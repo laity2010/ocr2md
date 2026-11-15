@@ -85,11 +85,15 @@ const MD_COLUMNS=Object.freeze([
   {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
 ]);
 const MD_TITLE_COLUMNS=Object.freeze([
-  {field:'text',headerName:'MD 行',flex:1,minWidth:220,sortable:false,
+  // Outline text remains visible while users inspect/filter metadata columns.
+  // Fixed width is intentional: AG Grid's flex width and pinned columns
+  // interact poorly in a narrow Dockview pane on iPad WebKit.
+  {field:'text',headerName:'MD 行',width:235,minWidth:160,sortable:false,
+    pinned:'left',lockPinned:true,lockPosition:'left',
     cellRenderer:renderTitleMdCell,cellClass:'ocr-ag-title-text'},
-  {field:'level',headerName:'Level',width:78,sortable:true},
   {field:'line_no',headerName:'行号',width:89,sortable:true,sort:'asc'},
   {field:'pbs',headerName:'PBS',width:125,sortable:true,comparator:comparePBS},
+  {field:'level',headerName:'Level',width:78,sortable:true},
 ]);
 async function request(op,params,post=false,options={}){
   const url=new URL(ENDPOINT+op,location.origin);

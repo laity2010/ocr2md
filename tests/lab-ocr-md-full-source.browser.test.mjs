@@ -382,8 +382,16 @@ try{
    await agView.selectOption('title');
    assert.equal(await agView.inputValue(),'title');
    assert.deepEqual(await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.columnFields()),['text','level','line_no','pbs'],
-     'Title view must have exactly MD 行, Level, 行号, PBS in that order');
+     ?.ocrSqlGrid?.columnFields()),['text','line_no','pbs','level'],
+     'Outline must show MD 行, 行号, PBS, Level in that order');
+   // Lab Frame has a fixed-column wrapper rather than a second selection
+   // store. Check the *displayed* pinned order as well as the columnDefs.
+   const pinnedHeaders=await page.locator('#workspace .ag-grid-container-wrapper .ag-header-cell')
+     .evaluateAll(nodes=>nodes.map(node=>node.getAttribute('col-id')));
+   assert.deepEqual(pinnedHeaders,['text'],
+     'Only MD 行 is left-fixed; line_no/PBS/Level must scroll as metadata');
+   assert.equal(await page.locator('#workspace .ag-grid-container-wrapper .ag-cell[col-id="text"]').count()>0,true,
+     'Outline source cells must remain in the left-fixed region');
    assert.equal(await allPages.isChecked(),true,
      'Title view shows every page of the document by default');
    await page.waitForFunction(()=>document.querySelectorAll(
@@ -392,22 +400,55 @@ try{
      ['1','5'],'Only nonblank title MD rows on both pages are visible');
    assert.equal(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
      .filter({hasText:'Corrected paragraph'}).count(),0,'Non-title blocks must be absent');
+   await page.waitForFunction(()=>[...document.querySelectorAll(
+     '#workspace .ag-grid-container-wrapper .ag-cell[col-id="text"]')].some(node=>
+       node.textContent.includes('## Heading')),null,{timeout:9000});
+   const visibleOrder=await page.locator('#workspace .ag-header-cell[col-id]')
+     .evaluateAll(nodes=>nodes.filter(el=>el.getBoundingClientRect().width>0)
+       .map(el=>({id:el.getAttribute('col-id'),left:el.getBoundingClientRect().left}))
+       .sort((a,b)=>a.left-b.left).map(item=>item.id));
+   assert.deepEqual(visibleOrder,['text','line_no','pbs','level'],
+     'The actual displayed outline columns, not just schema defs, follow the requested order');
    const titleStyles=await page.evaluate(()=>{
-     const ag=document.querySelector('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]');
+     // Pinned cells live in a separate AG region; DOM order can differ
+     // between Chromium and iPad WebKit. Match by actual source text.
+     const ag=[...document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')]
+       .find(el=>el.textContent.includes('## Heading'));
      const marker=ag?.querySelector('.cm-ob-heading-marker-2');
      const heading=document.querySelector('.ocr-cm-source .cm-ob-heading-marker-2');
-     const levelCell=document.querySelector('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="level"]');
+     const sourceLine=document.querySelector('.ocr-cm-source .cm-ob-heading-line-2');
+     const title=ag?.querySelector('.ocr-ag-title-source');
+     const cmHost=document.querySelector('.ocr-cm-source');
+     const palette=[];
+     for(let n=1;n<=6;n++){
+       const cm=document.createElement('div');cm.className='cm-ob-heading-line-'+n;
+       const outline=document.createElement('span');outline.className='ocr-ag-title-source cm-ob-heading-line-'+n;
+       cmHost?.append(cm);ag?.append(outline);
+       palette.push({level:n,cm:cmHost?getComputedStyle(cm).color:null,
+         ag:ag?getComputedStyle(outline).color:null,
+         agSize:ag?getComputedStyle(outline).fontSize:null});
+       cm.remove();outline.remove();
+     }
      return {font:ag?getComputedStyle(ag).fontSize:null,
        actualFont:marker?getComputedStyle(marker).fontSize:null,
-       regularFont:levelCell?getComputedStyle(levelCell).fontSize:null,
+       regularFont:ag?getComputedStyle(ag).fontSize:null,
        marker:marker?.textContent,sourceColor:heading?getComputedStyle(heading).color:null,
-       agColor:marker?getComputedStyle(marker).color:null};
+       agColor:marker?getComputedStyle(marker).color:null,
+       sourceLineColor:sourceLine?getComputedStyle(sourceLine).color:null,
+       titleTextColor:title?getComputedStyle(title).color:null,palette};
    });
    assert.equal(titleStyles.marker,'##','MD line remains literal Markdown source');
    assert.equal(titleStyles.actualFont,titleStyles.regularFont,
      'Title row styling must keep default AG font size');
    assert.equal(titleStyles.agColor,titleStyles.sourceColor,
      'MD title marker must match the installed CM6 Obsidian heading palette');
+   assert.equal(titleStyles.titleTextColor,titleStyles.sourceLineColor,
+     'Full outline title, not only the hash marks, must match the CM6 source H2');
+   for(const {level,cm,ag,agSize} of titleStyles.palette){
+     assert.equal(ag,cm,'H'+level+' outline text matches CM6 source color');
+     assert.equal(agSize,titleStyles.regularFont,
+       'H'+level+' outline text keeps default AG font size');
+   }
    await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
      .filter({hasText:'Revised from AG'}).click();
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
@@ -431,6 +472,9 @@ try{
    await agView.selectOption('md');
    assert.deepEqual((await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields())).slice(0,4),['line_no','pbs','block_type','text']);
+   assert.deepEqual(await page.locator('#workspace .ag-grid-container-wrapper .ag-header-cell')
+     .evaluateAll(nodes=>nodes.map(node=>node.getAttribute('col-id'))),['line_no','pbs'],
+     'Returning to normal MD must restore its original left-pinned indexes');
    assert.equal(await allPages.isChecked(),false);
    await page.waitForFunction(()=>document.querySelectorAll(
      '#workspace .ag-row:not(.ag-opacity-zero)').length===1);

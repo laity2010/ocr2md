@@ -21,6 +21,9 @@ export function renderTitleMdCell(params){
   line.className='ocr-ag-title-source';
   const parts=titleSourceParts(params.value);
   if(parts.marker){
+    // Keep the complete title source line, not only '#', at the same
+    // Everforest heading level as the CM6 source. No font-size scaling.
+    line.classList.add('cm-ob-heading-line-'+parts.level);
     const marker=document.createElement('span');
     marker.className='cm-ob-heading-marker-'+parts.level;
     marker.textContent=parts.marker;

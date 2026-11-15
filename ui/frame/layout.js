@@ -303,6 +303,13 @@ function mountEmptyGrid(host){
     // Different SQLite tables must not inherit one another's AG filters.
     grid.setFilterModel(null);
     grid.setGridOption('columnDefs',columns);
+    // AG Grid preserves prior per-column pinned state across reconfiguration.
+    // When MD -> title reuses line_no and pbs, explicitly apply this view's
+    // requested order and pinning; otherwise the former left-pinned indexes
+    // remain ahead of the outline text despite the new columnDefs order.
+    grid.applyColumnState({state:columns.filter(col=>col.field).map(col=>({
+      colId:col.field,pinned:col.pinned??null,
+    })),applyOrder:true});
     grid.setGridOption('rowData',rows.filter(isVisible));
     // Apply the caller's startup selection through AG Grid's public filter
     // model before subscribing to changes; the real checkbox UI stays owner.

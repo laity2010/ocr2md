@@ -1,12 +1,12 @@
-/* Title view reuses the installed Obsidian CM6 heading MARKER colors via
- * shared `obsidian-everforest.css` selector — no duplicate palette. Keep AG's
+/* Title view reuses the installed Obsidian Everforest H1-H6 color tokens
+ * shared by CM6 and outline. Only Lab OCR colors entire source heading rows;
+ * Main source styling remains untouched. Keep AG's
  * regular Sarasa size even when the actual CM6 H1-H6 font-size is enlarged. */
 #workspace .ocr-ag-title-text .ocr-ag-title-source {
   font:inherit;
   font-size:inherit;
   line-height:inherit;
   white-space:pre-wrap;
-  color:#d3c6aa;
 }
 #workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-1,
 #workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-2,
@@ -15,4 +15,32 @@
 #workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-5,
 #workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-6 {
   font-size:inherit;
+}
+
+/* The heading source and outline use the same color token for ALL text,
+ * including the Markdown marker. AG stays at its global default font size;
+ * CM6 retains its existing per-level size and layout. */
+#workspace.ocr-review-focus-unified .ocr-cm-source .cm-ob-heading-line-1,
+#workspace.ocr-review-focus-unified .ocr-ag-title-source.cm-ob-heading-line-1 {
+  color:var(--ocr-heading-1);
+}
+#workspace.ocr-review-focus-unified .ocr-cm-source .cm-ob-heading-line-2,
+#workspace.ocr-review-focus-unified .ocr-ag-title-source.cm-ob-heading-line-2 {
+  color:var(--ocr-heading-2);
+}
+#workspace.ocr-review-focus-unified .ocr-cm-source .cm-ob-heading-line-3,
+#workspace.ocr-review-focus-unified .ocr-ag-title-source.cm-ob-heading-line-3 {
+  color:var(--ocr-heading-3);
+}
+#workspace.ocr-review-focus-unified .ocr-cm-source .cm-ob-heading-line-4,
+#workspace.ocr-review-focus-unified .ocr-ag-title-source.cm-ob-heading-line-4 {
+  color:var(--ocr-heading-4);
+}
+#workspace.ocr-review-focus-unified .ocr-cm-source .cm-ob-heading-line-5,
+#workspace.ocr-review-focus-unified .ocr-ag-title-source.cm-ob-heading-line-5 {
+  color:var(--ocr-heading-5);
+}
+#workspace.ocr-review-focus-unified .ocr-cm-source .cm-ob-heading-line-6,
+#workspace.ocr-review-focus-unified .ocr-ag-title-source.cm-ob-heading-line-6 {
+  color:var(--ocr-heading-6);
 }
