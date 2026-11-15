@@ -16,7 +16,7 @@ vite.stdout.on('data',c=>log+=c);vite.stderr.on('data',c=>log+=c);
 const blockRows=[
  [1,'p1b0',null,0,0,'title',2,'Heading'],
  [2,'p1b1',null,1,0,'text',null,'Original paragraph'],
- [3,'p2b0',null,0,1,'text',null,'Last paragraph'],
+ [3,'p2b0',null,0,1,'title',3,'Last paragraph'],
 ].map(([block_id,pbs,parent_block_id,sibling_order,global_page,block_type,level,content])=>({
  block_id,pbs,parent_block_id,sibling_order,global_page,block_type,level,
  block_group:'para_blocks',source_name:'source.json',
@@ -374,6 +374,73 @@ try{
    assert((await view()).text.includes('Revised from AG'));
    assert.equal(mdInit,1);
    assert.equal(mdLoads,3);
+   // WCP55 AG toolbar uses its EXISTING dropdown, not a second control.
+   // Title is a full-document projection of only block_type=title MD lines.
+   const agView=page.locator('#workspace .ocr-outline-pane .ocr-ag-module-select');
+   assert.equal(await agView.getAttribute('aria-label'),'选择 AG 过滤视图');
+   assert.deepEqual(await agView.locator('option').allTextContents(),['MD 行','标题']);
+   await agView.selectOption('title');
+   assert.equal(await agView.inputValue(),'title');
+   assert.deepEqual(await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields()),['text','level','line_no','pbs'],
+     'Title view must have exactly MD 行, Level, 行号, PBS in that order');
+   assert.equal(await allPages.isChecked(),true,
+     'Title view shows every page of the document by default');
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===2);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),
+     ['1','5'],'Only nonblank title MD rows on both pages are visible');
+   assert.equal(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
+     .filter({hasText:'Corrected paragraph'}).count(),0,'Non-title blocks must be absent');
+   const titleStyles=await page.evaluate(()=>{
+     const ag=document.querySelector('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]');
+     const marker=ag?.querySelector('.cm-ob-heading-marker-2');
+     const heading=document.querySelector('.ocr-cm-source .cm-ob-heading-marker-2');
+     const levelCell=document.querySelector('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="level"]');
+     return {font:ag?getComputedStyle(ag).fontSize:null,
+       actualFont:marker?getComputedStyle(marker).fontSize:null,
+       regularFont:levelCell?getComputedStyle(levelCell).fontSize:null,
+       marker:marker?.textContent,sourceColor:heading?getComputedStyle(heading).color:null,
+       agColor:marker?getComputedStyle(marker).color:null};
+   });
+   assert.equal(titleStyles.marker,'##','MD line remains literal Markdown source');
+   assert.equal(titleStyles.actualFont,titleStyles.regularFont,
+     'Title row styling must keep default AG font size');
+   assert.equal(titleStyles.agColor,titleStyles.sourceColor,
+     'MD title marker must match the installed CM6 Obsidian heading palette');
+   await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
+     .filter({hasText:'Revised from AG'}).click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.selected()==='md-e',null,{timeout:3500}).catch(async err=>{
+       console.error('TITLE_ROW_CLICK_DIAG',name,JSON.stringify(await page.evaluate(()=>({
+         selected:document.querySelector('.ocr-cm-source')?.ocrCmTable?.selected(),
+         status:document.querySelector('#status')?.textContent,
+         gridRow:[...document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)')].map(node=>
+           ({text:node.textContent.slice(0,130),selected:node.classList.contains('ag-row-selected')})),
+         active:document.activeElement?.outerHTML?.slice(0,260),
+         view:document.querySelector('.ocr-ag-module-select')?.value,
+       }))));throw err;
+     });
+   await allPages.uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),['5'],
+     'The page checkbox follows the PDF page reached by selecting the title');
+   // Returning to the original view must restore ALL original columns and
+   // its default current-page/nonblank filters, with no SQL/CM6 reload.
+   await agView.selectOption('md');
+   assert.deepEqual((await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields())).slice(0,4),['line_no','pbs','block_type','text']);
+   assert.equal(await allPages.isChecked(),false);
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===1);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),['5'],
+     'Normal AG view restores the current PDF page and its nonblank filter');
+   assert.equal(mdLoads,3,'AG view switching must not read MD from SQLite');
+   assert.equal(mdInit,1,'AG view switching cannot reinitialize the document');
+   assert.equal(saves,2,'AG view switching is read-only');
+   assert((await view()).text.includes('Revised from AG'),
+     'AG title view switching must not alter the authoritative Markdown');
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_MD_FULL_SOURCE_E2E_PASS',name,
      JSON.stringify({mdInit,mdLoads,saves,blocks,pdfs,revision,visits}));

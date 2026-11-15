@@ -287,11 +287,11 @@ function mountEmptyGrid(host){
     // Read-only column contract: includes AG's horizontally virtualized columns.
     columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
     show({rows,columns,onRowSelected,onFilterChanged,
-    initialFilterModel=null,pageScope:scope=null}){
+    initialFilterModel=null,pageScope:scope=null,allPagesInitially=false}){
     selectedListener=onRowSelected??(()=>{});
-    pageScope=scope;pdfPage=scope?.page??1;showAllPages=false;
+    pageScope=scope;pdfPage=scope?.page??1;showAllPages=Boolean(scope&&allPagesInitially);
     if(allPagesControl)allPagesControl.hidden=!pageScope;
-    if(allPagesInput)allPagesInput.checked=false;
+    if(allPagesInput)allPagesInput.checked=showAllPages;
     // The full source atoms remain owned by CM6; the Grid shows only
     // non-absorbed blocks. Parent wrappers are retained for undo/audit.
     blockData=new Map(rows.filter(r=>r?.block_id!=null)
@@ -307,7 +307,8 @@ function mountEmptyGrid(host){
     // Apply the caller's startup selection through AG Grid's public filter
     // model before subscribing to changes; the real checkbox UI stays owner.
     if(initialFilterModel)grid.setFilterModel(initialFilterModel);
-    if(pageScope)updatePbsModel(false);
+    if(pageScope&&!allPagesInitially)updatePbsModel(false);
+    if(allPagesInput)allPagesInput.checked=showAllPages;
     filterListener=onFilterChanged??(()=>{});
     filterListener(grid.getFilterModel());
     // Avoid carrying horizontal scroll from the previous table into the new
@@ -404,7 +405,8 @@ function mountEmptyGrid(host){
   return {dispose(){allPagesInput?.removeEventListener('change',onAllPagesChange);
     delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
-function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlot=null,onStatus=()=>{}){
+function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlot=null,onStatus=()=>{},
+  agViewOptions=[],onAgViewChange=()=>{}){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -419,15 +421,22 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     allPages.append(allPagesCheckbox,document.createTextNode('全部'));
     const label=document.createElement('span');label.className='ocr-ag-toolbar-label';label.textContent='AG 表';
     const picker=document.createElement('select');picker.className='ocr-ag-module-select';
-    picker.setAttribute('aria-label','选择模块');
-    picker.add(new Option(moduleLabel,'frame'));
-    picker.add(new Option('全局设置','settings'));
-    const ownModule='frame';picker.value=ownModule;
-    picker.addEventListener('change',()=>{
-      const next=picker.value;
-      picker.value=ownModule; // Each pane retains its own correct module on return.
-      onModuleChange?.(next);
-    });
+    if(agViewOptions.length){
+      picker.setAttribute('aria-label','选择 AG 过滤视图');
+      for(const {value,label} of agViewOptions)picker.add(new Option(label,value));
+      picker.value=agViewOptions[0].value;
+      picker.addEventListener('change',()=>onAgViewChange(picker.value));
+    }else{
+      picker.setAttribute('aria-label','选择模块');
+      picker.add(new Option(moduleLabel,'frame'));
+      picker.add(new Option('全局设置','settings'));
+      const ownModule='frame';picker.value=ownModule;
+      picker.addEventListener('change',()=>{
+        const next=picker.value;
+        picker.value=ownModule;
+        onModuleChange?.(next);
+      });
+    }
     bar.append(allPages,label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
@@ -560,11 +569,12 @@ function addPanel(dockview,id,component,title,position){
 }
 /** Public F01: configurable preview default; Frame retains split, OCR uses PDF. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
-  moduleLabel='空白框架',defaultPreview='split'}={}){
+  onAgViewChange=()=>{},agViewOptions=[],moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
   const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null};
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus)});
+    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus,
+      agViewOptions,onAgViewChange)});
   let previewToken=0,previewTimer=null;
   let previewClickCallback=null,previewSelectedLine=null,previewSync=null,previewClickArea=null;
   const mdArea=()=>pdfSlot.preview?.mdArea??null;
@@ -626,6 +636,11 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    setAgView(value){
+      const picker=container.querySelector('.ocr-outline-pane .ocr-ag-module-select');
+      if(!picker||![...picker.options].some(option=>option.value===value))return false;
+      picker.value=value;return true;
+    },
     setMdPreviewNavigation(callback){
       if(callback!==null&&typeof callback!=='function')throw Error('MD 预览定位回调无效');
       previewClickCallback=callback;bindPreviewClick();
@@ -775,12 +790,14 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     setSqlPdfPage(page){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.setPdfPage(page)??false;
     },
-    showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,pageScope=null}={}){
+    showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,
+      pageScope=null,allPagesInitially=false}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
-      port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,pageScope,onRowSelected:row=>{
+      port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,
+        pageScope,allPagesInitially,onRowSelected:row=>{
         cm.select(row);
         onSelect?.(row);
       }});

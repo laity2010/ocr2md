@@ -134,9 +134,9 @@
   -webkit-user-select: none;
 }
 /* Obsidian's enabled daisor snippet makes heading # markers match the text. */
-.ocr-cm-source .cm-ob-heading-marker-1, .ocr-cm-source .cm-ob-heading-marker-1 span { color: #da6362 !important; }
-.ocr-cm-source .cm-ob-heading-marker-2, .ocr-cm-source .cm-ob-heading-marker-2 span { color: #d77f48 !important; }
-.ocr-cm-source .cm-ob-heading-marker-3, .ocr-cm-source .cm-ob-heading-marker-3 span { color: #bf983d !important; }
-.ocr-cm-source .cm-ob-heading-marker-4, .ocr-cm-source .cm-ob-heading-marker-4 span { color: #899c40 !important; }
-.ocr-cm-source .cm-ob-heading-marker-5, .ocr-cm-source .cm-ob-heading-marker-5 span { color: #569d79 !important; }
-.ocr-cm-source .cm-ob-heading-marker-6, .ocr-cm-source .cm-ob-heading-marker-6 span { color: #b87b9d !important; }
+:is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-1, :is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-1 span { color: #da6362 !important; }
+:is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-2, :is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-2 span { color: #d77f48 !important; }
+:is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-3, :is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-3 span { color: #bf983d !important; }
+:is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-4, :is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-4 span { color: #899c40 !important; }
+:is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-5, :is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-5 span { color: #569d79 !important; }
+:is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-6, :is(.ocr-cm-source, .ocr-ag-title-source) .cm-ob-heading-marker-6 span { color: #b87b9d !important; }

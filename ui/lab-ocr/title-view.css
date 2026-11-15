@@ -1,0 +1,18 @@
+/* Title view reuses the installed Obsidian CM6 heading MARKER colors via
+ * shared `obsidian-everforest.css` selector — no duplicate palette. Keep AG's
+ * regular Sarasa size even when the actual CM6 H1-H6 font-size is enlarged. */
+#workspace .ocr-ag-title-text .ocr-ag-title-source {
+  font:inherit;
+  font-size:inherit;
+  line-height:inherit;
+  white-space:pre-wrap;
+  color:#d3c6aa;
+}
+#workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-1,
+#workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-2,
+#workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-3,
+#workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-4,
+#workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-5,
+#workspace .ocr-ag-title-text .ocr-ag-title-source .cm-ob-heading-marker-6 {
+  font-size:inherit;
+}

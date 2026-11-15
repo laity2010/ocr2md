@@ -7,6 +7,7 @@ import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
   mdSplice,reorderMdByBlocks} from './md-runtime.js';
 import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
+import {projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {resolveReviewLocation} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -83,6 +84,13 @@ const MD_COLUMNS=Object.freeze([
   ...BLOCK_COLUMNS.filter(column=>!['pbs','block_type'].includes(column.field)),
   {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
 ]);
+const MD_TITLE_COLUMNS=Object.freeze([
+  {field:'text',headerName:'MD 行',flex:1,minWidth:220,sortable:false,
+    cellRenderer:renderTitleMdCell,cellClass:'ocr-ag-title-text'},
+  {field:'level',headerName:'Level',width:78,sortable:true},
+  {field:'line_no',headerName:'行号',width:89,sortable:true,sort:'asc'},
+  {field:'pbs',headerName:'PBS',width:125,sortable:true,comparator:comparePBS},
+]);
 async function request(op,params,post=false,options={}){
   const url=new URL(ENDPOINT+op,location.origin);
   if(!post)for(const [key,value] of Object.entries(params))url.searchParams.set(key,String(value));
@@ -103,7 +111,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     mdSupported=false,operation=0,loaded=0;
   let blockProjectionKind=null;
   let currentSqlTable=null;
+  let activeAgView='md'; // AG presentation only; CM6 and SQLite are unchanged.
   let pdfPage=1;
+  const projectedMdRows=()=>activeAgView==='title'?
+    projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
+    projectMdAgRows(md()?.rows??[],cm()?.rows??[]);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
   const sqlReady=()=>tableReady;
@@ -167,7 +179,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return persistence;
   }
   function mdContentChanged(next){
-    if(currentSqlTable==='md')frame.patchMdRows(projectMdAgRows(next.rows,cm()?.rows??[]));
+    if(currentSqlTable==='md')frame.patchMdRows(projectedMdRows());
     if(currentSqlTable==='md')frame.setMdEditHistory();
     frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'));
     if(mdPersistence&&next.dirty)mdPersistence.changed();
@@ -322,7 +334,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         mdContentChanged(updated);
       }else if(currentSqlTable==='md'){
         // A Block's PBS may change without changing its MD text/order.
-        frame.patchMdRows(projectMdAgRows(md().rows,cm().rows));
+        frame.patchMdRows(projectedMdRows());
       }
     }
     for(const page of result.pages??[result.page])
@@ -558,6 +570,53 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(success){prepareOverlays(saved);warmPdf(saved);}
     return success;
   }
+  // AG view switching is a re-projection of the resident CM6 Markdown.
+  // It never reopens SQLite or replaces the MD editor StateField.
+  function renderMdAg(){
+    const title=activeAgView==='title';
+    const rows=projectedMdRows();
+    const columns=title?MD_TITLE_COLUMNS:MD_COLUMNS;
+    frame.showSqlRows(rows,columns.map(column=>({
+      ...column,
+      ...(column.field==='text'?{editable:true,valueSetter:params=>{
+        if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
+          onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
+          return false;
+        }
+        try{frame.editMdLine(params.data.line_id,params.newValue);}
+        catch(error){onStatus('MD 行编辑失败：'+error.message,'error');}
+        return false;
+      }}:{}),
+      filter:EnumCheckboxFilter,
+      filterValueGetter:params=>column.field==='line_no'?
+        mdLineKind(params.data?.text):column.field==='pbs'?
+          pbsPageKey(params.data?.pbs):params.data?.[column.field]??'',
+      suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
+    })),{
+      pageScope:{page:pdfPage},
+      // Title is a document-wide view by default, with the existing AG
+      // all-pages checkbox visibly checked; users may uncheck for this page.
+      allPagesInitially:title,
+      // Blank lines remain in the source/SQL, hidden only in both AG views.
+      initialFilterModel:{line_no:{values:['非空行']}},
+      onSelect:row=>{
+        locateReview({origin:'ag',lineId:row.line_id});
+        onStatus('MD 四窗定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
+      },
+    });
+    frame.setAgView(activeAgView);
+    frame.setMdEditHistory();
+    return rows.length;
+  }
+  function setAgView(view){
+    if(!['md','title'].includes(view))throw Error('未知 AG 过滤视图');
+    activeAgView=view;
+    frame.setAgView(view);
+    if(currentSqlTable!=='md'||!md())return false;
+    const count=renderMdAg();
+    onStatus(`AG ${view==='title'?'标题':'MD 行'}视图 · ${count} 条投影 · 不修改 MD/SQLite`,'ok');
+    return true;
+  }
   async function openSql(table='minerujson',{selectedId=null}={}){
     if(table==='md'){
       if(!blockReady||!mdSupported){
@@ -567,35 +626,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       try{
         await ensureMdRuntime();
         const rows=md().rows;
-        frame.showSqlRows(projectMdAgRows(rows,cm()?.rows??[]),MD_COLUMNS.map(column=>({
-          ...column,
-          ...(column.field==='text'?{editable:true,valueSetter:params=>{
-            if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
-              onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
-              return false;
-            }
-            try{frame.editMdLine(params.data.line_id,params.newValue);}
-            catch(error){onStatus('MD 行编辑失败：'+error.message,'error');}
-            // AG never writes to its own row model; CM6 will project the
-            // authoritative document change back through patchMdRows.
-            return false;
-          }}:{}),
-          filter:EnumCheckboxFilter,
-          filterValueGetter:params=>column.field==='line_no'?
-            mdLineKind(params.data?.text):column.field==='pbs'?
-              pbsPageKey(params.data?.pbs):params.data?.[column.field]??'',
-          suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
-        })),{
-          // Existing AG toolbar page switch remains active for MD, just as
-          // for the reviewed Block table. "全部" defaults to unchecked.
-          pageScope:{page:pdfPage},
-          // Empty lines remain in CM6/SQLite; only the AG view starts filtered.
-          initialFilterModel:{line_no:{values:['非空行']}},
-          onSelect:row=>{
-            locateReview({origin:'ag',lineId:row.line_id});
-            onStatus('MD 四窗定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
-          },
-        });
+        renderMdAg();
         currentSqlTable='md';
         frame.setMdEditHistory();
         if(selectedId!=null){
@@ -652,6 +683,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         }
       }});
       currentSqlTable=table;
+      activeAgView='md';frame.setAgView('md');
       if(table==='block')refreshBlockUndoRedo();
       if(selectedId!==null&&table==='block'&&!frame.selectSqlRowById({field:'block_id',id:selectedId})){
         onStatus(`PDF → AG · BlockID ${selectedId} 不在当前载入行中`,'warning');
@@ -705,5 +737,5 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   return Object.freeze({savedWorkspace,initialize,initializeSql,afterSave,openSql,
     sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
     flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation,
-    dispose(){unsubscribeLocation();frame.setMdPreviewNavigation(null);}});
+    setAgView,dispose(){unsubscribeLocation();frame.setMdPreviewNavigation(null);}});
 }
