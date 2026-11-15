@@ -314,6 +314,12 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   function paintPageBoxes(page,data){
     if(disposed||!pdf||overlayLevel==='off'||page>pdf.numPages)return;
+    // PDF.js can issue pagechanging/pagerendered while the pointer is held
+    // and the source page scrolls away. Replacing the source PBS button then
+    // loses pointer capture and cancels a valid adjacent-page drag.
+    // Its original geometry/BlockID remain unchanged throughout the gesture;
+    // keep the source DOM stable until pointerup/pointercancel.
+    if(blockDrag?.active&&blockDrag.source.page===page)return;
     // Keep geometry cached as supplied by SQL, but always paint identifiers
     // and family relations projected from the current CM6 runtime.
     if(overlayLevel==='block'&&projectPage)data=projectPage(data);
@@ -514,7 +520,16 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(!Number.isInteger(page)||page<1||page>pdf.numPages)return;
     const key=overlayLevel+':'+page;
     if(overlayCache.has(key)){
-      paintPageBoxes(page,overlayCache.get(key));return;
+      // pagechanging is a navigation notification, NOT a reason to replace
+      // an already-painted overlay. Aside from needlessly doing DOM work,
+      // that replacement destroys a held PBS drag when crossing the page.
+      const host=viewer.getPageView(page-1)?.div;
+      const layer=host?.querySelector('.lab-ocr-pdf-overlay-layer');
+      const labels=host?.querySelector('.lab-ocr-pdf-pbs-layer');
+      if(!layer||layer.dataset.level!==overlayLevel||
+         (overlayLevel==='block'&&!labels))
+        paintPageBoxes(page,overlayCache.get(key));
+      return;
     }
     if(overlayPending.has(key))return;
     const ticket={};

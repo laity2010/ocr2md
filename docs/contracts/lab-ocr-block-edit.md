@@ -1,5 +1,8 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP50 · 跨页自动滚动时保护 PBS 拖动（2026-11-15）**：在长按后从第 14 页拖向第 13 页的 `p13b5` 时，PDF.js `pagechanging → showOverlayPages → requestOverlayPage` 曾将**已缓存且已绘制**的第 14 页覆盖层再次重绘，删除了被按住的源 PBS 按钮，浏览器指针捕获丢失，拖动无落点。现在缓存页在覆盖层仍挂载时仅复用现有 DOM；在活跃拖动期间如果 PDF.js 另外发出源页 `pagerendered`，暂不替换源页覆盖层，直到指针操作结束。跨页逻辑父子约束、BlockID/PBS 更新、CM6 异步 SQLite 保持不变。新增 `tests/lab-ocr-cross-page-autoscroll.browser.test.mjs`：14 页、100% 缩放，从 `p14b1` 按住边缘滚动跨至第 13 页、落到 `p13b5` 并完成关系写入；Chromium 和 iPad WebKit 都应通过；原 25% 同屏双页的测试不能替代此测试。
+
+
 > **WCP49 · 后页子块落点的逻辑父页修复（2026-11-15）**：若第 10 页显示的 `p9b5s1` 实际属于第 9 页的逻辑父块 `p9b5`，则 `p10b0` 拖向 `p9b5s1` 并选择「作为子块」时，来源块必须归入 `p9b5`，成为其一级兄弟块（例如 `p9b5s2`），不能产生孙块，也不能按落点物理第 10 页重编 PBS。CM6 / SQLite 均按**逻辑父页**检查后→前相邻页归入并重编目标根块的子块；两个已跨页的子块在下一物理页进行同父「之前／之后」排序，同样须重编逻辑父页。仅改关系、顺序、PBS，保留 BlockID、物理页、bbox、源 MinerU JSON 和 SQLite CAS/Undo/Redo。仍不开放反向、隔页或跨页「之前／之后」归入。
 
 
