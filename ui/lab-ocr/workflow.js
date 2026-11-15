@@ -2,6 +2,7 @@ import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
 import {createBlockRuntime,editBlockRuntime,acknowledgeBlockPersistence,
   runtimeStatus,projectBlockOverlays} from './block-runtime.js';
 import {createBlockPersistence} from './block-persistence.js';
+import {pbsPageKey} from './pbs-page-filter.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
  */
@@ -48,16 +49,16 @@ const comparePBS=(left,right)=>{
   return a.length-b.length;
 };
 const BLOCK_COLUMNS=Object.freeze([
-  {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
   {field:'pbs',headerName:'PBS',width:125,sortable:true,sort:'asc',comparator:comparePBS},
+  {field:'block_type',headerName:'Block Type',width:145,sortable:true},
+  {field:'content_preview',headerName:'摘要',minWidth:210,flex:1,sortable:false},
+  {field:'global_page',headerName:'Page（0起）',width:108,sortable:true},
   {field:'block_id',headerName:'Block ID',width:105,sortable:true},
   {field:'parent_block_id',headerName:'ParentID',width:125,sortable:true},
-  {field:'block_type',headerName:'Block Type',width:145,sortable:true},
   {field:'block_bbox_json',headerName:'Block BBox',width:145,sortable:false},
   {field:'line_count',headerName:'Lines',width:85,sortable:true},
   {field:'span_count',headerName:'Spans',width:85,sortable:true},
   {field:'span_types',headerName:'Span Types',width:170,sortable:false},
-  {field:'content_preview',headerName:'内容摘要',minWidth:210,flex:1,sortable:false},
   {field:'block_path',headerName:'原始层级路径',width:175,hide:true},
   {field:'source_block_key',headerName:'来源 Block Key',width:280,hide:true},
   {field:'block_json',headerName:'原始 Lines / Spans',width:260,hide:true},
@@ -81,6 +82,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let workspace='',tableReady=false,spanReady=false,blockReady=false,operation=0,loaded=0;
   let blockProjectionKind=null;
   let currentSqlTable=null;
+  let pdfPage=1;
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   const sqlReady=()=>tableReady;
   const readyBlock=()=>blockReady;
@@ -243,6 +245,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     lastOverlayWorkspace=directory;
     frame.setPdfOverlays(directory?{
       level:'block',blockGroups:[REVIEW_BLOCK_GROUP],allowSpan:spanReady,
+      onPageChange:page=>{
+        if(!Number.isSafeInteger(page)||page<1)return;
+        pdfPage=page;
+        if(currentSqlTable==='block')frame.setSqlPdfPage(page);
+      },
       onBlockSelect:({blockId,pbs})=>{
         const id=String(blockId);
         // The Block ID, not PBS, is the stable identity across views.
@@ -258,7 +265,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       projectPage:data=>projectBlockOverlays(cm(),data),
       loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
     }:{level:'off',loadPage:null,blockGroups:null,onBlockSelect:null,
-      onBlockDragIntent:null,projectPage:null});
+      onBlockDragIntent:null,projectPage:null,onPageChange:null});
   }
   function warmPdf(directory){
     if(directory===lastPdfWorkspace)return;
@@ -335,6 +342,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(cm()?.queue.length)throw Error('CM Block 尚有待持久操作，必须先保存，拒绝切换/重建');
     persistence?.dispose();persistence=null;loadingRuntime=null;
     frame.replaceStructuredRuntime(null);
+    pdfPage=1;
     workspace=nextWorkspace;
     lastEditedId=null;
     frame.setSqlEditHistory();
@@ -424,10 +432,12 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       frame.showSqlRows(entries,(table==='span'?SPAN_COLUMNS:table==='block'?BLOCK_COLUMNS:COLUMNS).map(column=>({
         ...column,
         filter:EnumCheckboxFilter,
-        filterValueGetter:params=>params.data?.[column.field]??'',
+        filterValueGetter:params=>table==='block'&&column.field==='pbs'?
+          pbsPageKey(params.data?.pbs):params.data?.[column.field]??'',
         suppressHeaderMenuButton:true,
         suppressHeaderFilterButton:false,
-      })),{onSelect:row=>{
+      })),{pageScope:table==='block'?{page:pdfPage}:null,
+        onSelect:row=>{
         if(table==='span')onStatus(`Span 定位：P${row.global_page} · ${row.block_id} · L${row.line_index} · S${row.span_index} · bbox ${row.span_bbox_json}`,'info');
         if(table==='block'){
           frame.focusPdfBlock({id:row.block_id,page:Number(row.global_page)+1});

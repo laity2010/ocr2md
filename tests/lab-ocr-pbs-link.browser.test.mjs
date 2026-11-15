@@ -226,6 +226,9 @@ try{
    assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag').count(),0);
    // Selecting a Block in AG while viewing Spans returns to Block mode and
    // navigates to its page/selection, preserving the same PDF instance.
+   // WCP51 defaults AG to the PDF's current PBS page. Select 全部 before
+   // navigating from page 1 to an off-page AG row on page 2.
+   await page.locator('.ocr-ag-all-pages input[aria-label="全部"]').check();
    await page.locator('#workspace .ag-row .ag-cell[col-id="block_id"]').filter({hasText:/^5$/}).click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-overlay-level')?.value==='block'&&
      document.querySelector('.lab-ocr-pdf-page')?.value==='2'&&

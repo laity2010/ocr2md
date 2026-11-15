@@ -60,8 +60,16 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // The caller owns SQL/JSON; the viewer sees only geometry, public display
   // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
-  let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,
+  let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
     selectedBlockId=null,focusRequest=null;
+  let lastNotifiedPage=null;
+  const notifyPage=()=>{
+    const page=viewer.currentPageNumber||1;
+    if(page!==lastNotifiedPage){
+      lastNotifiedPage=page;
+      onPageChange?.(page);
+    }
+  };
   const overlayCache=new Map(),overlayPending=new Map(),overlayEpoch=new Map(),
     blockParents=new Map();
   const dropCandidatesByPage=new Map();
@@ -578,6 +586,12 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   overlaySelect.addEventListener('change',()=>chooseOverlayLevel(overlaySelect.value));
   function setOverlays(config={}){
     if(disposed)throw Error('PDF Viewer 已销毁');
+    if(Object.hasOwn(config,'onPageChange')){
+      if(config.onPageChange!==null&&typeof config.onPageChange!=='function')
+        throw Error('PDF 翻页回调必须为函数或 null');
+      onPageChange=config.onPageChange;
+      if(onPageChange&&ready)onPageChange(viewer.currentPageNumber||1);
+    }
     if(Object.hasOwn(config,'allowSpan')){
       allowSpan=Boolean(config.allowSpan);
       const spanOption=overlaySelect.querySelector('option[value="span"]');
@@ -693,8 +707,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   };
   bus.on('pagesinit',()=>{
     viewer.currentScaleValue='page-width';viewer.update();updatePage();observePages();showOverlayPages();
+    notifyPage();
   });
-  bus.on('pagechanging',()=>{updatePage();showOverlayPages();});
+  bus.on('pagechanging',()=>{updatePage();showOverlayPages();notifyPage();});
   bus.on('pagerendered',event=>{
     // PDF.js may replace a page's content during zoom/re-render. Reattach
     // its cached overlay once, without a database query or a PDF reload.
@@ -740,6 +755,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const oldTask=task;task=null;
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
+    lastNotifiedPage=null;
     focusRequest=null;selectedBlockId=null;blockParents.clear();
     pageObserver.disconnect();
     clearOverlayNodes();viewer.setDocument(null);
@@ -772,7 +788,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         if(disposed||token!==revision)return false;
         if(!painted)throw Error('PDF 首页绘制失败');
         ready=true;placeholder.hidden=true;
-        updatePage();relayout();showOverlayPages();
+        updatePage();relayout();showOverlayPages();notifyPage();
         emit(`已就绪 · ${document.numPages} 页，首页已绘制`,'ok');
         return true;
       }catch(error){

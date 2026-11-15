@@ -165,13 +165,21 @@ try{
    await blockDropdown.locator('.option').filter({hasText:'block'}).click();
    await page.waitForFunction(()=>document.querySelector('select.ocr-source-file-select')?.value==='sql:block'&&
      /CM6 · block：3 行/.test(document.querySelector('#status')?.textContent||'')&&
-     document.querySelectorAll('#workspace .ag-row').length===3);
+     document.querySelectorAll('#workspace .ag-row').length===1);
    assert.match(await page.locator('#status').innerText(),/CM6 · block：3 行/);
+   assert.equal(await page.locator('.ocr-ag-all-pages input[aria-label="全部"]').isChecked(),false);
+   assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable?.rows().length),3,
+     'CM6 holds every row; AG defaults to the current PDF PBS page');
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="pbs"]').count(),1);
-   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_id"]').count(),1);
-   assert.equal(await page.locator('#workspace .ag-header-cell[col-id="parent_block_id"]').count(),1);
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="parent_pbs"]').count(),0);
    assert.match(await page.locator('#workspace .ag-row').first().innerText(),/p1b0/);
+   // WCP51 puts PBS, type, summary before legacy columns: AG virtualizes
+   // BlockID/ParentID until horizontally scrolled into view.
+   const agScroll=page.locator('#workspace .ag-body-horizontal-scroll-viewport');
+   await agScroll.evaluate(node=>{node.scrollLeft=800;node.dispatchEvent(new Event('scroll',{bubbles:true}));});
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-header-cell[col-id="parent_block_id"]'));
+   await agScroll.evaluate(node=>{node.scrollLeft=0;node.dispatchEvent(new Event('scroll',{bubbles:true}));});
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-header-cell[col-id="pbs"]'));
    await page.waitForTimeout(450); // WebKit: let AG finish virtualizing headers after the table switch.
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_group"]').count(),0);
    await page.locator('#workspace .ag-row').first().click();
@@ -188,7 +196,7 @@ try{
    await page.waitForFunction(()=>!!document.querySelector('select.ocr-source-file-select option[value="sql:minerujson"]')&&!!document.querySelector('select.ocr-source-file-select option[value="sql:block"]')&&!!document.querySelector('select.ocr-source-file-select option[value="sql:span"]'),null,{timeout:20000});
    assert.equal(importCount,1,'Reload must not re-import unchanged JSON');
    await page.waitForFunction(()=>document.querySelector('#workspace select.ocr-source-file-select')?.value==='sql:block'&&
-     document.querySelectorAll('#workspace .ag-row').length===3,null,{timeout:20000});
+     document.querySelectorAll('#workspace .ag-row').length===1,null,{timeout:20000});
    assert(importCount>0&&inspectCount>=2&&rowsCount>0&&spanCreateCount>=2&&blockCreateCount>=2);
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_SAMPLE_FLOW_PASS',name,JSON.stringify({inspectCount,importCount,spanCreateCount,blockCreateCount,rowsCount}));

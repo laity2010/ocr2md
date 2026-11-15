@@ -94,6 +94,24 @@ function mountEmptySource(host){
   });
   return {dispose(){delete host.ocrCmTable;editor.destroy();},layout:()=>editor.requestMeasure()};
 }
+/** Header-only select-all switch; AG Grid remains the sole filter owner. */
+class AllPagesHeader {
+  init(params){
+    this.params=params;
+    const label=document.createElement('label');label.className='ocr-ag-all-pages';
+    const input=document.createElement('input');
+    input.type='checkbox';input.checked=Boolean(params.getChecked?.());
+    input.setAttribute('aria-label','全部');
+    params.onMount?.(input);
+    input.addEventListener('change',()=>this.params.onChange?.(input.checked));
+    input.addEventListener('pointerdown',event=>event.stopPropagation());
+    label.append(input,document.createTextNode('全部'));
+    this.gui=label;this.input=input;
+  }
+  getGui(){return this.gui;}
+  refresh(params){this.params=params;this.input.checked=Boolean(params.getChecked?.());return true;}
+  destroy(){this.params.onUnmount?.(this.input);}
+}
 function mountEmptyGrid(host){
   const columnDefs=[
     {field:'pbs',headerName:'PBS',width:115},
@@ -103,18 +121,47 @@ function mountEmptyGrid(host){
   ];
   let selectedListener=()=>{},filterListener=()=>{};
   let blockData=new Map();
+  let pageScope=null,pdfPage=1,showAllPages=false,allPagesInput=null;
   const isVisible=row=>row?.absorbed_into_block_id==null;
+  const updatePbsModel=checked=>{
+    const model={...(grid.getFilterModel()||{})};
+    if(checked)delete model.pbs;
+    else model.pbs={values:['p'+pdfPage]};
+    grid.setFilterModel(Object.keys(model).length?model:null);
+  };
+  const toggleAllPages=checked=>{
+    if(!pageScope||showAllPages===checked)return;
+    showAllPages=checked;
+    updatePbsModel(checked); // one AG column filter, no parallel page state
+  };
+  const allColumn={colId:'__all_pages',headerName:'',width:85,minWidth:85,
+    maxWidth:85,pinned:'left',lockPinned:true,resizable:false,sortable:false,filter:false,suppressMovable:true,
+    suppressHeaderMenuButton:true,suppressHeaderFilterButton:true,
+    headerComponent:AllPagesHeader,
+    headerComponentParams:{getChecked:()=>showAllPages,onChange:toggleAllPages,
+      onMount:input=>{allPagesInput=input;},onUnmount:input=>{
+        if(allPagesInput===input)allPagesInput=null;
+      }}};
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     rowSelection:{mode:'singleRow',checkboxes:false,headerCheckbox:false,enableClickSelection:true},
     onRowClicked:event=>selectedListener(event.data),
-    onFilterChanged:event=>filterListener(event.api.getFilterModel()),
+    onFilterChanged:event=>{
+      const model=event.api.getFilterModel();
+      if(pageScope){
+        showAllPages=!Boolean(model?.pbs);
+        if(allPagesInput)allPagesInput.checked=showAllPages;
+      }
+      filterListener(model);
+    },
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{resizable:true,sortable:false,suppressMovable:true},
     columnDefs,rowData:[]});
   // The AG pane owns the Grid API. Other modules may only update rows/columns
   // through this explicit, narrow component boundary; no private AG DOM access.
-  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged,initialFilterModel=null}){
+  host.ocrSqlGrid=Object.freeze({show({rows,columns,onRowSelected,onFilterChanged,
+    initialFilterModel=null,pageScope:scope=null}){
     selectedListener=onRowSelected??(()=>{});
+    pageScope=scope;pdfPage=scope?.page??1;showAllPages=false;
     // The full source atoms remain owned by CM6; the Grid shows only
     // non-absorbed blocks. Parent wrappers are retained for undo/audit.
     blockData=new Map(rows.filter(r=>r?.block_id!=null)
@@ -123,11 +170,12 @@ function mountEmptyGrid(host){
     filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
     grid.setFilterModel(null);
-    grid.setGridOption('columnDefs',columns);
+    grid.setGridOption('columnDefs',pageScope?[allColumn,...columns]:columns);
     grid.setGridOption('rowData',rows.filter(isVisible));
     // Apply the caller's startup selection through AG Grid's public filter
     // model before subscribing to changes; the real checkbox UI stays owner.
     if(initialFilterModel)grid.setFilterModel(initialFilterModel);
+    if(pageScope)updatePbsModel(false);
     filterListener=onFilterChanged??(()=>{});
     filterListener(grid.getFilterModel());
     // Avoid carrying horizontal scroll from the previous table into the new
@@ -137,6 +185,11 @@ function mountEmptyGrid(host){
       grid.ensureColumnVisible(first,'start');
       requestAnimationFrame(()=>grid.ensureColumnVisible(first,'start'));
     }
+  },setPdfPage(page){
+    if(!Number.isSafeInteger(page)||page<1||pdfPage===page)return false;
+    pdfPage=page;
+    if(pageScope&&!showAllPages)updatePbsModel(false);
+    return true;
   },patchBlockRows(changedRows){
     const changed=new Map(changedRows.map(r=>[String(r.block_id),r]));
     const remove=[],add=[];
@@ -160,7 +213,10 @@ function mountEmptyGrid(host){
       if(patch&&isVisible(blockData.get(String(node.data?.block_id))))
         node.updateData({...node.data,...patch});
     });
-    grid.refreshClientSideRowModel?.('sort');
+    // A structural move can change PBS pN while leaving the physical page
+    // intact. Reapply the existing PBS filter, not a second page predicate.
+    if(pageScope)grid.onFilterChanged();
+    else grid.refreshClientSideRowModel?.('sort');
   },selectById({field,id}){
     if(typeof field!=='string'||!field||id==null)return null;
     const wanted=String(id);
@@ -176,7 +232,8 @@ function mountEmptyGrid(host){
       // A PDF-visible Block may be hidden by unrelated AG filters (e.g.
       // block_type). Preserve the authoritative block_group filter.
       const current=grid.getFilterModel()||{};
-      const remaining=Object.fromEntries(Object.entries(current).filter(([key])=>key==='block_group'));
+      const remaining=Object.fromEntries(Object.entries(current).filter(([key])=>
+        key==='block_group'||(pageScope&&key==='pbs')));
       if(Object.keys(current).length!==Object.keys(remaining).length){
         grid.setFilterModel(remaining);selected=lookup();
       }
@@ -187,7 +244,8 @@ function mountEmptyGrid(host){
     if(column){grid.ensureColumnVisible(column);grid.setFocusedCell(selected.index,column);}
     selected.node.setSelected(true,true);
     return selected.node.data;
-  },clear(){selectedListener=()=>{};filterListener=()=>{};grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
+  },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
+    grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
   return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
 function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlot=null,onStatus=()=>{}){
@@ -407,12 +465,15 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
-    showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null}={}){
+    setSqlPdfPage(page){
+      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.setPdfPage(page)??false;
+    },
+    showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,pageScope=null}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
-      port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,onRowSelected:row=>{
+      port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,pageScope,onRowSelected:row=>{
         cm.select(row);
         onSelect?.(row);
       }});

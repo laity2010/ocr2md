@@ -26,6 +26,24 @@
   padding-right:5px;
   line-height:1.25;
 }
+.ocr-ag-all-pages {
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:4px;
+  height:100%;
+  font-size:13px;
+  white-space:nowrap;
+  cursor:pointer;
+  user-select:none;
+}
+.ocr-ag-all-pages input {
+  width:17px;
+  height:17px;
+  margin:0;
+  accent-color:#83c092;
+  cursor:pointer;
+}
 .ocr-outline-pane .ag-cell[col-id="title"] {
   display:flex;
   align-items:center;

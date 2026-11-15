@@ -61,3 +61,5 @@ WCP44：Block 只允许父块和一级子块两级；父块连同原子块内容
 **WCP49 · 上一页父块的后页兄弟接续**：`p10b0` 拖至实际在第 10 页、逻辑属于第 9 页的 `p9b5s1` 并选择「作为子块」时，按目标真正父块 `p9b5` 归入，形成直接兄弟子块。前后两页局部刷新，支持 Undo/Redo 和同父排序，不改原始数据；详见 `docs/contracts/lab-ocr-block-edit.md`。
 
 **WCP48 · 父父合并的节点数**：两个已拥有子块的父容器合并时只保留一个可见父容器，原有双方的子块按序变成幸存父的一级子块（如 2+2→4，**不是 5**）。被归并的父容器不再显示，也不额外成为子块，但原始 OCR/BlockID 和数据库审阅归并标志全部保留，可 Undo/Redo 完整恢复。SQL VIEW 保留无损原子供 CM6，AG/PDF 仅投影活跃节点；不重新初始化书籍。详见 `docs/contracts/lab-ocr-block-edit.md`。
+
+**WCP51 · AG 跟随 PDF 的 PBS 页筛选**：Block 表将列序调整为 PBS、Block Type、摘要，其余字段按原顺序保留；最左固定表头 checkbox「全部」默认不勾选。默认在 AG **PBS 列原有的 EnumCheckboxFilter** 只选 PDF 当前页对应的 `pN`，PDF.js 翻页事件通过明确回调更新这一列的筛选模型，不从 SQLite 重新读取、不让 CM6 数据发生变化。勾选「全部」时清除 PBS 页限制，仍可在 PBS 列菜单手动选择 `p1、p2…`（菜单不再逐块显示 `p1b0` 等值），取消勾选即恢复当前 PDF 页。跨页关系以可变的**逻辑 PBS `pN`**而不是原始物理 `global_page` 归类。被吸收的父容器仍按已有投影规则不可见。详见 `tests/lab-ocr-pbs-page-filter.test.mjs`、`tests/lab-ocr-ag-pbs-page.browser.test.mjs`；其他 SQL 表不增加该 checkbox。
