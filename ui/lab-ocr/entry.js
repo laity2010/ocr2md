@@ -2,6 +2,9 @@
  * A book with no PDF configured loads no PDF.js code or worker.
  */
 import {registerFramePdfPane} from '../frame/layout.js';
+import './focus-theme.css';
+// Only Lab OCR installs the shared four-pane review-focus palette.
+document.getElementById('workspace')?.classList.add('ocr-review-focus-unified');
 registerFramePdfPane(context=>{
   let disposed=false,viewer=null,initialization=null,overlayConfig=null,pendingFocus=null,activeSource=null;
   return Object.freeze({

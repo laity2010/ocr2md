@@ -1,0 +1,54 @@
+/* Lab OCR four-pane review focus. One semantic target -> the same visible
+ * amber fill and solid 2px gold edge in AG / CM6 / Markdown / PDF.
+ * Scoped to this Lab; Main and frame/base retain their own palette.
+ * No new DOM state, event bus or data owner is introduced. */
+#workspace.ocr-review-focus-unified {
+  --ocr-review-focus-edge:#ffd46c;
+  --ocr-review-focus-fill:rgba(231,183,83,.20);
+}
+
+/* AG Grid's selected-row surface is also the review focus. Do not style the
+ * keyboard-focused cell: keyboard traversal is not a semantic review click. */
+#workspace.ocr-review-focus-unified .ocr-outline-grid .ag-row-selected {
+  background:var(--ocr-review-focus-fill) !important;
+  box-shadow:inset 0 0 0 2px var(--ocr-review-focus-edge);
+  z-index:1;
+}
+#workspace.ocr-review-focus-unified .ocr-outline-grid .ag-row-selected::before {
+  background:transparent !important;
+}
+
+/* Use the same ring and fill for source lines and rendered Markdown blocks.
+ * The source line ring is inset because CodeMirror clips its scroller edges. */
+#workspace.ocr-review-focus-unified .cm-line.ocr-four-pane-source-active {
+  background:var(--ocr-review-focus-fill);
+  outline:2px solid var(--ocr-review-focus-edge);
+  outline-offset:-2px;
+  box-shadow:none;
+  border-radius:2px;
+}
+#workspace.ocr-review-focus-unified .ocr-preview-md-scroll [data-ocr-sync-selected="true"] {
+  background:var(--ocr-review-focus-fill);
+  outline:2px solid var(--ocr-review-focus-edge);
+  outline-offset:1px;
+  border-radius:3px;
+}
+
+/* The original PDF overlay transparency applies to unselected geometry only;
+ * keeping focus below a semi-transparent PARENT made the same color far dimmer
+ * than AG/CM6/MD. Selection and family remain solid and distinct. */
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-layer {
+  opacity:1;
+}
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-box:not([data-selected="true"]):not([data-family-selected="true"]) {
+  opacity:var(--lab-ocr-pdf-overlay-opacity,.35);
+}
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-box[data-selected="true"] {
+  background:var(--ocr-review-focus-fill);
+  outline:2px solid var(--ocr-review-focus-edge);
+  outline-offset:1px;
+  opacity:1;
+}
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-pbs-tag[data-selected="true"] {
+  box-shadow:0 0 0 2px var(--ocr-review-focus-edge);
+}

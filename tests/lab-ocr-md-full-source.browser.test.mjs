@@ -169,12 +169,58 @@ try{
        }))));throw error;
      });
    };
+   // Check the rendered CSS, not merely the four semantic selection flags.
+   // All direct focus targets must have identical gold edge and amber fill,
+   // including AG Grid's native row selection and actual PDF box geometry.
+   const assertUnifiedFocus=async()=>{
+     await page.waitForFunction(()=>Boolean(document.querySelector(
+       '#workspace .ag-row-selected:not(.ag-opacity-zero)')),{},{timeout:6000});
+     const styles=await page.evaluate(()=>{
+       const el=selector=>document.querySelector(selector);
+       const style=selector=>{
+         const node=el(selector);
+         if(!node)return null;
+         const css=getComputedStyle(node);
+         return {background:css.backgroundColor,outline:css.outlineColor,
+           outlineWidth:css.outlineWidth,outlineStyle:css.outlineStyle,
+           boxShadow:css.boxShadow,opacity:css.opacity};
+       };
+       return {
+         root:el('#workspace')?.classList.contains('ocr-review-focus-unified'),
+         ag:style('#workspace .ag-row-selected:not(.ag-opacity-zero)'),
+         cm:style('#workspace .cm-line.ocr-four-pane-source-active'),
+         md:style('#workspace .ocr-preview-md-scroll [data-ocr-sync-selected="true"]'),
+         pdf:style('#workspace .lab-ocr-pdf-overlay-box[data-selected="true"]'),
+         label:style('#workspace .lab-ocr-pdf-pbs-tag[data-selected="true"]'),
+         layer:style('#workspace .lab-ocr-pdf-overlay-layer:has(.lab-ocr-pdf-overlay-box[data-selected="true"])'),
+         mutedPdf:style('#workspace .lab-ocr-pdf-overlay-box[data-selected="false"][data-family-selected="false"]'),
+       };
+     });
+     const expectedEdge='rgb(255, 212, 108)',expectedFill='rgba(231, 183, 83, 0.2)';
+     assert.equal(styles.root,true,'Four-pane focus palette must be Lab-scoped');
+     for(const name of ['ag','cm','md','pdf']){
+       assert(styles[name],name+' direct focus surface must exist');
+       assert.equal(styles[name].background,expectedFill,name+' amber focus fill');
+     }
+     for(const name of ['cm','md','pdf']){
+       assert.equal(styles[name].outline,expectedEdge,name+' gold focus ring');
+       assert.equal(styles[name].outlineWidth,'2px',name+' 2px focus ring');
+       assert.equal(styles[name].outlineStyle,'solid',name+' solid focus ring');
+     }
+     assert(styles.ag.boxShadow.includes(expectedEdge),'AG row gold 2px inset ring');
+     assert(styles.label.boxShadow.includes(expectedEdge),'PDF label gold focus ring');
+     assert.equal(styles.layer.opacity,'1','Selected PDF geometry must not inherit transparency fade');
+     if(styles.mutedPdf)assert(Number(styles.mutedPdf.opacity)<1,
+       'Unselected PDF coverage must retain global transparency');
+   };
    // PDF -> AG / CM6 / rendered Markdown.
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
    await synchronized(2,'md-c','Original paragraph');
+   await assertUnifiedFocus();
    // Markdown preview -> other three, including a different PDF page.
    await page.locator('.ocr-preview-md-scroll p[data-source-start="5"]').click();
    await synchronized(3,'md-e','Last paragraph');
+   await assertUnifiedFocus();
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),false);
    // AG -> CM6 / preview / PDF, returning to page 1 without clearing filters.
    await page.locator('.ocr-preview-md-scroll p[data-source-start="3"]').click();
@@ -182,9 +228,11 @@ try{
    await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
      .filter({hasText:/^Original paragraph$/}).click();
    await synchronized(2,'md-c','Original paragraph');
+   await assertUnifiedFocus();
    // CM6 user click -> the remaining three panels, not a programmatic echo.
    await page.locator('.ocr-cm-source .cm-line').filter({hasText:'## Heading'}).click();
    await synchronized(1,'md-a','## Heading');
+   await assertUnifiedFocus();
    await page.locator('.ocr-preview-md-scroll p[data-source-start="3"]').click();
    await synchronized(2,'md-c','Original paragraph');
    // Review AG must keep its prior Block columns, toolbar and default filters.

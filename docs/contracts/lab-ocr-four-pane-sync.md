@@ -29,6 +29,11 @@ Scope: experimental `lab-ocr`, not a Main feature or a second document store.
 - `clearMdAgSelection()` clears stale AG selection for hidden/absent rows while leaving the full filter model untouched.
 - Main's `createScrollSync` continues to coordinate high-frequency CM6 and MD preview scroll using Markdown renderer `data-source-start/end` anchors, without broadcasting every scroll pixel to PDF or AG. PDF pagechanging already follows AG page filter through `onPageChange`.
 
+## Shared review-focus presentation
+
+The Lab OCR root `.ocr-review-focus-unified` opts into `ui/lab-ocr/focus-theme.css`.
+Every directly focused object uses a solid 2px `#ffd46c` edge and `rgba(231,183,83,.20)` fill; the AG row, CM6 source line, Markdown block and PDF geometry use one pair of CSS custom properties. This is *not* hover or keyboard-cell focus. PDF family/descendant highlights retain their softer amber treatment, whereas unselected PDF geometry continues to honor the global overlay-opacity setting. The PDF selected geometry is outside that opacity fade, so its color is not artificially weaker than the other panes. PDF PBS labels retain the Main parent/child base palette.
+
 ## Acceptance / evidence
 
 `tests/lab-ocr-four-pane-location.test.mjs`: pure mapping + message contract; `tests/lab-ocr-md-full-source.browser.test.mjs`: four directions in a real Chromium and iPad WebKit browser, persistent highlights, PDF page transition, AG filter preservation and CM6/SQLite save/reload. `tests/lab-ocr-ag-pbs-page.browser.test.mjs` protects existing Block AG page filtering and all-pages switch.
