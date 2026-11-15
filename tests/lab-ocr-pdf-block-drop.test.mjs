@@ -10,6 +10,11 @@ const child={blockId:'21',parentBlockId:'20',page:1,pbs:'p1b1s0',
 const otherPage={...parent,blockId:'30',page:2};
 assert.deepEqual(blockDropPlacements(source,parent),['before','child','after']);
 assert.deepEqual(blockDropPlacements(source,child),['child']);
+// p10b0 -> p9b5s1: both labels sit on page 10 but the child belongs to
+// a page-9 logical parent. UI must expose the append-to-parent slot.
+assert.deepEqual(blockDropPlacements(
+ {blockId:'40',parentBlockId:null,page:10},
+ {blockId:'41',parentBlockId:'39',page:10,pbs:'p9b5s1'}),['child']);
 assert.deepEqual(blockDropPlacements({blockId:'22',parentBlockId:'20',page:1},child),['before','after']);
 assert.deepEqual(blockDropPlacements({blockId:'22',parentBlockId:'30',page:1},child),[]);
 assert.deepEqual(blockDropPlacements(source,otherPage),[]);

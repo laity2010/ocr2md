@@ -46,6 +46,33 @@ const redo=editBlockRuntime(state,{action:'redo'});
 state=redo.state;
 assert.equal(lookup(20).pbs,'~merged:20');
 assert.equal(lookup(21).pbs,'p1b1s1');
+// WCP49: the target child and the new root both live on physical page 2,
+// but the target's logical parent lives on page 1.
+const appendToForeignParent=editBlockRuntime(state,{action:'apply',
+ sourceBlockId:22,targetBlockId:21,placement:'child'});
+state=appendToForeignParent.state;
+assert.deepEqual(appendToForeignParent.pages,[1,2]);
+assert.equal(lookup(22).parent_block_id,11);
+assert.equal(lookup(22).pbs,'p1b1s2');
+assert.equal(lookup(21).pbs,'p1b1s1');
+assert.equal(lookup(23).pbs,'p2b0');
+assert.equal(lookup(22).global_page,1);
+state=editBlockRuntime(state,{action:'undo'}).state;
+assert.equal(lookup(22).parent_block_id,null);
+assert.equal(lookup(22).pbs,'p2b0');
+assert.equal(lookup(23).pbs,'p2b1');
+state=editBlockRuntime(state,{action:'redo'}).state;
+assert.equal(lookup(22).pbs,'p1b1s2');
+// Existing linked children still permit normal same-parent sibling reordering
+// although their physical page is not their parent's logical page.
+const reorderLinked=editBlockRuntime(state,{action:'apply',
+ sourceBlockId:22,targetBlockId:21,placement:'before'});
+state=reorderLinked.state;
+assert.equal(lookup(22).pbs,'p1b1s1');
+assert.equal(lookup(21).pbs,'p1b1s2');
+state=editBlockRuntime(state,{action:'undo'}).state;
+assert.equal(lookup(21).pbs,'p1b1s1');
+assert.equal(lookup(22).pbs,'p1b1s2');
 assert.throws(()=>planBlockMoveInMemory(data,10,20,'child'),/后一页/);
 assert.throws(()=>planBlockMoveInMemory(data,20,11,'after'),/后一页/);
 console.log('LAB_OCR_CROSS_PAGE_CM_PASS');

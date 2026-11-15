@@ -40,6 +40,9 @@ const prior=snapshot(originals);
 const after=[
  [20,11,1,'p1b1s1',null],[21,null,0,'p2b0',null],
 ];
+const afterSecond=[
+ [21,11,2,'p1b1s2',null],
+];
 try{
  let ready=false;
  for(let i=0;i<100;i++){try{if((await fetch(url)).ok){ready=true;break;}}catch{}
@@ -93,8 +96,9 @@ try{
       assert.equal(body.expectedRevision,revision);
       for(const cmd of body.operations){
         if(cmd.action==='apply'){
-          assert.deepEqual([cmd.sourceBlockId,cmd.targetBlockId,cmd.placement],[20,11,'child']);
-          applies++;cursor=1;applySnapshot(rows,after);
+          assert.deepEqual([cmd.sourceBlockId,cmd.targetBlockId,cmd.placement],
+            applies===0?[20,11,'child']:[21,20,'child']);
+          applies++;cursor=applies;applySnapshot(rows,applies===1?after:afterSecond);
         }else if(cmd.action==='undo'){undos++;cursor=0;applySnapshot(rows,prior);}
         else if(cmd.action==='redo'){redos++;cursor=1;applySnapshot(rows,after);}
         else throw Error('unexpected cmd '+cmd.action);
@@ -161,6 +165,30 @@ try{
    // The physical geometry still belongs to page two.
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="1"] .lab-ocr-pdf-overlay-box[data-id="b20"]').count(),0);
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-page="2"] .lab-ocr-pdf-overlay-box[data-id="b20"]').count(),1);
+   // p2 root dropped onto a p1 child that also physically occupies p2:
+   // this is the p10b0 -> p9b5s1 regression in a two-page fixture.
+   const source2=page.locator('.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag[data-block-id="21"]');
+   const target2=page.locator('.lab-ocr-pdf-overlay-layer[data-page="2"] .lab-ocr-pdf-overlay-box[data-id="b20"]');
+   await source2.scrollIntoViewIfNeeded();
+   const viewport2=await page.locator('.lab-ocr-pdf-scroller').evaluate(e=>({top:e.scrollTop,left:e.scrollLeft}));
+   src=await source2.boundingBox();dst=await target2.boundingBox();
+   assert(src&&dst);
+   await page.mouse.move(src.x+src.width/2,src.y+src.height/2);
+   await page.mouse.down();await sleep(465);
+   await page.mouse.move(dst.x+dst.width*.55,dst.y+dst.height*.5,{steps:14});
+   await sleep(100);
+   await guide.waitFor({state:'visible'});
+   assert.deepEqual(await guide.locator('[data-placement]').evaluateAll(nodes=>
+     nodes.map(node=>node.dataset.placement)),['child']);
+   await page.mouse.up();
+   await page.waitForFunction(()=>document.querySelector(
+     '.lab-ocr-pdf-pbs-layer[data-page="2"] .lab-ocr-pdf-pbs-tag[data-block-id="21"]')?.textContent==='p1b1s2');
+   const viewport2After=await page.locator('.lab-ocr-pdf-scroller').evaluate(e=>({top:e.scrollTop,left:e.scrollLeft}));
+   assert(Math.abs(viewport2After.top-viewport2.top)<2&&
+     Math.abs(viewport2After.left-viewport2.left)<2,'Second cross-page sibling append shifted viewport');
+   await page.waitForFunction(()=>/SQLite 已异步保存/.test(document.querySelector('#status')?.textContent||''),
+     null,{timeout:12000});
+   assert.equal(applies,2);
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_CROSS_PAGE_BROWSER_PASS',name,
       JSON.stringify({applies,undos,redos,revision,overlayReads}));

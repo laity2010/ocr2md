@@ -12,8 +12,16 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
     throw Error('已合并的父容器不能再次作为拖动源或目标');
   if(!['child','before','after'].includes(placement))throw Error('Block 落点无效');
   if(rows.length>10000||nodes.size!==rows.length)throw Error('跨页 Block 关系数量异常');
-  const cross=source.global_page!==target.global_page;
-  if(cross&&(source.global_page!==target.global_page+1||placement!=='child'||
+  const sourceParent=source.parent_block_id;
+  const targetRoot=target.parent_block_id===null?targetId:target.parent_block_id;
+  const rootPage=nodes.get(targetRoot)?.global_page;
+  if(rootPage===undefined)throw Error('CM 父 BlockID 缺失');
+  // The target child can physically be on the same PDF page as the source,
+  // while its *logical parent* is on the preceding page. Use that parent
+  // page to decide if this is a cross-page append.
+  const destinationPage=placement==='child'?rootPage:target.global_page;
+  const cross=source.global_page!==destinationPage;
+  if(cross&&(source.global_page!==destinationPage+1||placement!=='child'||
      source.parent_block_id!==null))
     throw Error('跨页仅允许后一页顶层块归入前一页父块；之前／之后仍须同页');
   const byParent=new Map();
@@ -37,10 +45,11 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
       seen.add(cur);cur=nodes.get(cur).parent_block_id;
     }
   }
-  const sourceParent=source.parent_block_id;
-  const targetRoot=target.parent_block_id===null?targetId:target.parent_block_id;
-  if(cross&&nodes.get(targetRoot)?.global_page!==target.global_page)
+  if(placement==='child'&&
+     (target.global_page<rootPage||target.global_page>rootPage+1))
     throw Error('跨页不能越过相邻的逻辑父页');
+  if(placement==='child'&&target.global_page>source.global_page)
+    throw Error('跨页不能逆向选择后一物理页的子块');
   const start=rows.map(r=>r);
   let absorbsParent=false;
   if(placement==='child'){
@@ -84,7 +93,13 @@ export function planLinkedBlockMove(rows,sourceBlockId,targetBlockId,placement){
     members.splice(members.indexOf(sourceId),1);
     members.splice(members.indexOf(targetId)+(placement==='after'?1:0),0,sourceId);
   }
-  const pages=new Set([source.global_page,target.global_page]);
+  // Renumber the *parent's* page as well: children on the next physical
+  // page are indexed under its logical root, not under their own page roots.
+  const pages=new Set([source.global_page,target.global_page,
+    // Reordering two already-linked children also belongs to their parent
+    // page, even if both children physically live on the following page.
+    ...(placement==='child'?[rootPage]:
+      sourceParent!==null?[nodes.get(sourceParent).global_page]:[])]);
   for(const page of pages){
     const roots=byParent.get('root:'+page)||[];
     roots.forEach((id,index)=>{

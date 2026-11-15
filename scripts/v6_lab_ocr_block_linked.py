@@ -16,8 +16,16 @@ def plan_linked_move(rows,source_id,target_id,placement):
     source=nodes[source_id];target=nodes[target_id]
     if source.get('absorbed_into_block_id') is not None or target.get('absorbed_into_block_id') is not None:
         raise OCRImportError('已合并父容器不能再次作为拖动源或目标')
-    cross=source['global_page']!=target['global_page']
-    if cross and (source['global_page']!=target['global_page']+1 or placement!='child' or
+    source_parent=source['parent_block_id']
+    target_root=(target_id if target['parent_block_id'] is None
+                 else target['parent_block_id'])
+    if target_root not in nodes:raise OCRImportError('已有 Block 父关系缺失')
+    root_page=nodes[target_root]['global_page']
+    # The target child may physically share the source page while its logical
+    # parent lives on the previous PDF page.
+    destination_page=root_page if placement=='child' else target['global_page']
+    cross=source['global_page']!=destination_page
+    if cross and (source['global_page']!=destination_page+1 or placement!='child' or
                   source['parent_block_id'] is not None):
         raise OCRImportError('跨页仅允许后一页顶层块归入前一页父块；之前／之后仍须同页')
     from collections import defaultdict
@@ -39,11 +47,10 @@ def plan_linked_move(rows,source_id,target_id,placement):
         while cursor is not None:
             if cursor in visited:raise OCRImportError('块关系存在循环')
             visited.add(cursor);cursor=nodes[cursor]['parent_block_id']
-    source_parent=source['parent_block_id']
-    target_root=(target_id if target['parent_block_id'] is None
-                 else target['parent_block_id'])
-    if cross and nodes[target_root]['global_page']!=target['global_page']:
+    if placement=='child' and not root_page<=target['global_page']<=root_page+1:
         raise OCRImportError('跨页不能越过相邻的逻辑父页')
+    if placement=='child' and target['global_page']>source['global_page']:
+        raise OCRImportError('跨页不能逆向选择后一物理页的子块')
     absorbs_parent=False
     if placement=='child':
         if source_parent is not None:raise OCRImportError('只能归入顶层块')
@@ -78,7 +85,10 @@ def plan_linked_move(rows,source_id,target_id,placement):
         members=siblings[key(source_parent,source['global_page'])]
         members.remove(source_id)
         members.insert(members.index(target_id)+(placement=='after'),source_id)
+    # Child PBS numbering belongs to the logical root's physical page.
     physical_pages={source['global_page'],target['global_page']}
+    if placement=='child':physical_pages.add(root_page)
+    elif source_parent is not None:physical_pages.add(nodes[source_parent]['global_page'])
     for page in physical_pages:
         for root_index,root_id in enumerate(siblings.get(('root',page),())):
             root=nodes[root_id]

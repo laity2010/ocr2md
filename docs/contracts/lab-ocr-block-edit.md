@@ -1,5 +1,8 @@
 # Lab OCR · Block 拖动改变关系 WP1–WP5（WCP41）
 
+> **WCP49 · 后页子块落点的逻辑父页修复（2026-11-15）**：若第 10 页显示的 `p9b5s1` 实际属于第 9 页的逻辑父块 `p9b5`，则 `p10b0` 拖向 `p9b5s1` 并选择「作为子块」时，来源块必须归入 `p9b5`，成为其一级兄弟块（例如 `p9b5s2`），不能产生孙块，也不能按落点物理第 10 页重编 PBS。CM6 / SQLite 均按**逻辑父页**检查后→前相邻页归入并重编目标根块的子块；两个已跨页的子块在下一物理页进行同父「之前／之后」排序，同样须重编逻辑父页。仅改关系、顺序、PBS，保留 BlockID、物理页、bbox、源 MinerU JSON 和 SQLite CAS/Undo/Redo。仍不开放反向、隔页或跨页「之前／之后」归入。
+
+
 > **WCP48 · 父容器与父容器合并规则（2026-11-15）**：当来源父块已有一级子块，拖动它归入另一父块或该父块的子块时，**只合并两组原子子块**，来源父容器不额外变成第五个子块。例如 `p4b0` 及 `s0,s1`，和 `p4b1` 及 `s0,s1` 合并后仅展示 `p4b0` + `p4b0s0…s3`（1 父 + 4 子）。来源父容器的稳定 BlockID 和无损原始 JSON **仍保留**，审阅扩展的 `absorbed_into_block_id` 指向幸存父块、不可见哨兵 PBS 为 `~merged:{BlockID}`；其记录作为可审计/可撤销的容器保留，但 AG/PDF 不再呈现它的标签或覆盖框。Block SQL VIEW 本身仍列出这一原始记录以供 CM6/历史恢复，AG 与 PDF 只显示活跃投影。若来源没有子块，它仍是一个独立原子，可以作为正常子块归入（不会意外消失）。
 >
 > 新旧 SQLite 审阅表在第一次实际父父合并写事务中**仅增补** `absorbed_into_block_id` 字段；若为 `block_review`，同一事务重新建立可读出该字段的 `block VIEW`，不重建/清空任何来源及审阅历史。新初始化直接包含该字段。CM6 立即修改完整原子行、隐藏标志与父子排序；AG 通过公共 Grid 事务对源父行移除、Undo 时恢复，原始 Line/Span 与 BlockID 不动。PDF 缓存始终保留全部原始 bbox，只在 CM 视图投影时隐藏已吸收父块，避免 Undo 时覆盖框找不到。SQLite CAS/幂等操作历史使用含第五字段的 delta 快照记录归并/Undo/Redo，旧四字段快照仍受支持。相邻跨页续接的**来源父块带子块**时应用相同规则；无子块仍按 WCP47 的原子归入。参见 `tests/lab-ocr-parent-merge.test.py`、`tests/lab-ocr-parent-merge-runtime.test.mjs`、`tests/lab-ocr-parent-merge.browser.test.mjs`。

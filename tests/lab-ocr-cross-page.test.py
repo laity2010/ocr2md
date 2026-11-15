@@ -27,6 +27,39 @@ def make_book(path):
     return content
 
 class CrossPage(unittest.TestCase):
+ def test_following_page_root_can_join_sibling_of_prior_page_child(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   book=Path(tmp);raw=make_book(book)
+   # 4 (physical p2) contains child 5; after merging into the p1 parent,
+   # child 5 is a p1 child while still physically on p2.
+   apply_block_move(book,4,3,'child',0)
+   before={r['block_id']:r for r in block_rows(book)['rows']}
+   self.assertEqual((before[5]['global_page'],before[5]['pbs']),(1,'p1b1s1'))
+   self.assertEqual((before[6]['global_page'],before[6]['pbs']),(1,'p2b0'))
+   plan=preview_block_move(book,6,5,'child')
+   self.assertEqual(plan['pages'],[1,2])
+   result=apply_block_move(book,6,5,'child',1)
+   self.assertEqual(result['pages'],[1,2])
+   post={r['block_id']:r for r in block_rows(book)['rows']}
+   self.assertEqual((post[6]['parent_block_id'],post[6]['pbs']),(2,'p1b1s2'))
+   self.assertEqual(post[7]['pbs'],'p2b0')
+   self.assertEqual(post[5]['pbs'],'p1b1s1')
+   self.assertEqual(post[6]['global_page'],1)
+   undo_block_move(book,2)
+   restored={r['block_id']:r for r in block_rows(book)['rows']}
+   self.assertEqual(restored[6]['pbs'],'p2b0')
+   self.assertEqual(restored[7]['pbs'],'p2b1')
+   undo_block_move(book,3,redo=True)
+   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[6],'p1b1s2')
+   reorder=apply_block_move(book,6,5,'before',4)
+   self.assertEqual(reorder['pages'],[1,2])
+   after_reorder={r['block_id']:r for r in block_rows(book)['rows']}
+   self.assertEqual(after_reorder[6]['pbs'],'p1b1s1')
+   self.assertEqual(after_reorder[5]['pbs'],'p1b1s2')
+   undo_block_move(book,5)
+   self.assertEqual({r['block_id']:r['pbs'] for r in block_rows(book)['rows']}[5],'p1b1s1')
+   self.assertEqual((book/'mineru json'/'book.json').read_bytes(),raw)
+
  def test_direct_apply_and_undo_port_use_the_same_cross_page_plan(self):
   with tempfile.TemporaryDirectory() as tmp:
    book=Path(tmp);make_book(book)
