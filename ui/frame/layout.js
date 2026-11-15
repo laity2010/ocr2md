@@ -94,24 +94,6 @@ function mountEmptySource(host){
   });
   return {dispose(){delete host.ocrCmTable;editor.destroy();},layout:()=>editor.requestMeasure()};
 }
-/** Header-only select-all switch; AG Grid remains the sole filter owner. */
-class AllPagesHeader {
-  init(params){
-    this.params=params;
-    const label=document.createElement('label');label.className='ocr-ag-all-pages';
-    const input=document.createElement('input');
-    input.type='checkbox';input.checked=Boolean(params.getChecked?.());
-    input.setAttribute('aria-label','全部');
-    params.onMount?.(input);
-    input.addEventListener('change',()=>this.params.onChange?.(input.checked));
-    input.addEventListener('pointerdown',event=>event.stopPropagation());
-    label.append(input,document.createTextNode('全部'));
-    this.gui=label;this.input=input;
-  }
-  getGui(){return this.gui;}
-  refresh(params){this.params=params;this.input.checked=Boolean(params.getChecked?.());return true;}
-  destroy(){this.params.onUnmount?.(this.input);}
-}
 function mountEmptyGrid(host){
   const columnDefs=[
     {field:'pbs',headerName:'PBS',width:115},
@@ -121,7 +103,10 @@ function mountEmptyGrid(host){
   ];
   let selectedListener=()=>{},filterListener=()=>{};
   let blockData=new Map();
-  let pageScope=null,pdfPage=1,showAllPages=false,allPagesInput=null;
+  // The switch belongs to the AG toolbar, not to the AG Grid column model.
+  const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
+  const allPagesInput=allPagesControl?.querySelector('input')??null;
+  let pageScope=null,pdfPage=1,showAllPages=false;
   const isVisible=row=>row?.absorbed_into_block_id==null;
   const updatePbsModel=checked=>{
     const model={...(grid.getFilterModel()||{})};
@@ -134,14 +119,8 @@ function mountEmptyGrid(host){
     showAllPages=checked;
     updatePbsModel(checked); // one AG column filter, no parallel page state
   };
-  const allColumn={colId:'__all_pages',headerName:'',width:85,minWidth:85,
-    maxWidth:85,pinned:'left',lockPinned:true,resizable:false,sortable:false,filter:false,suppressMovable:true,
-    suppressHeaderMenuButton:true,suppressHeaderFilterButton:true,
-    headerComponent:AllPagesHeader,
-    headerComponentParams:{getChecked:()=>showAllPages,onChange:toggleAllPages,
-      onMount:input=>{allPagesInput=input;},onUnmount:input=>{
-        if(allPagesInput===input)allPagesInput=null;
-      }}};
+  const onAllPagesChange=()=>toggleAllPages(allPagesInput.checked);
+  allPagesInput?.addEventListener('change',onAllPagesChange);
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     rowSelection:{mode:'singleRow',checkboxes:false,headerCheckbox:false,enableClickSelection:true},
     onRowClicked:event=>selectedListener(event.data),
@@ -162,6 +141,8 @@ function mountEmptyGrid(host){
     initialFilterModel=null,pageScope:scope=null}){
     selectedListener=onRowSelected??(()=>{});
     pageScope=scope;pdfPage=scope?.page??1;showAllPages=false;
+    if(allPagesControl)allPagesControl.hidden=!pageScope;
+    if(allPagesInput)allPagesInput.checked=false;
     // The full source atoms remain owned by CM6; the Grid shows only
     // non-absorbed blocks. Parent wrappers are retained for undo/audit.
     blockData=new Map(rows.filter(r=>r?.block_id!=null)
@@ -170,7 +151,7 @@ function mountEmptyGrid(host){
     filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
     grid.setFilterModel(null);
-    grid.setGridOption('columnDefs',pageScope?[allColumn,...columns]:columns);
+    grid.setGridOption('columnDefs',columns);
     grid.setGridOption('rowData',rows.filter(isVisible));
     // Apply the caller's startup selection through AG Grid's public filter
     // model before subscribing to changes; the real checkbox UI stays owner.
@@ -245,8 +226,11 @@ function mountEmptyGrid(host){
     selected.node.setSelected(true,true);
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
+    if(allPagesControl)allPagesControl.hidden=true;
+    if(allPagesInput)allPagesInput.checked=false;
     grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
-  return {dispose(){delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
+  return {dispose(){allPagesInput?.removeEventListener('change',onAllPagesChange);
+    delete host.ocrSqlGrid;grid.destroy();},layout:()=>{}};
 }
 function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlot=null,onStatus=()=>{}){
   const element=document.createElement('div');
@@ -256,6 +240,11 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     // The AG-owned module strip belongs to the left pane, not the global status.
     const bar=document.createElement('div');bar.className='ocr-ag-toolbar';
     bar.setAttribute('role','toolbar');bar.setAttribute('aria-label','AG 表工具栏');
+    const allPages=document.createElement('label');allPages.className='ocr-ag-all-pages';
+    allPages.hidden=true;
+    const allPagesCheckbox=document.createElement('input');allPagesCheckbox.type='checkbox';
+    allPagesCheckbox.checked=false;allPagesCheckbox.setAttribute('aria-label','全部');
+    allPages.append(allPagesCheckbox,document.createTextNode('全部'));
     const label=document.createElement('span');label.className='ocr-ag-toolbar-label';label.textContent='AG 表';
     const picker=document.createElement('select');picker.className='ocr-ag-module-select';
     picker.setAttribute('aria-label','选择模块');
@@ -267,7 +256,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
       picker.value=ownModule; // Each pane retains its own correct module on return.
       onModuleChange?.(next);
     });
-    bar.append(label,picker);element.append(bar);
+    bar.append(allPages,label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
     owned=()=>mountEmptyGrid(grid);

@@ -37,6 +37,7 @@
   cursor:pointer;
   user-select:none;
 }
+.ocr-ag-all-pages[hidden] {display:none;}
 .ocr-ag-all-pages input {
   width:17px;
   height:17px;

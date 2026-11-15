@@ -1,5 +1,5 @@
-/** WCP49 AG Block page-scoped view: PBS p-value filter, default current-page,
- * header 全部 switch, PDF.js page-change link, preserved complete CM source.
+/** AG Block page-scoped view: PBS p-value filter, default current-page,
+ * toolbar 全部 switch, PDF.js page-change link, preserved complete CM source.
  * Isolated API fixture; never touches any user's MinerU/SQLite/PDF.
  */
 import assert from 'node:assert/strict';
@@ -97,7 +97,11 @@ try{
    await toggle.waitFor();
    await expectPBS(['p1b0','p1b0s0','p1b1','p1b1s0']);
    assert.equal(await toggle.isChecked(),false,'All pages must be off by default');
-   assert.equal(await page.locator('.ag-header-cell[col-id="__all_pages"]').count(),1);
+   assert.equal(await page.locator('.ag-header-cell[col-id="__all_pages"]').count(),0,
+     'The checkbox belongs to the toolbar and MUST NOT consume a Grid column');
+   assert.equal(await page.locator('.ocr-ag-toolbar > .ocr-ag-all-pages').count(),1);
+   assert.equal(await page.locator('.ocr-ag-toolbar > :first-child').getAttribute('class'),'ocr-ag-all-pages');
+   assert.equal(await page.locator('.ocr-ag-toolbar > .ocr-ag-all-pages').isVisible(),true);
    assert.equal(await page.locator('.ag-header-cell[col-id="pbs"]').count(),1);
    // The default current-page rule must be the actual PBS column filter,
    // not a second hidden external predicate that contradicts its checkboxes.
