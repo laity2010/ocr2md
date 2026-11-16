@@ -19,3 +19,17 @@ export function resolveReviewLocation({lineId=null,blockId=null,lineNo=null}={},
     pbs:block?.pbs??null,
   });
 }
+
+/** The source caret follows the FIRST physical MD line belonging to a
+ * highlighted logical Block, even if AG clicked a later line in that Block.
+ * Empty PDF-only Blocks have no source position; manual/unowned lines may
+ * fall back to their explicitly selected LineNo. Never invent a line.
+ */
+export function sourceBlockStartLine(target,mdRows){
+  if(!target||!Array.isArray(mdRows))return null;
+  if(target.blockId!=null){
+    const first=mdRows.find(row=>row.block_id===target.blockId);
+    return Number.isInteger(first?.line_no)?first.line_no:null;
+  }
+  return Number.isInteger(target.lineNo)&&target.lineNo>0?target.lineNo:null;
+}

@@ -125,7 +125,7 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - PDF 标签点击以及 AG→PDF 定位共用稳定 `BlockID`、所在 PDF 页码和当前覆盖框 `bbox`。按钮初始禁用，**只有 PDF.js 的 `getTextContent()` 确认该覆盖框内部有原文 PDF 文本时才可用**，按页缓存；未取回文本、PDF 文本层为空或 bbox 内没有文字时均禁用。**禁止回退 MinerU `block_json`、`content_preview`、当前 CM 行内容或重新 OCR。**因此 MinerU 有文字而 PDF 无文字时仍禁用；反之 MinerU 文字为空但 PDF 覆盖范围内有文本时可以提取。
 - 通用 PDF 查看器内部复用 `getPage(page)` / `getTextContent()`，纯函数 `pdfTextInBox(textContent,viewport,pageSize,bbox)` 按 PDF.js 页视图的旋转/缩放变换，将可复制的原始文本片段定位到 MinerU 覆盖框坐标，限定绝大部分文字确实位于框内；按实际行的纵坐标和行内横坐标重组文字，保留断行和连字符。不使用 DOM 复制/选区、不读取任意别的 PDF 区域、不凭空拼出缺失字词。文本按 PDF 文档和每页缓存，仅在选中框时计算；切书释放缓存，异步旧响应不得污染新书的可用性。
 - PDF 对外仍只有 `setOverlays({...,onExtractText})` 提取回调，传入 `{blockId,text}`，其中 `text` 是由 PDF 组件从原始 PDF 产生的当前框文本；Lab OCR 业务层仅负责校验文本和执行 CM6 插入。原先 `canExtractBlock` / `originalBlockText` 的 MinerU 提取方案已淘汰，不再保留旧按钮行为或回退路径。
-- `frame.insertMdAtCursor(text)` → CM6 `editor.dispatch(changes)` 在**先前保留的源码光标 head** 插入，绝不以 PDF 标签目标/当前块头重新定位源码，也不替换选区；不附加新的逻辑块标签。通过现有 `editedMdRuntime` 的 LineID/BlockID 继承规则、CM6 原生 Undo/Redo、AG/预览投影和闲时 SQLite CAS 保存；仅影响正在编辑的 MD 文本。
+- `frame.insertMdAtCursor(text)` → CM6 `editor.dispatch(changes)` 在**当前源码光标 head** 插入：PDF 标签选中时四窗定位会先将光标同步到目标 MD 逻辑块首（没有对应 MD 行的块不移动）；用户之后可手动调整光标。不替换选区；不附加新的逻辑块标签。通过现有 `editedMdRuntime` 的 LineID/BlockID 继承规则、CM6 原生 Undo/Redo、AG/预览投影和闲时 SQLite CAS 保存；仅影响正在编辑的 MD 文本。
 - 直接测试：`node tests/lab-ocr-pdf-text-region.test.mjs`（真实 PDF.js 可复制文字、跨行、页外排除、缩放、纯扫描页）；真实 Chromium + iPad WebKit 集成：`node tests/lab-ocr-pdf-extract.browser.test.mjs`（按钮控制、OCR 有字 PDF 无字必须禁用、OCR 无字 PDF 有字必须可用、跨页与光标保留、原文多行插入、逻辑归属、撤销/重做/保存/重载）。
 
 历史 `lab-ocr-pdf-viewer.browser.test.mjs` 中「PDF 工具栏有覆盖框下拉」「初始不切分」的断言、以及此前用于手动 Span 切换的流程，是过去版本的验收快照；本轮不因此恢复已撤下的控件或改变默认四窗布局。

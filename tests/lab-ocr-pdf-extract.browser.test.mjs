@@ -123,6 +123,17 @@ try{
      '.lab-ocr-pdf-overlay-layer[data-level="block"] .lab-ocr-pdf-overlay-box')),
      null,{timeout:12000});
    const tag=id=>page.locator(`.lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
+   // An AG click on the SECOND physical line of Block 11 must move the CM6
+   // source caret to the block's FIRST physical line, not the clicked row.
+   await page.evaluate(()=>{
+     const cm=document.querySelector('.ocr-cm-source').ocrCmTable.editorView();
+     cm.dispatch({selection:{anchor:cm.state.doc.line(2).to}});
+   });
+   await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
+     .filter({hasText:/^Next line$/}).click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.editorView()?.state.selection.main.head===0,
+     null,{timeout:7000});
    // Image-only MinerU data still enables extraction when the original PDF
    // has native text INSIDE its bbox. An empty PDF region never falls back to
    // MinerU, even if adjacent PDF blocks have perfectly readable text.
@@ -134,14 +145,20 @@ try{
      'MinerU text with NO corresponding PDF native text must not enable extraction');
    await tag(11).click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
-   // Capture existing CodeMirror cursor BEFORE selecting the PDF label:
-   // the PDF block focus updates highlights but cannot steal that caret.
+   // PDF selection for Block 11 navigates CM6 to its first source line.
+   // A PDF-only Block 12 has NO MD physical line: its text can still be
+   // extracted, but the existing CM6 caret must not be invented/repositioned.
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.editorView()?.state.selection.main.head===0);
    const pos=await page.evaluate(()=>{
      const cm=document.querySelector('.ocr-cm-source').ocrCmTable.editorView();
      cm.dispatch({selection:{anchor:'Intro: '.length}});
      return cm.state.selection.main.head;
    });
    await tag(12).click();
+   assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     .ocrCmTable.editorView().state.selection.main.head),pos,
+     'A PDF-only Block without an MD row must keep the existing source caret');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
    await extract.click();
    await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
@@ -151,9 +168,15 @@ try{
      ?.ocrCmTable?.mdDocument()===text,original);
    await tag(11).click();
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
-   const still=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
-     .ocrCmTable.editorView().state.selection.main.head);
-   assert.equal(still,pos,'PDF label selection must not silently move CodeMirror insertion cursor');
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.editorView()?.state.selection.main.head===0,
+     null,{timeout:7000});
+   // After a new block navigation, a manual CM6 caret move still determines
+   // the exact insertion position until another cross-pane navigation occurs.
+   await page.evaluate(pos=>{
+     const cm=document.querySelector('.ocr-cm-source').ocrCmTable.editorView();
+     cm.dispatch({selection:{anchor:pos}});
+   },pos);
    await extract.click();
    await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument()===text,upgraded,{timeout:8000});

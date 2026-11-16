@@ -8,7 +8,7 @@ import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
 import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
-import {resolveReviewLocation} from './four-pane-location.js';
+import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
@@ -155,6 +155,13 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     }else{
       frame.highlightMdSource(null);
       frame.highlightMdPreview(null);
+    }
+    // External navigation is a caret move, not a text edit or focus steal.
+    // Source-origin gestures keep their exact CM6 position; AG rows may point
+    // to a later line but the source caret always lands at logical Block start.
+    if(target.origin!=='cm6'&&target.intent==='click'){
+      const first=sourceBlockStartLine(target,md().rows);
+      if(first!==null)frame.focusMdLine(first,{focus:false});
     }
     if(target.blockId!=null&&target.page&&target.origin!=='pdf')
       frame.focusPdfBlock({id:target.blockId,page:target.page,

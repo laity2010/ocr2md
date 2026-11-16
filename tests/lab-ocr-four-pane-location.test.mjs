@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {resolveReviewLocation} from '../ui/lab-ocr/four-pane-location.js';
+import {resolveReviewLocation,sourceBlockStartLine} from '../ui/lab-ocr/four-pane-location.js';
 import {viewStore,publishLabFocus} from '../ui/view-store.js';
 const md=[
   {line_id:'a',line_no:1,block_id:11,text:'Heading'},
@@ -24,6 +24,14 @@ assert.equal(resolveReviewLocation({lineId:'e'},md,blocks).page,null,
   'Unowned markdown cannot be assigned to a made-up PDF page');
 assert.equal(resolveReviewLocation({blockId:99},md,blocks),null);
 assert.equal(resolveReviewLocation({lineNo:100},md,blocks),null);
+assert.equal(sourceBlockStartLine(resolveReviewLocation({lineId:'d'},md,blocks),md),3,
+  'AG selecting a later line in a Block always places source caret at first line');
+assert.equal(sourceBlockStartLine(resolveReviewLocation({blockId:11},md,blocks),md),1);
+assert.equal(sourceBlockStartLine(resolveReviewLocation({blockId:13},md,blocks),md),null,
+  'A PDF-only Block without MD lines must not invent a cursor position');
+assert.equal(sourceBlockStartLine(resolveReviewLocation({lineId:'e'},md,blocks),md),5,
+  'Manually authored unowned physical source rows can locate their own start');
+assert.equal(sourceBlockStartLine(null,md),null);
 const before=viewStore.getState().labFocusTarget?.sequence??0;
 const samples=[];
 const unsubscribe=viewStore.subscribe((next,prior)=>{

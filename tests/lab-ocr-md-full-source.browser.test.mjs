@@ -213,13 +213,24 @@ try{
      if(styles.mutedPdf)assert(Number(styles.mutedPdf.opacity)<1,
        'Unselected PDF coverage must retain global transparency');
    };
+   // External navigation moves the source caret to the first PHYSICAL
+   // line of the highlighted Block, without focusing the source editor or
+   // editing its Markdown. The user can then continue at that source start.
+   const caretStart=async lineNo=>page.waitForFunction(lineNo=>{
+     const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     return cm&&cm.state.selection.main.head===cm.state.doc.line(lineNo).from;
+   },lineNo,{timeout:7000});
+   const unchanged=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdRuntime()?.version);
    // PDF -> AG / CM6 / rendered Markdown.
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
    await synchronized(2,'md-c','Original paragraph');
+   await caretStart(3);
    await assertUnifiedFocus();
    // Markdown preview -> other three, including a different PDF page.
    await page.locator('.ocr-preview-md-scroll p[data-source-start="5"]').click();
    await synchronized(3,'md-e','Last paragraph');
+   await caretStart(5);
    await assertUnifiedFocus();
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),false);
    // AG -> CM6 / preview / PDF, returning to page 1 without clearing filters.
@@ -228,13 +239,23 @@ try{
    await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="text"]')
      .filter({hasText:/^Original paragraph$/}).click();
    await synchronized(2,'md-c','Original paragraph');
+   await caretStart(3);
    await assertUnifiedFocus();
+   assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdRuntime()?.version),unchanged,
+     'External navigation must never generate an MD edit / SQL write');
    // CM6 user click -> the remaining three panels, not a programmatic echo.
    await page.locator('.ocr-cm-source .cm-line').filter({hasText:'## Heading'}).click();
    await synchronized(1,'md-a','## Heading');
+   await page.keyboard.press('End');
+   await page.waitForFunction(()=>{
+     const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     return cm&&cm.state.selection.main.head===cm.state.doc.line(1).to;
+   },null,{timeout:7000});
    await assertUnifiedFocus();
    await page.locator('.ocr-preview-md-scroll p[data-source-start="3"]').click();
    await synchronized(2,'md-c','Original paragraph');
+   await caretStart(3);
    // Review AG must keep its prior Block columns, toolbar and default filters.
    assert.equal(await page.locator('#workspace .ag-header-cell[col-id="block_type"]').count(),1,
      'Original Block Type column must remain in the MD row view');

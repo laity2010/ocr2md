@@ -734,8 +734,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
       previewSelectedLine=null;
     },
-    focusMdLine(lineNo){
-      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo)??false;
+    focusMdLine(lineNo,{focus=true}={}){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo,{focus})??false;
     },
     markMdLine(lineNo,{reveal=false}={}){
       if(!editor.state.field(mdField))return false;
@@ -839,7 +839,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       cm.load(rows);
       port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,
         pageScope,allPagesInitially,expandPageOnCategory,onRowSelected:row=>{
-        cm.select(row);
+        // MD rows use the semantic four-pane navigator to move the caret to
+        // logical Block start. Do not focus this arbitrary AG physical row.
+        cm.select(row,{focus:row?.line_id==null});
         onSelect?.(row);
       }});
     },
