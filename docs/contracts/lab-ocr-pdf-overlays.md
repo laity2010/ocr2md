@@ -128,3 +128,10 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - 直接测试：`node tests/lab-ocr-source-text.test.mjs`；真实 Chromium + iPad WebKit 集成：`node tests/lab-ocr-pdf-extract.browser.test.mjs`（按钮只读控制、仅缩放下拉、PDF标签选择不改 CM6 光标、原始文本多行插入、逻辑归属、撤销/重做/保存/重载）。
 
 历史 `lab-ocr-pdf-viewer.browser.test.mjs` 中「PDF 工具栏有覆盖框下拉」「初始不切分」的断言、以及此前用于手动 Span 切换的流程，是过去版本的验收快照；本轮不因此恢复已撤下的控件或改变默认四窗布局。
+
+## 源码点击必须把 PDF 高亮 Block 带入窗口（2026-11-16）
+
+- CM6 源码点击先按稳定 LineID → BlockID → PDF 页定位。此前只有 `paintPageBoxes()` 重绘了覆盖框才用 `scrollIntoView`；若目标 PDF 页已有缓存且原 DOM 仍在，`requestOverlayPage()` 直接返回，造成**有高亮但块在 PDF 滚动窗口之外**。异步 PDF.js 翻页还可能覆盖过早的滚动。
+- 当前 `focusBlock({id,page,reveal:true})` 在不改变已缓存 bbox 的前提下建立唯一待处理定位，基于**被选中 BlockID 的真实覆盖框 `getBoundingClientRect()`** 与独立 PDF `scroller` 的实际视口矩形，滚动 PDF 容器的 `scrollTop/scrollLeft`（不滚动整页、不移动 CM6 光标）。页缓存命中和跨页异步首次绘制都触发定位；PDF.js `pagechanging/pagerendered` 以及布局渲染后在下一帧核对，防止后续页面跳转覆盖定位。较新的源码点击取代较旧的待定位请求。
+- 可完整容纳的块优先**完整留在可视区域**，若已经完整可见则不滚动；块几乎与窗口同宽时自动收紧预留边距，不误判为超大块；实际超过窗口的长块则让**左上起始位置**可见。布局比例/缩放仍由 PDF.js 管理，不重置缩放。`reveal:false` 的拖动、结构 Undo/Redo 只更新选中高亮，不产生任何滚动；用户在 PDF 点击标签会取消此前的外部定位请求。
+- API 仍是已有 `focusBlock`/Frame `focusPdfBlock`，没有新增按钮、SQL/CM 双写或页面监听服务。直接函数测试 `tests/lab-ocr-pdf-focus-viewport.test.mjs`；Chromium/iPad WebKit 真实 E2E `tests/lab-ocr-pdf-extract.browser.test.mjs` 延伸了 150% 缩放下**跨页源码点击＋已缓存块被人工滚出 PDF 窗口后从同一源码行再次点击**，用真实几何确认框进入滚动窗口；`tests/lab-ocr-block-gesture.browser.test.mjs` 防止破坏拖动位置和历史操作。

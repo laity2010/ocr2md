@@ -37,3 +37,27 @@ export function positionFixedOverlayAt(element,x,y){
   element.style.left=(left+x-rect.left)+'px';
   element.style.top=(top+y-rect.top)+'px';
 }
+
+/** Return only the scroll correction needed to expose a highlighted bbox.
+ * All coordinates are in getBoundingClientRect() client pixels. For an
+ * oversized bbox, expose its leading edge instead of oscillating between
+ * its two ends. No scrolling if the existing visible region already fits.
+ */
+export function blockRevealScrollDelta(box,viewport,margin=10){
+  const axis=(start,end,visibleStart,visibleEnd)=>{
+    if(![start,end,visibleStart,visibleEnd].every(Number.isFinite)||
+       end<=start||visibleEnd<=visibleStart)return 0;
+    // A nearly viewport-wide block still fits: shrink the preferred gutter
+    // rather than misclassifying it as an oversized, unscrollable block.
+    const pad=Math.min(margin,Math.max(0,(visibleEnd-visibleStart-(end-start))/2));
+    const low=visibleStart+pad;
+    const high=visibleEnd-pad;
+    if(end-start>high-low)
+      return start<low||start>high?start-low:0;
+    if(start<low)return start-low;
+    if(end>high)return end-high;
+    return 0;
+  };
+  return {x:axis(box.left,box.right,viewport.left,viewport.right),
+    y:axis(box.top,box.bottom,viewport.top,viewport.bottom)};
+}

@@ -158,6 +158,62 @@ try{
    await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
       ?.ocrCmTable?.mdDocument()===text,upgraded,{timeout:12000});
    assert.equal(reads>=1,true);assert.equal(overlays>=1,true);
+   // Source -> PDF must reveal the actual focused bbox, not just the page
+   // number or orange highlight. Page 2 was preloaded and may be cached.
+   const inside=async blockId=>page.waitForFunction(blockId=>{
+     const scroller=document.querySelector('.lab-ocr-pdf-scroller');
+     const box=[...document.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')]
+       .find(x=>x.dataset.blockIds.split(' ').includes(String(blockId)));
+     if(!scroller||!box)return false;
+     const view=scroller.getBoundingClientRect(),rect=box.getBoundingClientRect();
+     return rect.left>=view.left+.5&&rect.right<=view.right-.5&&
+       rect.top>=view.top+7&&rect.bottom<=view.bottom-7;
+   },blockId,{timeout:10500}).catch(async error=>{
+     console.log('PDF_REVEAL_DIAG',name,JSON.stringify(await page.evaluate(blockId=>{
+       const s=document.querySelector('.lab-ocr-pdf-scroller'),
+       b=[...document.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')]
+         .find(n=>n.dataset.blockIds.split(' ').includes(String(blockId)));
+       const rect=n=>n?.getBoundingClientRect()?.toJSON();
+       return {scroller:rect(s),box:rect(b),page:document.querySelector('.lab-ocr-pdf-page')?.value,
+         scale:document.querySelector('.lab-ocr-pdf-scale')?.value,
+         scroll:[s?.scrollTop,s?.scrollLeft,s?.scrollHeight,s?.clientHeight],
+         selected:document.querySelector('.ocr-cm-source')?.ocrCmTable?.selected(),
+         labels:[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag[data-selected="true"]')].map(n=>n.dataset.blockId)};
+     },blockId)));throw error;
+   });
+   // At 150%, page 2 is taller than the narrow split PDF viewport, so
+   // the already-focused box can genuinely be scrolled completely away.
+   await page.locator('.lab-ocr-pdf-scale').selectOption('150');
+   await page.locator('.ocr-cm-source .cm-line').filter({hasText:'Second page'}).click();
+   await inside(14);
+   const hidden=await page.evaluate(()=>{
+     const scroller=document.querySelector('.lab-ocr-pdf-scroller');
+     const box=[...document.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')]
+       .find(x=>x.dataset.blockIds.split(' ').includes('14'));
+     if(!scroller||!box)return false;
+     const before=scroller.scrollTop;
+     scroller.scrollTop+=box.getBoundingClientRect().bottom-
+       scroller.getBoundingClientRect().top+38;
+     return scroller.scrollTop>before+5;
+   });
+   assert.equal(hidden,true,'Fixture must allow manually hiding an already cached bbox');
+   await page.waitForFunction(()=>{
+     const box=[...document.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')]
+       .find(x=>x.dataset.blockIds.split(' ').includes('14'));
+     const scroller=document.querySelector('.lab-ocr-pdf-scroller');
+     return box&&scroller&&box.getBoundingClientRect().bottom<
+       scroller.getBoundingClientRect().top+5;
+   });
+   // Move the CM caret without userEvent (no PDF navigation), then click the
+   // SAME source line again; a cached overlay must reveal without repainting.
+   await page.evaluate(()=>{
+     const cm=document.querySelector('.ocr-cm-source').ocrCmTable.editorView();
+     const line=cm.state.doc.line(cm.state.doc.lines);
+     cm.dispatch({selection:{anchor:line.from}});
+   });
+   await page.locator('.ocr-cm-source .cm-line').filter({hasText:'Second page'}).click();
+   await inside(14);
+   assert.equal(await page.locator('.lab-ocr-pdf-page').inputValue(),'2');
    assert.deepEqual(jsErrors,[]);
    console.log('LAB_OCR_PDF_EXTRACT_PASS',name,JSON.stringify({reads,overlays,saves,revision}));
   }finally{await browser.close();}

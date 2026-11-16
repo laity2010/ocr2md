@@ -9,7 +9,8 @@ import 'pdfjs-dist/web/pdf_viewer.css';
 import {layoutPbsLabels} from './pbs-label-layout.js';
 import {indexBlockParents,blockHighlight} from './pbs-family.js';
 import {pickBlockDropTarget,blockDropZone} from './pdf-block-drop.js';
-import {clientToOverlayPoint,positionFixedOverlayAt} from './pdf-gesture-viewport.js';
+import {clientToOverlayPoint,positionFixedOverlayAt,
+  blockRevealScrollDelta} from './pdf-gesture-viewport.js';
 import './pdf-viewer.css';
 GlobalWorkerOptions.workerSrc=workerUrl;
 
@@ -76,6 +77,42 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     catch(error){onStatus('PDF · 提取文本失败：'+error.message,'error');}
     finally{extracting=false;updateExtractButton();}
   });
+  let revealFrame=0;
+  // A location request owns its pending scroll until the actual bbox is
+  // visible. Cached PDF overlays don't repaint on a repeat focus, and PDF.js
+  // may reposition a page *after* changing the current page number.
+  function scheduleFocusReveal(){
+    if(disposed||!ready||!pdf||!focusRequest||blockDrag)return;
+    if(revealFrame)cancelAnimationFrame(revealFrame);
+    const request=focusRequest;
+    revealFrame=requestAnimationFrame(()=>{
+      revealFrame=0;
+      if(disposed||focusRequest!==request||!ready||blockDrag)return;
+      const host=viewer.getPageView(request.page-1)?.div;
+      const box=[...host?.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')??[]]
+        .find(node=>node.dataset.blockIds.split(' ').includes(request.id));
+      // An uncached or virtualized page will call us again when painted.
+      if(!box?.isConnected)return;
+      const correction=blockRevealScrollDelta(box.getBoundingClientRect(),
+        scroller.getBoundingClientRect());
+      if(correction.y)scroller.scrollTop+=correction.y;
+      if(correction.x)scroller.scrollLeft+=correction.x;
+      // PDF.js scroll/pagechange can run in the same frame. Verify AFTER its
+      // render/scroll update before acknowledging this focus request.
+      requestAnimationFrame(()=>{
+        if(disposed||focusRequest!==request||blockDrag)return;
+        const current=box.isConnected?box.getBoundingClientRect():null;
+        if(!current)return;
+        const remaining=blockRevealScrollDelta(current,scroller.getBoundingClientRect());
+        if(Math.abs(remaining.x)<1&&Math.abs(remaining.y)<1){
+          focusRequest=null;
+        }else if((request.attempts??0)<4){
+          request.attempts=(request.attempts??0)+1;
+          scheduleFocusReveal();
+        }
+      });
+    });
+  }
   let lastNotifiedPage=null;
   const notifyPage=()=>{
     const page=viewer.currentPageNumber||1;
@@ -336,6 +373,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(!meta?.blockId)return;
     selectedBlockId=String(meta.blockId);
     focusRequest=null;
+    if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();
     if(notify)onBlockSelect?.({...meta,blockId:selectedBlockId});
   }
@@ -539,14 +577,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       pbsRelayoutByPage.set(page,positionBadges);
     }
     updateSelectedNodes();
-    if(focusRequest?.page===page){
-      const found=visibleRects.find(entry=>entry.blockIds.has(focusRequest.id));
-      if(found){
-        focusRequest=null;
-        const target=found.element;
-        queueMicrotask(()=>{if(target.isConnected)target.scrollIntoView({block:'center',inline:'nearest'});});
-      }
-    }
+    if(focusRequest?.page===page)scheduleFocusReveal();
   }
   function requestOverlayPage(page){
     if(disposed||!pdf||!ready||overlayLevel==='off'||!loadOverlayPage)return;
@@ -562,6 +593,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       if(!layer||layer.dataset.level!==overlayLevel||
          (overlayLevel==='block'&&!labels))
         paintPageBoxes(page,overlayCache.get(key));
+      else if(focusRequest?.page===page)scheduleFocusReveal();
       return;
     }
     if(overlayPending.has(key))return;
@@ -696,17 +728,20 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     // Drag/Undo/Redo are structural edits, NOT a navigation request. Keep
     // current PDF.js page, scale and visual scroll exactly where the user
     // left them. Explicit AG -> PDF navigation continues to reveal/scroll.
-    focusRequest=reveal?{id:selectedBlockId,page}:null;
+    focusRequest=reveal?{id:selectedBlockId,page,attempts:0}:null;
+    if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     if(overlayLevel!=='block'&&loadOverlayPage)chooseOverlayLevel('block');
     updateSelectedNodes();
     if(!reveal)return true;
     if(!ready||!pdf||page>pdf.numPages)return false;
     viewer.currentPageNumber=page;
     requestOverlayPage(page);
+    scheduleFocusReveal();
     return true;
   }
   function clearFocus(){
     selectedBlockId=null;focusRequest=null;
+    if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();return true;
   }
   function invalidateOverlayPage(page,changedRows=[]){
@@ -745,12 +780,14 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     viewer.currentScaleValue='page-width';viewer.update();updatePage();observePages();showOverlayPages();
     notifyPage();
   });
-  bus.on('pagechanging',()=>{updatePage();showOverlayPages();notifyPage();});
+  bus.on('pagechanging',()=>{updatePage();showOverlayPages();notifyPage();
+    if(focusRequest)scheduleFocusReveal();});
   bus.on('pagerendered',event=>{
     // PDF.js may replace a page's content during zoom/re-render. Reattach
     // its cached overlay once, without a database query or a PDF reload.
     const cached=overlayCache.get(overlayLevel+':'+event.pageNumber);
     if(cached)paintPageBoxes(event.pageNumber,cached);
+    if(focusRequest?.page===event.pageNumber)scheduleFocusReveal();
     if(event.pageNumber!==1||!resolvePaint)return;
     const complete=resolvePaint;resolvePaint=null;complete(!event.error);
   });
@@ -801,6 +838,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
     lastNotifiedPage=null;
     focusRequest=null;selectedBlockId=null;blockParents.clear();updateExtractButton();
+    if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     pageObserver.disconnect();
     clearOverlayNodes();viewer.setDocument(null);
     pageInput.value='1';count.textContent='/ —';zoomSelect.value='page-width';readyControls();
@@ -850,6 +888,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
+    if(revealFrame)cancelAnimationFrame(revealFrame);revealFrame=0;focusRequest=null;
     if(resizeFrame)cancelAnimationFrame(resizeFrame);
     cssObserver.disconnect();clearOverlayNodes();
     pageObserver.disconnect();
