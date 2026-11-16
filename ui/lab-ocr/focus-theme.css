@@ -52,3 +52,17 @@
 #workspace.ocr-review-focus-unified .lab-ocr-pdf-pbs-tag[data-selected="true"] {
   box-shadow:0 0 0 2px var(--ocr-review-focus-edge);
 }
+
+/* Explicit legacy OCR projection upgrade: hidden on non-MD tabs. Keep the
+ * source toolbar readable on iPad and distinct from normal text Undo/Redo. */
+#workspace.ocr-review-focus-unified .ocr-source-upgrade-legacy {
+  flex:0 0 auto;
+  font:inherit;font-size:12px;line-height:1.4;
+  white-space:nowrap;min-height:29px;padding:3px 7px;margin-inline:4px;
+  color:#b0d6c6;background:#34443e;border:1px solid #647970;
+  border-radius:4px;cursor:pointer;
+}
+#workspace.ocr-review-focus-unified .ocr-source-upgrade-legacy[hidden] {display:none;}
+#workspace.ocr-review-focus-unified .ocr-source-upgrade-legacy:hover {
+  background:#40584d;
+}

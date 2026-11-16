@@ -35,3 +35,13 @@
 - `tests/lab-ocr-cm-view-formula.test.py`：只含三张业务实体及两个只读 View、同父兄弟无分隔、父块间空行 LineID/BlockID、公式代码优先 + 原图链接、旧书 MD 不覆盖、来源字节未改变。
 - `tests/lab-ocr-md-store.test.py`、`lab-ocr-block-view.test.py`：原始无损和 MD CAS/旧库读写不倒退。
 - `tests/lab-ocr-md-full-source.browser.test.mjs` 与相关 AG/PDF 浏览器回归：CM6 编辑、行号、PBS、标题及各视图不倒退；通过 $$ 预览实验验证公式 + 原图链接可见。
+
+## 1137 实书旧 MD 与 AG 分类修复（本轮增量）
+
+- **原因**：`md_line` 在已有书籍上是唯一已校正正文权威，版本更新不覆盖它。因此旧文稿仍含 ` ```math` + `![image]`；旧 `project_md_lines()` 又曾在每一个逻辑子块后插入一个真实空白 MD 行。1137 的新书初始化规则只影响不存在 `md_line` 的书籍，不意味着旧书已迁移。
+- **AG Block Type 筛选**：未勾「全部」时 PBS 仅匹配当前 PDF 页。用户首次明确选择一个 `block_type` 筛选值，AG Grid 在同一原生 filterModel 内去掉隐式 PBS 页码限制，并把「全部」置为勾选；**用户随后手动取消「全部」不得再自动扩大范围**。标题视图和其他 SQL 表不受此机制影响。
+- **显式升级**：仅在 MD 源码窗顶栏显示「旧MD→$$」按钮；点击扫描当前 CM6 的 MD/Block 两套 StateField，并先弹出公式数、父子块合成空行数、跳过数及公式变更样例。用户确认前不修改任何源文本。只有每个块**完全等于旧初始化转换器的逐行结果**才可迁移其公式或删除其后单个同根父子分隔空行；任意人工修改后的公式内容保留并报告跳过。真正内容空行、父块之间的行及尾行都保留。
+- **状态与恢复**：升级是 CM6 原生文本编辑事务，同一 `mdField` 内的迁移前后快照保存精确 LineID/BlockID、行号和内容；Undo/Redo 可精确恢复，且被现有 SQLite CAS/空闲保存识别，用户改写其他正文后关闭迁移快照。此命令不修改 `minerujson`、`block_review`、BlockID、ParentID、PBS，不重建整本 MD。
+- **边界**：当某个块内容已被人工修改、旧生成结果与当前行不一致、或空行无法证明为旧自动分隔时，该处不自动清理；需在 UI 手动审阅。现有数据没有空行来源的独立权威字段，不能靠“看到空行”推定它是冗余结构分隔符。
+
+直接测试：`tests/lab-ocr-md-legacy-upgrade.test.mjs`；Chromium/iPad-WebKit 实机语义浏览器测试：`tests/lab-ocr-md-legacy.browser.test.mjs`（模拟跨页公式、旧文稿迁移、Undo/Redo、CAS 保存、刷新重载、原始公式图片链接）。

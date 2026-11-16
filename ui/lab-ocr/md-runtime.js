@@ -67,10 +67,32 @@ export function createMdRuntime(rows,revision=0){
 }
 export function editedMdRuntime(state,newText,makeId){
   if(!state)fail('尚未载入 MD');
+  // An explicitly approved legacy migration is one CM6 history transaction.
+  // CM6 undo/redo changes the source text; restore the EXACT original LineID
+  // and BlockID snapshots instead of trying to infer a mass edit from rows.
+  // The snapshots live in the one CM6 StateField, not a second mutable store.
+  const migration=state.migration;
+  if(migration&&(newText===migration.before||newText===migration.after)){
+    const rows=newText===migration.before?migration.beforeRows:migration.afterRows;
+    if(!mdSplice(state.rows,rows))return state;
+    return {...state,rows,version:state.version+1,
+      dirty:Boolean(mdSplice(state.savedRows,rows))};
+  }
   const next=reconcileMdText(state.rows,newText,makeId);
   if(!mdSplice(state.rows,next))return state;
-  return {...state,rows:next,version:state.version+1,
+  return {...state,rows:next,migration:null,version:state.version+1,
     dirty:Boolean(mdSplice(state.savedRows,next))};
+}
+/** Explicit legacy projection migration. No migration on normal load/GET. */
+export function migratedMdRuntime(state,rows){
+  if(!state)fail('尚未载入 MD');
+  validateMdRows(rows);
+  if(!mdSplice(state.rows,rows))return state;
+  return {...state,rows,version:state.version+1,
+    dirty:Boolean(mdSplice(state.savedRows,rows)),migration:{
+      before:textOfRows(state.rows),after:textOfRows(rows),
+      beforeRows:state.rows,afterRows:rows,
+    }};
 }
 export function acknowledgeMdRuntime(state,savedRows,revision){
   if(!state||!Array.isArray(savedRows)||revision!==state.revision+1)
