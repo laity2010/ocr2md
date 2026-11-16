@@ -1,4 +1,4 @@
-"""Three tables + CM View + display-TeX image evidence, without user data.
+"""Three tables + CM View + display-TeX without embedded image links.
 
 All SQLite writes occur in an isolated temporary synthetic book. Original
 MinerU bytes and every reviewed/edited MD line must remain intact on reload.
@@ -42,11 +42,15 @@ class CMViewFormulaContract(unittest.TestCase):
     def test_formula_precedence_delimiters_and_url_safety(self):
         formula={'lines':[{'spans':[{'content':'\\frac{a}{b}',
                   'image_path':'https://example.org/formula%3E1.png'}]}]}
-        self.assertEqual(display_equation(formula),
+        self.assertEqual(display_equation(formula),'$$\n\\frac{a}{b}\n$$')
+        self.assertEqual(display_equation(formula,legacy_links=True),
             '$$\n\\frac{a}{b}\n$$\n[原始公式图](<https://example.org/formula%3E1.png>)')
-        # No TeX? Keep the image reference without pretending image is TeX.
+        # No TeX? A formula image is available through PDF bbox only,
+        # and the immutable MinerU JSON still contains image_path.
         self.assertEqual(display_equation({'lines':[{'spans':[
-            {'image_path':'figures/a.jpg'}]}]}),'[原始公式图](<figures/a.jpg>)')
+            {'image_path':'figures/a.jpg'}]}]}),'')
+        self.assertEqual(display_equation({'lines':[{'spans':[
+            {'image_path':'figures/a.jpg'}]}]},legacy_links=True),'[原始公式图](<figures/a.jpg>)')
         self.assertEqual(display_equation({'lines':[{'spans':[
             {'content':'abc','image_path':'javascript:alert(1)'}]}]}),'$$\nabc\n$$')
         self.assertEqual(display_equation({'lines':[{'spans':[
@@ -65,19 +69,18 @@ class CMViewFormulaContract(unittest.TestCase):
             text='\n'.join(row['text'] for row in rows)
             self.assertEqual(text,
                 'Introductory text\n$$\nE = mc^2\n$$\n'
-                '[原始公式图](<https://images.example.org/equation%20(1).png>)\n'
                 'after equation\n\nAnother parent\n')
             self.assertEqual([r['line_no'] for r in rows],list(range(1,len(rows)+1)))
             self.assertEqual(rows[-1]['text'],'')
-            self.assertEqual(rows[6]['text'],'','Only parent groups get a separator')
+            self.assertEqual(rows[5]['text'],'','Only parent groups get a separator')
             self.assertEqual(rows[2]['text'],'E = mc^2')
             self.assertEqual(rows[3]['text'],'$$')
-            self.assertEqual(rows[4]['text'].startswith('[原始公式图]'),True)
+            self.assertEqual(rows[4]['text'],'after equation')
             self.assertEqual(rows[2]['block_id'],rows[3]['block_id'])
-            self.assertEqual(rows[2]['block_id'],rows[4]['block_id'])
+            self.assertNotEqual(rows[2]['block_id'],rows[4]['block_id'])
             self.assertNotEqual(rows[1]['block_id'],rows[0]['block_id'],
                 'Parent and child remain separate logical BlockIDs')
-            self.assertEqual(rows[6]['block_id'],rows[5]['block_id'],
+            self.assertEqual(rows[5]['block_id'],rows[4]['block_id'],
                 'Separator physical row is owned by preceding child block')
             with sqlite3.connect(book/'ocr2md.sqlite') as db:
                 objects=dict(db.execute("SELECT name,type FROM sqlite_master "

@@ -1,4 +1,4 @@
-/** WP2/WP3: presentational KaTeX + provenance image cells for existing AG.
+/** WP2/WP3: presentational KaTeX + PDF bbox crop cells for existing AG.
  * Imported only when the read-only LaTeX view opens. No editor or SQL writes.
  */
 import katex from 'katex';
@@ -53,53 +53,27 @@ export function formulaImageCell(params,getPdfFormulaCrop){
   const row=params.data;
   const root=document.createElement('div');root.className='lab-ocr-latex-image';
   if(!row)return root;
-  const url=row.original_image;
-  const remote=typeof url==='string'&&/^https:\/\//.test(url);
   const canCrop=Number.isInteger(row.page)&&Array.isArray(row.pdf_bbox)&&
     Array.isArray(row.page_size)&&typeof getPdfFormulaCrop==='function';
   const visual=document.createElement('img');
   visual.alt='PDF 原文公式局部截图';
-  visual.loading='lazy';visual.decoding='async';
-  visual.hidden=true;
+  visual.loading='lazy';visual.decoding='async';visual.hidden=true;
   const caption=document.createElement('span');caption.className='lab-ocr-latex-image-caption';
-  caption.textContent='读取 PDF 公式图…';
+  caption.textContent=canCrop?'读取 PDF 公式图…':
+    (row.pdf_bbox?'PDF 框可定位':'无 PDF 公式截图');
   const figure=document.createElement('div');figure.className='lab-ocr-latex-image-figure';
-  figure.append(visual,caption);
-  root.append(figure);
-  const addSourceLink=()=>{
-    if(!remote)return;
-    const link=document.createElement('a');link.href=url;link.target='_blank';
-    link.rel='noopener noreferrer';link.referrerPolicy='no-referrer';
-    link.title='MinerU 原始图片链接，可能需要外网权限';
-    link.textContent='MinerU 原图';
-    link.className='lab-ocr-latex-original-link';
-    link.addEventListener('click',event=>event.stopPropagation());
-    root.append(link);
-  };
-  const showFallback=()=>{
-    if(remote){
-      visual.alt='MinerU 原始公式图';
-      visual.referrerPolicy='no-referrer';
-      visual.onerror=()=>{
-        visual.hidden=true;
-        caption.textContent='远端图片不可访问 · 查看 PDF 框';
-      };
-      visual.onload=()=>{visual.hidden=false;caption.textContent='MinerU 原图';};
-      visual.src=url;
-    }else caption.textContent=row.pdf_bbox?'PDF 框可定位':'无原始图片';
-  };
-  addSourceLink();
-  if(!canCrop){showFallback();return root;}
+  figure.append(visual,caption);root.append(figure);
+  if(!canCrop)return root;
   Promise.resolve().then(()=>getPdfFormulaCrop({page:row.page,bbox:row.pdf_bbox,
     pageSize:row.page_size})).then(data=>{
       if(!root.isConnected)return;
       if(typeof data==='string'&&data.startsWith('data:image/png;base64,')){
         visual.src=data;visual.hidden=false;
         caption.textContent='PDF 原文局部图';
-      }else showFallback();
-    }).catch(()=>{if(root.isConnected)showFallback();});
-  // AG Grid owns cell lifetime. Late responses for offscreen rows are ignored
-  // via root.isConnected rather than mutating the DOM of a reused formula.
+      }else caption.textContent='PDF 截图暂不可用 · 可定位 PDF 框';
+    }).catch(()=>{
+      if(root.isConnected)caption.textContent='PDF 截图失败 · 可定位 PDF 框';
+    });
   return root;
 }
 
@@ -119,7 +93,7 @@ export function latexColumns({filter,pbsPageKey,getPdfFormulaCrop}){
       cellRenderer:textCell('lab-ocr-latex-source',row=>row?.formula)},
     {field:'render_html',headerName:'KaTeX 预览',minWidth:205,flex:1.2,filter:false,
       cellRenderer:formulaPreviewCell},
-    {field:'original_image',headerName:'PDF / 原图',width:175,filter:false,
+    {field:'pdf_crop',headerName:'PDF 原文截图',width:175,filter:false,
       cellRenderer:params=>formulaImageCell(params,getPdfFormulaCrop)},
     valueColumn('render_status','渲染',79),
     valueColumn('match_status','来源',86),

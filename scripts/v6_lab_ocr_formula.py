@@ -1,7 +1,7 @@
-"""Non-destructive MinerU interline_equation -> Obsidian Markdown projection.
+"""Non-destructive MinerU display LaTeX projection.
 
-CM6 receives editable display LaTeX plus link(s) to original OCR images.
-The immutable MinerU JSON retains full original content and image_path.
+The MD projection contains TeX only. Original image_path is retained
+exclusively in immutable MinerU JSON; formula evidence uses PDF bbox crops.
 """
 from __future__ import annotations
 
@@ -27,11 +27,9 @@ def _safe_reference(path):
     return quote(path,safe="/:@?&=#%+;,._~!$'()*-[]")
 
 
-def display_equation(block):
-    """Output $$ delimiters, original TeX, and non-embedded image references.
-
-    `image_path` is *not* a replacement for `content`. Each generated MD
-    physical line remains owned by this one logical BlockID in the caller.
+def display_equation(block, *, legacy_links=False):
+    """Output native $$ and LaTeX. Legacy links are available only for
+    strict one-time reconciliation of an older MD document, never for new MD.
     """
     latex_lines=[]
     images=[]
@@ -44,9 +42,10 @@ def display_equation(block):
                 continue
             if isinstance(span.get('content'),str):
                 content.append(span['content'])
-            path=span.get('image_path')
-            if isinstance(path,str) and path not in images:
-                images.append(path)
+            if legacy_links:
+                path=span.get('image_path')
+                if isinstance(path,str) and path not in images:
+                    images.append(path)
         if content:
             latex_lines.append(''.join(content))
     latex='\n'.join(latex_lines)

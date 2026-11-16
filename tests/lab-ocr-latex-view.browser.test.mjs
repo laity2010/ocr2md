@@ -95,9 +95,13 @@ try{
      }
      throw Error('Unexpected OCR endpoint '+op);
    });
-   // Prove the PDF crop works even when MinerU's remote CDN denies access.
-   await page.route('https://formula.example.test/**',route=>route.fulfill({
-     status:403,contentType:'text/plain',body:'Forbidden'}));
+   // A formula CDN URL may still exist in immutable MinerU metadata but
+   // neither AG nor the source may ever request it.
+   let remoteFormulaRequests=0;
+   await page.route('https://formula.example.test/**',route=>{
+     remoteFormulaRequests++;
+     return route.fulfill({status:403,contentType:'text/plain',body:'Forbidden'});
+   });
    await page.goto(base,{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.querySelector(
      '#workspace select.ocr-source-file-select')?.value==='sql:md');
@@ -116,7 +120,7 @@ try{
    assert.equal(await picker.inputValue(),'latex');
    const fields=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields());
-   for(const name of ['pbs','formula','render_html','original_image','match_status'])
+   for(const name of ['pbs','formula','render_html','pdf_crop','match_status'])
      assert(fields.includes(name),'Missing LaTeX AG column '+name);
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===7);
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true,
@@ -250,12 +254,12 @@ try{
    // a trusted local PDF.js crop of the physical Span without remote image IO.
    await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'formula_id',id:'ocr:1:0:0',
-       focusColumn:'original_image',preserveFilters:true}));
+       focusColumn:'pdf_crop',preserveFilters:true}));
    await page.waitForFunction(()=>[...document.querySelectorAll(
      '.lab-ocr-latex-image-figure img[src^="data:image/png;base64,"]')]
      .some(el=>el.isConnected&&el.complete&&el.naturalWidth>0),null,{timeout:15000});
-   assert.equal(await page.locator('.lab-ocr-latex-original-link').count()>0,true,
-     'A PDF crop should retain the exact MinerU original image link');
+   assert.equal(await page.locator('.lab-ocr-latex-image a[href]').count(),0,
+     'PDF crop is the only user-visible formula image: no MinerU URL links');
    const crop=await page.locator('.lab-ocr-latex-image-figure img[src^="data:image/png;base64,"]')
       .first().evaluate(el=>({width:el.naturalWidth,height:el.naturalHeight}));
    assert(crop.width>20&&crop.height>10&&crop.width<=520&&crop.height<=250,
@@ -301,6 +305,7 @@ try{
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdRuntime()?.dirty),false);
    assert.equal(saves,0,'Read-only formula view cannot generate SQL writes');
+   assert.equal(remoteFormulaRequests,0,'AG must not fetch MinerU formula image URLs');
    assert.deepEqual(errors,[],'No browser page errors');
    console.log('LAB_OCR_LATEX_VIEW_E2E_PASS',label,JSON.stringify({
      formulas:7,matched:5,ocrOnly:1,mdOnly:1,saves,loaded}));

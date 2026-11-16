@@ -63,9 +63,14 @@ def _span_text(block, *, inline_math=True):
         for span in line.get('spans') or []:
             if not isinstance(span, dict):
                 continue
-            if isinstance(span.get('html'), str):
+            if span.get('type') in ('inline_equation','interline_equation') and isinstance(span.get('content'),str):
+                content = span['content']
+                if inline_math and span.get('type') == 'inline_equation':
+                    content = _inline_math(content)
+                pieces.append(content)
+            elif isinstance(span.get('html'), str):
                 pieces.append(span['html'])
-            elif isinstance(span.get('image_path'), str):
+            elif isinstance(span.get('image_path'), str) and span.get('type') not in ('inline_equation','interline_equation'):
                 path = span['image_path'].replace('>', '%3E')
                 pieces.append('![image](<' + path + '>)')
             elif isinstance(span.get('content'), str):

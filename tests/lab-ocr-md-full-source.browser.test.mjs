@@ -624,22 +624,17 @@ try{
      .allTextContents(),['4','3'],'Saved title changes persist after browser reload');
    assert.equal(mdInit,1);
    assert.equal(mdLoads,4);
-   // The shared Obsidian Markdown preview recognizes $$ display LaTeX and
-   // keeps the original OCR image as a clickable reference, not a second IMG.
-   // The synthetic fixture is the only edited book; real user data untouched.
-   // Real new-book projection puts siblings back-to-back without blank.
-   const mathDocument='#### Heading\n\nIntroductory text\n$$\nE = mc^2\n$$\n'
-     +'[原始公式图](<https://example.org/formula-ocr.jpg>)\n\n'
+   // The shared Obsidian Markdown preview recognizes $$ display LaTeX.
+   // The new MinerU projection uses LaTeX alone, not redundant image links.
+   const mathDocument='#### Heading\n\nIntroductory text\n$$\nE = mc^2\n$$\n\n'
      +'### Corrected paragraph\n\nRevised from AG\n';
    await replaceMarkdown(mathDocument);
    await page.waitForFunction(()=>{
      const preview=document.querySelector('.ocr-preview-md-scroll');
-     return Boolean(preview?.querySelector('.ocr-math .katex')&&
-       [...preview.querySelectorAll('a[href]')].some(el=>el.textContent==='原始公式图'&&
-         el.href==='https://example.org/formula-ocr.jpg'));
+     return Boolean(preview?.querySelector('.ocr-math .katex'));
    },null,{timeout:15000});
-   assert.equal(await page.locator('.ocr-preview-md-scroll img[src*="formula-ocr"]').count(),0,
-     'OCR equation picture is a reference link, not an embedded duplicated formula');
+   assert.equal(await page.locator('.ocr-preview-md-scroll a[href*="formula-ocr"]').count(),0,
+     'Formula source must not contain a redundant original-image link');
    assert.equal(await page.locator('.ocr-preview-md-scroll .ocr-math .katex').count(),1,
      'Display TeX renders once through KaTeX');
    await page.locator('#global-save').click();

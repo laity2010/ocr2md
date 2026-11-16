@@ -11,18 +11,18 @@
 
 - 原有 AG 顶栏三选一：MD 行 / 标题 / LaTeX。LaTeX 使用同一 AG Grid（没有第二表），默认“全部”页打开，支持已有 PBS 页码、类型、来源、渲染状态 checkbox 筛选。每条公式占一行；列：PBS、行号、类型、LaTeX 文本、KaTeX 渲染、原始图片、渲染、来源、错误与隐含来源 ID。
 - 首次打开该视图时才动态加载 `ui/lab-ocr/latex-view.js` 与 KaTeX；只渲染自可信 KaTeX 生成的 HTML，原样文本使用 `textContent`。`trust:false`, `throwOnError:true`，失败显示完整报错；不替用户修正数学内容。
-- CM6 文本编辑后，公式索引从最新运行态增量更新 AG（按唯一 FormulaID patch，保留过滤器和滚动），不发 SQL 修改、不重复 mount AG 或整个 CM 文档。“PDF / 原图”列首先从当前已经授权加载的原始 PDF 用 PDF.js 按公式 bbox 仅在内存裁剪局部 PNG，支持行内与独立公式；优先保证与原始页面一致，若 MinerU 远端 `image_path` 返回 HTTP 403 也能对照。保留原始图片的 HTTPS 链接供另开查看，PDF 裁剪不可用时才回退尝试远端图片并显示失败状态。原始 URL 不属于用户数据所有权，不声称能保证远端可达。局部 PNG 不上传、不持久化，按页/框/加载修订号有限缓存；图片单元仅在可见 AG 行创建。
+- CM6 文本编辑后，公式索引从最新运行态增量更新 AG（按唯一 FormulaID patch，保留过滤器和滚动），不发 SQL 修改、不重复 mount AG 或整个 CM 文档。“PDF 原文截图”列从当前已经授权加载的原始 PDF 用 PDF.js 按公式 bbox 仅在内存裁剪局部 PNG，支持行内与独立公式；**不展示、不请求 MinerU 的远端 `image_path`，也不设置图片 URL 回退**。原始图片路径仅由不可变的 MinerU JSON 保留作为来源证据。局部 PNG 不上传、不持久化，按页/框/加载修订号有限缓存；图片单元仅在可见 AG 行创建。
 
 ## 公式级四窗定位 WP3
 
 - AG 选择的公式通过现有 `publishLabFocus` 携带受验证的 `formulaColumn`、`formulaEndColumn` 和 `formulaBBox`，携带 LineID/BlockID/页码；后续 PDF/预览/CM6 仍使用统一消息，不相互读取 DOM。
 - CM6 的 `focusMdFormula({lineNo,column,endColumn})` 将光标移动到公式起点（UTF16 位置），同时在同一原始 MD 行中用 CM6 `Decoration.mark` **单独高亮公式全文范围**，直接使用 CM6 `highlightSelectionMatches()` 的 `cm-selectionMatch` 类及其内置样式，不再单独定义颜色、下划线或阴影（与原整行高亮共存，直到下一次导航或正文变化）；Markdown 原文不编辑、不触发保存。PDF 的 `focusFormula({id,page,bbox})` 复用 block 焦点与当前 PDF.js 页面缓存，添加不拦截指针的精确公式橙框并确保公式在可视范围；通用 Block 焦点会清除此暂态框。
-- 对 `仅 OCR` 或 `有歧义` 且无精确 MD 偏移者，只高亮 PDF 公式 Span，不把所在 Block 的普通文本伪装成该公式的源码。AG 图片列优先显示 PDF.js 原文局部裁剪；如果原始 MinerU `image_path` 存在则附原始链接，截图不可用才尝试远端图片；原始链接只作额外校对，不能替代 PDF 坐标证据。
+- 对 `仅 OCR` 或 `有歧义` 且无精确 MD 偏移者，只高亮 PDF 公式 Span，不把所在 Block 的普通文本伪装成该公式的源码。AG 的图片列只显示 PDF.js 原文局部裁剪；截图不可用时显示明确信息并仍可跳转 PDF bbox，不再生成远端图像链接。
 
 ## 验收与权限
 
 - 单测 `tests/lab-ocr-latex-index.test.mjs` 保证独立/行内/孤立/歧义/只读；`tests/lab-ocr-four-pane-location.test.mjs` 保证总线校验；`tests/lab-ocr-latex-view.browser.test.mjs` 用独立假书籍在 Chromium 和 WebKit 做公式索引、KaTeX、PDF.js 本地裁剪图像、CM 光标列偏移、PDF 精确 bbox、无 SQL 写入端到端验收；`tests/lab-ocr-pdf-formula-crop.test.mjs` 验证源坐标映射、边界、页面尺寸错误拒绝。
-- 真实 sample 源数据扫描基线：20 个独立+22 个行内 Span、20 个原图地址；40 个精确匹配、2 个同块重复的行内公式标记有歧义；42 个公式 KaTeX 结果为 41 成功/1 失败（`p7b1s0` 行内原文）。原图 CDN 以实际 HTTP 403 为例，不能单纯依赖远端。重新生成索引不是数据迁移，禁止直接初始化逻辑块或 MD 表。
+- 真实 sample 源数据：20 个独立+22 个行内 Span、原始 JSON 内仍有 20 个公式图片路径；原生 `$...$` 和重复 Span 精确偏移修复后 42/42 匹配；42 个公式 KaTeX 结果为 41 成功/1 失败（`p7b1s0` 行内原文）。原图 CDN 以实际 HTTP 403 为例，不能单纯依赖远端。重新生成索引不是数据迁移，禁止直接初始化逻辑块或 MD 表。
 - WP4 的审阅状态、人工仲裁与回写**未在本次开启**；本轮只是 WP1–WP3。
 
 ## WCP42 行内公式定位修复验收
@@ -43,3 +43,9 @@
 - 公式索引 `exactInlineOffsets` 同时支持无定界遗留 MD 与原生 `$...$` MD；新格式在每个公式的 `$` **内部**定位 CM6 字符列，按完整段落与原始 Span 序列无损比对，可正确区分重复的行内公式。不存在确定的块级对应关系时继续标记未匹配。
 - Lab-OCR 的 MD 预览使用 `renderMarkdown(...,{nativeInlineMath:true})` 原生渲染无审阅标记的 `$...$`。Main 继续使用原来默认的 review-gated 行为，显式 `忽略` 的公式保持普通文本；渲染仅改变预览，不再写回任何 CMD 注释。
 - sample 已在独立 SQL 快照与 WebKit/Chromium 验证：原始 22 行内 Span 分布在17个块，现有 478 行 MD 中仅17行被修改、revision `77→78`，全部 LineID 未改。完整原库备份存放于 `.ops/backups/lab-ocr-inline-math-20261116/`（不要向外分发用户书籍）。
+
+## 公式图链接清理（2026-11-16）
+
+- 用户已确认 AG 可自行用 PDF 覆盖框截图，无须在源码和 AG 图像列提供 MinerU 公式图片链接。**新建 MD 的 `interline_equation` 默认只输出 `$$...$$` 或 `math` fence，不再附 `[原始公式图]`；行内 `inline_equation` 有 `image_path` 时优先输出 `span.content`（`$...$`），不能用 URL 替代数学内容。其他 `image` / `table` 等媒体仍照旧保存原链接。**
+- 现有 `sample` 禁止重新初始化全文。`scripts/v6_lab_ocr_reconcile_formula_links.py` 对照完整 Block 的旧生成文本与当前单个公式块的 MD 非空行，精确匹配后仅把旧 `[原始公式图]` 物理行文本设为空（保留 LineID、BlockID、行号、空行语义），前置完整 SQLite 在线备份。revision/BlockRevision/来源再次核对后单事务 CAS 更新，手改或不匹配即跳过；重复运行 no-op。
+- AG 的“PDF 原文截图”只从原 PDF 渲染 Data URI，不产生任何指向 MinerU CDN 的 DOM 链接或请求。原始 `image_path` 在 MinerU JSON 中保持原样，只有不可变来源数据保留链接。Chromium/iPad WebKit 测试覆盖图片像素、公式级定位、零远程请求及零 MD 保存。
