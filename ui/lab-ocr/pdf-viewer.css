@@ -118,3 +118,29 @@
   outline:1.5px solid #e8aa55;outline-offset:1px;background:rgba(231,183,83,.14)}
 .lab-ocr-pdf-overlay-box[data-selected="true"]{
   outline:2px solid #ffd46c;outline-offset:1px;background:rgba(231,183,83,.20)}
+
+/* Only source-empty MinerU LEAVES get dashed geometry and PBS labels.
+ * The source flag is immutable OCR evidence; no dependence on editable MD or
+ * on whether this block is currently selected. Parent wrappers with children
+ * remain solid even when the wrapper itself has no lines of its own. */
+.lab-ocr-pdf-overlay-box[data-source-empty="true"] {
+  box-shadow:none;
+  border:max(1px,var(--lab-ocr-pdf-overlay-border-width,.75px)) dashed #95b989;
+}
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-child="true"] {
+  border-color:#79c3a0;
+}
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"] {
+  border-style:dashed;
+}
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-selected="true"],
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-family-selected="true"] {
+  outline-style:dashed;
+}
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-selected="true"],
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-family-selected="true"] {
+  border-style:dashed;
+  box-shadow:none;
+  outline:2px dashed #eec45b;
+  outline-offset:1px;
+}

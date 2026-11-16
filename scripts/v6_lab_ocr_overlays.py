@@ -34,7 +34,7 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
             ).fetchone() else 'NULL')
             records = db.execute(
                 'SELECT block_id,page_size_json,block_bbox_json,block_type,block_group,'
-                'block_id,pbs,parent_block_id,'+absorbed_expr+' FROM block '
+                'block_id,pbs,parent_block_id,'+absorbed_expr+',content_preview,has_blocks_field FROM block '
                 'WHERE global_page=? AND block_group=? ORDER BY block_id LIMIT ?',
                 (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
         else:
@@ -45,20 +45,21 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
             if has_blocks:
                 records = db.execute(
                     'SELECT s.span_id,s.page_size_json,s.span_bbox_json,s.block_type,'
-                    's.block_group,b.block_id,b.pbs,b.parent_block_id,NULL FROM span AS s '
+                    's.block_group,b.block_id,b.pbs,b.parent_block_id,NULL,NULL,NULL FROM span AS s '
                     'LEFT JOIN block AS b ON b.source_block_key=s.block_id '
                     'WHERE s.global_page=? AND s.block_group=? ORDER BY s.rowid LIMIT ?',
                     (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
             else:
                 records = db.execute(
                     'SELECT span_id,page_size_json,span_bbox_json,block_type,block_group,'
-                    'NULL,NULL,NULL,NULL FROM span WHERE global_page=? AND block_group=? ORDER BY rowid LIMIT ?',
+                    'NULL,NULL,NULL,NULL,NULL,NULL FROM span WHERE global_page=? AND block_group=? ORDER BY rowid LIMIT ?',
                     (page - 1, REVIEW_BLOCK_GROUP,MAX_PAGE_BOXES + 1)).fetchall()
     if len(records) > MAX_PAGE_BOXES:
         raise OCRImportError('单页覆盖框超过允许上限')
     size = None
     result = []
-    for identity, raw_size, raw_bbox, block_type, block_group, block_id, pbs, parent_id, absorbed in records:
+    for (identity, raw_size, raw_bbox, block_type, block_group, block_id, pbs,
+         parent_id, absorbed, content_preview, has_blocks_field) in records:
         try:
             dimensions = json.loads(raw_size)
             rect = json.loads(raw_bbox)
@@ -82,5 +83,10 @@ def overlay_rows(book: Path, level: str, page: int) -> dict:
                        'pbs': str(pbs or ''), 'parentBlockId': str(parent_id) if parent_id is not None else None,
                        'absorbedIntoBlockId': str(absorbed) if absorbed is not None else None,
                        'blockType': str(block_type or ''), 'blockGroup': str(block_group or ''),
+                       # The immutable MinerU leaf is empty, not the editable
+                       # MD line or current review status. A wrapper with child
+                       # nodes (tables/charts/images) is NOT an absorbed leaf.
+                       'sourceEmpty': bool(level == 'block' and not has_blocks_field
+                                           and not str(content_preview or '').strip()),
                        'bbox': rect})
     return {'level': level, 'page': page, 'pageSize': size, 'boxes': result}

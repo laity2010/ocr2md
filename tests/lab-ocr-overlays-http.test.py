@@ -44,10 +44,13 @@ class CoverageHttpContract(unittest.TestCase):
      self.assertEqual(result,{'level':'block','page':1,'pageSize':[595,842],
                               'boxes':[{'id':'1','blockId':'1','pbs':'p1b0','parentBlockId':None,
                                         'absorbedIntoBlockId':None,
-                                        'blockType':'text','blockGroup':'para_blocks','bbox':[20,30,100,60]}]})
+                                        'blockType':'text','blockGroup':'para_blocks',
+                                        'sourceEmpty':False,'bbox':[20,30,100,60]}]})
      self.assertNotIn('PRIVATE TEXT',json.dumps(result))
      with get(level='span',page=1) as response:spans=json.loads(response.read())
      self.assertEqual([i['bbox'] for i in spans['boxes']],[[21,31,80,45]])
+     self.assertEqual([i['sourceEmpty'] for i in spans['boxes']],[False],
+       'Span coverage does not infer block-level OCR absorption')
      self.assertEqual([i['blockType'] for i in spans['boxes']],['text'])
      self.assertEqual([i['blockGroup'] for i in spans['boxes']],['para_blocks'])
      self.assertEqual([i['pbs'] for i in spans['boxes']],['p1b0'])

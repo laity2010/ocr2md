@@ -47,6 +47,8 @@ class OverlayContract(unittest.TestCase):
    self.assertEqual([x['parentBlockId'] for x in block['boxes']],[None,None,'2'])
    self.assertEqual([x['blockType'] for x in block['boxes']],['text','table','table_caption'])
    self.assertEqual([x['blockGroup'] for x in block['boxes']],['para_blocks']*3)
+   self.assertEqual([x['sourceEmpty'] for x in block['boxes']],[False,False,False],
+     'A table wrapper with populated children is not an absorbed leaf')
    spans=overlay_rows(book,'span',1)
    self.assertEqual([x['bbox'] for x in spans['boxes']],[[25,30,100,50],[110,30,200,50],[20,160,195,177]])
    self.assertTrue(all(':l' in x['id'] for x in spans['boxes']))
@@ -64,6 +66,41 @@ class OverlayContract(unittest.TestCase):
    with sqlite3.connect(book/'ocr2md.sqlite') as connection:
     self.assertEqual(connection.execute('SELECT COUNT(*) FROM block').fetchone()[0],5)
     self.assertEqual(connection.execute('SELECT COUNT(*) FROM span').fetchone()[0],5)
+
+ def test_original_empty_leaf_flag_not_recalculated_from_edited_md(self):
+  with tempfile.TemporaryDirectory() as directory:
+   book=Path(directory)
+   (book/'pdf').mkdir();(book/'mineru json').mkdir()
+   (book/'pdf'/'sample.pdf').write_bytes(b'%PDF-1.4\n')
+   blocks=[
+    {'type':'text','bbox':[20,20,280,85], 'lines':[{'spans':[
+      {'type':'text','content':'Absorbed leaf text lives here', 'bbox':[21,21,180,38]}]}],
+     'blocks':[{'type':'text','bbox':[305,22,525,49],
+       'lines':[],'lines_deleted':True}]},
+    {'type':'table','bbox':[20,120,500,200], 'blocks':[
+      {'type':'table_body','bbox':[22,130,490,180], 'lines':[{'spans':[
+        {'type':'text','content':'Actual table data','bbox':[24,134,135,148]}]}]}]},
+    {'type':'image','bbox':[25,230,400,325], 'lines':[{'spans':[
+      {'type':'image','image_path':'figure.png','bbox':[26,240,395,321]}]}]},
+    {'type':'text','bbox':[20,350,280,390], 'lines':[], 'lines_deleted':True},
+    {'type':'text','bbox':[20,420,280,459], 'lines':[{'spans':[
+      {'type':'text','content':'  ', 'bbox':[21,421,35,432]}]}]},
+   ]
+   data={'pdf_info':[{'page_idx':0,'page_size':[595,842],
+     'preproc_blocks':[],'discarded_blocks':[],'para_blocks':blocks}]}
+   (book/'mineru json'/'source.json').write_text(json.dumps(data))
+   import_workspace(book);minerujson2block(book)
+   expected=['p1b0','p1b0s0','p1b1','p1b1s0','p1b2','p1b3','p1b4']
+   boxes=overlay_rows(book,'block',1)['boxes']
+   self.assertEqual([b['pbs'] for b in boxes],expected)
+   self.assertEqual([b['sourceEmpty'] for b in boxes],
+     [False,True,False,False,False,True,True])
+   # This server endpoint sends geometry and flags, not OCR text or image URLs.
+   self.assertNotIn('Absorbed leaf text',json.dumps(boxes))
+   self.assertNotIn('figure.png',json.dumps(boxes))
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    self.assertEqual(db.execute('SELECT COUNT(*) FROM block').fetchone()[0],7)
+    self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
 
  def test_para_only_projection_preserves_all_raw_mineru_groups(self):
   with tempfile.TemporaryDirectory() as directory:

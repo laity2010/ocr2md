@@ -120,7 +120,8 @@ try{
       return reply({level,page:p,pageSize:[595,842],
         boxes:level==='block'&&p===1?records.map(row=>({
           id:'b'+row.block_id,blockId:String(row.block_id),parentBlockId:row.parent_block_id==null?null:String(row.parent_block_id),
-          pbs:row.pbs,blockGroup:'para_blocks',blockType:row.block_type,bbox:row.bbox})):[]});
+          pbs:row.pbs,blockGroup:'para_blocks',blockType:row.block_type,
+          sourceEmpty:row.block_id===102||row.block_id===104,bbox:row.bbox})):[]});
     }
     throw Error('Unexpected OCR route '+op);
    });
@@ -132,6 +133,25 @@ try{
       document.querySelectorAll('.lab-ocr-pdf-pbs-layer[data-page="1"] .lab-ocr-pdf-pbs-tag').length===5);
    assert.equal(await page.locator('#workspace .ag-row').count(),5);
    assert.equal(await tag(102).innerText(),'p1b1s0','Identical parent and child bbox preserve both tags');
+   // OCR-absorbed empty leaves: both PBS badge and rectangle are dashed.
+   // Identical parent+child geometry paints once and stays solid because
+   // the populated parent is still present, while the empty child tag is dashed.
+   assert.equal(await tag(102).getAttribute('data-source-empty'),'true');
+   assert.equal(await tag(102).evaluate(el=>getComputedStyle(el).borderTopStyle),'dashed');
+   assert.equal(await tag(101).evaluate(el=>getComputedStyle(el).borderTopStyle),'solid');
+   assert.equal(await target.getAttribute('data-source-empty'),'false');
+   const absorbedBox=paper.locator('.lab-ocr-pdf-overlay-box[data-block-ids~="104"]');
+   assert.equal(await absorbedBox.getAttribute('data-source-empty'),'true');
+   assert.equal(await absorbedBox.evaluate(el=>getComputedStyle(el).borderTopStyle),'dashed');
+   assert.equal(await tag(104).evaluate(el=>getComputedStyle(el).borderTopStyle),'dashed');
+   assert.match(await tag(104).getAttribute('title'),/OCR 已吸收/);
+   await tag(104).click();
+   await page.waitForFunction(()=>document.querySelector(
+     '.lab-ocr-pdf-pbs-tag[data-block-id="104"]')?.dataset.selected==='true');
+   assert.equal(await absorbedBox.evaluate(el=>getComputedStyle(el).outlineStyle),'dashed',
+     'Selected empty leaf remains dashed with the existing amber highlight');
+   assert.equal(await tag(104).evaluate(el=>getComputedStyle(el).outlineStyle),'dashed');
+   await tag(100).click();
    // Four-pane review is the default. For the legacy long-distance PDF drag
    // regression, use the existing user switch to give PDF the full preview
    // width; test the same viewer/overlays, not a recreated PDF component.

@@ -23,9 +23,12 @@ assert.equal(cm.rows.find(r=>r.block_id===105).pbs,'p2b0');
 assert.equal(cm.queue.length,1);
 assert.equal(JSON.stringify(data),initial,'CM runtime must never mutate source rows');
 const projected=projectBlockOverlays(cm,{level:'block',page:1,boxes:[
- {blockId:'100',pbs:'p1b0',parentBlockId:null,bbox:[10,20,50,65]}]});
+ {blockId:'100',pbs:'p1b0',parentBlockId:null,
+  sourceEmpty:true,bbox:[10,20,50,65]}]});
 assert.deepEqual([projected.boxes[0].pbs,projected.boxes[0].parentBlockId],
   ['p1b0s1','101']);
+assert.equal(projected.boxes[0].sourceEmpty,true,
+  'CM review PBS/ParentID projection cannot erase immutable original OCR emptiness');
 const b=editBlockRuntime(cm,{action:'apply',sourceBlockId:103,targetBlockId:101,placement:'before'});
 cm=b.state;
 assert.equal(cm.queue.length,2,'Two edits take effect before any SQL persistence');

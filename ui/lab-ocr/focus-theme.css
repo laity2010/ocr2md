@@ -52,3 +52,17 @@
 #workspace.ocr-review-focus-unified .lab-ocr-pdf-pbs-tag[data-selected="true"] {
   box-shadow:0 0 0 2px var(--ocr-review-focus-edge);
 }
+
+/* Focus mode keeps OCR-absorbed source-empty blocks dashed even when the
+ * existing orange selection ring overrides PDF viewer outlines. */
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-box[data-source-empty="true"][data-selected="true"],
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-box[data-source-empty="true"][data-family-selected="true"] {
+  outline-style:dashed;
+}
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-selected="true"],
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-family-selected="true"] {
+  border-style:dashed;
+  box-shadow:none;
+  outline:2px dashed var(--ocr-review-focus-edge);
+  outline-offset:1px;
+}

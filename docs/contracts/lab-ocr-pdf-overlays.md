@@ -110,3 +110,11 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - 精确相同 bbox 且 PBS 不同的 Block 在单页仍只画一份几何框、显示多个避让标签；跨块组**同名 PBS** 仍合并一个标签，保留全部别名 Block ID 的 AG 反向高亮。浏览器回归在第 11 页加入 `p11b0s1`、`p11b01s1` 两例完全重合几何，验收两个 `s1` 标签同时可见、标签互不重叠、点击 `s1` 只选中对应 ID，选父块递归高亮 `s1`，并测试 150% 缩放与字体变化；不需要修改 SQLite、MinerU JSON 或 PDF 本体。
 
 2026-11-12 最终颜色裁决：以当前 Main `ui/pdf-preview.css` 的 PBS 父（灰绿）／子（蓝灰）方案为唯一对照来源。不要再使用 Lab 先前深绿／浅绿和虚线区分的方案；只读 Lab 的 PBS 标签和引线都不设置虚线，PDF Block 被选中的橙色覆盖框保持独立。
+
+## MinerU 基础块被 OCR 吸收后的虚线提示（2026-11-16）
+
+- 仅修改 **Lab OCR PDF Block 覆盖框及 PBS 标签的显示**，不修改基础表、逻辑父子关系、MD 物理行和 PBS。服务端只读投影新增 `sourceEmpty: boolean`，来源为**不可变的 MinerU 基础块**：本块 `content_preview` 为空（包括纯空白），并且 `has_blocks_field=0`（没有实际子块内容的叶块）。即使后来修改了 CM6 文本，标记也不反推变化。`p3b7s0` 对应基础块 `lines:[]`、`lines_deleted:true`，返回 `sourceEmpty:true`，`p3b7` 为 `false`。
+- 表格、图片、图表父容器自身可能没有 `lines`，但 `blocks` 子块里还有内容；它们是**正常容器而非被吸收的空叶块**，不标虚线。其他没有来源元数据的通用 PDF 组件输入仍视为实线。
+- PDF 原始 bbox 不变，`sourceEmpty:true` 的覆盖框采用原色虚线（配置线宽下限 1px 以保证可见），PBS 标签同色虚线；选中或父子高亮时继续橙色，外轮廓仍保持虚线。跨度为零、不合法的 bbox 仍不绘制。Span 粒度不另加标签。
+- 相同 bbox 的多个 Block 仍仅绘制一份覆盖框，但每个 PBS 标签独立判定虚线；如果去重组中任一来源有内容，则共享覆盖框保持实线，避免用某个空子块覆盖正常父块的实际内容。覆盖框不拦截 PDF 文本选择，标签的点击、拖动、四窗联动和缩放不变。
+- 验收：`tests/lab-ocr-overlays.test.py`（空叶、包含内容的父容器、图片、纯空白、只读）、`tests/lab-ocr-overlays-http.test.py`（不泄漏正文的 Boolean）、`tests/lab-ocr-block-gesture.browser.test.mjs`（Chromium/iPad WebKit 的虚线颜色和样式、同 bbox 去重独立标签、选择/拖动/Undo/Redo）。

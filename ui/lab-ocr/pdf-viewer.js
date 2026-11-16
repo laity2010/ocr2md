@@ -301,9 +301,14 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const blockId=blockIdOf(item),pbs=item?.pbs==null?'':String(item.pbs);
     if(!blockId||!pbs)return;
     const existing=entry.labels.find(label=>label.pbs===pbs);
-    if(existing){existing.blockIds.add(blockId);return;}
+    if(existing){
+      existing.blockIds.add(blockId);
+      existing.sourceEmpty&&=item?.sourceEmpty===true;
+      return;
+    }
     entry.labels.push({pbs,blockId,group:String(item.blockGroup??''),
-      parentBlockId:item.parentBlockId,bbox,blockIds:new Set([blockId])});
+      parentBlockId:item.parentBlockId,bbox,sourceEmpty:item?.sourceEmpty===true,
+      blockIds:new Set([blockId])});
   }
   const highlightKind=ids=>blockHighlight(ids,selectedBlockId,blockParents);
   const updateSelectedNodes=()=>{
@@ -387,6 +392,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       });
       const blockId=blockIdOf(item);
       if(duplicate){
+        duplicate.sourceEmpty&&=item?.sourceEmpty===true;
         if(blockId)duplicate.blockIds.add(blockId);
         includePbsLabel(duplicate,item,[left,top,right,bottom]);
         if(id)seenIds.set(id,duplicate);
@@ -394,6 +400,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         continue;
       }
       const entry={left,top,right,bottom,area,group,item,
+        sourceEmpty:item?.sourceEmpty===true,
         blockIds:new Set(blockId?[blockId]:[]),labels:[],element:null};
       includePbsLabel(entry,item,[left,top,right,bottom]);
       visibleRects.push(entry);
@@ -409,6 +416,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     }
     for(const entry of visibleRects){
       entry.element.dataset.blockIds=[...entry.blockIds].join(' ');
+      entry.element.dataset.sourceEmpty=String(entry.sourceEmpty);
       const highlight=highlightKind(entry.blockIds);
       entry.element.dataset.selected=String(highlight==='direct');
       entry.element.dataset.familySelected=String(highlight==='family');
@@ -423,6 +431,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       const labelInputs=visibleRects.flatMap(entry=>entry.labels.map(label=>({
         pbs:label.pbs,blockId:label.blockId,group:label.group,
         parentBlockId:label.parentBlockId,blockIds:label.blockIds,
+        sourceEmpty:label.sourceEmpty,
         bbox:[label.bbox[0]/size[0]*width,label.bbox[1]/size[1]*height,
           label.bbox[2]/size[0]*width,label.bbox[3]/size[1]*height],
       })));
@@ -439,6 +448,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         button.dataset.side=placement.side;
         button.dataset.lane=String(placement.lane);
         button.dataset.child=String(placement.parentBlockId!==null&&placement.parentBlockId!==undefined);
+        button.dataset.sourceEmpty=String(placement.sourceEmpty===true);
         button.dataset.blockId=placement.blockId;
         button.dataset.blockIds=[...placement.blockIds].join(' ');
         const highlight=highlightKind(placement.blockIds);
@@ -446,7 +456,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         button.dataset.familySelected=String(highlight==='family');
         button.style.top=placement.top+'px';
         button.textContent=placement.pbs;
-        button.title=`${placement.pbs} · Block ID ${placement.blockId} · ${placement.group}`;
+        button.title=`${placement.pbs} · Block ID ${placement.blockId} · ${placement.group}`+
+          (placement.sourceEmpty?' · OCR 已吸收（原始基础块无内容）':'');
         button.setAttribute('aria-label',`定位 ${placement.pbs}`);
         button.addEventListener('click',()=>{
           if(dragSuppressId===placement.blockId&&performance.now()<dragSuppressUntil)return;
