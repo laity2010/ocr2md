@@ -39,34 +39,51 @@ function exactInlineOffsets(blocks,byBlock){
     catch{continue;}
     if(!Array.isArray(raw?.lines)||block.block_type==='title'||
        block.block_type==='interline_equation')continue;
-    const positions=[];
-    const lines=[];
-    for(const [lineIndex,line] of raw.lines.entries()){
-      if(!Array.isArray(line?.spans))continue;
-      let text='';
-      for(const [spanIndex,span] of line.spans.entries()){
-        if(!span||typeof span!=='object')continue;
-        let fragment='';
-        if(typeof span.html==='string')fragment=span.html;
-        else if(typeof span.image_path==='string')
-          fragment='![image](<'+span.image_path.replace(/>/g,'%3E')+'>)';
-        else if(typeof span.content==='string')fragment=span.content;
-        if(span.type==='inline_equation'&&typeof span.content==='string'&&
-           fragment===span.content)
-          positions.push({key:`${block.block_id}:${lineIndex}:${spanIndex}`,
-            line:lines.length,offset:text.length});
-        text+=fragment;
+    const modes=[{delimited:false},{delimited:true}];
+    for(const mode of modes){
+      const positions=[],lines=[];
+      for(const [lineIndex,line] of raw.lines.entries()){
+        if(!Array.isArray(line?.spans))continue;
+        let text='';
+        for(const [spanIndex,span] of line.spans.entries()){
+          if(!span||typeof span!=='object')continue;
+          let fragment='';
+          const isInline=span.type==='inline_equation'&&typeof span.content==='string';
+          if(typeof span.html==='string')fragment=span.html;
+          else if(typeof span.image_path==='string')
+            fragment='![image](<'+span.image_path.replace(/>/g,'%3E')+'>)';
+          else if(typeof span.content==='string'){
+            fragment=span.content;
+            if(isInline&&mode.delimited)fragment=wrapInlineMath(fragment);
+          }
+          if(isInline&&typeof span.content==='string'&&
+             (fragment===span.content||mode.delimited&&fragment===wrapInlineMath(span.content))){
+            const leadingDollar=fragment.startsWith('$')&&fragment.endsWith('$')?1:0;
+            positions.push({key:`${block.block_id}:${lineIndex}:${spanIndex}`,
+              line:lines.length,offset:text.length+leadingDollar});
+          }
+          text+=fragment;
+        }
+        if(text)lines.push(text);
       }
-      if(text)lines.push(text);
-    }
-    const joined=lines.join(' ');
-    if(joined!==rows[0].row.text)continue;
-    for(const item of positions){
-      const local=lines.slice(0,item.line).reduce((acc,line)=>acc+line.length+1,0)+item.offset;
-      exact.set(item.key,rows[0].start+local);
+      if(lines.join(' ')!==rows[0].row.text)continue;
+      for(const item of positions){
+        const local=lines.slice(0,item.line).reduce((acc,line)=>acc+line.length+1,0)+item.offset;
+        exact.set(item.key,rows[0].start+local);
+      }
+      break; // A whole-paragraph proof selects exactly one representation.
     }
   }
   return exact;
+}
+
+// Mirrors _inline_math() in scripts/v6_lab_ocr_md.py; otherwise the source
+// pointer could drift when the Markdown projection inserts $ delimiters.
+function wrapInlineMath(text){
+  if(!text||text.includes('\n')||text.includes('\r'))return text;
+  if(text.startsWith('$')&&text.endsWith('$')&&!text.startsWith('$$'))return text;
+  for(let i=0;i<text.length;i++)if(text[i]==='$'&&(i===0||text[i-1]!=='\\'))return text;
+  return '$'+text+'$';
 }
 
 function sourceSpans(blocks){

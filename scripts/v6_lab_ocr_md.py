@@ -36,7 +36,25 @@ def _check_signature(db, book):
     return row[0]
 
 
-def _span_text(block):
+def _inline_math(text: str) -> str:
+    """Emit native Markdown math syntax, preserving every OCR character.
+
+    A MinerU formula may already carry a single pair of dollar delimiters;
+    don't double-wrap it. We never rewrite immutable OCR JSON. An interior
+    unescaped $ would make ambiguous Markdown math and is kept as-is instead
+    of manufacturing an invalid nested formula.
+    """
+    if not text or '\n' in text or '\r' in text:
+        return text
+    if text.startswith('$') and text.endswith('$') and not text.startswith('$$'):
+        return text
+    if any(ch == '$' and (i == 0 or text[i-1] != '\\')
+           for i, ch in enumerate(text)):
+        return text
+    return '$' + text + '$'
+
+
+def _span_text(block, *, inline_math=True):
     fragments = []
     for line in block.get('lines') or []:
         if not isinstance(line, dict):
@@ -51,7 +69,10 @@ def _span_text(block):
                 path = span['image_path'].replace('>', '%3E')
                 pieces.append('![image](<' + path + '>)')
             elif isinstance(span.get('content'), str):
-                pieces.append(span['content'])
+                content = span['content']
+                if inline_math and span.get('type') == 'inline_equation':
+                    content = _inline_math(content)
+                pieces.append(content)
         if pieces:
             fragments.append(''.join(pieces))
     return fragments

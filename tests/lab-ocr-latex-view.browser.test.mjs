@@ -44,7 +44,7 @@ const blocks=[
 const md=[
  [1,1,'$$'],[2,1,'E=mc^2'],[3,1,'$$'],[4,1,''],
  [5,2,'Formula $a+b$ plus $c+d$ and manual $q^2$.'],[6,2,''],
- [7,3,'Unrelated text'],[8,4,'before r_t between r_t after'],[9,4,''],
+ [7,3,'Unrelated text'],[8,4,'before $r_t$ between $r_t$ after'],[9,4,''],
 ].map(([line_no,block_id,text])=>({line_no,line_id:'latex-md-'+line_no,
   block_id,text}));
 try{
@@ -102,6 +102,11 @@ try{
    await page.waitForFunction(()=>document.querySelector(
      '#workspace select.ocr-source-file-select')?.value==='sql:md');
    await page.waitForFunction(()=>document.querySelectorAll('.lab-ocr-pdf-pbs-tag').length>=2);
+   // The Lab's native $...$ opt-in renders ordinary math without requiring
+   // legacy CMD review comments, while the Markdown source stays intact.
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '.ocr-preview-md-scroll .ocr-reviewed-inline-latex .katex').length>=3,
+     null,{timeout:14000});
    const picker=page.locator('.ocr-outline-pane .ocr-ag-module-select');
    assert.deepEqual(await picker.locator('option').allTextContents(),['MD 行','标题','LaTeX']);
    const originalText=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
@@ -180,7 +185,7 @@ try{
    await exact('ocr:4:0:1');
    await page.waitForFunction(()=>{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
-     return cm?.state.selection.main.head===cm.state.doc.line(8).from+7;
+     return cm?.state.selection.main.head===cm.state.doc.line(8).from+8;
    },null,{timeout:9000});
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
      ?.dataset.formulaBlockId==='4',null,{timeout:9000});
@@ -191,7 +196,7 @@ try{
    await exact('ocr:4:0:3');
    await page.waitForFunction(()=>{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
-     return cm?.state.selection.main.head===cm.state.doc.line(8).from+19;
+     return cm?.state.selection.main.head===cm.state.doc.line(8).from+22;
    },null,{timeout:9000});
    const secondLeft=await page.locator('.lab-ocr-pdf-formula-focus')
      .evaluate(box=>parseFloat(box.style.left));
@@ -204,7 +209,7 @@ try{
    const sourceColors=await page.evaluate(async()=>{
      const editor=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
      const line=editor.state.doc.line(8);
-     editor.dispatch({selection:{anchor:line.from+19,head:line.from+22}});
+     editor.dispatch({selection:{anchor:line.from+22,head:line.from+25}});
      await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
      const own=document.querySelector('.ocr-cm-source .ocr-four-pane-formula-active');
      const builtIn=document.querySelector('.ocr-cm-source .cm-selectionMatch:not(.ocr-four-pane-formula-active)');

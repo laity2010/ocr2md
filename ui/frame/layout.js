@@ -790,7 +790,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     highlightMdSource(lineNo,{reveal=false}={}){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.markMdLine(lineNo,{reveal})??false;
     },
-    setMarkdownPreview(source){
+    setMarkdownPreview(source,{nativeInlineMath=false}={}){
       if(typeof source!=='string')throw Error('MD 预览源码必须是字符串');
       bindPreviewClick();
       const token=++previewToken;
@@ -805,7 +805,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
           if(token!==previewToken||!pdfSlot.preview?.mdArea)return;
           const preserved=sync?.beforeRender();
           documentChanged();
-          pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source);
+          pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source,{nativeInlineMath});
           sync?.afterRender(preserved);
           highlightPreviewLine(previewSelectedLine);
         }).catch(error=>onStatus('MD 预览渲染失败：'+error.message,'warning'));

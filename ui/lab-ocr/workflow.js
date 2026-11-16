@@ -225,7 +225,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       else frame.patchMdRows(projectedMdRows());
     }
     if(currentSqlTable==='md')frame.setMdEditHistory();
-    frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'));
+    frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'),{nativeInlineMath:true});
     if(mdPersistence&&next.dirty)mdPersistence.changed();
   }
   function mdCursorChanged(lineNo,{docChanged=false}={}){
@@ -275,7 +275,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         onChange:mdContentChanged,
         onSelection:mdCursorChanged,
       });
-      frame.setMarkdownPreview(result.rows.map(r=>r.text).join('\n'));
+      frame.setMarkdownPreview(result.rows.map(r=>r.text).join('\n'),{nativeInlineMath:true});
       mdReady=true;
       bindMdPersistence();
       revealNavigation();

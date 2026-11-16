@@ -113,11 +113,11 @@ md.renderer.rules.html_block = (tokens,idx,options,env,self) => {
 
 // Obsidian-reading projection. MinerU preservation comments are deliberately
 // present in the source but invisible here; the sanitizer strips comments.
-export function renderMarkdown(source) {
-  // Review annotations are CMD-owned source metadata. Only confirmed inline
-  // latex is rendered as math; ignored/unreviewed fragments stay plain text.
+export function renderMarkdown(source,{nativeInlineMath=false}={}) {
+  // Main remains review-gated; Lab-OCR opts in to native $...$ math.
+  // Explicitly ignored formulas remain plain text in every mode.
   // The projection never inserts or removes source line breaks.
-  const {projected,fragments}=projectReviewedInlineLatex(source);
+  const {projected,fragments}=projectReviewedInlineLatex(source,{nativeInlineMath});
   const env={};
   const tokens=md.parse(projected,env);
   for(let idx=0;idx<tokens.length;idx++){

@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {projectReviewedInlineLatex} from '../ui/latex-inline-preview.js';
+const source=String.raw`Here $x^2$ and $\mathsf { T A } _ { t }$ remain in MD.`;
+const original=source;
+const main=projectReviewedInlineLatex(source);
+assert.equal(main.projected,original,'Main review-gated behavior must be unchanged');
+assert.equal(main.fragments.length,0);
+const lab=projectReviewedInlineLatex(source,{nativeInlineMath:true});
+assert.equal(lab.fragments.length,2,'Native $...$ should render without review annotations');
+assert(lab.fragments.every(x=>x.html.includes('katex')));
+assert(lab.fragments.every(x=>!x.html.includes('<script')));
+assert(!lab.projected.includes(' $x^2$ '));
+const monetary=projectReviewedInlineLatex('Price $100 only.',{nativeInlineMath:true});
+assert.equal(monetary.fragments.length,0,'Currency is not formula');
+assert(monetary.projected.includes('$100'));
+assert.equal(projectReviewedInlineLatex('Variable $x$.',{nativeInlineMath:true}).fragments.length,1);
+assert.equal(source,original,'Projection is read-only');
+console.log('LAB_OCR_NATIVE_INLINE_PREVIEW_OPT_IN_PASS');

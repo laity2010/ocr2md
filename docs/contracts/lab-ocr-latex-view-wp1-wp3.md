@@ -35,3 +35,11 @@
 - 公式级定位消息的 `formulaKind` 限定为 `inline` 或 `display`。仅 `inline` 使用统一 CSS 变量 `--ocr-inline-formula-fill`，在 CM6 精确源码范围及 PDF 对应 Span bbox 上同时使用；透明度降低，PDF 仅保留柔和 1px 边缘，取消旧橙色光晕。
 - 独立公式继续使用既有 CM6 选区匹配 / PDF 独立公式配色；不改变父块边界、公式坐标、数据写回，也不修改 Main 或 lab-frame 的外观。
 - Chromium / iPad WebKit 端到端测试需核验两个视图计算出的 rgba 完全一致、透明度与外框、独立公式不受影响以及无数据库写入。
+
+## MinerU 原生行内数学定界符（2026-11-16）
+
+- 对新建 MD，`scripts/v6_lab_ocr_md.py:_span_text` 保留原 MinerU `span.content` 不变，仅将 `type=inline_equation` 的可证明安全内容包成 `$...$`；原始 MinerU、bbox、score、source Span 完整保留。原来已有单对 `$` 不再重复包裹；具有不安全内部美元符号或缺少文本的原始 Span 不做猜测。
+- 既有 MD 禁止自动重初始化：显式一次性 `scripts/v6_lab_ocr_reconcile_inline_math.py` 首先只读计划，再用 `--apply --backup <唯一的备份路径>` 进行 SQLite online backup + 单事务 CAS。只有单条 MD 非空行与该 Block 原始拼接正文**逐字符完全一致**时允许加 `$`；人工改动、不同源 Block、重建风险等直接跳过。保持所有 LineID、行号、BlockID、其他原文行、原始表不变，revision 只增加一次。重跑无差异即 no-op。
+- 公式索引 `exactInlineOffsets` 同时支持无定界遗留 MD 与原生 `$...$` MD；新格式在每个公式的 `$` **内部**定位 CM6 字符列，按完整段落与原始 Span 序列无损比对，可正确区分重复的行内公式。不存在确定的块级对应关系时继续标记未匹配。
+- Lab-OCR 的 MD 预览使用 `renderMarkdown(...,{nativeInlineMath:true})` 原生渲染无审阅标记的 `$...$`。Main 继续使用原来默认的 review-gated 行为，显式 `忽略` 的公式保持普通文本；渲染仅改变预览，不再写回任何 CMD 注释。
+- sample 已在独立 SQL 快照与 WebKit/Chromium 验证：原始 22 行内 Span 分布在17个块，现有 478 行 MD 中仅17行被修改、revision `77→78`，全部 LineID 未改。完整原库备份存放于 `.ops/backups/lab-ocr-inline-math-20261116/`（不要向外分发用户书籍）。

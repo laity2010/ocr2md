@@ -41,6 +41,21 @@ assert.equal(a.match_status,'已匹配');
 assert.equal(b.match_status,'已匹配');
 assert.equal(a.line_no,8);assert.equal(b.line_no,8);
 assert.equal(a.column,6);assert.equal(b.column,16);
+// New MinerU -> MD automatically adds $ delimiters, even when a block
+// repeats identical formulas. Two OCR Span IDs must remain 1:1, with the
+// caret on the math body (one character after the opening $).
+const delimited=lines.map(row=>row.line_no===8?
+  {...row,text:'start $z$ between $z$ end'}:row);
+const native=projectLatexIndex(delimited,original);
+const nativeA=native.find(r=>r.formula_id==='ocr:5:0:1');
+const nativeB=native.find(r=>r.formula_id==='ocr:5:0:3');
+assert.equal(nativeA.match_status,'已匹配');
+assert.equal(nativeB.match_status,'已匹配');
+assert.equal(nativeA.column,7);assert.equal(nativeB.column,19);
+assert.equal(nativeA.syntax,'$');assert.equal(nativeB.syntax,'$');
+assert.equal(native.filter(r=>r.block_id===5).length,2,
+  'Native math delimiters must not create duplicate MD formula rows');
+assert.equal(latexIndexSummary(native).matched,4);
 // If a reviewer changes the paragraph, source sequence alone is NOT proof.
 const edited=lines.map(row=>row.line_no===8?{...row,text:'edited '+row.text}:row);
 const unsafe=projectLatexIndex(edited,original).filter(r=>r.block_id===5);
