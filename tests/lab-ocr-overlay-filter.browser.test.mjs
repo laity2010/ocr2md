@@ -122,16 +122,20 @@ try{
    await typeHeader.locator('.ag-header-cell-filter-button').click();
    await page.locator('.lab-ocr-pdf-scale').selectOption('100');
    await expectIds(['b-para-text','b-para-table','b-para-inner']);
-   const level=page.locator('.lab-ocr-pdf-overlay-level');
-   await level.selectOption('span');
-   await expectIds(['s-para-text','s-para-table','s-para-inner']);
-   assert.equal(await page.locator('.lab-ocr-pdf-pbs-tag').count(),0);
+   // The overlay mode remains programmatically Block; the user removed
+   // the manual overlay dropdown, without changing the para-only projection.
+   assert.equal(await page.locator('.lab-ocr-pdf-overlay-level,.lab-ocr-pdf-overlay-control').count(),0);
+   assert.equal(await page.locator('.lab-ocr-pdf-extract-text').count(),1);
+   assert.equal(await page.locator('.lab-ocr-pdf-extract-text').isDisabled(),true,
+     'Legacy group-filter fixture does not supply an editable MD document');
    // Even on a different page containing only discarded_blocks, no box.
    await page.locator('.lab-ocr-pdf-page').fill('3');
    await page.locator('.lab-ocr-pdf-page').press('Tab');
-   await page.waitForFunction(()=>!!document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="3"][data-level="span"]'));
+   await page.waitForFunction(()=>!!document.querySelector('.lab-ocr-pdf-overlay-layer[data-page="3"][data-level="block"]'));
    await expectIds([],3);
-   assert(overlayRequests.includes('span:3'));
+   assert(overlayRequests.includes('block:3'));
+   assert(!overlayRequests.some(item=>item.startsWith('span:')),
+     'Hidden Span is not requested without a programmatic client request');
    assert.equal(pdfRequests,1);
    assert.equal(rowRequests,1);
    assert.deepEqual(errors,[]);

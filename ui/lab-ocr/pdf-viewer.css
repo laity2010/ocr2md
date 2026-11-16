@@ -39,11 +39,6 @@
 .ocr-preview-pane[data-preview-mode="pdf"]>.ocr-preview-pdf-host{visibility:visible;pointer-events:auto}
 
 /* Read-only geometry, never intercepts PDF text selection or scrolling. */
-.lab-ocr-pdf-controls .lab-ocr-pdf-overlay-control{border-left:1px solid #52615f;
-  padding-left:7px;gap:4px}
-.lab-ocr-pdf-controls .lab-ocr-pdf-overlay-level{height:26px;min-width:66px;
-  padding:2px 3px;border-radius:4px;border:1px solid #596963;
-  background:#202c32;color:#d3c6aa;font:12px "OCR2MD Sarasa",monospace}
 .lab-ocr-pdf-scroller .page>.lab-ocr-pdf-overlay-layer{
   position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden;
   opacity:var(--lab-ocr-pdf-overlay-opacity,.35)}
@@ -143,4 +138,16 @@
   box-shadow:none;
   outline:2px dashed #eec45b;
   outline-offset:1px;
+}
+
+/* PDF toolbar: no overlay selector; extraction is enabled only for a
+ * source-backed selected Block. Native disabled state is also touch-safe. */
+.lab-ocr-pdf-controls .lab-ocr-pdf-extract-text {
+  flex:0 0 auto;min-height:27px;padding:2px 9px;
+  border:1px solid #71988c;border-radius:4px;
+  background:#2c493f;color:#e4ebd6;
+  font:12px "OCR2MD Sarasa",monospace;cursor:pointer;
+}
+.lab-ocr-pdf-controls .lab-ocr-pdf-extract-text:disabled {
+  opacity:.4;cursor:default;
 }

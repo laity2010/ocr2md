@@ -192,6 +192,19 @@ function mountEmptySource(host){
       editor.dispatch({effects});
       return true;
     },
+    insertMdAtCursor(text){
+      const md=editor.state.field(mdField);
+      if(!md||typeof text!=='string'||!text.trim()||text.includes('\r'))
+        throw Error('CM6 源码未就绪或 OCR 文本无效');
+      // A PDF click does not move the CM6 selection; insert at its existing
+      // caret head without replacing a selected range or rebinding BlockID.
+      const at=editor.state.selection.main.head;
+      editor.dispatch({changes:{from:at,insert:text},
+        selection:{anchor:at+text.length},
+        annotations:Transaction.userEvent.of('input.pdf-extract')});
+      editor.focus();
+      return true;
+    },
     editMdLine(lineId,text){
       const md=editor.state.field(mdField);
       const row=md?.rows.find(r=>r.line_id===lineId);
@@ -736,6 +749,11 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     editMdLine(lineId,text){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.editMdLine(lineId,text)??false;
+    },
+    insertMdAtCursor(text){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 源码窗未就绪');
+      return cm.insertMdAtCursor(text);
     },
     patchMdRows(rows){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchMdRows(rows);

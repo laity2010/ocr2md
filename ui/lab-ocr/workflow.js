@@ -9,6 +9,7 @@ import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {resolveReviewLocation} from './four-pane-location.js';
+import {originalBlockText} from './source-text.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
  * UI never reads disk or SQLite; those belong to the isolated OCR API.
@@ -423,10 +424,21 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
           });
         }
       },
+      canExtractBlock:id=>Boolean(md()&&originalBlockText(
+        cm()?.rows.find(row=>String(row.block_id)===String(id)))),
+      onExtractText:({blockId})=>{
+        if(!md()||!workspace)throw Error('尚未加载可编辑 Markdown 源码');
+        const block=cm()?.rows.find(row=>String(row.block_id)===String(blockId));
+        const text=originalBlockText(block);
+        if(!text)throw Error('该基础块没有可提取的原始文本');
+        frame.insertMdAtCursor(text);
+        onStatus(`PDF · 已提取 ${block.pbs} 的 ${text.length} 个字符到 CM6 光标处；可撤销`,'ok');
+      },
       onBlockDragIntent:intent=>executeBlockGesture(intent),
       projectPage:data=>projectBlockOverlays(cm(),data),
       loadPage:(page,level)=>request('overlays',{workspace:directory,page,level}),
     }:{level:'off',loadPage:null,blockGroups:null,onBlockSelect:null,
+      canExtractBlock:null,onExtractText:null,
       onBlockDragIntent:null,projectPage:null,onPageChange:null});
   }
   function warmPdf(directory){

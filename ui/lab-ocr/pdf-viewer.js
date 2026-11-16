@@ -31,16 +31,13 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   zoomSelect.add(new Option('适宽','page-width'));
   for(const level of zoomLevels)zoomSelect.add(new Option(level+'%',String(level)));
   zoomSelect.value='page-width';
-  const overlayLabel=document.createElement('label');
-  overlayLabel.className='lab-ocr-pdf-overlay-control';
-  overlayLabel.textContent='覆盖框';
-  const overlaySelect=document.createElement('select');
-  overlaySelect.className='lab-ocr-pdf-overlay-level';
-  overlaySelect.setAttribute('aria-label','PDF 覆盖框粒度');
-  overlaySelect.append(new Option('关闭','off'),new Option('Block','block'),new Option('Span','span'));
-  overlaySelect.value='off';overlaySelect.disabled=true;
-  overlayLabel.append(overlaySelect);
-  controls.append(pageLabel,zoomSelect,overlayLabel);
+  const extract=document.createElement('button');extract.type='button';
+  extract.className='lab-ocr-pdf-extract-text';
+  extract.textContent='提取文本';
+  extract.setAttribute('aria-label','提取文本');
+  extract.title='先选择含原始 OCR 文本的 PDF Block，再插入源码光标位置';
+  extract.disabled=true;
+  controls.append(pageLabel,zoomSelect,extract);
   toolbar.replaceChildren(controls);
   surface.dataset.pdfTheme='dark';surface.classList.add('lab-ocr-pdf-surface');
   const root=document.createElement('div');root.className='lab-ocr-pdf-root';
@@ -61,7 +58,24 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
+    canExtractBlock=null,onExtractText=null,extracting=false,
     selectedBlockId=null,focusRequest=null;
+  const updateExtractButton=()=>{
+    const enabled=ready&&overlayLevel==='block'&&selectedBlockId!=null&&
+      !extracting&&typeof onExtractText==='function'&&
+      typeof canExtractBlock==='function'&&canExtractBlock(selectedBlockId)===true;
+    extract.disabled=!enabled;
+    extract.title=enabled?'提取当前选中 Block 的原始 OCR 文本到源码光标位置':
+      '选中基础块内有文字的 PDF 覆盖框后可用';
+  };
+  extract.addEventListener('click',async()=>{
+    if(extract.disabled||!selectedBlockId)return;
+    const id=selectedBlockId;
+    extracting=true;updateExtractButton();
+    try{await onExtractText?.({blockId:id});}
+    catch(error){onStatus('PDF · 提取文本失败：'+error.message,'error');}
+    finally{extracting=false;updateExtractButton();}
+  });
   let lastNotifiedPage=null;
   const notifyPage=()=>{
     const page=viewer.currentPageNumber||1;
@@ -322,7 +336,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(!meta?.blockId)return;
     selectedBlockId=String(meta.blockId);
     focusRequest=null;
-    updateSelectedNodes();
+    updateSelectedNodes();updateExtractButton();
     if(notify)onBlockSelect?.({...meta,blockId:selectedBlockId});
   }
   function paintPageBoxes(page,data){
@@ -590,11 +604,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   function chooseOverlayLevel(level){
     if(!['off','block','span'].includes(level))throw Error('覆盖框粒度无效');
     if(level==='span'&&!allowSpan)throw Error('当前只有 para Block VIEW，尚未启用 Span 视图');
-    overlayLevel=level;overlaySelect.value=level;overlayRevision++;
+    overlayLevel=level;overlayRevision++;updateExtractButton();
     overlayCache.clear();overlayPending.clear();clearOverlayNodes();
     showOverlayPages();
   }
-  overlaySelect.addEventListener('change',()=>chooseOverlayLevel(overlaySelect.value));
   function setOverlays(config={}){
     if(disposed)throw Error('PDF Viewer 已销毁');
     if(Object.hasOwn(config,'onPageChange')){
@@ -605,12 +618,20 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     }
     if(Object.hasOwn(config,'allowSpan')){
       allowSpan=Boolean(config.allowSpan);
-      const spanOption=overlaySelect.querySelector('option[value="span"]');
-      if(spanOption)spanOption.disabled=!allowSpan;
       if(!allowSpan&&overlayLevel==='span')chooseOverlayLevel('block');
     }
-    // The same public method accepts a {blockGroups} patch from AG without
-    // resetting a user's Block/Span dropdown or the cached page geometry.
+    if(Object.hasOwn(config,'canExtractBlock')){
+      if(config.canExtractBlock!==null&&typeof config.canExtractBlock!=='function')
+        throw Error('PDF OCR 文本可用性回调必须是函数或 null');
+      canExtractBlock=config.canExtractBlock;
+    }
+    if(Object.hasOwn(config,'onExtractText')){
+      if(config.onExtractText!==null&&typeof config.onExtractText!=='function')
+        throw Error('PDF 提取文本回调必须是函数或 null');
+      onExtractText=config.onExtractText;
+    }
+    // The public method accepts a {blockGroups} patch without resetting
+    // the caller-configured overlay level or cached page geometry.
     const nextLevel=Object.hasOwn(config,'level')?config.level:overlayLevel;
     if(Object.hasOwn(config,'onBlockSelect')){
       if(config.onBlockSelect!==null&&typeof config.onBlockSelect!=='function')
@@ -644,11 +665,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const loaderChanged=nextLoader!==loadOverlayPage;
     const levelChanged=nextLevel!==overlayLevel;
     loadOverlayPage=nextLoader;
-    overlaySelect.disabled=nextLoader===null;
-    blockGroups=normalized;
+    blockGroups=normalized;updateExtractButton();
     if(levelChanged){chooseOverlayLevel(nextLevel);return true;}
     if(loaderChanged){
-      blockParents.clear();selectedBlockId=null;
+      blockParents.clear();selectedBlockId=null;updateExtractButton();
       overlayRevision++;overlayCache.clear();overlayPending.clear();
       clearOverlayNodes();showOverlayPages();
     }else if(groupsChanged){
@@ -672,7 +692,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if((typeof id!=='string'&&typeof id!=='number')||!String(id)||
         !Number.isInteger(page)||page<1||page>200)throw Error('Block 定位身份或页码无效');
     if(typeof reveal!=='boolean')throw Error('PDF Block 定位模式必须是布尔值');
-    selectedBlockId=String(id);
+    selectedBlockId=String(id);updateExtractButton();
     // Drag/Undo/Redo are structural edits, NOT a navigation request. Keep
     // current PDF.js page, scale and visual scroll exactly where the user
     // left them. Explicit AG -> PDF navigation continues to reveal/scroll.
@@ -687,7 +707,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   }
   function clearFocus(){
     selectedBlockId=null;focusRequest=null;
-    updateSelectedNodes();return true;
+    updateSelectedNodes();updateExtractButton();return true;
   }
   function invalidateOverlayPage(page,changedRows=[]){
     if(!Number.isInteger(page)||page<1||page>200)throw Error('失效 PDF 页码无效');
@@ -714,7 +734,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return false;
   }
   const emit=(message,kind='info')=>{if(!disposed)onStatus('PDF · '+message,kind);};
-  const readyControls=()=>{pageInput.disabled=!ready;zoomSelect.disabled=!ready;};
+  const readyControls=()=>{pageInput.disabled=!ready;zoomSelect.disabled=!ready;
+    updateExtractButton();};
   const updatePage=()=>{
     pageInput.value=String(viewer.currentPageNumber||1);
     if(pdf)count.textContent='/ '+pdf.numPages;
@@ -779,7 +800,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
     lastNotifiedPage=null;
-    focusRequest=null;selectedBlockId=null;blockParents.clear();
+    focusRequest=null;selectedBlockId=null;blockParents.clear();updateExtractButton();
     pageObserver.disconnect();
     clearOverlayNodes();viewer.setDocument(null);
     pageInput.value='1';count.textContent='/ —';zoomSelect.value='page-width';readyControls();

@@ -118,3 +118,13 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - PDF 原始 bbox 不变，`sourceEmpty:true` 的覆盖框采用原色虚线（配置线宽下限 1px 以保证可见），PBS 标签同色虚线；选中或父子高亮时继续橙色，外轮廓仍保持虚线。跨度为零、不合法的 bbox 仍不绘制。Span 粒度不另加标签。
 - 相同 bbox 的多个 Block 仍仅绘制一份覆盖框，但每个 PBS 标签独立判定虚线；如果去重组中任一来源有内容，则共享覆盖框保持实线，避免用某个空子块覆盖正常父块的实际内容。覆盖框不拦截 PDF 文本选择，标签的点击、拖动、四窗联动和缩放不变。
 - 验收：`tests/lab-ocr-overlays.test.py`（空叶、包含内容的父容器、图片、纯空白、只读）、`tests/lab-ocr-overlays-http.test.py`（不泄漏正文的 Boolean）、`tests/lab-ocr-block-gesture.browser.test.mjs`（Chromium/iPad WebKit 的虚线颜色和样式、同 bbox 去重独立标签、选择/拖动/Undo/Redo）。
+
+## PDF 工具栏提取原始文本（2026-11-16）
+
+- 用户指定从 PDF 工具栏撤下「覆盖框」文字及 Block/Span/关闭下拉控件；**覆盖框继续默认 Block 绘制，原有 `setOverlays({level,loadPage,...})` 外部 API 仍保留**，以便各调用方按原配置维护几何数据。PDF 工具栏只保留页码、缩放，以及一个「提取文本」按钮；不增加新的开关或工具栏。
+- PDF 标签点击以及 AG→PDF 定位，共用 `selectedBlockId`。按钮默认禁用；仅当选中的 Block 在**CM6 已加载的原始 `block_json`** 中有可见的 `span.content` 或 `span.html` 内容、且 MD 编辑器已加载时启用。纯 `image_path`、`lines:[]`、仅有子块而本身没有文字的容器，不当作可提取文本。判断不使用已经人工修改过的 MD 正文或 `content_preview`（后者可能包含图片路径）。
+- 复用 PDF `setOverlays` 注入的业务能力 `canExtractBlock(blockId):boolean` 和 `onExtractText({blockId})`，通用 PDF 查看器不依赖 SQL 或原文数据。Lab OCR 业务层使用 `originalBlockText()` 从现有 Block 运行态取原始内容，保留 OCR 的原始多行顺序及文本中的空行；不递归吸收子块内容，不写入新的表或 API。此操作绝不向 HTML/图片路径误提取。
+- `frame.insertMdAtCursor(text)` → CM6 `editor.dispatch(changes)` 在**先前保留的源码光标 head** 插入，绝不以 PDF 标签目标/当前块头重新定位源码，也不替换选区；不附加新的逻辑块标签。通过现有 `editedMdRuntime` 的 LineID/BlockID 继承规则、CM6 原生 Undo/Redo、AG/预览投影和闲时 SQLite CAS 保存；仅影响正在编辑的 MD 文本。
+- 直接测试：`node tests/lab-ocr-source-text.test.mjs`；真实 Chromium + iPad WebKit 集成：`node tests/lab-ocr-pdf-extract.browser.test.mjs`（按钮只读控制、仅缩放下拉、PDF标签选择不改 CM6 光标、原始文本多行插入、逻辑归属、撤销/重做/保存/重载）。
+
+历史 `lab-ocr-pdf-viewer.browser.test.mjs` 中「PDF 工具栏有覆盖框下拉」「初始不切分」的断言、以及此前用于手动 Span 切换的流程，是过去版本的验收快照；本轮不因此恢复已撤下的控件或改变默认四窗布局。
