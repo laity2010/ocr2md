@@ -68,7 +68,10 @@ md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent
   token.content=state.getLines(startLine+1,end,0,false).replace(/\n$/,'');
   state.line=end+1;
   return true;
-});
+}, {alt:['paragraph']});
+// Without paragraph termination, 'text\n$$\n...\n$$' would be swallowed
+// by one paragraph. Logical siblings intentionally have no blank separator,
+// so a $$ display formula must be allowed to start immediately after text.
 md.renderer.rules.ocr_display_math=(tokens,idx)=>{
   const token=tokens[idx];
   return '<div class="ocr-math ocr-source-block"'+sourceAttrs(token)+'>'+

@@ -12,6 +12,8 @@ import uuid
 from contextlib import closing
 from pathlib import Path
 from v6_lab_ocr_store import _db, existing_info, OCRImportError
+from v6_lab_ocr_cm_view import ensure_cm_view
+from v6_lab_ocr_formula import display_equation
 
 MAX_LINES = 40000
 MAX_INSERT = 16000
@@ -73,11 +75,7 @@ def _markdown_block(row):
         depth = level if type(level) is int and 1 <= level <= 6 else 1
         return '#' * depth + ' ' + text if text else ''
     if typ == 'interline_equation':
-        if not text:
-            return ''
-        count = max([3] + [len(m.group(0)) + 1 for m in re.finditer(r'`+', text)])
-        fence = '`' * count
-        return fence + 'math\n' + text + '\n' + fence
+        return display_equation(data)
     # Unmapped types with OCR content retain that content, rather than
     # silently deleting it.  Unconvertible metadata stays in the raw source.
     return text
@@ -133,7 +131,14 @@ def _ordered_review_blocks(db):
 def project_md_lines(blocks):
     """Return contiguous numbered MD rows, including every blank/EOF line."""
     result = []
+    last_owner = None
     for block in blocks:
+        # Children of the same top-level parent are contiguous. A root-group
+        # separator is a real physical MD row, owned by the preceding block.
+        # Its emptiness is formatting, NEVER the authority for block identity.
+        if block['parent_block_id'] is None and result:
+            result.append({'line_id':uuid.uuid4().hex,
+                           'block_id':last_owner,'text':''})
         body = _markdown_block(block).replace('\r\n','\n')
         if '\r' in body:
             body = body.replace('\r', '\n')
@@ -141,11 +146,10 @@ def project_md_lines(blocks):
             for line in body.split('\n'):
                 result.append({'line_id':uuid.uuid4().hex,
                                'block_id':block['block_id'], 'text':line})
-        # Empty block and each block separator have a real line identity.
-        result.append({'line_id':uuid.uuid4().hex,
-                       'block_id':block['block_id'], 'text':''})
-    if not result:
-        result.append({'line_id':uuid.uuid4().hex,'block_id':None,'text':''})
+            last_owner = block['block_id']
+    # Trailing LF is represented by a last physical blank row, not hidden
+    # serialization logic. Contentless logical blocks need no dummy MD line.
+    result.append({'line_id':uuid.uuid4().hex,'block_id':last_owner,'text':''})
     for index, row in enumerate(result, 1):
         row['line_no'] = index
     if len(result) > MAX_LINES:
@@ -165,6 +169,9 @@ def initialize_md(book:Path) -> dict:
                 if existing != set(MD_TABLES):
                     raise OCRImportError('MD 表结构不完整，拒绝自动重建或覆盖')
                 _check_signature(db,book)
+                # Add only a read-only SQL view. Never regenerate existing MD
+                # or touch its saved LineID/BlockID/text/revision.
+                ensure_cm_view(db)
                 db.commit()
                 return {**read_md(book),'status':'existing'}
             blocks = _ordered_review_blocks(db)
@@ -188,6 +195,7 @@ def initialize_md(book:Path) -> dict:
             db.executemany('INSERT INTO md_line(line_id,line_no,block_id,text) VALUES(?,?,?,?)',
                 [(r['line_id'],r['line_no'],r['block_id'],r['text']) for r in generated])
             db.execute('INSERT INTO md_meta VALUES (1,0,?)',(info['signature'],))
+            ensure_cm_view(db)
             db.commit()
             return {'status':'created','revision':0,'rows':generated,'total':len(generated)}
         except Exception:
@@ -209,8 +217,12 @@ def read_md(book:Path) -> dict:
         meta = db.execute('SELECT revision FROM md_meta WHERE id=1').fetchone()
         if not meta:
             raise OCRImportError('MD 版本不存在')
+        # An already-edited legacy book without cm_view remains readable
+        # without an automatic GET-side SQLite schema mutation.
+        from_view=db.execute("SELECT type FROM sqlite_master WHERE name='cm_view'").fetchone()
+        source='cm_view' if from_view and from_view['type']=='view' else 'md_line'
         records = [dict(r) for r in db.execute(
-            'SELECT line_id,line_no,block_id,text FROM md_line ORDER BY line_no')]
+            f'SELECT line_id,line_no,block_id,text FROM {source} ORDER BY line_no')]
         if not records or len(records)>MAX_LINES or any(
             r['line_no']!=idx or '\n' in r['text'] or '\r' in r['text']
             for idx,r in enumerate(records,1)):
@@ -298,6 +310,7 @@ def persist_md_splice(book:Path, expected_revision, request_id, start,
             change=len(inserted)-delete_count
             db.executemany('UPDATE md_line SET line_no=? WHERE line_id=?',
                 [(old_number+change,line_id) for line_id,old_number in suffix])
+            ensure_cm_view(db)
             db.execute('UPDATE md_meta SET revision=? WHERE id=1',(revision+1,))
             response={'status':'saved','revision':revision+1,
                       'total':count+change,'inserted':len(inserted),'deleted':delete_count}
