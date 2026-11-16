@@ -3,11 +3,10 @@ import {createBlockRuntime,editBlockRuntime,acknowledgeBlockPersistence,
   runtimeStatus,projectBlockOverlays} from './block-runtime.js';
 import {createBlockPersistence} from './block-persistence.js';
 import {pbsPageKey} from './pbs-page-filter.js';
-import {createMdRuntime,editedMdRuntime,migratedMdRuntime,acknowledgeMdRuntime,
+import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
   mdSplice,reorderMdByBlocks} from './md-runtime.js';
 import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
-import {planLegacyMdUpgrade} from './md-legacy-upgrade.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {resolveReviewLocation} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
@@ -244,33 +243,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     })();
     try{return await mdLoading;}
     finally{mdLoading=null;}
-  }
-  async function upgradeOldMarkdown(){
-    const initial=md(),blocks=cm();
-    if(!initial||!blocks){onStatus('需先加载 MD 和逻辑块','warning');return false;}
-    let plan;
-    try{plan=planLegacyMdUpgrade(initial.rows,blocks.rows,()=>'md-'+crypto.randomUUID());}
-    catch(error){onStatus('旧 MD 审阅失败：'+error.message,'error');return false;}
-    if(!plan.changed){
-      onStatus('没有可安全升级的旧公式或父子分隔空行；可疑/已修改公式 '+plan.skipped+' 处保持原样','info');
-      return false;
-    }
-    const detail=`检测到 ${plan.formulas} 处未改动的旧公式、${plan.separators} 个旧父子块空行。\n`+
-      `将公式从 math 图片围栏升级为 $$ LaTeX + 原图链接，并仅删除与原始生成结果完全匹配的父子分隔空行。\n`+
-      `跳过 ${plan.skipped} 处可能人工修改的公式。\n\n`+
-      '原始 OCR、BlockID、ParentID、PBS 不变；CM6 撤销/重做可恢复本次转换。要执行吗？' +
-      (plan.example?'\n\n示例 BlockID '+plan.example.block+'\n旧：\n'+
-        plan.example.old.slice(0,340)+'\n新：\n'+plan.example.new.slice(0,340):'');
-    if(!window.confirm(detail))return false;
-    if(initial!==md()||blocks!==cm()||workspace!==blocks.workspace){
-      onStatus('确认期间书籍内容或块结构已变化，拒绝覆盖；请重新操作','warning');return false;
-    }
-    try{
-      frame.applyMdUpgrade(migratedMdRuntime(initial,plan.rows));
-      onStatus(`✓ 已升级旧公式 ${plan.formulas} 处、父子分隔空行 ${plan.separators} 处；`+
-        '原始内容保留，CM6 可撤销；空闲时保存 SQL','ok');
-      return true;
-    }catch(error){onStatus('旧 MD 升级失败：'+error.message,'error');return false;}
   }
   async function flushMdChanges(){
     return md()?.dirty?bindMdPersistence().flush():false;
@@ -538,7 +510,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     mdPersistence?.dispose();mdPersistence=null;mdLoading=null;
     frame.replaceStructuredRuntime(null);
     frame.clearMdRuntime();
-    frame.setMdUpgradeAction();
     pdfPage=1;
     workspace=nextWorkspace;
     lastEditedId=null;
@@ -630,7 +601,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       // Title is a document-wide view by default, with the existing AG
       // all-pages checkbox visibly checked; users may uncheck for this page.
       allPagesInitially:title,
-      expandPageOnCategory:title?null:'block_type',
       // Blank lines remain in the source/SQL, hidden only in both AG views.
       initialFilterModel:{line_no:{values:['非空行']}},
       onSelect:row=>{
@@ -662,7 +632,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         const rows=md().rows;
         renderMdAg();
         currentSqlTable='md';
-        frame.setMdUpgradeAction({visible:true,onClick:upgradeOldMarkdown});
         frame.setMdEditHistory();
         if(selectedId!=null){
           const selected=frame.selectSqlRowById({field:'block_id',id:selectedId,preserveFilters:true});
@@ -718,7 +687,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         }
       }});
       currentSqlTable=table;
-      frame.setMdUpgradeAction();
       activeAgView='md';frame.setAgView('md');
       if(table==='block')refreshBlockUndoRedo();
       if(selectedId!==null&&table==='block'&&!frame.selectSqlRowById({field:'block_id',id:selectedId})){

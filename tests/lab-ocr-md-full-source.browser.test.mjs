@@ -403,16 +403,6 @@ try{
    await page.waitForFunction(()=>[...document.querySelectorAll(
      '#workspace .ag-grid-container-wrapper .ag-cell[col-id="text"]')].some(node=>
        node.textContent.includes('## Heading')),null,{timeout:9000});
-   // AG Grid can settle its retained column positions one animation frame
-   // after a full SQL-view switch. Verify the actual final header geometry,
-   // not the transitional DOM immediately after the new row appears.
-   await page.waitForFunction(()=>{
-     const order=[...document.querySelectorAll('#workspace .ag-header-cell[col-id]')]
-       .filter(el=>el.getBoundingClientRect().width>0)
-       .map(el=>({id:el.getAttribute('col-id'),left:el.getBoundingClientRect().left}))
-       .sort((a,b)=>a.left-b.left).map(item=>item.id);
-     return order.join('|')==='text|line_no|pbs|level';
-   },null,{timeout:6500});
    const visibleOrder=await page.locator('#workspace .ag-header-cell[col-id]')
      .evaluateAll(nodes=>nodes.filter(el=>el.getBoundingClientRect().width>0)
        .map(el=>({id:el.getAttribute('col-id'),left:el.getBoundingClientRect().left}))

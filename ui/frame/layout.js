@@ -165,26 +165,6 @@ function mountEmptySource(host){
         effects:setMdRuntime.of(next),
         annotations:Transaction.addToHistory.of(false)});
     },
-    applyMarkdownUpgrade(next){
-      if(!next?.migration||!next?.rows?.length)throw Error('MD 迁移运行态无效');
-      if(next.migration.before!==editor.state.doc.toString())
-        throw Error('MD 编辑在预览确认后已改变，拒绝覆盖');
-      // A real CM6 change records the migration in native undo/redo history.
-      // The StateField effect keeps exact original BlockID/LineID mappings;
-      // undo/redo reducers restore the corresponding snapshot by source text.
-      const old=next.migration.before,text=next.migration.after;
-      let prefix=0;
-      while(prefix<old.length&&prefix<text.length&&old[prefix]===text[prefix])prefix++;
-      let suffix=0;
-      while(suffix<old.length-prefix&&suffix<text.length-prefix&&
-        old[old.length-suffix-1]===text[text.length-suffix-1])suffix++;
-      editor.dispatch({changes:{from:prefix,to:old.length-suffix,
-        insert:text.slice(prefix,text.length-suffix)},
-        effects:setMdRuntime.of(next),
-        annotations:Transaction.userEvent.of('input.md-legacy-upgrade')});
-      mdOnChange?.(next);
-      return true;
-    },
     clearMarkdown(){
       mdReducer=null;mdOnChange=null;mdOnSelection=null;
       editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},
@@ -272,7 +252,6 @@ function mountEmptyGrid(host){
   const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
   const allPagesInput=allPagesControl?.querySelector('input')??null;
   let pageScope=null,pdfPage=1,showAllPages=false;
-  let expandPageOnFilter=null,lastCategoryFilter='null';
   const isVisible=row=>row?.absorbed_into_block_id==null;
   const updatePbsModel=checked=>{
     const model={...(grid.getFilterModel()||{})};
@@ -292,22 +271,6 @@ function mountEmptyGrid(host){
     onRowClicked:event=>selectedListener(event.data),
     onFilterChanged:event=>{
       const model=event.api.getFilterModel();
-      const category=JSON.stringify(expandPageOnFilter?model?.[expandPageOnFilter]??null:null);
-      // A newly selected semantic category (e.g. interline_equation) is a
-      // book-wide search. Otherwise the implicit current-PDF-page PBS filter
-      // can yield misleading 'No Matching Rows' on a different page. Widen
-      // only when the category actually changes; manually unchecking 全部
-      // afterwards must remain possible and must never be overridden.
-      if(pageScope&&expandPageOnFilter&&model?.pbs&&
-         Array.isArray(model?.[expandPageOnFilter]?.values)&&
-         model[expandPageOnFilter].values.length>0&&
-         category!==lastCategoryFilter){
-        lastCategoryFilter=category;
-        const expanded={...model};delete expanded.pbs;
-        event.api.setFilterModel(expanded);
-        return;
-      }
-      lastCategoryFilter=category;
       if(pageScope){
         showAllPages=!Boolean(model?.pbs);
         if(allPagesInput)allPagesInput.checked=showAllPages;
@@ -324,11 +287,9 @@ function mountEmptyGrid(host){
     // Read-only column contract: includes AG's horizontally virtualized columns.
     columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
     show({rows,columns,onRowSelected,onFilterChanged,
-    initialFilterModel=null,pageScope:scope=null,allPagesInitially=false,
-    expandPageOnCategory=null}){
+    initialFilterModel=null,pageScope:scope=null,allPagesInitially=false}){
     selectedListener=onRowSelected??(()=>{});
     pageScope=scope;pdfPage=scope?.page??1;showAllPages=Boolean(scope&&allPagesInitially);
-    expandPageOnFilter=expandPageOnCategory;lastCategoryFilter='null';
     if(allPagesControl)allPagesControl.hidden=!pageScope;
     if(allPagesInput)allPagesInput.checked=showAllPages;
     // The full source atoms remain owned by CM6; the Grid shows only
@@ -444,7 +405,6 @@ function mountEmptyGrid(host){
     selected.node.setSelected(true,true);
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
-    expandPageOnFilter=null;lastCategoryFilter='null';
     mdData.clear();blockData.clear();
     if(allPagesControl)allPagesControl.hidden=true;
     if(allPagesInput)allPagesInput.checked=false;
@@ -510,12 +470,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     const redo=document.createElement('button');redo.type='button';redo.id='redo';
     redo.textContent='↷';redo.setAttribute('aria-label','重做');redo.title='没有绑定文档';redo.disabled=true;
     actions.append(undo,redo);
-    const upgrade=document.createElement('button');upgrade.type='button';
-    upgrade.className='ocr-source-upgrade-legacy';upgrade.hidden=true;
-    upgrade.textContent='旧MD→$$';
-    upgrade.setAttribute('aria-label','升级旧公式 Markdown');
-    upgrade.title='仅转换与原始 OCR 完全一致的旧公式；可撤销';
-    bar.append(select,upgrade,actions);element.append(bar);
+    bar.append(select,actions);element.append(bar);
     const body=document.createElement('div');body.className='ocr-cm-source frame-editor';
     body.id='editor';
     element.append(body);owned=()=>mountEmptySource(body);
@@ -688,12 +643,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
-    setMdUpgradeAction({visible=false,onClick=null}={}){
-      const button=container.querySelector('.ocr-source-upgrade-legacy');
-      if(!button)return;
-      button.hidden=!visible;
-      button.onclick=visible&&typeof onClick==='function'?onClick:null;
-    },
     setAgView(value){
       const picker=container.querySelector('.ocr-outline-pane .ocr-ag-module-select');
       if(!picker||![...picker.options].some(option=>option.value===value))return false;
@@ -748,11 +697,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!cm)throw Error('CM6 尚未初始化');
       cm.setMarkdownRuntime(next);
-    },
-    applyMdUpgrade(next){
-      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
-      if(!cm)throw Error('CM6 尚未初始化');
-      return cm.applyMarkdownUpgrade(next);
     },
     clearMdRuntime(){
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clearMarkdown();
@@ -854,13 +798,13 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.setPdfPage(page)??false;
     },
     showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,
-      pageScope=null,allPagesInitially=false,expandPageOnCategory=null}={}){
+      pageScope=null,allPagesInitially=false}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
       port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,
-        pageScope,allPagesInitially,expandPageOnCategory,onRowSelected:row=>{
+        pageScope,allPagesInitially,onRowSelected:row=>{
         cm.select(row);
         onSelect?.(row);
       }});
