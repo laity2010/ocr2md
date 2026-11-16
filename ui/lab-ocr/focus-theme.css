@@ -66,11 +66,3 @@
   outline:2px dashed var(--ocr-review-focus-edge);
   outline-offset:1px;
 }
-
-/* Inline LaTeX source identity: keep the existing full-line focus but mark
- * precisely the formula characters, even while CM6 itself lacks DOM focus. */
-#workspace.ocr-review-focus-unified .cm-line .ocr-four-pane-formula-active {
-  background:rgba(255,190,80,.34);
-  box-shadow:inset 0 -2px 0 #ffd46c;
-  border-radius:2px;
-}

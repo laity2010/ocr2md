@@ -101,7 +101,7 @@ function mountEmptySource(host){
           const range=effect.value;
           value=range&&range.from>=0&&range.to>range.from&&
             range.to<=tr.newDoc.length?
-            Decoration.set([Decoration.mark({class:'ocr-four-pane-formula-active'})
+            Decoration.set([Decoration.mark({class:'ocr-four-pane-formula-active cm-selectionMatch'})
               .range(range.from,range.to)]):Decoration.none;
         }
       }

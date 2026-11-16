@@ -16,7 +16,7 @@
 ## 公式级四窗定位 WP3
 
 - AG 选择的公式通过现有 `publishLabFocus` 携带受验证的 `formulaColumn`、`formulaEndColumn` 和 `formulaBBox`，携带 LineID/BlockID/页码；后续 PDF/预览/CM6 仍使用统一消息，不相互读取 DOM。
-- CM6 的 `focusMdFormula({lineNo,column,endColumn})` 将光标移动到公式起点（UTF16 位置），同时在同一原始 MD 行中用 CM6 `Decoration.mark` **单独高亮公式全文范围**（与原整行高亮共存，直到下一次导航或正文变化）；Markdown 原文不编辑、不触发保存。PDF 的 `focusFormula({id,page,bbox})` 复用 block 焦点与当前 PDF.js 页面缓存，添加不拦截指针的精确公式橙框并确保公式在可视范围；通用 Block 焦点会清除此暂态框。
+- CM6 的 `focusMdFormula({lineNo,column,endColumn})` 将光标移动到公式起点（UTF16 位置），同时在同一原始 MD 行中用 CM6 `Decoration.mark` **单独高亮公式全文范围**，直接使用 CM6 `highlightSelectionMatches()` 的 `cm-selectionMatch` 类及其内置样式，不再单独定义颜色、下划线或阴影（与原整行高亮共存，直到下一次导航或正文变化）；Markdown 原文不编辑、不触发保存。PDF 的 `focusFormula({id,page,bbox})` 复用 block 焦点与当前 PDF.js 页面缓存，添加不拦截指针的精确公式橙框并确保公式在可视范围；通用 Block 焦点会清除此暂态框。
 - 对 `仅 OCR` 或 `有歧义` 且无精确 MD 偏移者，只高亮 PDF 公式 Span，不把所在 Block 的普通文本伪装成该公式的源码。AG 图片列优先显示 PDF.js 原文局部裁剪；如果原始 MinerU `image_path` 存在则附原始链接，截图不可用才尝试远端图片；原始链接只作额外校对，不能替代 PDF 坐标证据。
 
 ## 验收与权限

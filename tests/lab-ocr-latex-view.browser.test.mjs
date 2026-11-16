@@ -179,6 +179,34 @@ try{
    assert(secondLeft>firstLeft+10,'Repeated formula must move to its own PDF Span');
    assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
      .allTextContents().then(parts=>parts.join('')),'r_t');
+   // The LaTeX mark MUST share CodeMirror's actual "highlight same text"
+   // theme, not an independently tuned amber background or underline.
+   // Select the second r_t with CM6 itself. Its built-in highlighter marks
+   // the first occurrence; compare that native match with the AG formula.
+   const sourceColors=await page.evaluate(async()=>{
+     const editor=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     const line=editor.state.doc.line(8);
+     editor.dispatch({selection:{anchor:line.from+19,head:line.from+22}});
+     await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+     const own=document.querySelector('.ocr-cm-source .ocr-four-pane-formula-active');
+     const builtIn=document.querySelector('.ocr-cm-source .cm-selectionMatch:not(.ocr-four-pane-formula-active)');
+     return {own:own&&{
+       className:own.className,
+       background:getComputedStyle(own).backgroundColor,
+       boxShadow:getComputedStyle(own).boxShadow,
+     },builtIn:builtIn&&{
+       className:builtIn.className,
+       background:getComputedStyle(builtIn).backgroundColor,
+       boxShadow:getComputedStyle(builtIn).boxShadow,
+     }};
+   });
+   assert(sourceColors.own?.className.includes('cm-selectionMatch'));
+   assert(sourceColors.builtIn?.className.includes('cm-selectionMatch'),
+     'CM6 stock highlightSelectionMatches must be active');
+   assert.equal(sourceColors.own.background,sourceColors.builtIn.background,
+     'LaTeX highlight must use the exact same built-in CM6 match color');
+   assert.equal(sourceColors.own.boxShadow,sourceColors.builtIn.boxShadow,
+     'LaTeX highlight must not add a custom underline or shadow');
    await exact('ocr:1:0:0');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
      ?.dataset.formulaBlockId==='1');
