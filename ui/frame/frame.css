@@ -121,8 +121,23 @@
   background:transparent;color:inherit;line-height:inherit;
   font:inherit;font-variant-numeric:tabular-nums;text-align:right;cursor:pointer;
 }
-#workspace .ocr-cm-line-number-button:not(:disabled):is(:hover,:focus-visible){
-  background:#465748;color:#e7d5ae;outline:1px solid #778c70;
+/* A highlighted line must look like a button BEFORE hover or keyboard focus.
+   iPad Safari has neither reliable hover nor a visible mouse cursor; the old
+   transparent at-rest style looked identical to an ordinary line number. */
+#workspace .ocr-cm-line-number-button{
+  min-width:36px;min-height:27px;height:27px;
+  padding:0 5px;gap:3px;justify-content:center;
+  border:1px solid #edc476;border-radius:5px;
+  background:#516548;color:#fff2c7;
+  box-shadow:inset 0 0 0 1px rgba(255,225,156,.13);
+  font-weight:700;touch-action:manipulation;
+}
+#workspace .ocr-cm-line-number-button::after{
+  content:'▾';font-size:10px;line-height:1;color:#f6db9f;
+}
+#workspace .ocr-cm-line-number-button:is(:hover,:focus-visible,:active){
+  background:#667e53;color:#fff5d5;
+  outline:1px solid #ffe3a0;outline-offset:1px;
 }
 #workspace .ocr-cm-line-number-label{cursor:default}
 #workspace .ocr-cm-line-number-label[data-spacer="true"]{

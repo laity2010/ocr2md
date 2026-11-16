@@ -57,3 +57,9 @@ Every directly focused object uses a solid 2px `#ffd46c` edge and `rgba(231,183,
 - 沿用 CM6 `mdFocusField` 中既有的**橙色高亮焦点行**作为唯一按钮位置，不新增独立焦点状态。只有这一行的 gutter 行号渲染为可点击按钮；其他所有可见行渲染为**普通数字文本**（不是禁用按钮）。没有高亮行或未加载可编辑 MD 时，不显示行号按钮；仍保留普通数字行号、标题折叠 gutter 和 iPad 原生文本选区。
 - CM6 来源点击、AG 行选择、MD 预览点击、PDF 标签定位都由现有 `publishLabFocus` 更新 `mdFocusField`，行号按钮因此自动随焦点移动。焦点变化时关闭此前的行号菜单，防止菜单指向旧行。菜单仍只有「删除当前行」；打开菜单本身不清除选区，删除仍采用稳定 `LineID`、CM6 编辑历史及原有 CAS 保存。
 - `focusedLineHasAction` 有单元断言；`tests/lab-ocr-md-full-source.browser.test.mjs` 在 Chromium/iPad WebKit 验证零/单个按钮、所有非焦点行普通数字、PDF/MD 预览/AG/源码四种焦点迁移、焦点切换关闭菜单，以及删除/撤销/保存回归。
+
+## iPad 行号按钮的静态可见性（2026-11-16）
+
+- 实际 iPad Safari 截图确认：此前虽然高亮焦点行已渲染 `<button>`，但它与普通行号共用 `background:transparent;border:0`，只在 `hover`/键盘聚焦时变色，所以触控用户无法辨认。**可点击元素存在不等于视觉验收通过。**
+- 当前焦点行的行号按钮必须在**静止、未悬停、未聚焦**时就有明显底色、描边及下拉 `▾`，并有不低于 32×26 CSS 像素的可触区域；其他行仍显示无背景、无按钮的普通数字。焦点切换和删除菜单的事件与 LineID 规则不变。
+- Chromium 和 iPad WebKit 的 `tests/lab-ocr-md-full-source.browser.test.mjs` 除了断言焦点行唯一 `<button>`，还必须断言真实浏览器 `getComputedStyle` 的常显背景与普通数字不同、实线边框、尺寸和 `::after` 下拉标识，避免仅通过 DOM 元素存在检查造成的回归漏检。

@@ -215,13 +215,37 @@ try{
    };
    // Exactly one native line-number BUTTON must follow the highlighted
    // source focus line; every other visible number stays ordinary text.
-   const activeLineButton=async lineNo=>page.waitForFunction(lineNo=>{
-     const pane=document.querySelector('.ocr-cm-source');
-     const buttons=[...pane?.querySelectorAll('.ocr-cm-line-number-button')??[]];
-     const labels=[...pane?.querySelectorAll('.ocr-cm-line-number-label:not([data-spacer])')??[]];
-     return buttons.length===1&&buttons[0].dataset.lineNo===String(lineNo)&&
-       labels.length>0&&!labels.some(node=>node.dataset.lineNo===String(lineNo));
-   },lineNo,{timeout:8500});
+   const activeLineButton=async lineNo=>{
+     await page.waitForFunction(lineNo=>{
+       const pane=document.querySelector('.ocr-cm-source');
+       const buttons=[...pane?.querySelectorAll('.ocr-cm-line-number-button')??[]];
+       const labels=[...pane?.querySelectorAll('.ocr-cm-line-number-label:not([data-spacer])')??[]];
+       return buttons.length===1&&buttons[0].dataset.lineNo===String(lineNo)&&
+         labels.length>0&&!labels.some(node=>node.dataset.lineNo===String(lineNo));
+     },lineNo,{timeout:8500});
+     // DOM presence alone missed the real iPad failure: the old button's
+     // transparent at-rest styling was identical to an ordinary line number.
+     const appearance=await page.locator(
+       `.ocr-cm-source .ocr-cm-line-number-button[data-line-no="${lineNo}"]`)
+       .evaluate(el=>{
+         const style=getComputedStyle(el),after=getComputedStyle(el,'::after');
+         const label=el.closest('.cm-gutters')?.querySelector(
+           '.ocr-cm-line-number-label:not([data-spacer])');
+         return {background:style.backgroundColor,border:style.borderTopStyle,
+           borderColor:style.borderTopColor,width:el.getBoundingClientRect().width,
+           height:el.getBoundingClientRect().height,caret:after.content,
+           labelBg:label?getComputedStyle(label).backgroundColor:null};
+       });
+     assert.notEqual(appearance.background,'rgba(0, 0, 0, 0)',
+       'Focused line-number button must have a visible background at rest');
+     assert.notEqual(appearance.background,appearance.labelBg,
+       'Active action must visibly differ from ordinary line numbers');
+     assert.equal(appearance.border,'solid');
+     assert(appearance.width>=32&&appearance.height>=26,
+       'Active button must have a touch-readable hit area');
+     assert(appearance.caret.includes('▾'),
+       'The button needs a persistent menu disclosure glyph on iPad');
+   };
    assert.equal(await page.locator('.ocr-cm-source .ocr-cm-line-number-button').count(),0,
      'Before any highlighted source focus, no destructive line button is visible');
    assert.equal(await page.locator('.ocr-cm-source .ocr-cm-line-number-label').count()>0,true,
