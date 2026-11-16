@@ -55,8 +55,9 @@ const unFormula=viewStore.subscribe((next,prior)=>{
   if(next.labFocusTarget!==prior.labFocusTarget)formulaEvents.push(next.labFocusTarget);
 });
 publishLabFocus({origin:'ag',lineId:'c',lineNo:3,blockId:12,page:3,pbs:'p3b0',
-  formulaColumn:8,formulaBBox:[10,20,40,35]});
+  formulaColumn:8,formulaEndColumn:13,formulaBBox:[10,20,40,35]});
 assert.equal(formulaEvents.at(-1).formulaColumn,8);
+assert.equal(formulaEvents.at(-1).formulaEndColumn,13);
 assert.deepEqual(formulaEvents.at(-1).formulaBBox,[10,20,40,35]);
 assert(Object.isFrozen(formulaEvents.at(-1).formulaBBox));
 for(const payload of [
@@ -64,6 +65,8 @@ for(const payload of [
   {origin:'pdf',blockId:12,page:3,formulaBBox:[1,2,3,4]},
   {origin:'ag',lineNo:3,formulaColumn:-1},
   {origin:'ag',formulaColumn:2},
+  {origin:'ag',lineNo:3,formulaColumn:9,formulaEndColumn:8},
+  {origin:'ag',lineNo:3,formulaEndColumn:10},
 ])assert.throws(()=>publishLabFocus(payload));
 unFormula();
 console.log('LAB_OCR_FORMULA_FOCUS_BUS_PASS');

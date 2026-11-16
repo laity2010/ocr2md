@@ -23,6 +23,52 @@ function locateOffset(starts,rows,offset){
   return {line_no:row.line_no,line_id:row.line_id,column:offset-starts[low]};
 }
 
+/** A lossless original paragraph can establish exact Span offsets even when
+ * two identical inline formulas occur in that paragraph. Unlike occurrence
+ * ranking, this is safe only if the *whole* original line-joined paragraph
+ * still equals one current MD line byte-for-byte. Reviewed edits fail closed.
+ */
+function exactInlineOffsets(blocks,byBlock){
+  const exact=new Map();
+  for(const block of blocks){
+    if(!Number.isSafeInteger(block.block_id))continue;
+    const rows=(byBlock.get(block.block_id)??[]).filter(item=>item.row.text);
+    if(rows.length!==1)continue;
+    let raw;
+    try{raw=typeof block.block_json==='string'?JSON.parse(block.block_json):block.block_json;}
+    catch{continue;}
+    if(!Array.isArray(raw?.lines)||block.block_type==='title'||
+       block.block_type==='interline_equation')continue;
+    const positions=[];
+    const lines=[];
+    for(const [lineIndex,line] of raw.lines.entries()){
+      if(!Array.isArray(line?.spans))continue;
+      let text='';
+      for(const [spanIndex,span] of line.spans.entries()){
+        if(!span||typeof span!=='object')continue;
+        let fragment='';
+        if(typeof span.html==='string')fragment=span.html;
+        else if(typeof span.image_path==='string')
+          fragment='![image](<'+span.image_path.replace(/>/g,'%3E')+'>)';
+        else if(typeof span.content==='string')fragment=span.content;
+        if(span.type==='inline_equation'&&typeof span.content==='string'&&
+           fragment===span.content)
+          positions.push({key:`${block.block_id}:${lineIndex}:${spanIndex}`,
+            line:lines.length,offset:text.length});
+        text+=fragment;
+      }
+      if(text)lines.push(text);
+    }
+    const joined=lines.join(' ');
+    if(joined!==rows[0].row.text)continue;
+    for(const item of positions){
+      const local=lines.slice(0,item.line).reduce((acc,line)=>acc+line.length+1,0)+item.offset;
+      exact.set(item.key,rows[0].start+local);
+    }
+  }
+  return exact;
+}
+
 function sourceSpans(blocks){
   const found=[];
   for(const block of blocks){
@@ -73,12 +119,29 @@ export function projectLatexIndex(mdRows,blockRows){
     group.push({row,start:starts[index]});byBlock.set(row.block_id,group);
   }
   const ocr=sourceSpans(blockRows);
+  const exact=exactInlineOffsets(blockRows,byBlock);
   const output=[];
   for(const item of ocr){
     const matches=scans.filter(s=>!s.match&&s.block_id===item.block_id&&
       s.kind===item.kind&&normalized(s.content)===normalized(item.formula));
     let focus=null,scanner=null,match_status='仅 OCR';
-    if(matches.length===1){
+    const exactOffset=exact.get(`${item.block_id}:${item.source_span}`);
+    if(item.kind==='行内'&&Number.isInteger(exactOffset)){
+      focus=exactOffset;match_status='已匹配';
+      const scan=scans.find(candidate=>!candidate.match&&
+        candidate.block_id===item.block_id&&candidate.focus===focus&&
+        normalized(candidate.content)===normalized(item.formula));
+      if(scan){scanner=scan;scanner.match=true;}
+      // Un-delimited MinerU text can contain smaller scanner candidates
+      // (e.g. σ without the OCR punctuation, or an inner \dot). Those
+      // are already represented by the proven, exact source Span, not new
+      // independent Markdown formulas.
+      for(const candidate of scans){
+        if(candidate.block_id===item.block_id&&!candidate.match&&
+           candidate.from>=focus&&candidate.to<=focus+item.formula.length)
+          candidate.match=true;
+      }
+    }else if(matches.length===1){
       scanner=matches[0];scanner.match=true;focus=scanner.focus;
       match_status='已匹配';
     }else if(matches.length>1){match_status='有歧义';}

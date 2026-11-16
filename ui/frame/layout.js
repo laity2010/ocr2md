@@ -73,6 +73,7 @@ function mountEmptySource(host){
   host.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   const setMdRuntime=StateEffect.define();
   const setMdFocusLine=StateEffect.define();
+  const setMdFormulaRange=StateEffect.define();
   const deletedMdLine=StateEffect.define();
   const mdFocusField=StateField.define({
     create:()=>Decoration.none,
@@ -84,6 +85,24 @@ function mountEmptySource(host){
           value=Number.isInteger(line)&&line>=1&&line<=tr.newDoc.lines?
             Decoration.set([Decoration.line({class:'ocr-four-pane-source-active'})
               .range(tr.newDoc.line(line).from)]):Decoration.none;
+        }
+      }
+      return value;
+    },
+    provide:field=>EditorView.decorations.from(field),
+  });
+  const mdFormulaFocusField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      // Never retain an out-of-date formula underline after a source edit.
+      value=tr.docChanged?Decoration.none:value.map(tr.changes);
+      for(const effect of tr.effects){
+        if(effect.is(setMdFormulaRange)){
+          const range=effect.value;
+          value=range&&range.from>=0&&range.to>range.from&&
+            range.to<=tr.newDoc.length?
+            Decoration.set([Decoration.mark({class:'ocr-four-pane-formula-active'})
+              .range(range.from,range.to)]):Decoration.none;
         }
       }
       return value;
@@ -134,7 +153,7 @@ function mountEmptySource(host){
   // mature editing, history, native iOS selection, folding and keybindings.
   editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
-    tableStateField,structuredRuntimeField,mdField,mdFocusField,
+    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,
     lineGutter.extension,...base.slice(1),
     EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),mineruCommentFolding,
@@ -213,22 +232,26 @@ function mountEmptySource(host){
       const position=editor.state.doc.line(lineNo).from;
       programmaticMdSelection=true;
       try{editor.dispatch({selection:{anchor:position},
-        effects:EditorView.scrollIntoView(position,{y:'center'})});}
+        effects:[setMdFormulaRange.of(null),
+          EditorView.scrollIntoView(position,{y:'center'})]});}
       finally{programmaticMdSelection=false;}
       if(focus)editor.focus();return true;
     },
-    focusMdFormula({lineNo,column,focus=false}={}){
-      // Formula-level caret positioning. UTF-16 column offsets match CM6's
-      // document positions; no edit transaction or history is generated.
+    focusMdFormula({lineNo,column,endColumn,focus=false}={}){
+      // Formula-level offset and visible range (not merely the physical line)
+      // use UTF-16 CodeMirror positions; this is a decoration, not an edit.
       if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
          lineNo<1||lineNo>editor.state.doc.lines||
          !Number.isInteger(column)||column<0)return false;
       const line=editor.state.doc.line(lineNo);
-      if(column>line.length)return false;
+      if(column>=line.length)return false;
+      const end=Number.isInteger(endColumn)&&endColumn>column&&
+        endColumn<=line.length?endColumn:column+1;
       const position=line.from+column;
       programmaticMdSelection=true;
       try{editor.dispatch({selection:{anchor:position},
-        effects:EditorView.scrollIntoView(position,{y:'center'})});}
+        effects:[setMdFormulaRange.of({from:position,to:line.from+end}),
+          EditorView.scrollIntoView(position,{y:'center'})]});}
       finally{programmaticMdSelection=false;}
       if(focus)editor.focus();return true;
     },
@@ -240,7 +263,7 @@ function mountEmptySource(host){
       const prior=current.value?editor.state.doc.lineAt(current.from).number:null;
       // A popup belongs to the highlighted focus line, never to a stale one.
       if(prior!==lineNo)lineGutter.close();
-      const effects=[setMdFocusLine.of(lineNo)];
+      const effects=[setMdFocusLine.of(lineNo),setMdFormulaRange.of(null)];
       if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
         editor.state.doc.line(lineNo).from,{y:'center'}));
       editor.dispatch({effects});
@@ -827,7 +850,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       const prior=current.value?editor.state.doc.lineAt(current.from).number:null;
       // A popup belongs to the highlighted focus line, never to a stale one.
       if(prior!==lineNo)lineGutter.close();
-      const effects=[setMdFocusLine.of(lineNo)];
+      const effects=[setMdFocusLine.of(lineNo),setMdFormulaRange.of(null)];
       if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
         editor.state.doc.line(lineNo).from,{y:'center'}));
       editor.dispatch({effects});

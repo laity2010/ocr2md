@@ -133,7 +133,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // One semantic event, four independent projections. Never store Markdown in
   // the shared View Store, and never let one pane call another pane's private DOM.
   function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null,
-    formulaColumn=null,formulaBBox=null}={}){
+    formulaColumn=null,formulaEndColumn=null,formulaBBox=null}={}){
     if(currentSqlTable!=='md'||!md())return null;
     const target=resolveReviewLocation({lineId,blockId,lineNo},md().rows,cm()?.rows??[]);
     if(target){
@@ -145,6 +145,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       ...(exactMissing?{lineId:null,lineNo:null}:{}),
       ...(origin==='ag'&&Number.isInteger(formulaColumn)&&formulaColumn>=0?
         {formulaColumn}:{}),
+      ...(origin==='ag'&&Number.isInteger(formulaEndColumn)&&
+        Number.isInteger(formulaColumn)&&formulaEndColumn>formulaColumn?
+        {formulaEndColumn}:{}),
       ...(origin==='ag'&&Array.isArray(formulaBBox)?{formulaBBox}:{}),
       });
       return exactMissing?{...target,lineId:null,lineNo:null}:target;
@@ -177,7 +180,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     // to a later line but the source caret always lands at logical Block start.
     if(target.origin!=='cm6'&&target.intent==='click'){
       if(Number.isInteger(target.formulaColumn)&&target.lineNo)
-        frame.focusMdFormula({lineNo:target.lineNo,column:target.formulaColumn,focus:false});
+        frame.focusMdFormula({lineNo:target.lineNo,column:target.formulaColumn,
+          endColumn:target.formulaEndColumn,focus:false});
       else if(Array.isArray(target.formulaBBox)&&target.lineNo===null){
         // OCR-only/ambiguous Span: PDF-only focus, no fictitious MD caret.
       }else{
@@ -656,7 +660,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       onSelect:row=>{
         const target=locateReview({origin:'ag',lineId:row.line_id,
           blockId:row.block_id,lineNo:row.line_no,
-          ...(latex?{formulaColumn:row.column,formulaBBox:row.pdf_bbox}:{}),
+          ...(latex?{formulaColumn:row.column,
+            formulaEndColumn:Number.isInteger(row.column)&&
+              typeof row.formula==='string'?row.column+row.formula.length:null,
+            formulaBBox:row.pdf_bbox}:{}),
         });
         onStatus(latex?
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+

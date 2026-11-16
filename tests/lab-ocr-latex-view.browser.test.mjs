@@ -24,6 +24,13 @@ const blocks=[
          span('inline_equation','c+d',[210,205,260,221])]},
  {id:3,page:1,pbs:'p2b0',type:'interline_equation',bbox:[50,75,360,135],
   spans:[span('interline_equation','z=3',[65,90,120,113])]},
+ // A genuinely repeated inline formula: each physical Span has a separate
+ // bbox but both have the same LaTeX. OCR + MD whole-paragraph exact match
+ // proves their distinct character offsets without guessing by proximity.
+ {id:4,page:1,pbs:'p2b1',type:'text',bbox:[40,190,440,240],
+  spans:[span('text','before '),span('inline_equation','r_t',[205,205,230,225]),
+    span('text',' between '),span('inline_equation','r_t',[335,205,360,225]),
+    span('text',' after')]},
 ].map(item=>({block_id:item.id,global_page:item.page,pbs:item.pbs,
   parent_block_id:null,sibling_order:item.id,block_type:item.type,
   block_group:'para_blocks',level:null,source_name:'fixture.json',
@@ -37,7 +44,7 @@ const blocks=[
 const md=[
  [1,1,'$$'],[2,1,'E=mc^2'],[3,1,'$$'],[4,1,''],
  [5,2,'Formula $a+b$ plus $c+d$ and manual $q^2$.'],[6,2,''],
- [7,3,'Unrelated text'],[8,3,''],
+ [7,3,'Unrelated text'],[8,4,'before r_t between r_t after'],[9,4,''],
 ].map(([line_no,block_id,text])=>({line_no,line_id:'latex-md-'+line_no,
   block_id,text}));
 try{
@@ -68,11 +75,11 @@ try{
        contentType:'application/pdf',body:makeLabOcrPdf(2,[
          'BT /F1 20 Tf 80 733 Td (E=mc2) Tj ET\n',
          'BT /F1 20 Tf 75 742 Td (z=3) Tj ET\n'])});
-     if(op==='inspect')return respond({status:'unchanged',blocks:3,pages:2,
+     if(op==='inspect')return respond({status:'unchanged',blocks:4,pages:2,
        pdf:'fixture.pdf',sources:[{name:'fixture.json',pages:2}],mdSupported:true});
-     if(op==='minerujson2block')return respond({status:'ready',kind:'view',blocks:3});
+     if(op==='minerujson2block')return respond({status:'ready',kind:'view',blocks:4});
      if(op==='rows')return respond(u.searchParams.get('table')==='block'?
-       {table:'block',total:3,rows:blocks}:{table:'minerujson',total:0,rows:[]});
+       {table:'block',total:4,rows:blocks}:{table:'minerujson',total:0,rows:[]});
      if(op==='block-edit-state')return respond({revision:0,cursor:0,history:[],
        canUndo:false,canRedo:false});
      if(op==='md-state'){loaded++;return respond({status:'ready',revision:0,
@@ -106,7 +113,7 @@ try{
      ?.ocrSqlGrid?.columnFields());
    for(const name of ['pbs','formula','render_html','original_image','match_status'])
      assert(fields.includes(name),'Missing LaTeX AG column '+name);
-   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===5);
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===7);
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true,
      'LaTeX view must initially list all PDF pages');
    assert.equal(await page.locator('.lab-ocr-latex-preview .katex').count()>=1,true);
@@ -126,6 +133,11 @@ try{
      const line=cm.state.doc.line(5);
      return cm.state.selection.main.head===line.from+9;
    },null,{timeout:9000});
+   // CM6 splits a decorated formula into multiple DOM spans around math
+   // syntax tokens. Compare the WHOLE formula decoration, not one span.
+   await page.waitForFunction(()=>[...document.querySelectorAll(
+     '.ocr-cm-source .ocr-four-pane-formula-active')]
+       .map(node=>node.textContent).join('')==='a+b',null,{timeout:9000});
    await page.waitForFunction(()=>{
      const box=document.querySelector('.lab-ocr-pdf-formula-focus');
      return box?.dataset.formulaBlockId==='2';
@@ -144,6 +156,29 @@ try{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
      return cm?.state.selection.main.head===cm.state.doc.line(5).from+20;
    },null,{timeout:9000});
+   assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
+     .allTextContents().then(parts=>parts.join('')),'c+d');
+   await exact('ocr:4:0:1');
+   await page.waitForFunction(()=>{
+     const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     return cm?.state.selection.main.head===cm.state.doc.line(8).from+7;
+   },null,{timeout:9000});
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
+     ?.dataset.formulaBlockId==='4',null,{timeout:9000});
+   const firstLeft=await page.locator('.lab-ocr-pdf-formula-focus')
+     .evaluate(box=>parseFloat(box.style.left));
+   assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
+     .allTextContents().then(parts=>parts.join('')),'r_t');
+   await exact('ocr:4:0:3');
+   await page.waitForFunction(()=>{
+     const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     return cm?.state.selection.main.head===cm.state.doc.line(8).from+19;
+   },null,{timeout:9000});
+   const secondLeft=await page.locator('.lab-ocr-pdf-formula-focus')
+     .evaluate(box=>parseFloat(box.style.left));
+   assert(secondLeft>firstLeft+10,'Repeated formula must move to its own PDF Span');
+   assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
+     .allTextContents().then(parts=>parts.join('')),'r_t');
    await exact('ocr:1:0:0');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
      ?.dataset.formulaBlockId==='1');
@@ -186,6 +221,7 @@ try{
      ?.ocrCmTable?.editorView()?.state.selection.main.head),caretBefore);
    assert.equal(await page.locator('.ocr-cm-source .cm-line.ocr-four-pane-source-active').count(),0,
      'Unmatched OCR formula must not fabricate a highlighted MD line');
+   assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active').count(),0);
    // The additional MD-only formula still navigates its actual characters,
    // without inventing a precise PDF Span bbox.
    const mdOnly=findLatex(md.map(r=>r.text).join('\n')).find(x=>x.content==='q^2');
@@ -195,6 +231,8 @@ try{
      return cm?.state.selection.main.head===cm.state.doc.line(5).from+37;
    },null,{timeout:9000});
    assert.equal(await page.locator('.lab-ocr-pdf-formula-focus').count(),0);
+   assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
+     .allTextContents().then(parts=>parts.join('')),'q^2');
    assert.equal(await page.locator('.ocr-cm-source .cm-editor').count(),1);
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument()),originalText,'Formula selection cannot modify Markdown');
@@ -203,7 +241,7 @@ try{
    assert.equal(saves,0,'Read-only formula view cannot generate SQL writes');
    assert.deepEqual(errors,[],'No browser page errors');
    console.log('LAB_OCR_LATEX_VIEW_E2E_PASS',label,JSON.stringify({
-     formulas:5,matched:3,ocrOnly:1,mdOnly:1,saves,loaded}));
+     formulas:7,matched:5,ocrOnly:1,mdOnly:1,saves,loaded}));
   }finally{await browser.close();}
  }
 }finally{vite.kill('SIGTERM');}
