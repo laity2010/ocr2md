@@ -601,6 +601,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       // Title is a document-wide view by default, with the existing AG
       // all-pages checkbox visibly checked; users may uncheck for this page.
       allPagesInitially:title,
+      expandPageOnCategory:title?null:'block_type',
       // Blank lines remain in the source/SQL, hidden only in both AG views.
       initialFilterModel:{line_no:{values:['非空行']}},
       onSelect:row=>{

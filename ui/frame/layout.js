@@ -252,6 +252,7 @@ function mountEmptyGrid(host){
   const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
   const allPagesInput=allPagesControl?.querySelector('input')??null;
   let pageScope=null,pdfPage=1,showAllPages=false;
+  let expandPageOnCategory=null,lastCategoryModel='null';
   const isVisible=row=>row?.absorbed_into_block_id==null;
   const updatePbsModel=checked=>{
     const model={...(grid.getFilterModel()||{})};
@@ -271,6 +272,18 @@ function mountEmptyGrid(host){
     onRowClicked:event=>selectedListener(event.data),
     onFilterChanged:event=>{
       const model=event.api.getFilterModel();
+      const category=JSON.stringify(expandPageOnCategory?model?.[expandPageOnCategory]??null:null);
+      // A user-selected Block Type searches the whole book. Reuse the
+      // existing AG PBS filter and 全部 checkbox; never introduce new UI.
+      if(pageScope&&expandPageOnCategory&&model?.pbs&&
+         Array.isArray(model?.[expandPageOnCategory]?.values)&&
+         model[expandPageOnCategory].values.length>0&&category!==lastCategoryModel){
+        lastCategoryModel=category;
+        const widened={...model};delete widened.pbs;
+        event.api.setFilterModel(widened);
+        return;
+      }
+      lastCategoryModel=category;
       if(pageScope){
         showAllPages=!Boolean(model?.pbs);
         if(allPagesInput)allPagesInput.checked=showAllPages;
@@ -287,9 +300,11 @@ function mountEmptyGrid(host){
     // Read-only column contract: includes AG's horizontally virtualized columns.
     columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
     show({rows,columns,onRowSelected,onFilterChanged,
-    initialFilterModel=null,pageScope:scope=null,allPagesInitially=false}){
+    initialFilterModel=null,pageScope:scope=null,allPagesInitially=false,
+    expandPageOnCategory:category=null}){
     selectedListener=onRowSelected??(()=>{});
     pageScope=scope;pdfPage=scope?.page??1;showAllPages=Boolean(scope&&allPagesInitially);
+    expandPageOnCategory=category;lastCategoryModel='null';
     if(allPagesControl)allPagesControl.hidden=!pageScope;
     if(allPagesInput)allPagesInput.checked=showAllPages;
     // The full source atoms remain owned by CM6; the Grid shows only
@@ -405,6 +420,7 @@ function mountEmptyGrid(host){
     selected.node.setSelected(true,true);
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
+    expandPageOnCategory=null;lastCategoryModel='null';
     mdData.clear();blockData.clear();
     if(allPagesControl)allPagesControl.hidden=true;
     if(allPagesInput)allPagesInput.checked=false;
@@ -798,13 +814,13 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.setPdfPage(page)??false;
     },
     showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,
-      pageScope=null,allPagesInitially=false}={}){
+      pageScope=null,allPagesInitially=false,expandPageOnCategory=null}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
       port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,
-        pageScope,allPagesInitially,onRowSelected:row=>{
+        pageScope,allPagesInitially,expandPageOnCategory,onRowSelected:row=>{
         cm.select(row);
         onSelect?.(row);
       }});

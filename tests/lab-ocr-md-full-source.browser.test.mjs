@@ -272,6 +272,35 @@ try{
    assert.deepEqual((await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents()).sort((a,b)=>Number(a)-Number(b)),
      ['1','2','3','4','5','6'],'Restoring blanks must retain original MD line positions');
    assert.equal(await allPages.isChecked(),true);
+   // Cross-page category search uses the existing AG filter/全部 switch:
+   // a title on page 1 must be findable while the PDF displays page 2.
+   await page.locator('.lab-ocr-pdf-page').fill('2');
+   await page.locator('.lab-ocr-pdf-page').press('Tab');
+   await allPages.uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===2);
+   const typeFilter=page.locator('#workspace .ag-header-cell[col-id="block_type"] .ag-header-cell-filter-button');
+   await typeFilter.click();
+   await page.locator('.ocr-enum-filter:visible [data-filter-value="all"] input').uncheck();
+   await page.locator('.ocr-enum-filter:visible [data-filter-value="title"] input').check();
+   await page.waitForFunction(()=>document.querySelector('.ocr-ag-all-pages input')?.checked===true);
+   assert.deepEqual(await page.locator('#workspace .ag-row:not(.ag-opacity-zero) .ag-cell[col-id="line_no"]').allTextContents(),['1'],
+     'Selecting title category expands to all pages to show remote matching rows');
+   await allPages.uncheck();
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===0);
+   assert.equal(await allPages.isChecked(),false,
+     'Explicit manual return to current-page scope must remain respected');
+   await allPages.check();
+   if(!await page.locator('.ocr-enum-filter:visible [data-filter-value="all"] input').isVisible())
+     await typeFilter.click();
+   await page.locator('.ocr-enum-filter:visible [data-filter-value="all"] input').check();
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '#workspace .ag-row:not(.ag-opacity-zero)').length===6);
+   await page.locator('.lab-ocr-pdf-page').fill('1');
+   await page.locator('.lab-ocr-pdf-page').press('Tab');
+   assert.equal(await page.locator('.ocr-source-upgrade-legacy').count(),0,
+     'No user-unrequested legacy migration button is installed');
 
    const view=()=>page.evaluate(()=>{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable;
