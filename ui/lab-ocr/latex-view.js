@@ -32,6 +32,17 @@ const textCell=(className,selector)=>params=>{
   el.textContent=selector(params.data)??'';return el;
 };
 
+export function formulaRenderCell(params){
+  const status=params.data?.render_status??'—';
+  const el=document.createElement('span');
+  el.className='lab-ocr-latex-render-status '+
+    (status==='成功'?'lab-ocr-latex-render-ok':
+     status==='失败'?'lab-ocr-latex-render-fail':'');
+  el.textContent=status;
+  if(status==='失败'&&params.data?.render_error)el.title=params.data.render_error;
+  return el;
+}
+
 export function formulaPreviewCell(params){
   const row=params.data;
   if(!row)return '';
@@ -82,20 +93,22 @@ export function latexColumns({filter,pbsPageKey,getPdfFormulaCrop}){
     filter,filterValueGetter:p=>p.data?.[field]??'—',
     suppressHeaderMenuButton:true});
   return [
-    {field:'pbs',headerName:'PBS',width:119,pinned:'left',lockPinned:true,
+    {field:'formula',headerName:'源码',minWidth:180,flex:1,filter:false,
+      cellRenderer:textCell('lab-ocr-latex-source',row=>row?.formula)},
+    {field:'render_status',headerName:'渲染',width:80,sortable:true,
+      filter,filterValueGetter:p=>p.data?.render_status??'—',
+      suppressHeaderMenuButton:true,cellRenderer:formulaRenderCell},
+    valueColumn('kind','类型',76),
+    {field:'render_html',headerName:'预览',minWidth:205,flex:1.2,filter:false,
+      cellRenderer:formulaPreviewCell},
+    {field:'pdf_crop',headerName:'截图',width:175,filter:false,
+      cellRenderer:params=>formulaImageCell(params,getPdfFormulaCrop)},
+    {field:'pbs',headerName:'PBS',width:119,
       filter,filterValueGetter:p=>pbsPageKey(p.data?.pbs),
       suppressHeaderMenuButton:true},
     {field:'line_no',headerName:'行号',width:71,sortable:true,
       filter,filterValueGetter:p=>p.data?.line_no??'仅 OCR',
       suppressHeaderMenuButton:true},
-    valueColumn('kind','类型',76),
-    {field:'formula',headerName:'LaTeX 源码',minWidth:180,flex:1,filter:false,
-      cellRenderer:textCell('lab-ocr-latex-source',row=>row?.formula)},
-    {field:'render_html',headerName:'KaTeX 预览',minWidth:205,flex:1.2,filter:false,
-      cellRenderer:formulaPreviewCell},
-    {field:'pdf_crop',headerName:'PDF 原文截图',width:175,filter:false,
-      cellRenderer:params=>formulaImageCell(params,getPdfFormulaCrop)},
-    valueColumn('render_status','渲染',79),
     valueColumn('match_status','来源',86),
     {field:'render_error',headerName:'错误 / 边界',minWidth:160,flex:0.9,filter:false,
       cellRenderer:textCell('lab-ocr-latex-error',row=>row?.render_error||row?.scan_issue||'—')},

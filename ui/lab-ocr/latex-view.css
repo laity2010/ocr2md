@@ -24,3 +24,9 @@
 .lab-ocr-latex-image-figure img{max-width:100%;max-height:83px;object-fit:contain;
   background:#f1eee4}
 .lab-ocr-latex-image-caption{font-size:10px;color:#bbc5b9;white-space:nowrap}
+
+/* Formula render *parsing* result (not OCR correctness). AG-only styling. */
+.lab-ocr-latex-render-status{display:inline-block;line-height:1.45;font-weight:600;
+ padding:2px 6px;border-radius:4px;white-space:nowrap}
+.lab-ocr-latex-render-ok{color:#b7e5bf;background:rgba(66,143,91,.16)}
+.lab-ocr-latex-render-fail{color:#ffc2a7;background:rgba(185,75,52,.21)}

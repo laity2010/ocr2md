@@ -23,7 +23,7 @@ const blocks=[
   spans:[span('inline_equation','a+b',[100,205,140,221]),
          span('inline_equation','c+d',[210,205,260,221])]},
  {id:3,page:1,pbs:'p2b0',type:'interline_equation',bbox:[50,75,360,135],
-  spans:[span('interline_equation','z=3',[65,90,120,113])]},
+  spans:[span('interline_equation',String.raw`\frac{1}{`,[65,90,120,113])]},
  // A genuinely repeated inline formula: each physical Span has a separate
  // bbox but both have the same LaTeX. OCR + MD whole-paragraph exact match
  // proves their distinct character offsets without guessing by proximity.
@@ -120,8 +120,21 @@ try{
    assert.equal(await picker.inputValue(),'latex');
    const fields=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields());
-   for(const name of ['pbs','formula','render_html','pdf_crop','match_status'])
-     assert(fields.includes(name),'Missing LaTeX AG column '+name);
+   assert.deepEqual(fields.slice(0,5),
+     ['formula','render_status','kind','render_html','pdf_crop'],
+     'LaTeX columns must be source / colored render / kind / preview / screenshot');
+   for(const name of ['pbs','line_no','match_status','syntax'])
+     assert(fields.includes(name),'Missing other LaTeX AG column '+name);
+   const headers=await page.evaluate(()=>{
+     const elements=[...document.querySelectorAll('.ocr-outline-grid .ag-header-cell')];
+     return elements.filter(el=>!el.closest('[aria-hidden="true"]'))
+       .map(el=>({field:el.getAttribute('col-id'),label:el.querySelector('.ag-header-cell-text')?.textContent}));
+   });
+   for(const [field,label] of [['formula','源码'],['render_status','渲染'],
+       ['kind','类型'],['render_html','预览'],['pdf_crop','截图']]){
+     const item=headers.find(x=>x.field===field);
+     if(item)assert.equal(item.label,label,`Unexpected LaTeX header: ${field}`);
+   }
    await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===7);
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true,
      'LaTeX view must initially list all PDF pages');
@@ -136,6 +149,9 @@ try{
      await active.first().click();
    };
    await exact('ocr:2:0:0');
+   const success=page.locator('#workspace .ag-row-selected .ag-cell[col-id="render_status"] .lab-ocr-latex-render-ok');
+   assert.equal(await success.textContent(),'成功');
+   const successColor=await success.evaluate(el=>getComputedStyle(el).color);
    await page.waitForFunction(()=>{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
      if(!cm)return false;
@@ -281,6 +297,10 @@ try{
    const caretBefore=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.editorView()?.state.selection.main.head);
    await exact('ocr:3:0:0');
+   const failure=page.locator('#workspace .ag-row-selected .ag-cell[col-id="render_status"] .lab-ocr-latex-render-fail');
+   assert.equal(await failure.textContent(),'失败');
+   assert.notEqual(await failure.evaluate(el=>getComputedStyle(el).color),successColor,
+     'Render success / failure must have distinct status colors');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
      ?.dataset.formulaBlockId==='3',null,{timeout:10000});
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
