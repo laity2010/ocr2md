@@ -31,6 +31,12 @@ const blocks=[
   spans:[span('text','before '),span('inline_equation','r_t',[205,205,230,225]),
     span('text',' between '),span('inline_equation','r_t',[335,205,360,225]),
     span('text',' after')]},
+ // p7b1s0 regression: old OCR TeX is invalid, but the same stable BlockID
+ // contains one corrected, explicit MD math span. The AG must show the CM6
+ // revision and re-run KaTeX, while retaining the source PDF bbox.
+ {id:5,page:1,pbs:'p2b2',type:'text',bbox:[40,270,430,322],
+  spans:[span('inline_equation',String.raw`\badcommand{Equity}`,[80,285,320,305]),
+    span('text',', then we found leverage.')]},
 ].map(item=>({block_id:item.id,global_page:item.page,pbs:item.pbs,
   parent_block_id:null,sibling_order:item.id,block_type:item.type,
   block_group:'para_blocks',level:null,source_name:'fixture.json',
@@ -45,6 +51,8 @@ const md=[
  [1,1,'$$'],[2,1,'E=mc^2'],[3,1,'$$'],[4,1,''],
  [5,2,'Formula $a+b$ plus $c+d$ and manual $q^2$.'],[6,2,''],
  [7,3,'Unrelated text'],[8,4,'before $r_t$ between $r_t$ after'],[9,4,''],
+ [10,5,'$(Equity_t^{MV}+Debt_t+Float_t)/Equity_t^{MV}$, then we found leverage.'],
+ [11,5,''],
 ].map(([line_no,block_id,text])=>({line_no,line_id:'latex-md-'+line_no,
   block_id,text}));
 try{
@@ -75,11 +83,11 @@ try{
        contentType:'application/pdf',body:makeLabOcrPdf(2,[
          'BT /F1 20 Tf 80 733 Td (E=mc2) Tj ET\n',
          'BT /F1 20 Tf 75 742 Td (z=3) Tj ET\n'])});
-     if(op==='inspect')return respond({status:'unchanged',blocks:4,pages:2,
+     if(op==='inspect')return respond({status:'unchanged',blocks:5,pages:2,
        pdf:'fixture.pdf',sources:[{name:'fixture.json',pages:2}],mdSupported:true});
-     if(op==='minerujson2block')return respond({status:'ready',kind:'view',blocks:4});
+     if(op==='minerujson2block')return respond({status:'ready',kind:'view',blocks:5});
      if(op==='rows')return respond(u.searchParams.get('table')==='block'?
-       {table:'block',total:4,rows:blocks}:{table:'minerujson',total:0,rows:[]});
+       {table:'block',total:5,rows:blocks}:{table:'minerujson',total:0,rows:[]});
      if(op==='block-edit-state')return respond({revision:0,cursor:0,history:[],
        canUndo:false,canRedo:false});
      if(op==='md-state'){loaded++;return respond({status:'ready',revision:0,
@@ -135,7 +143,7 @@ try{
      const item=headers.find(x=>x.field===field);
      if(item)assert.equal(item.label,label,`Unexpected LaTeX header: ${field}`);
    }
-   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===7);
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===8);
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true,
      'LaTeX view must initially list all PDF pages');
    assert.equal(await page.locator('.lab-ocr-latex-preview .katex').count()>=1,true);
@@ -308,6 +316,30 @@ try{
    assert.equal(await page.locator('.ocr-cm-source .cm-line.ocr-four-pane-source-active').count(),0,
      'Unmatched OCR formula must not fabricate a highlighted MD line');
    assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active').count(),0);
+   // A corrected formula in the same one-formula Block is displayed
+   // from the current CM6 source, not the immutable bad MinerU original.
+   await exact('ocr:5:0:0');
+   const corrected=page.locator('#workspace .ag-row-selected:not(.ag-opacity-zero)');
+   await page.waitForFunction(()=>{
+     const cell=document.querySelector('#workspace .ag-row-selected:not(.ag-opacity-zero) .ag-cell[col-id="render_status"]');
+     return cell?.textContent?.trim()==='成功';
+   },null,{timeout:9000});
+   // AG Grid virtualizes columns to the right; inspect its public row
+   // port rather than assuming "来源" and "预览" cells are in the DOM.
+   const revisedData=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'formula_id',id:'ocr:5:0:0',focusColumn:'formula',
+       preserveFilters:true}));
+   assert.equal(revisedData.match_status,'已修订');
+   assert.equal(revisedData.formula,'(Equity_t^{MV}+Debt_t+Float_t)/Equity_t^{MV}');
+   assert.equal(revisedData.original_formula,String.raw`\badcommand{Equity}`);
+   assert(revisedData.render_html?.includes('katex'));
+   assert.equal(await corrected.locator('.ag-cell[col-id="render_status"] .lab-ocr-latex-render-ok').count(),1);
+   await page.waitForFunction(()=>{
+     const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     return cm?.state.selection.main.head===cm.state.doc.line(10).from+1;
+   },null,{timeout:9000});
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
+     ?.dataset.formulaBlockId==='5',null,{timeout:9000});
    // The additional MD-only formula still navigates its actual characters,
    // without inventing a precise PDF Span bbox.
    const mdOnly=findLatex(md.map(r=>r.text).join('\n')).find(x=>x.content==='q^2');
@@ -328,7 +360,7 @@ try{
    assert.equal(remoteFormulaRequests,0,'AG must not fetch MinerU formula image URLs');
    assert.deepEqual(errors,[],'No browser page errors');
    console.log('LAB_OCR_LATEX_VIEW_E2E_PASS',label,JSON.stringify({
-     formulas:7,matched:5,ocrOnly:1,mdOnly:1,saves,loaded}));
+     formulas:8,matched:6,revised:1,ocrOnly:1,mdOnly:1,saves,loaded}));
   }finally{await browser.close();}
  }
 }finally{vite.kill('SIGTERM');}

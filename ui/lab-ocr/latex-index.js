@@ -137,6 +137,18 @@ export function projectLatexIndex(mdRows,blockRows){
   }
   const ocr=sourceSpans(blockRows);
   const exact=exactInlineOffsets(blockRows,byBlock);
+  const ocrByBlockKind=new Map();
+  const mdByBlockKind=new Map();
+  const identity=item=>`${item.block_id}:${item.kind}`;
+  for(const item of ocr){
+    const key=identity(item);
+    ocrByBlockKind.set(key,(ocrByBlockKind.get(key)??0)+1);
+  }
+  for(const scan of scans){
+    const key=identity(scan);
+    const candidates=mdByBlockKind.get(key)??[];
+    candidates.push(scan);mdByBlockKind.set(key,candidates);
+  }
   const output=[];
   for(const item of ocr){
     const matches=scans.filter(s=>!s.match&&s.block_id===item.block_id&&
@@ -184,12 +196,28 @@ export function projectLatexIndex(mdRows,blockRows){
         }
       }else if(hits.length>1)match_status='有歧义';
     }
+    // A one-formula Block is itself a stable identity anchor even when the
+    // reviewer completely rewrites OCR's broken TeX. Bind only a UNIQUE,
+    // explicitly delimited MD formula of the SAME kind and BlockID; never
+    // guess from relative order, neighboring blocks, or fuzzy string matches.
+    // The current CM6 formula is authoritative; original_formula and its
+    // physical PDF Span bbox remain immutable OCR evidence.
+    const key=identity(item);
+    const oneMd=mdByBlockKind.get(key)??[];
+    if(focus===null&&ocrByBlockKind.get(key)===1&&oneMd.length===1&&
+       !oneMd[0].match&&['$','\\(','\\[','$$'].includes(oneMd[0].syntax)&&
+       !oneMd[0].issue&&oneMd[0].content.trim()){
+      scanner=oneMd[0];scanner.match=true;focus=scanner.focus;
+      match_status='已修订';
+    }
+    const currentFormula=match_status==='已修订'?scanner.content:item.formula;
     const located=focus===null?null:locateOffset(starts,mdRows,focus);
-    output.push({...item,match_status,syntax:scanner?.syntax??'OCR 原文',
+    output.push({...item,formula:currentFormula,match_status,
+      syntax:scanner?.syntax??'OCR 原文',
       detection:scanner?.detection??false,scan_issue:scanner?.issue??'',
       line_no:located?.line_no??null,line_id:located?.line_id??null,
       column:located?.column??null,source_from:focus,
-      source_to:focus===null?null:focus+item.formula.length});
+      source_to:focus===null?null:focus+currentFormula.length});
   }
   for(const scan of scans){
     if(scan.match)continue;
@@ -219,7 +247,8 @@ export function latexIndexSummary(rows){
   return {total:rows.length,original:rows.filter(r=>r.formula_id.startsWith('ocr:')).length,
     independent:rows.filter(r=>r.kind==='独立').length,
     inline:rows.filter(r=>r.kind==='行内').length,
-    matched:rows.filter(r=>r.match_status==='已匹配').length,
+    matched:rows.filter(r=>['已匹配','已修订'].includes(r.match_status)).length,
+    revised:rows.filter(r=>r.match_status==='已修订').length,
     ocrOnly:rows.filter(r=>r.match_status==='仅 OCR').length,
     mdOnly:rows.filter(r=>r.match_status==='仅 MD').length,
     ambiguous:rows.filter(r=>r.match_status==='有歧义').length,

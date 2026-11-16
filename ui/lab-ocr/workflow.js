@@ -671,7 +671,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+
             (target?.lineNo?`MD ${target.lineNo}`:'仅 PDF / OCR'):
           `MD 四窗定位 · ${row.line_no} · BlockID ${row.block_id??'NULL'}`,
-        latex&&row.match_status!=='已匹配'?'warning':'info');
+        latex&&!['已匹配','已修订'].includes(row.match_status)?'warning':'info');
       },
     });
     frame.setAgView(activeAgView);

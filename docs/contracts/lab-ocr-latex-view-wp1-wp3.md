@@ -49,3 +49,10 @@
 - 用户已确认 AG 可自行用 PDF 覆盖框截图，无须在源码和 AG 图像列提供 MinerU 公式图片链接。**新建 MD 的 `interline_equation` 默认只输出 `$$...$$` 或 `math` fence，不再附 `[原始公式图]`；行内 `inline_equation` 有 `image_path` 时优先输出 `span.content`（`$...$`），不能用 URL 替代数学内容。其他 `image` / `table` 等媒体仍照旧保存原链接。**
 - 现有 `sample` 禁止重新初始化全文。`scripts/v6_lab_ocr_reconcile_formula_links.py` 对照完整 Block 的旧生成文本与当前单个公式块的 MD 非空行，精确匹配后仅把旧 `[原始公式图]` 物理行文本设为空（保留 LineID、BlockID、行号、空行语义），前置完整 SQLite 在线备份。revision/BlockRevision/来源再次核对后单事务 CAS 更新，手改或不匹配即跳过；重复运行 no-op。
 - AG 的“PDF 原文截图”只从原 PDF 渲染 Data URI，不产生任何指向 MinerU CDN 的 DOM 链接或请求。原始 `image_path` 在 MinerU JSON 中保持原样，只有不可变来源数据保留链接。Chromium/iPad WebKit 测试覆盖图片像素、公式级定位、零远程请求及零 MD 保存。
+
+## 人工修订公式回流 AG（2026-11-16）
+
+- `p7b1s0` 实际故障：MinerU `ocr:207:0:0` 的行内公式 KaTeX 失败，CM6 MD 第128行已人工改写成合法 `$...$`。旧索引以 **公式文本相同** 为绑定条件，造成 AG 仍显示原始失败公式（`仅 OCR`）且另生成一条 `仅 MD`。
+- 修正：严格限定在 **稳定 BlockID + 相同公式类型** 中恰有 **1 条原始 OCR Span 和 1 条显式定界的 MD 公式**，且无法按原字符串匹配时，使用这个唯一稳定结构关系关联，标为 `已修订`；AG 的 `formula`、KaTeX 渲染结果、CM6 起始和全文字符范围均以**当前 CM6 MD**为唯一权威；保留原始 `formula_id`、`original_formula`、`pdf_bbox` 和页码便于核验原 PDF。禁止按相似字符串、相邻 Block、多个候选公式顺序猜测关联。
+- `latexIndexSummary.matched` 同时统计 `已匹配` 和 `已修订`，新增 `revised` 便于识别修改量；无匹配时 `仅 OCR` / `仅 MD` / `有歧义` 仍如实显示。
+- 测试以真实 `sample` p7b1s0 校核：修订后仅一条公式，`ocr:207:0:0` → MD 第128行、公式字符列1，KaTeX 可解析，原 PDF bbox `[53,216,226,234]` 保持。另有合成书浏览器测试覆盖 corrected MD / malformed OCR、AG 状态着色和点击定位，防止修正后继续显示旧的「渲染失败」。

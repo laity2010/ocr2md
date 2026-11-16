@@ -23,7 +23,7 @@ const lines=[md(1,1,'$$'),md(2,1,'E=mc^2'),md(3,1,'$$'),
 const snap=JSON.stringify({original,lines});
 const rows=projectLatexIndex(lines,original);const summary=latexIndexSummary(rows);
 assert.deepEqual(summary,{total:8,original:7,independent:1,inline:7,
- matched:4,ocrOnly:1,mdOnly:1,ambiguous:2,images:1});
+ matched:4,revised:0,ocrOnly:1,mdOnly:1,ambiguous:2,images:1});
 const display=rows.find(r=>r.formula_id==='ocr:1:0:0');
 assert.equal(display.match_status,'已匹配');
 assert.equal(display.line_no,2);assert.equal(display.column,0);
@@ -62,5 +62,43 @@ const unsafe=projectLatexIndex(edited,original).filter(r=>r.block_id===5);
 assert(unsafe.some(r=>r.match_status==='有歧义')||
   unsafe.some(r=>r.match_status==='仅 OCR'),
   'Never force positional identity after paragraph edits');
+// Real failure mode p7b1s0: OCR supplied one malformed inline equation,
+// while its *same stable block* now owns one explicitly delimited corrected
+// equation. The AG row must display current CM6 TeX and re-render success,
+// but retain the original Span ID/bbox for PDF comparison.
+const broken=String.raw`\badcommand{Equity}`;
+const fixed=String.raw`(Equity_t^{MV}+Debt_t+Float_t)/Equity_t^{MV}`;
+const editedBlock=base(207,'p7b1s0',6,[span('inline_equation',broken,[53,216,226,234]),
+  span('text',', then we found leverage.')]);
+const prefix=Array.from({length:127},(_,i)=>md(i+1,null,''));
+const current=[...prefix,md(128,207,`$${fixed}$, then we found leverage.`)];
+const repaired=projectLatexIndex(current,[editedBlock]);
+assert.equal(repaired.length,1,'A one-to-one reviewed correction is not two AG formulas');
+assert.equal(repaired[0].formula_id,'ocr:207:0:0');
+assert.equal(repaired[0].match_status,'已修订');
+assert.equal(repaired[0].formula,fixed);
+assert.equal(repaired[0].original_formula,broken);
+assert.equal(repaired[0].line_no,128);
+assert.equal(repaired[0].line_id,'line-128');
+assert.equal(repaired[0].column,1);
+assert.equal(repaired[0].source_to-repaired[0].source_from,fixed.length);
+assert.equal(repaired[0].syntax,'$');
+assert.deepEqual(repaired[0].pdf_bbox,[53,216,226,234]);
+assert.deepEqual(latexIndexSummary(repaired),{total:1,original:1,independent:0,
+  inline:1,matched:1,revised:1,ocrOnly:0,mdOnly:0,ambiguous:0,images:0});
+// Undoing the correction recomputes AG from current MD and restores the
+// original OCR formula, without any separate SQL source or stale cache.
+const unedited=projectLatexIndex([...prefix,md(128,207,`$${broken}$, then we found leverage.`)],
+  [editedBlock]);
+assert.equal(unedited.length,1);
+assert.equal(unedited[0].formula,broken);
+assert.equal(unedited[0].match_status,'已匹配');
+// Never pair when there are two possible Markdown formulas (or the formula
+// sits in an adjacent block), even if the PDF contains only one OCR Span.
+const many=projectLatexIndex([...prefix,md(128,207,`$${fixed}$ + $a+b$`)],[editedBlock]);
+assert.equal(many.find(r=>r.formula_id==='ocr:207:0:0').match_status,'仅 OCR');
+assert.equal(many.filter(r=>r.match_status==='仅 MD').length,2);
+const wrongBlock=projectLatexIndex([...prefix,md(128,208,`$${fixed}$`)],[editedBlock]);
+assert.equal(wrongBlock.find(r=>r.formula_id==='ocr:207:0:0').match_status,'仅 OCR');
 assert.equal(JSON.stringify({original,lines}),snap,'Pure projection must not mutate CM6 / SQL data');
 console.log('LAB_OCR_LATEX_INDEX_DIRECT_PASS',summary);
