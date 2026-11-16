@@ -4,6 +4,7 @@
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './latex-view.css';
+import {renderTitleMdCell} from './title-view.js';
 
 const cache=new Map();
 export function renderFormula(formula,kind){
@@ -33,6 +34,7 @@ const textCell=(className,selector)=>params=>{
 };
 
 export function formulaRenderCell(params){
+  if(params.data?.latex_heading_id)return '';
   const status=params.data?.render_status??'—';
   const el=document.createElement('span');
   el.className='lab-ocr-latex-render-status '+
@@ -45,7 +47,7 @@ export function formulaRenderCell(params){
 
 export function formulaPreviewCell(params){
   const row=params.data;
-  if(!row)return '';
+  if(!row||row.latex_heading_id)return '';
   const container=document.createElement('div');
   container.className='lab-ocr-latex-preview';
   if(row.render_html){
@@ -63,7 +65,7 @@ export function formulaPreviewCell(params){
 export function formulaImageCell(params,getPdfFormulaCrop){
   const row=params.data;
   const root=document.createElement('div');root.className='lab-ocr-latex-image';
-  if(!row)return root;
+  if(!row||row.latex_heading_id)return '';
   const canCrop=Number.isInteger(row.page)&&Array.isArray(row.pdf_bbox)&&
     Array.isArray(row.page_size)&&typeof getPdfFormulaCrop==='function';
   const visual=document.createElement('img');
@@ -90,9 +92,13 @@ export function formulaImageCell(params,getPdfFormulaCrop){
 
 export function latexColumns({filter,pbsPageKey,getPdfFormulaCrop}){
   const valueColumn=(field,name,width)=>({field,headerName:name,width,sortable:true,
+    valueGetter:p=>p.data?.latex_heading_id?'':p.data?.[field],
     filter,filterValueGetter:p=>p.data?.[field]??'—',
     suppressHeaderMenuButton:true});
   return [
+    {field:'heading_source',headerName:'标题',width:235,minWidth:160,sortable:false,
+      pinned:'left',lockPinned:true,lockPosition:'left',filter:false,
+      cellRenderer:renderTitleMdCell,cellClass:'ocr-ag-title-text'},
     {field:'formula',headerName:'源码',minWidth:180,flex:1,filter:false,
       cellRenderer:textCell('lab-ocr-latex-source',row=>row?.formula)},
     {field:'render_status',headerName:'渲染',width:80,sortable:true,
@@ -104,16 +110,20 @@ export function latexColumns({filter,pbsPageKey,getPdfFormulaCrop}){
     {field:'pdf_crop',headerName:'截图',width:175,filter:false,
       cellRenderer:params=>formulaImageCell(params,getPdfFormulaCrop)},
     {field:'pbs',headerName:'PBS',width:119,
+      valueGetter:p=>p.data?.latex_heading_id?'':p.data?.pbs,
       filter,filterValueGetter:p=>pbsPageKey(p.data?.pbs),
       suppressHeaderMenuButton:true},
     {field:'line_no',headerName:'行号',width:71,sortable:true,
+      valueGetter:p=>p.data?.latex_heading_id?'':p.data?.line_no,
       filter,filterValueGetter:p=>p.data?.line_no??'仅 OCR',
       suppressHeaderMenuButton:true},
     valueColumn('match_status','来源',86),
     {field:'render_error',headerName:'错误 / 边界',minWidth:160,flex:0.9,filter:false,
-      cellRenderer:textCell('lab-ocr-latex-error',row=>row?.render_error||row?.scan_issue||'—')},
+      cellRenderer:textCell('lab-ocr-latex-error',row=>row?.latex_heading_id?'':
+        row?.render_error||row?.scan_issue||'—')},
     {field:'syntax',headerName:'定界',width:112},
     {field:'formula_id',headerName:'公式 ID',width:190,hide:true},
-    {field:'block_id',headerName:'BlockID',width:94,hide:true},
+    {field:'block_id',headerName:'BlockID',width:94,hide:true,
+      valueGetter:p=>p.data?.latex_heading_id?'':p.data?.block_id},
   ];
 }

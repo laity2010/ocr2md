@@ -48,9 +48,9 @@ const blocks=[
   span_count:item.spans.length,span_types:item.spans.map(s=>s.type).join(','),
   bbox:item.bbox}));
 const md=[
- [1,1,'$$'],[2,1,'E=mc^2'],[3,1,'$$'],[4,1,''],
- [5,2,'Formula $a+b$ plus $c+d$ and manual $q^2$.'],[6,2,''],
- [7,3,'Unrelated text'],[8,4,'before $r_t$ between $r_t$ after'],[9,4,''],
+ [1,1,'$$'],[2,1,'E=mc^2'],[3,1,'$$'],[4,1,'# Chapter Root'],
+ [5,2,'Formula $a+b$ plus $c+d$ and manual $q^2$.'],[6,2,'## Section A'],
+ [7,3,'### Deeper topic'],[8,4,'before $r_t$ between $r_t$ after'],[9,4,''],
  [10,5,'$(Equity_t^{MV}+Debt_t+Float_t)/Equity_t^{MV}$, then we found leverage.'],
  [11,5,''],
 ].map(([line_no,block_id,text])=>({line_no,line_id:'latex-md-'+line_no,
@@ -128,9 +128,9 @@ try{
    assert.equal(await picker.inputValue(),'latex');
    const fields=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields());
-   assert.deepEqual(fields.slice(0,5),
-     ['formula','render_status','kind','render_html','pdf_crop'],
-     'LaTeX columns must be source / colored render / kind / preview / screenshot');
+   assert.deepEqual(fields.slice(0,6),
+     ['heading_source','formula','render_status','kind','render_html','pdf_crop'],
+     'LaTeX columns must be heading / source / colored render / kind / preview / screenshot');
    for(const name of ['pbs','line_no','match_status','syntax'])
      assert(fields.includes(name),'Missing other LaTeX AG column '+name);
    const headers=await page.evaluate(()=>{
@@ -138,12 +138,41 @@ try{
      return elements.filter(el=>!el.closest('[aria-hidden="true"]'))
        .map(el=>({field:el.getAttribute('col-id'),label:el.querySelector('.ag-header-cell-text')?.textContent}));
    });
-   for(const [field,label] of [['formula','源码'],['render_status','渲染'],
+   for(const [field,label] of [['heading_source','标题'],['formula','源码'],['render_status','渲染'],
        ['kind','类型'],['render_html','预览'],['pdf_crop','截图']]){
      const item=headers.find(x=>x.field===field);
      if(item)assert.equal(item.label,label,`Unexpected LaTeX header: ${field}`);
    }
-   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===8);
+   await page.waitForFunction(()=>document.querySelectorAll('#workspace .ag-row:not(.ag-opacity-zero)').length===11);
+   // Headings use the *same* title-view renderer, ATX level classes, pinned
+   // first column and compact row height; other cells must be visually blank.
+   const titles=await page.locator('#workspace .ag-cell[col-id="heading_source"] .ocr-ag-title-source.cm-ob-heading-line-1, #workspace .ag-cell[col-id="heading_source"] .ocr-ag-title-source.cm-ob-heading-line-2, #workspace .ag-cell[col-id="heading_source"] .ocr-ag-title-source.cm-ob-heading-line-3').allTextContents();
+   assert.deepEqual(titles,['# Chapter Root','## Section A','### Deeper topic']);
+   const titleRows=page.locator('#workspace .ag-row').filter({has:page.locator('.ocr-ag-title-source.cm-ob-heading-line-2')});
+   assert.equal(await titleRows.count(),1);
+   const blankColumns=await titleRows.first().evaluate(node=>({
+     values:['formula','render_status','kind','render_html','pdf_crop','pbs','line_no']
+       .map(field=>node.querySelector(`.ag-cell[col-id="${field}"]`)?.textContent?.trim()??''),
+     height:Math.round(node.getBoundingClientRect().height),
+   }));
+   assert.deepEqual(blankColumns.values,['','','','','','',''],
+     'Heading rows show only the heading, never inherited formula metadata');
+   assert.equal(blankColumns.height,35,'Heading rows must be compact');
+   const headingRecord=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+      ?.ocrSqlGrid?.selectById({field:'latex_heading_id',id:'heading:latex-md-6',
+        focusColumn:'heading_source',preserveFilters:true}));
+   assert.equal(headingRecord.heading_level,2);
+   assert.equal(headingRecord.line_no,6);
+   assert.equal(headingRecord.formula_id,undefined);
+   assert.equal(await page.locator('.ag-cell[col-id="heading_source"].ag-cell-focus').count()>0,true);
+   // The heading row uses the same semantic AG -> CM6 navigation path as
+   // Title View, but never pretends to be a formula or requests a crop.
+   await page.locator('#workspace .ag-row-selected .ag-cell[col-id="heading_source"]').click();
+   await page.waitForFunction(()=>{
+     const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
+     return cm?.state.selection.main.head===cm.state.doc.line(6).from;
+   },null,{timeout:9000});
+   assert.equal(await page.locator('.lab-ocr-pdf-formula-focus').count(),0);
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true,
      'LaTeX view must initially list all PDF pages');
    assert.equal(await page.locator('.lab-ocr-latex-preview .katex').count()>=1,true);

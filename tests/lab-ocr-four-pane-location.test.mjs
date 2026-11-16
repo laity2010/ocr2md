@@ -60,8 +60,13 @@ publishLabFocus({origin:'ag',lineId:'c',lineNo:3,blockId:12,page:3,pbs:'p3b0',
 assert.equal(formulaEvents.at(-1).formulaColumn,8);
 assert.equal(formulaEvents.at(-1).formulaEndColumn,13);
 assert.equal(formulaEvents.at(-1).formulaKind,'inline');
+assert.equal(formulaEvents.at(-1).sourceLineExact,false);
 assert.deepEqual(formulaEvents.at(-1).formulaBBox,[10,20,40,35]);
 assert(Object.isFrozen(formulaEvents.at(-1).formulaBBox));
+publishLabFocus({origin:'ag',lineId:'d',lineNo:4,blockId:12,page:3,
+  sourceLineExact:true});
+assert.equal(formulaEvents.at(-1).sourceLineExact,true);
+assert.equal(formulaEvents.at(-1).lineNo,4);
 for(const payload of [
   {origin:'ag',blockId:12,page:3,formulaBBox:[2,3,1,4]},
   {origin:'pdf',blockId:12,page:3,formulaBBox:[1,2,3,4]},
@@ -70,6 +75,8 @@ for(const payload of [
   {origin:'ag',lineNo:3,formulaColumn:9,formulaEndColumn:8},
   {origin:'ag',lineNo:3,formulaEndColumn:10},
   {origin:'ag',lineNo:3,formulaColumn:2,formulaKind:'bogus'},
+  {origin:'ag',sourceLineExact:true},
+  {origin:'cm6',lineNo:3,sourceLineExact:true},
   {origin:'cm6',lineNo:3,formulaColumn:2,formulaKind:'inline'},
 ])assert.throws(()=>publishLabFocus(payload));
 unFormula();
