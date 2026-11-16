@@ -1,4 +1,4 @@
-/** PDF source OCR extraction into existing CM6 cursor. No real user DB.
+/** PDF native text layer extraction inside selected bbox into CM6 cursor. No real user DB.
  * Real Dockview/PDF.js/AG/CM6 on Chromium and iPad WebKit.
  */
 import assert from 'node:assert/strict';
@@ -12,7 +12,8 @@ const vite=process.env.LAB_OCR_TEST_URL?null:spawn('node',[
  'node_modules/vite/bin/vite.js','--config','labs/lab-ocr/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
 let serverLog='';vite?.stdout.on('data',c=>serverLog+=c);vite?.stderr.on('data',c=>serverLog+=c);
-const sourceText='From MinerU OCR\nsecond OCR line';
+const sourceText='Native PDF first\nsecond PDF line';
+const secondaryText='PDF words over image';
 const baseBlocks=[
  {block_id:11,pbs:'p1b0',parent_block_id:null,global_page:0,block_type:'text',
   block_json:JSON.stringify({type:'text',lines:[
@@ -23,6 +24,9 @@ const baseBlocks=[
   content_preview:'source-only-image.png'},
  {block_id:13,pbs:'p1b2',parent_block_id:null,global_page:0,block_type:'text',
   block_json:JSON.stringify({type:'text',lines:[],lines_deleted:true}),content_preview:''},
+ {block_id:15,pbs:'p1b3',parent_block_id:null,global_page:0,block_type:'text',
+  block_json:JSON.stringify({type:'text',lines:[{spans:[{content:'MinerU has text that PDF does not'}]}]}),
+  content_preview:'MinerU has text that PDF does not'},
  {block_id:14,pbs:'p2b0',parent_block_id:null,global_page:1,block_type:'text',
   block_json:JSON.stringify({type:'text',lines:[{spans:[{content:'Second page'}]}]}),
   content_preview:'Second page'},
@@ -62,14 +66,19 @@ try{
     const parsed=new URL(route.request().url()),op=parsed.pathname.split('/').at(-1);
     const payload=route.request().method()==='POST'?JSON.parse(route.request().postData()||'{}'):null;
     const reply=obj=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(obj)});
-    if(op==='inspect')return reply({status:'unchanged',blocks:4,pages:2,pdf:'fixture.pdf',
+    if(op==='inspect')return reply({status:'unchanged',blocks:5,pages:2,pdf:'fixture.pdf',
       sources:[{name:'source.json',pages:2}],mdSupported:true});
-    if(op==='minerujson2block')return reply({status:'ready',kind:'view',blocks:4});
-    if(op==='pdf')return route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf(2)});
+    if(op==='minerujson2block')return reply({status:'ready',kind:'view',blocks:5});
+    if(op==='pdf')return route.fulfill({status:200,contentType:'application/pdf',body:makeLabOcrPdf(2,[
+      'BT /F1 12 Tf 72 760 Td (Native PDF first) Tj 0 -18 Td (second PDF line) Tj ET\n'+
+      'BT /F1 12 Tf 72 615 Td (PDF words over image) Tj ET\n'+
+      'BT /F1 12 Tf 72 430 Td (Stray text outside all selected blocks) Tj ET\n',
+      'BT /F1 12 Tf 72 749 Td (Native second page) Tj ET\n',
+    ])});
     if(op==='rows'){
       reads++;
       assert.equal(parsed.searchParams.get('table'),'block');
-      return reply({table:'block',total:4,rows:baseBlocks});
+      return reply({table:'block',total:5,rows:baseBlocks});
     }
     if(op==='block-edit-state')return reply({revision:0,canUndo:false,canRedo:false,cursor:0,history:[]});
     if(op==='md-state')return reply({status:'ready',revision,total:mdRows.length,rows:mdRows});
@@ -89,7 +98,7 @@ try{
       const n=Number(parsed.searchParams.get('page'));
       assert.equal(parsed.searchParams.get('level'),'block','Block overlay remains default without dropdown');
       const bboxes={11:[50,65,195,135],12:[52,185,196,265],
-        13:[53,305,195,370],14:[50,75,195,145]};
+        13:[53,305,195,370],15:[53,465,195,515],14:[50,75,195,145]};
       return reply({level:'block',page:n,pageSize:[595,842],boxes:baseBlocks
         .filter(row=>row.global_page===n-1).map(row=>({id:'b'+row.block_id,
          blockId:String(row.block_id),pbs:row.pbs,parentBlockId:null,
@@ -102,10 +111,10 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable
      ?.mdDocument()==='Intro: here\nNext line\nSecond page');
    await page.waitForFunction(()=>document.querySelectorAll(
-     '.lab-ocr-pdf-pbs-layer[data-page="1"] .lab-ocr-pdf-pbs-tag').length===3);
+     '.lab-ocr-pdf-pbs-layer[data-page="1"] .lab-ocr-pdf-pbs-tag').length===4);
    const extract=page.locator('.lab-ocr-pdf-extract-text');
    assert.equal(await extract.count(),1);
-   assert.equal(await extract.isDisabled(),true,'No selected source block');
+   assert.equal(await extract.isDisabled(),true,'No selected PDF Block');
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-control,.lab-ocr-pdf-overlay-level').count(),0);
    assert.equal(await page.locator('.lab-ocr-pdf-controls select').count(),1,'Only zoom dropdown remains');
    // PDF.js can replace the overlay layer after PBS labels were observed;
@@ -114,11 +123,17 @@ try{
      '.lab-ocr-pdf-overlay-layer[data-level="block"] .lab-ocr-pdf-overlay-box')),
      null,{timeout:12000});
    const tag=id=>page.locator(`.lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
-   // Image URL in source preview does NOT qualify as text.
-   await tag(12).click();assert.equal(await extract.isDisabled(),true);
+   // Image-only MinerU data still enables extraction when the original PDF
+   // has native text INSIDE its bbox. An empty PDF region never falls back to
+   // MinerU, even if adjacent PDF blocks have perfectly readable text.
+   await tag(12).click();await extract.waitFor({state:'visible'});
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
    await tag(13).click();assert.equal(await extract.isDisabled(),true,
-     'Source-empty lines_deleted OCR block stays disabled');
-   await tag(11).click();assert.equal(await extract.isEnabled(),true);
+     'Source-empty, PDF-text-empty block stays disabled');
+   await tag(15).click();assert.equal(await extract.isDisabled(),true,
+     'MinerU text with NO corresponding PDF native text must not enable extraction');
+   await tag(11).click();
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
    // Capture existing CodeMirror cursor BEFORE selecting the PDF label:
    // the PDF block focus updates highlights but cannot steal that caret.
    const pos=await page.evaluate(()=>{
@@ -126,8 +141,16 @@ try{
      cm.dispatch({selection:{anchor:'Intro: '.length}});
      return cm.state.selection.main.head;
    });
-   await tag(12).click();assert.equal(await extract.isDisabled(),true);
-   await tag(11).click();assert.equal(await extract.isEnabled(),true);
+   await tag(12).click();
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
+   await extract.click();
+   await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdDocument()===text,'Intro: '+secondaryText+'here\nNext line\nSecond page');
+   await page.locator('#undo').click();
+   await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdDocument()===text,original);
+   await tag(11).click();
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-extract-text')?.disabled===false);
    const still=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      .ocrCmTable.editorView().state.selection.main.head);
    assert.equal(still,pos,'PDF label selection must not silently move CodeMirror insertion cursor');

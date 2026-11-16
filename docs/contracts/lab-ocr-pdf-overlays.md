@@ -119,13 +119,14 @@ Lab OCR 业务层提供 `loadPage()`，按需读取已经授权的只读 `GET /l
 - 相同 bbox 的多个 Block 仍仅绘制一份覆盖框，但每个 PBS 标签独立判定虚线；如果去重组中任一来源有内容，则共享覆盖框保持实线，避免用某个空子块覆盖正常父块的实际内容。覆盖框不拦截 PDF 文本选择，标签的点击、拖动、四窗联动和缩放不变。
 - 验收：`tests/lab-ocr-overlays.test.py`（空叶、包含内容的父容器、图片、纯空白、只读）、`tests/lab-ocr-overlays-http.test.py`（不泄漏正文的 Boolean）、`tests/lab-ocr-block-gesture.browser.test.mjs`（Chromium/iPad WebKit 的虚线颜色和样式、同 bbox 去重独立标签、选择/拖动/Undo/Redo）。
 
-## PDF 工具栏提取原始文本（2026-11-16）
+## PDF 工具栏从原始 PDF 文本层提取文字（2026-11-16）
 
 - 用户指定从 PDF 工具栏撤下「覆盖框」文字及 Block/Span/关闭下拉控件；**覆盖框继续默认 Block 绘制，原有 `setOverlays({level,loadPage,...})` 外部 API 仍保留**，以便各调用方按原配置维护几何数据。PDF 工具栏只保留页码、缩放，以及一个「提取文本」按钮；不增加新的开关或工具栏。
-- PDF 标签点击以及 AG→PDF 定位，共用 `selectedBlockId`。按钮默认禁用；仅当选中的 Block 在**CM6 已加载的原始 `block_json`** 中有可见的 `span.content` 或 `span.html` 内容、且 MD 编辑器已加载时启用。纯 `image_path`、`lines:[]`、仅有子块而本身没有文字的容器，不当作可提取文本。判断不使用已经人工修改过的 MD 正文或 `content_preview`（后者可能包含图片路径）。
-- 复用 PDF `setOverlays` 注入的业务能力 `canExtractBlock(blockId):boolean` 和 `onExtractText({blockId})`，通用 PDF 查看器不依赖 SQL 或原文数据。Lab OCR 业务层使用 `originalBlockText()` 从现有 Block 运行态取原始内容，保留 OCR 的原始多行顺序及文本中的空行；不递归吸收子块内容，不写入新的表或 API。此操作绝不向 HTML/图片路径误提取。
+- PDF 标签点击以及 AG→PDF 定位共用稳定 `BlockID`、所在 PDF 页码和当前覆盖框 `bbox`。按钮初始禁用，**只有 PDF.js 的 `getTextContent()` 确认该覆盖框内部有原文 PDF 文本时才可用**，按页缓存；未取回文本、PDF 文本层为空或 bbox 内没有文字时均禁用。**禁止回退 MinerU `block_json`、`content_preview`、当前 CM 行内容或重新 OCR。**因此 MinerU 有文字而 PDF 无文字时仍禁用；反之 MinerU 文字为空但 PDF 覆盖范围内有文本时可以提取。
+- 通用 PDF 查看器内部复用 `getPage(page)` / `getTextContent()`，纯函数 `pdfTextInBox(textContent,viewport,pageSize,bbox)` 按 PDF.js 页视图的旋转/缩放变换，将可复制的原始文本片段定位到 MinerU 覆盖框坐标，限定绝大部分文字确实位于框内；按实际行的纵坐标和行内横坐标重组文字，保留断行和连字符。不使用 DOM 复制/选区、不读取任意别的 PDF 区域、不凭空拼出缺失字词。文本按 PDF 文档和每页缓存，仅在选中框时计算；切书释放缓存，异步旧响应不得污染新书的可用性。
+- PDF 对外仍只有 `setOverlays({...,onExtractText})` 提取回调，传入 `{blockId,text}`，其中 `text` 是由 PDF 组件从原始 PDF 产生的当前框文本；Lab OCR 业务层仅负责校验文本和执行 CM6 插入。原先 `canExtractBlock` / `originalBlockText` 的 MinerU 提取方案已淘汰，不再保留旧按钮行为或回退路径。
 - `frame.insertMdAtCursor(text)` → CM6 `editor.dispatch(changes)` 在**先前保留的源码光标 head** 插入，绝不以 PDF 标签目标/当前块头重新定位源码，也不替换选区；不附加新的逻辑块标签。通过现有 `editedMdRuntime` 的 LineID/BlockID 继承规则、CM6 原生 Undo/Redo、AG/预览投影和闲时 SQLite CAS 保存；仅影响正在编辑的 MD 文本。
-- 直接测试：`node tests/lab-ocr-source-text.test.mjs`；真实 Chromium + iPad WebKit 集成：`node tests/lab-ocr-pdf-extract.browser.test.mjs`（按钮只读控制、仅缩放下拉、PDF标签选择不改 CM6 光标、原始文本多行插入、逻辑归属、撤销/重做/保存/重载）。
+- 直接测试：`node tests/lab-ocr-pdf-text-region.test.mjs`（真实 PDF.js 可复制文字、跨行、页外排除、缩放、纯扫描页）；真实 Chromium + iPad WebKit 集成：`node tests/lab-ocr-pdf-extract.browser.test.mjs`（按钮控制、OCR 有字 PDF 无字必须禁用、OCR 无字 PDF 有字必须可用、跨页与光标保留、原文多行插入、逻辑归属、撤销/重做/保存/重载）。
 
 历史 `lab-ocr-pdf-viewer.browser.test.mjs` 中「PDF 工具栏有覆盖框下拉」「初始不切分」的断言、以及此前用于手动 Span 切换的流程，是过去版本的验收快照；本轮不因此恢复已撤下的控件或改变默认四窗布局。
 

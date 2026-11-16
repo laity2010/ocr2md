@@ -1,7 +1,8 @@
 /** Tiny self-authored PDF fixture; no external PDF or user document. */
-export function makeLabOcrPdf(pageCount=3){
+export function makeLabOcrPdf(pageCount=3,contentByPage=null){
   if(!Number.isInteger(pageCount)||pageCount<1||pageCount>100)throw Error('invalid page count');
-  const content=n=>`BT /F1 20 Tf 72 760 Td (OCR Lab PDF page ${n}) Tj ET\n`;
+  const content=n=>contentByPage?.[n-1]??
+    `BT /F1 20 Tf 72 760 Td (OCR Lab PDF page ${n}) Tj ET\n`;
   const fontId=3+pageCount*2;
   const kids=Array.from({length:pageCount},(_,i)=>`${3+2*i} 0 R`).join(' ');
   const objects=[

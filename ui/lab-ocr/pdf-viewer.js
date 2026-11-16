@@ -7,6 +7,7 @@ import {EventBus,PDFViewer} from 'pdfjs-dist/web/pdf_viewer.mjs';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import {layoutPbsLabels} from './pbs-label-layout.js';
+import {pdfTextInBox} from './pdf-text-region.js';
 import {indexBlockParents,blockHighlight} from './pbs-family.js';
 import {pickBlockDropTarget,blockDropZone} from './pdf-block-drop.js';
 import {clientToOverlayPoint,positionFixedOverlayAt,
@@ -36,7 +37,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   extract.className='lab-ocr-pdf-extract-text';
   extract.textContent='提取文本';
   extract.setAttribute('aria-label','提取文本');
-  extract.title='先选择含原始 OCR 文本的 PDF Block，再插入源码光标位置';
+  extract.title='选择 PDF 覆盖框；框内有原文 PDF 文本层时可提取';
   extract.disabled=true;
   controls.append(pageLabel,zoomSelect,extract);
   toolbar.replaceChildren(controls);
@@ -59,21 +60,59 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   // labels and stable IDs, never a database schema, raw source or disk path.
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
-    canExtractBlock=null,onExtractText=null,extracting=false,
+    onExtractText=null,extracting=false,selectedPage=null,
     selectedBlockId=null,focusRequest=null;
+  // Text authority: PDF.js getTextContent() from the original PDF page.
+  // No MinerU block_json and no editable CM lines participate in availability.
+  const nativePageTexts=new Map(),nativeBoxTexts=new Map(),nativeBoxPending=new Set();
+  const selectedBox=()=>{
+    if(!ready||!pdf||overlayLevel!=='block'||selectedPage==null||
+       selectedBlockId==null||typeof onExtractText!=='function')return null;
+    const source=overlayCache.get('block:'+selectedPage);
+    const item=source?.boxes?.find(item=>item?.absorbedIntoBlockId==null&&
+      String(item.blockId)===selectedBlockId&&Array.isArray(item.bbox));
+    if(!item||!Array.isArray(source.pageSize))return null;
+    const key=JSON.stringify([revision,selectedPage,selectedBlockId,source.pageSize,item.bbox]);
+    return {key,page:selectedPage,bbox:item.bbox,pageSize:source.pageSize};
+  };
   const updateExtractButton=()=>{
-    const enabled=ready&&overlayLevel==='block'&&selectedBlockId!=null&&
-      !extracting&&typeof onExtractText==='function'&&
-      typeof canExtractBlock==='function'&&canExtractBlock(selectedBlockId)===true;
-    extract.disabled=!enabled;
-    extract.title=enabled?'提取当前选中 Block 的原始 OCR 文本到源码光标位置':
-      '选中基础块内有文字的 PDF 覆盖框后可用';
+    const target=selectedBox();
+    const text=target?nativeBoxTexts.get(target.key):null;
+    extract.disabled=extracting||typeof text!=='string'||!text.trim();
+    extract.title=!extract.disabled?'提取覆盖框里的原始 PDF 文本层到 CM6 光标位置':
+      '此框内没有可提取的 PDF 文本层文字';
+    if(!target||nativeBoxTexts.has(target.key)||nativeBoxPending.has(target.key))return;
+    nativeBoxPending.add(target.key);
+    const doc=pdf;
+    let pending=nativePageTexts.get(target.page);
+    if(!pending){
+      pending=doc.getPage(target.page).then(async page=>({
+        viewport:page.getViewport({scale:1}),content:await page.getTextContent(),
+      }));
+      nativePageTexts.set(target.page,pending);
+    }
+    void pending.then(({viewport,content})=>{
+      if(disposed||doc!==pdf)return;
+      nativeBoxTexts.set(target.key,pdfTextInBox(content,viewport,target.pageSize,target.bbox));
+    }).catch(error=>{
+      if(disposed||doc!==pdf)return;
+      // A corrupt/unavailable native text layer must disable extraction,
+      // never fall back to MinerU text or fabricate OCR content.
+      nativeBoxTexts.set(target.key,'');
+      onStatus('PDF · 原始文本层读取失败：'+error.message,'warning');
+    }).finally(()=>{
+      nativeBoxPending.delete(target.key);
+      if(!disposed&&doc===pdf&&selectedBox()?.key===target.key)updateExtractButton();
+    });
   };
   extract.addEventListener('click',async()=>{
-    if(extract.disabled||!selectedBlockId)return;
+    const target=selectedBox();
+    if(extract.disabled||!target)return;
+    const text=nativeBoxTexts.get(target.key);
+    if(typeof text!=='string'||!text.trim())return;
     const id=selectedBlockId;
     extracting=true;updateExtractButton();
-    try{await onExtractText?.({blockId:id});}
+    try{await onExtractText?.({blockId:id,text});}
     catch(error){onStatus('PDF · 提取文本失败：'+error.message,'error');}
     finally{extracting=false;updateExtractButton();}
   });
@@ -371,7 +410,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   };
   function activateBlock(meta,notify){
     if(!meta?.blockId)return;
-    selectedBlockId=String(meta.blockId);
+    selectedBlockId=String(meta.blockId);selectedPage=meta.page;
     focusRequest=null;
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();
@@ -576,7 +615,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       pbsLabelObservers.set(page,labelObserver);
       pbsRelayoutByPage.set(page,positionBadges);
     }
-    updateSelectedNodes();
+    updateSelectedNodes();updateExtractButton();
     if(focusRequest?.page===page)scheduleFocusReveal();
   }
   function requestOverlayPage(page){
@@ -608,6 +647,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         throw Error('覆盖框返回结构或页码不匹配');
       overlayCache.set(key,result);
       paintPageBoxes(page,result);
+      updateExtractButton();
     }).catch(error=>{
       if(!disposed&&stamp===overlayRevision)emit('覆盖框读取失败：'+error.message,'error');
     }).finally(()=>{if(overlayPending.get(key)===ticket)overlayPending.delete(key);});
@@ -652,11 +692,6 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       allowSpan=Boolean(config.allowSpan);
       if(!allowSpan&&overlayLevel==='span')chooseOverlayLevel('block');
     }
-    if(Object.hasOwn(config,'canExtractBlock')){
-      if(config.canExtractBlock!==null&&typeof config.canExtractBlock!=='function')
-        throw Error('PDF OCR 文本可用性回调必须是函数或 null');
-      canExtractBlock=config.canExtractBlock;
-    }
     if(Object.hasOwn(config,'onExtractText')){
       if(config.onExtractText!==null&&typeof config.onExtractText!=='function')
         throw Error('PDF 提取文本回调必须是函数或 null');
@@ -700,7 +735,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     blockGroups=normalized;updateExtractButton();
     if(levelChanged){chooseOverlayLevel(nextLevel);return true;}
     if(loaderChanged){
-      blockParents.clear();selectedBlockId=null;updateExtractButton();
+      blockParents.clear();selectedBlockId=null;selectedPage=null;updateExtractButton();
       overlayRevision++;overlayCache.clear();overlayPending.clear();
       clearOverlayNodes();showOverlayPages();
     }else if(groupsChanged){
@@ -724,7 +759,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if((typeof id!=='string'&&typeof id!=='number')||!String(id)||
         !Number.isInteger(page)||page<1||page>200)throw Error('Block 定位身份或页码无效');
     if(typeof reveal!=='boolean')throw Error('PDF Block 定位模式必须是布尔值');
-    selectedBlockId=String(id);updateExtractButton();
+    selectedBlockId=String(id);selectedPage=page;updateExtractButton();
     // Drag/Undo/Redo are structural edits, NOT a navigation request. Keep
     // current PDF.js page, scale and visual scroll exactly where the user
     // left them. Explicit AG -> PDF navigation continues to reveal/scroll.
@@ -740,7 +775,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return true;
   }
   function clearFocus(){
-    selectedBlockId=null;focusRequest=null;
+    selectedBlockId=null;selectedPage=null;focusRequest=null;
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();return true;
   }
@@ -837,7 +872,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
     lastNotifiedPage=null;
-    focusRequest=null;selectedBlockId=null;blockParents.clear();updateExtractButton();
+    focusRequest=null;selectedBlockId=null;selectedPage=null;blockParents.clear();
+    nativePageTexts.clear();nativeBoxTexts.clear();nativeBoxPending.clear();
+    updateExtractButton();
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     pageObserver.disconnect();
     clearOverlayNodes();viewer.setDocument(null);
@@ -889,6 +926,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
     if(revealFrame)cancelAnimationFrame(revealFrame);revealFrame=0;focusRequest=null;
+    nativePageTexts.clear();nativeBoxTexts.clear();nativeBoxPending.clear();
     if(resizeFrame)cancelAnimationFrame(resizeFrame);
     cssObserver.disconnect();clearOverlayNodes();
     pageObserver.disconnect();
