@@ -804,6 +804,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return true;
   }
   async function renderFormulaCrop({page,bbox,pageSize}={}){
+    // AG may open while PDF.js is still warming its first page. Join the
+    // existing loader, do not wrongly mark a valid formula image missing.
+    if(!ready&&loading){try{await loading;}catch{return null;}}
     if(disposed||!ready||!pdf||!Number.isInteger(page)||
        page<1||page>pdf.numPages)return null;
     const sourceSize=Array.isArray(pageSize)?pageSize:

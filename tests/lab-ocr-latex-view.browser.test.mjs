@@ -88,8 +88,9 @@ try{
      }
      throw Error('Unexpected OCR endpoint '+op);
    });
+   // Prove the PDF crop works even when MinerU's remote CDN denies access.
    await page.route('https://formula.example.test/**',route=>route.fulfill({
-     status:200,contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="100" height="30"><text x="4" y="20">E=mc2</text></svg>'}));
+     status:403,contentType:'text/plain',body:'Forbidden'}));
    await page.goto(base,{waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.querySelector(
      '#workspace select.ocr-source-file-select')?.value==='sql:md');

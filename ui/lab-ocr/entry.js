@@ -31,7 +31,10 @@ registerFramePdfPane(context=>{
     focusBlock(target){pendingFocus=target;return viewer?.focusBlock(target)??false;},
     focusFormula(target){pendingFocus={...target,formula:true};
       return viewer?.focusFormula(target)??false;},
-    renderFormulaCrop(target){return viewer?.renderFormulaCrop(target)??Promise.resolve(null);},
+    async renderFormulaCrop(target){
+      const mounted=viewer??await initialization?.catch(()=>null);
+      return mounted?.renderFormulaCrop(target)??null;
+    },
     clearFocus(){pendingFocus=null;return viewer?.clearFocus()??false;},
     invalidateOverlayPage(page,changedRows){
       return viewer?.invalidateOverlayPage(page,changedRows)??false;
