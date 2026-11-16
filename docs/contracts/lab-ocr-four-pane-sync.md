@@ -51,3 +51,9 @@ Every directly focused object uses a solid 2px `#ffd46c` edge and `rgba(231,183,
 - 点击菜单项时用**打开菜单时捕获的 LineID**查找最新的物理行，避免期间其它操作引起行号变化而误删；不是删除 CM6 当前光标所在行。一次原生 CM6 文本事务删除当前行及其下一换行符；最后一行改为删除前一换行符。唯一剩余行不能再从 CodeMirror 消失，删除其文字后保留一个空物理行。所有操作通过原有 CM6 `StateField` → MD 行表重组 → AG/MD 预览 → Undo/Redo → SQL CAS 保存，不直接操作 AG 或 SQLite。
 - 对删除的 MD 行同时携带原 `LineID`、`BlockID` 与相邻稳定 LineID，保存在**CM6 唯一运行态中的少量临时撤销候选**（最多 16 条，非新的存储/文档）；CM6 Undo 恢复相邻原始文本时重用原有 LineID/BlockID，不随意生成新 ID；其他未删除行的 ID 不变。Undo/Redo 本身仍由 CM6 历史管理。
 - 验收：`tests/lab-ocr-source-line-menu.test.mjs` 检查五种物理行位置/SQL 剩余 ID 与单独最后一行；`tests/lab-ocr-md-runtime.test.mjs` 覆盖 Undo/Redo 复原 LineID；`tests/lab-ocr-md-full-source.browser.test.mjs` 在 Chromium/iPad WebKit 模拟行号点击、菜单仅一项、选区不变、Escape、删除首/中/空/末行、原生撤销恢复、保存后刷新重载与未受影响行稳定。
+
+## 行号按钮仅随高亮焦点行显示（2026-11-16）
+
+- 沿用 CM6 `mdFocusField` 中既有的**橙色高亮焦点行**作为唯一按钮位置，不新增独立焦点状态。只有这一行的 gutter 行号渲染为可点击按钮；其他所有可见行渲染为**普通数字文本**（不是禁用按钮）。没有高亮行或未加载可编辑 MD 时，不显示行号按钮；仍保留普通数字行号、标题折叠 gutter 和 iPad 原生文本选区。
+- CM6 来源点击、AG 行选择、MD 预览点击、PDF 标签定位都由现有 `publishLabFocus` 更新 `mdFocusField`，行号按钮因此自动随焦点移动。焦点变化时关闭此前的行号菜单，防止菜单指向旧行。菜单仍只有「删除当前行」；打开菜单本身不清除选区，删除仍采用稳定 `LineID`、CM6 编辑历史及原有 CAS 保存。
+- `focusedLineHasAction` 有单元断言；`tests/lab-ocr-md-full-source.browser.test.mjs` 在 Chromium/iPad WebKit 验证零/单个按钮、所有非焦点行普通数字、PDF/MD 预览/AG/源码四种焦点迁移、焦点切换关闭菜单，以及删除/撤销/保存回归。

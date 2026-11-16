@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import {Text} from '@codemirror/state';
-import {physicalLineDeleteRange} from '../ui/frame/md-line-gutter.js';
+import {physicalLineDeleteRange,focusedLineHasAction} from '../ui/frame/md-line-gutter.js';
 import {reconcileMdText,mdSplice} from '../ui/lab-ocr/md-runtime.js';
 
+// A single active gutter button follows the highlighted source focus line;
+// all nonfocused physical line numbers are inert text.
+assert.deepEqual([1,2,3,4].filter(n=>focusedLineHasAction(n,3,true,`id-${n}`)),[3]);
+assert.deepEqual([1,2,3].filter(n=>focusedLineHasAction(n,null,true,`id-${n}`)),[]);
+assert.equal(focusedLineHasAction(3,3,false,'id-3'),false);
+assert.equal(focusedLineHasAction(3,3,true,null),false);
 const original=['Title','','Paragraph','','Tail'];
 const md=original.map((text,i)=>({line_id:'line-'+(i+1),line_no:i+1,
  block_id:i<2?11:i<4?12:13,text}));

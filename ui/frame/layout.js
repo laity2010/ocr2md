@@ -119,6 +119,12 @@ function mountEmptySource(host){
   };
   const lineGutter=createMdLineGutter({
     isMarkdown:state=>Boolean(state.field(mdField)),
+    focusLineAt:state=>{
+      // Reuse the existing four-pane orange CM6 source-line decoration as
+      // the sole focus authority; cursor moves publish into this same field.
+      const marker=state.field(mdFocusField).iter();
+      return marker.value?state.doc.lineAt(marker.from).number:null;
+    },
     lineIdAt:lineNo=>editor?.state.field(mdField)?.rows[lineNo-1]?.line_id??null,
     onDelete:deleteMdLine,
   });
@@ -215,6 +221,10 @@ function mountEmptySource(host){
       if(!editor.state.field(mdField))return false;
       if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
           lineNo>editor.state.doc.lines))return false;
+      const current=editor.state.field(mdFocusField).iter();
+      const prior=current.value?editor.state.doc.lineAt(current.from).number:null;
+      // A popup belongs to the highlighted focus line, never to a stale one.
+      if(prior!==lineNo)lineGutter.close();
       const effects=[setMdFocusLine.of(lineNo)];
       if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
         editor.state.doc.line(lineNo).from,{y:'center'}));
@@ -772,6 +782,10 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       if(!editor.state.field(mdField))return false;
       if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
           lineNo>editor.state.doc.lines))return false;
+      const current=editor.state.field(mdFocusField).iter();
+      const prior=current.value?editor.state.doc.lineAt(current.from).number:null;
+      // A popup belongs to the highlighted focus line, never to a stale one.
+      if(prior!==lineNo)lineGutter.close();
       const effects=[setMdFocusLine.of(lineNo)];
       if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
         editor.state.doc.line(lineNo).from,{y:'center'}));

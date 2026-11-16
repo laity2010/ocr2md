@@ -213,6 +213,19 @@ try{
      if(styles.mutedPdf)assert(Number(styles.mutedPdf.opacity)<1,
        'Unselected PDF coverage must retain global transparency');
    };
+   // Exactly one native line-number BUTTON must follow the highlighted
+   // source focus line; every other visible number stays ordinary text.
+   const activeLineButton=async lineNo=>page.waitForFunction(lineNo=>{
+     const pane=document.querySelector('.ocr-cm-source');
+     const buttons=[...pane?.querySelectorAll('.ocr-cm-line-number-button')??[]];
+     const labels=[...pane?.querySelectorAll('.ocr-cm-line-number-label:not([data-spacer])')??[]];
+     return buttons.length===1&&buttons[0].dataset.lineNo===String(lineNo)&&
+       labels.length>0&&!labels.some(node=>node.dataset.lineNo===String(lineNo));
+   },lineNo,{timeout:8500});
+   assert.equal(await page.locator('.ocr-cm-source .ocr-cm-line-number-button').count(),0,
+     'Before any highlighted source focus, no destructive line button is visible');
+   assert.equal(await page.locator('.ocr-cm-source .ocr-cm-line-number-label').count()>0,true,
+     'Every unfocused line keeps its plain numeric gutter');
    // External navigation moves the source caret to the first PHYSICAL
    // line of the highlighted Block, without focusing the source editor or
    // editing its Markdown. The user can then continue at that source start.
@@ -226,11 +239,13 @@ try{
    await page.locator('.lab-ocr-pdf-pbs-tag[data-block-id="2"]').click();
    await synchronized(2,'md-c','Original paragraph');
    await caretStart(3);
+   await activeLineButton(3);
    await assertUnifiedFocus();
    // Markdown preview -> other three, including a different PDF page.
    await page.locator('.ocr-preview-md-scroll p[data-source-start="5"]').click();
    await synchronized(3,'md-e','Last paragraph');
    await caretStart(5);
+   await activeLineButton(5);
    await assertUnifiedFocus();
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),false);
    // AG -> CM6 / preview / PDF, returning to page 1 without clearing filters.
@@ -247,6 +262,7 @@ try{
    // CM6 user click -> the remaining three panels, not a programmatic echo.
    await page.locator('.ocr-cm-source .cm-line').filter({hasText:'## Heading'}).click();
    await synchronized(1,'md-a','## Heading');
+   await activeLineButton(1);
    await page.keyboard.press('End');
    await page.waitForFunction(()=>{
      const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
@@ -617,8 +633,9 @@ try{
    });
    const menuLine=async n=>{
      await page.evaluate(n=>document.querySelector('.ocr-cm-source')
-       ?.ocrCmTable?.focusMdLine(n,{focus:false}),n);
-     const button=page.locator(`.ocr-cm-line-number-button[data-line-no="${n}"]:not(:disabled)`);
+       ?.ocrCmTable?.markMdLine(n,{reveal:true}),n);
+     await activeLineButton(n);
+     const button=page.locator(`.ocr-cm-line-number-button[data-line-no="${n}"]`);
      await button.click();
      const menu=page.locator('.ocr-cm-line-menu');
      await menu.waitFor();
@@ -631,6 +648,12 @@ try{
    const before=await cmPort();
    // Outside menu click cancels without changing selection or document.
    let popup=await menuLine(3);
+   await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.markMdLine(4,{reveal:true}));
+   await activeLineButton(4);
+   assert.equal(await page.locator('.ocr-cm-line-menu').count(),0,
+     'When highlighted focus moves, its former line menu must close');
+   popup=await menuLine(3);
    let snapshot=await cmPort();
    await popup.locator('.ocr-cm-line-delete').hover();
    assert.deepEqual((await cmPort()).selection,snapshot.selection,
@@ -680,6 +703,10 @@ try{
    await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument()===text,deleted.text,{timeout:12000});
    assert.deepEqual((await cmPort()).rows.map(row=>row.line_id),deleted.rows.map(row=>row.line_id));
+   await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.markMdLine(null));
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '.ocr-cm-source .ocr-cm-line-number-button').length===0);
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_MD_FULL_SOURCE_E2E_PASS',name,
      JSON.stringify({mdInit,mdLoads,saves,blocks,pdfs,revision,visits}));

@@ -15,12 +15,20 @@ export function physicalLineDeleteRange(doc,lineNo){
   return {from:line.from-1,to:line.to};
 }
 
-/** Native CM6 GutterMarker button, only enabled when a line owns an MD LineID.
- * Exposes a single menu action without introducing a parallel document state.
+/** Show the deletion control exclusively on the highlighted focus row.
+ * All other rows remain plain numerals, not disabled/fake buttons.
  */
-export function createMdLineGutter({lineIdAt,isMarkdown,onDelete}){
+export function focusedLineHasAction(lineNo,focusLineNo,mdLoaded,lineId){
+  return Boolean(mdLoaded&&lineId&&lineNo===focusLineNo);
+}
+
+/** Native CM6 line-number gutter: one button follows the highlighted focus
+ * line. The same immutable document/line-ID authority owns its menu action.
+ */
+export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete}){
   if(typeof lineIdAt!=='function'||typeof isMarkdown!=='function'||
-     typeof onDelete!=='function')throw Error('CM6 line gutter port invalid');
+     typeof focusLineAt!=='function'||typeof onDelete!=='function')
+    throw Error('CM6 line gutter port invalid');
   let menu=null,cleanup=()=>{};
   function close(){
     cleanup();cleanup=()=>{};
@@ -76,20 +84,25 @@ export function createMdLineGutter({lineIdAt,isMarkdown,onDelete}){
     eq(other){return other instanceof NumberButtonMarker&&this.value===other.value&&
       this.enabled===other.enabled&&this.spacer===other.spacer;}
     toDOM(){
+      if(!this.enabled){
+        const number=document.createElement('span');
+        number.className='ocr-cm-line-number-label';
+        number.textContent=this.value;
+        number.dataset.lineNo=this.value;
+        if(this.spacer)number.dataset.spacer='true';
+        return number;
+      }
       const button=document.createElement('button');button.type='button';
       button.className='ocr-cm-line-number-button';
       button.textContent=this.value;
       button.dataset.lineNo=this.value;
-      if(this.spacer){button.dataset.spacer='true';button.tabIndex=-1;}
-      else if(this.enabled){
-        button.setAttribute('aria-label',`第 ${this.value} 行操作`);
-        button.title='行号操作';
-        // Mouse clicks in the gutter must not change an existing CM6 selection.
-        button.addEventListener('mousedown',event=>event.preventDefault());
-        button.addEventListener('click',event=>{
-          event.stopPropagation();open(button,Number(this.value));
-        });
-      }else{button.disabled=true;button.tabIndex=-1;}
+      button.setAttribute('aria-label',`第 ${this.value} 行操作`);
+      button.title='行号操作';
+      // A gutter tap may open the menu, but must never move the CM6 caret.
+      button.addEventListener('mousedown',event=>event.preventDefault());
+      button.addEventListener('click',event=>{
+        event.stopPropagation();open(button,Number(this.value));
+      });
       return button;
     }
   }
@@ -98,9 +111,11 @@ export function createMdLineGutter({lineIdAt,isMarkdown,onDelete}){
     lineMarker:(view,line)=>{
       const row=view.state.doc.lineAt(line.from);
       if(row.from!==line.from)return null;
-      return new NumberButtonMarker(row.number,Boolean(isMarkdown(view.state)&&lineIdAt(row.number)));
+      return new NumberButtonMarker(row.number,focusedLineHasAction(
+        row.number,focusLineAt(view.state),isMarkdown(view.state),lineIdAt(row.number)));
     },
     lineMarkerChange:update=>update.docChanged||
+      focusLineAt(update.startState)!==focusLineAt(update.state)||
       Boolean(isMarkdown(update.startState))!==Boolean(isMarkdown(update.state)),
     initialSpacer:view=>new NumberButtonMarker('8'.repeat(String(view.state.doc.lines).length),false,true),
     updateSpacer:(spacer,update)=>{

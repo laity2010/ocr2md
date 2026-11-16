@@ -113,6 +113,7 @@
 /* CM6 physical line number buttons. Only the first/basic gutter is replaced;
    folding gutter and native iOS selection keep their existing behavior. */
 #workspace .ocr-cm-line-button-gutter .cm-gutterElement{padding:0 2px}
+#workspace .ocr-cm-line-number-label,
 #workspace .ocr-cm-line-number-button{
   display:inline-flex;align-items:center;justify-content:flex-end;
   box-sizing:border-box;min-width:2ch;height:1.5em;
@@ -123,8 +124,8 @@
 #workspace .ocr-cm-line-number-button:not(:disabled):is(:hover,:focus-visible){
   background:#465748;color:#e7d5ae;outline:1px solid #778c70;
 }
-#workspace .ocr-cm-line-number-button:disabled{cursor:default}
-#workspace .ocr-cm-line-number-button[data-spacer="true"]{
+#workspace .ocr-cm-line-number-label{cursor:default}
+#workspace .ocr-cm-line-number-label[data-spacer="true"]{
   visibility:hidden;pointer-events:none;
 }
 .ocr-cm-line-menu{
