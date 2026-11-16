@@ -18,6 +18,7 @@ from v6_lab_ocr_store import (
     _db, existing_info, OCRImportError, REVIEW_BLOCK_GROUP,
 )
 from v6_lab_ocr_block import _records, LIMIT
+from v6_lab_ocr_cross_page_sources import rebuild_source_links
 
 REVIEW_SCHEMA = """CREATE TABLE block_review (
  block_id INTEGER PRIMARY KEY,
@@ -44,9 +45,17 @@ WITH nodes AS (
         r.parent_block_id,r.sibling_order,r.block_path,r.absorbed_into_block_id,
         m.source_name,m.local_page,m.page_size_json,m.import_fingerprint,
         m.block_json AS root_json,
-        json_extract(m.block_json,r.source_json_path) AS node_json
+        CASE WHEN link.mode='shadow' THEN
+                  json_set(json_extract(m.block_json,r.source_json_path),'$.lines',json('[]'))
+             WHEN link.mode='preproc' AND pre.row_kind='block'
+                  AND pre.block_group='preproc_blocks' THEN
+                  json_extract(pre.block_json,link.source_json_path)
+             ELSE json_extract(m.block_json,r.source_json_path) END AS node_json,
+        link.reason AS source_link_reason
  FROM block_review AS r
  JOIN minerujson AS m ON m.id=r.source_root_id
+ LEFT JOIN block_source_link AS link ON link.block_id=r.block_id
+ LEFT JOIN minerujson AS pre ON pre.id=link.source_root_id
  WHERE m.row_kind='block' AND m.block_group='para_blocks'
    AND r.source_order=m.source_order AND r.global_page=m.global_page
    AND r.import_fingerprint=m.import_fingerprint
@@ -77,7 +86,8 @@ WITH nodes AS (
    CASE WHEN c.recovered_lines IS NOT NULL
         THEN json_set(c.node_json,'$.lines',json(c.recovered_lines))
         ELSE c.node_json END AS effective_json,
-   CASE WHEN c.recovered_lines IS NOT NULL THEN 'preproc_caption'
+   CASE WHEN c.source_link_reason IS NOT NULL THEN c.source_link_reason
+        WHEN c.recovered_lines IS NOT NULL THEN 'preproc_caption'
         WHEN json_extract(c.node_json,'$.lines_deleted')=1 THEN 'para_deleted'
         ELSE 'para_blocks' END AS content_source
  FROM caption_source AS c
@@ -135,13 +145,14 @@ def refresh_block_view(book:Path)->dict:
             before=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
             if before!=count:raise OCRImportError('Block 视图行数异常，拒绝刷新')
             conn.execute('DROP VIEW block')
+            linked=rebuild_source_links(conn)
             conn.execute(VIEW_SCHEMA)
             after=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
             if after!=before:raise OCRImportError('刷新后 Block 行数变化，拒绝提交')
             if conn.execute('PRAGMA foreign_key_check').fetchall():
                 raise OCRImportError('Block 外键不完整，拒绝刷新')
             conn.commit()
-            return {'status':'refreshed','blocks':after}
+            return {'status':'refreshed','blocks':after,'sourceLinks':linked}
         except Exception:
             conn.rollback()
             raise
@@ -209,7 +220,7 @@ def initialize_block_projection(book:Path)->dict:
             if 'md_line' in tables:
                 raise OCRImportError('MD 行表已有人工正文；禁止直接重建 Block 编号。须先独立备份并规划映射迁移')
             allowed={'minerujson','block','span','block_review','block_edit_meta',
-                     'block_edit_history','block_edit_receipt'}
+                     'block_edit_history','block_edit_receipt','block_source_link'}
             if tables-allowed:raise OCRImportError('数据库存在未知实体表，拒绝重建')
             _page_sizes(conn,info['signature'])
             # Enumerate existing MinerU data in its original group order.
@@ -252,6 +263,7 @@ def initialize_block_projection(book:Path)->dict:
               source_order,global_page,parent_block_id,sibling_order,pbs,import_fingerprint)
              VALUES (?,?,?,?,?,?,?,?,?,?,?)''',candidates)
             conn.execute('CREATE INDEX idx_review_page ON block_review(global_page,block_id)')
+            rebuild_source_links(conn)
             conn.execute(VIEW_SCHEMA)
             viewed=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
             if viewed!=len(candidates):raise OCRImportError(
