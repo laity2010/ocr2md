@@ -48,3 +48,22 @@ for(const input of [{origin:'unknown'},{origin:'ag',blockId:0},
   assert.throws(()=>publishLabFocus(input));
 unsubscribe();
 console.log('LAB_OCR_FOUR_PANE_LOCATION_PASS');
+// Formula-level navigation extends the same semantic focus bus without
+// introducing DOM/SQL ownership or changing the prior Block-focus contract.
+const formulaEvents=[];
+const unFormula=viewStore.subscribe((next,prior)=>{
+  if(next.labFocusTarget!==prior.labFocusTarget)formulaEvents.push(next.labFocusTarget);
+});
+publishLabFocus({origin:'ag',lineId:'c',lineNo:3,blockId:12,page:3,pbs:'p3b0',
+  formulaColumn:8,formulaBBox:[10,20,40,35]});
+assert.equal(formulaEvents.at(-1).formulaColumn,8);
+assert.deepEqual(formulaEvents.at(-1).formulaBBox,[10,20,40,35]);
+assert(Object.isFrozen(formulaEvents.at(-1).formulaBBox));
+for(const payload of [
+  {origin:'ag',blockId:12,page:3,formulaBBox:[2,3,1,4]},
+  {origin:'pdf',blockId:12,page:3,formulaBBox:[1,2,3,4]},
+  {origin:'ag',lineNo:3,formulaColumn:-1},
+  {origin:'ag',formulaColumn:2},
+])assert.throws(()=>publishLabFocus(payload));
+unFormula();
+console.log('LAB_OCR_FORMULA_FOCUS_BUS_PASS');

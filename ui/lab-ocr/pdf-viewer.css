@@ -151,3 +151,12 @@
 .lab-ocr-pdf-controls .lab-ocr-pdf-extract-text:disabled {
   opacity:.4;cursor:default;
 }
+
+/* Selected formula Span, independent of the parent Block overlay and PDF text
+ * layer. Uses source-page percentages, so zoom/pinch remain aligned. */
+.lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-focus{
+ position:absolute;z-index:9;box-sizing:border-box;pointer-events:none;
+ border:2px solid #f7bb57;background:rgba(255,173,41,.16);
+ box-shadow:0 0 0 2px rgba(26,31,32,.75),0 0 10px rgba(248,166,38,.35);
+ border-radius:2px;
+}

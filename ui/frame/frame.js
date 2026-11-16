@@ -82,11 +82,13 @@ function previewStatus(message,kind='info'){
   topStatus(message,kind);
 }
 const frame=createFrameWorkspace($('workspace'),{onStatus:previewStatus,onModuleChange:userShowModule,
-  agViewOptions:labName==='lab-ocr'?[{value:'md',label:'MD 行'},{value:'title',label:'标题'}]:[],
+  agViewOptions:labName==='lab-ocr'?[{value:'md',label:'MD 行'},{value:'title',label:'标题'},{value:'latex',label:'LaTeX'}]:[],
   onAgViewChange:async view=>{
     if(!ocrWorkflow)return;
-    if(currentModule!=='sql:md')await showModule('sql:md');
-    ocrWorkflow.setAgView(view);
+    try{
+      if(currentModule!=='sql:md')await showModule('sql:md');
+      await ocrWorkflow.setAgView(view);
+    }catch(error){topStatus('AG 视图切换失败：'+error.message,'error');}
   },
   moduleLabel:labName==='lab-ocr'?'OCR 审阅':'空白框架',
   // Four visible panes: AG, CM6, Markdown and PDF.

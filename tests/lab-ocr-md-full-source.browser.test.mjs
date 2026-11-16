@@ -468,7 +468,7 @@ try{
    // Outline is computed from current Markdown ATX headings, not OCR Block type.
    const agView=page.locator('#workspace .ocr-outline-pane .ocr-ag-module-select');
    assert.equal(await agView.getAttribute('aria-label'),'选择 AG 过滤视图');
-   assert.deepEqual(await agView.locator('option').allTextContents(),['MD 行','标题']);
+   assert.deepEqual(await agView.locator('option').allTextContents(),['MD 行','标题','LaTeX']);
    await agView.selectOption('title');
    assert.equal(await agView.inputValue(),'title');
    assert.deepEqual(await page.evaluate(()=>document.querySelector('.ocr-outline-grid')

@@ -8,6 +8,7 @@ import {createMdRuntime,editedMdRuntime,acknowledgeMdRuntime,
 import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
+import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -116,9 +117,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let blockProjectionKind=null;
   let currentSqlTable=null;
   let activeAgView='md'; // AG presentation only; CM6 and SQLite are unchanged.
+  let latexPresentation=null,agViewRequest=0,lastRenderedLatexSummary=null;
   let pdfPage=1;
-  const projectedMdRows=()=>activeAgView==='title'?
-    projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
+  const projectedMdRows=()=>activeAgView==='latex'?
+    latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
+    activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
@@ -129,11 +132,24 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   const status=()=>runtimeStatus(cm());
   // One semantic event, four independent projections. Never store Markdown in
   // the shared View Store, and never let one pane call another pane's private DOM.
-  function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null}){
+  function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null,
+    formulaColumn=null,formulaBBox=null}={}){
     if(currentSqlTable!=='md'||!md())return null;
     const target=resolveReviewLocation({lineId,blockId,lineNo},md().rows,cm()?.rows??[]);
-    if(target)publishLabFocus({origin,intent,...target});
-    return target;
+    if(target){
+      // A span present only in MinerU must NEVER claim a neighboring source
+      // line is its own formula. Keep PDF BlockID+bbox but clear MD caret.
+      const exactMissing=origin==='ag'&&Array.isArray(formulaBBox)&&
+        !Number.isInteger(formulaColumn);
+      publishLabFocus({origin,intent,...target,
+      ...(exactMissing?{lineId:null,lineNo:null}:{}),
+      ...(origin==='ag'&&Number.isInteger(formulaColumn)&&formulaColumn>=0?
+        {formulaColumn}:{}),
+      ...(origin==='ag'&&Array.isArray(formulaBBox)?{formulaBBox}:{}),
+      });
+      return exactMissing?{...target,lineId:null,lineNo:null}:target;
+    }
+    return null;
   }
   const unsubscribeLocation=viewStore.subscribe((state,previous)=>{
     const target=state.labFocusTarget;
@@ -160,13 +176,22 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     // Source-origin gestures keep their exact CM6 position; AG rows may point
     // to a later line but the source caret always lands at logical Block start.
     if(target.origin!=='cm6'&&target.intent==='click'){
-      const first=sourceBlockStartLine(target,md().rows);
-      if(first!==null)frame.focusMdLine(first,{focus:false});
+      if(Number.isInteger(target.formulaColumn)&&target.lineNo)
+        frame.focusMdFormula({lineNo:target.lineNo,column:target.formulaColumn,focus:false});
+      else if(Array.isArray(target.formulaBBox)&&target.lineNo===null){
+        // OCR-only/ambiguous Span: PDF-only focus, no fictitious MD caret.
+      }else{
+        const first=sourceBlockStartLine(target,md().rows);
+        if(first!==null)frame.focusMdLine(first,{focus:false});
+      }
     }
-    if(target.blockId!=null&&target.page&&target.origin!=='pdf')
-      frame.focusPdfBlock({id:target.blockId,page:target.page,
+    if(target.blockId!=null&&target.page&&target.origin!=='pdf'){
+      if(Array.isArray(target.formulaBBox))
+        frame.focusPdfFormula({id:target.blockId,page:target.page,
+          bbox:target.formulaBBox,reveal:target.intent==='click'});
+      else frame.focusPdfBlock({id:target.blockId,page:target.page,
         reveal:target.intent==='click'});
-    else if(target.blockId==null||!target.page)frame.clearPdfFocus();
+    }else if(target.blockId==null||!target.page)frame.clearPdfFocus();
   });
   frame.setMdPreviewNavigation(lineNo=>locateReview({origin:'preview',lineNo}));
   function refreshBlockUndoRedo(){
@@ -190,7 +215,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return persistence;
   }
   function mdContentChanged(next){
-    if(currentSqlTable==='md')frame.patchMdRows(projectedMdRows());
+    if(currentSqlTable==='md'){
+      if(activeAgView==='latex')frame.patchFormulaRows(projectedMdRows());
+      else frame.patchMdRows(projectedMdRows());
+    }
     if(currentSqlTable==='md')frame.setMdEditHistory();
     frame.setMarkdownPreview(next.rows.map(r=>r.text).join('\n'));
     if(mdPersistence&&next.dirty)mdPersistence.changed();
@@ -346,7 +374,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         mdContentChanged(updated);
       }else if(currentSqlTable==='md'){
         // A Block's PBS may change without changing its MD text/order.
-        frame.patchMdRows(projectedMdRows());
+        if(activeAgView==='latex')frame.patchFormulaRows(projectedMdRows());
+        else frame.patchMdRows(projectedMdRows());
       }
     }
     for(const page of result.pages??[result.page])
@@ -596,12 +625,15 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // AG view switching is a re-projection of the resident CM6 Markdown.
   // It never reopens SQLite or replaces the MD editor StateField.
   function renderMdAg(){
-    const title=activeAgView==='title';
+    const title=activeAgView==='title',latex=activeAgView==='latex';
     const rows=projectedMdRows();
-    const columns=title?MD_TITLE_COLUMNS:MD_COLUMNS;
+    lastRenderedLatexSummary=latex?latexIndexSummary(rows):null;
+    const columns=latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
+        getPdfFormulaCrop:target=>frame.getPdfFormulaCrop(target)}):
+      title?MD_TITLE_COLUMNS:MD_COLUMNS;
     frame.showSqlRows(rows,columns.map(column=>({
       ...column,
-      ...(column.field==='text'?{editable:true,valueSetter:params=>{
+      ...(column.field==='text'&&!latex?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
           return false;
@@ -610,35 +642,47 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         catch(error){onStatus('MD 行编辑失败：'+error.message,'error');}
         return false;
       }}:{}),
-      filter:EnumCheckboxFilter,
-      filterValueGetter:params=>column.field==='line_no'?
+      filter:column.filter??EnumCheckboxFilter,
+      filterValueGetter:column.filterValueGetter??(params=>column.field==='line_no'?
         mdLineKind(params.data?.text):column.field==='pbs'?
-          pbsPageKey(params.data?.pbs):params.data?.[column.field]??'',
+          pbsPageKey(params.data?.pbs):params.data?.[column.field]??''),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     })),{
       pageScope:{page:pdfPage},
-      // Title is a document-wide view by default, with the existing AG
-      // all-pages checkbox visibly checked; users may uncheck for this page.
-      allPagesInitially:title,
-      expandPageOnCategory:title?null:'block_type',
-      // Blank lines remain in the source/SQL, hidden only in both AG views.
-      initialFilterModel:{line_no:{values:['非空行']}},
+      allPagesInitially:title||latex,
+      expandPageOnCategory:title?null:latex?'kind':'block_type',
+      initialFilterModel:latex?null:{line_no:{values:['非空行']}},
+      rowHeight:latex?134:35,
       onSelect:row=>{
-        locateReview({origin:'ag',lineId:row.line_id});
-        onStatus('MD 四窗定位 · '+row.line_no+' · BlockID '+(row.block_id??'NULL'),'info');
+        const target=locateReview({origin:'ag',lineId:row.line_id,
+          blockId:row.block_id,lineNo:row.line_no,
+          ...(latex?{formulaColumn:row.column,formulaBBox:row.pdf_bbox}:{}),
+        });
+        onStatus(latex?
+          `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+
+            (target?.lineNo?`MD ${target.lineNo}`:'仅 PDF / OCR'):
+          `MD 四窗定位 · ${row.line_no} · BlockID ${row.block_id??'NULL'}`,
+        latex&&row.match_status!=='已匹配'?'warning':'info');
       },
     });
     frame.setAgView(activeAgView);
     frame.setMdEditHistory();
     return rows.length;
   }
-  function setAgView(view){
-    if(!['md','title'].includes(view))throw Error('未知 AG 过滤视图');
+  async function setAgView(view){
+    if(!['md','title','latex'].includes(view))throw Error('未知 AG 过滤视图');
+    const token=++agViewRequest;
+    if(view==='latex'&&!latexPresentation)
+      latexPresentation=await import('./latex-view.js');
+    if(token!==agViewRequest||currentSqlTable!=='md'||!md())return false;
     activeAgView=view;
     frame.setAgView(view);
-    if(currentSqlTable!=='md'||!md())return false;
     const count=renderMdAg();
-    onStatus(`AG ${view==='title'?'标题':'MD 行'}视图 · ${count} 条投影 · 不修改 MD/SQLite`,'ok');
+    const summary=lastRenderedLatexSummary;
+    onStatus(view==='latex'?`AG LaTeX · ${summary.total} 条，原始 ${summary.original}，`+
+      `精确匹配 ${summary.matched}，仅 OCR ${summary.ocrOnly}，仅 MD ${summary.mdOnly}，`+
+      `有歧义 ${summary.ambiguous}，原图 ${summary.images} · 只读`:
+      `AG ${view==='title'?'标题':'MD 行'}视图 · ${count} 条投影 · 不修改 MD/SQLite`,'ok');
     return true;
   }
   async function openSql(table='minerujson',{selectedId=null}={}){

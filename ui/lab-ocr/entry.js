@@ -21,11 +21,17 @@ registerFramePdfPane(context=>{
       const mounted=await initialization;
       if(!mounted)return false;
       const loaded=await mounted.loadPdf(source);
-      if(loaded&&pendingFocus)mounted.focusBlock(pendingFocus);
+      if(loaded&&pendingFocus){
+        if(pendingFocus.formula)mounted.focusFormula(pendingFocus);
+        else mounted.focusBlock(pendingFocus);
+      }
       return loaded;
     },
     setOverlays(config){overlayConfig={...overlayConfig,...config};return viewer?.setOverlays(config)??false;},
     focusBlock(target){pendingFocus=target;return viewer?.focusBlock(target)??false;},
+    focusFormula(target){pendingFocus={...target,formula:true};
+      return viewer?.focusFormula(target)??false;},
+    renderFormulaCrop(target){return viewer?.renderFormulaCrop(target)??Promise.resolve(null);},
     clearFocus(){pendingFocus=null;return viewer?.clearFocus()??false;},
     invalidateOverlayPage(page,changedRows){
       return viewer?.invalidateOverlayPage(page,changedRows)??false;

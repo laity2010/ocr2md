@@ -217,6 +217,21 @@ function mountEmptySource(host){
       finally{programmaticMdSelection=false;}
       if(focus)editor.focus();return true;
     },
+    focusMdFormula({lineNo,column,focus=false}={}){
+      // Formula-level caret positioning. UTF-16 column offsets match CM6's
+      // document positions; no edit transaction or history is generated.
+      if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
+         lineNo<1||lineNo>editor.state.doc.lines||
+         !Number.isInteger(column)||column<0)return false;
+      const line=editor.state.doc.line(lineNo);
+      if(column>line.length)return false;
+      const position=line.from+column;
+      programmaticMdSelection=true;
+      try{editor.dispatch({selection:{anchor:position},
+        effects:EditorView.scrollIntoView(position,{y:'center'})});}
+      finally{programmaticMdSelection=false;}
+      if(focus)editor.focus();return true;
+    },
     markMdLine(lineNo,{reveal=false}={}){
       if(!editor.state.field(mdField))return false;
       if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
@@ -305,6 +320,7 @@ function mountEmptyGrid(host){
   // The switch belongs to the AG toolbar, not to the AG Grid column model.
   const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
   const allPagesInput=allPagesControl?.querySelector('input')??null;
+  let formulaData=new Map(),currentRowHeight=35;
   let pageScope=null,pdfPage=1,showAllPages=false;
   let expandPageOnCategory=null,lastCategoryModel='null';
   const isVisible=row=>row?.absorbed_into_block_id==null;
@@ -355,7 +371,7 @@ function mountEmptyGrid(host){
     columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
     show({rows,columns,onRowSelected,onFilterChanged,
     initialFilterModel=null,pageScope:scope=null,allPagesInitially=false,
-    expandPageOnCategory:category=null}){
+    expandPageOnCategory:category=null,rowHeight=35}){
     selectedListener=onRowSelected??(()=>{});
     pageScope=scope;pdfPage=scope?.page??1;showAllPages=Boolean(scope&&allPagesInitially);
     expandPageOnCategory=category;lastCategoryModel='null';
@@ -367,6 +383,11 @@ function mountEmptyGrid(host){
       .map(r=>[String(r.block_id),r]));
     mdData=new Map(rows.filter(r=>r?.line_id!=null)
       .map(r=>[String(r.line_id),r]));
+    formulaData=new Map(rows.filter(r=>r?.formula_id!=null)
+      .map(r=>[String(r.formula_id),r]));
+    if(rowHeight!==currentRowHeight){
+      currentRowHeight=rowHeight;grid.setGridOption('rowHeight',rowHeight);
+    }
     // Ignore transient filter-change events while replacing a whole SQL table.
     filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
@@ -399,6 +420,23 @@ function mountEmptyGrid(host){
     pdfPage=page;
     if(pageScope&&!showAllPages)updatePbsModel(false);
     return true;
+  },patchFormulaRows(rows){
+    // Formula IDs are not MD LineIDs: a physical line can contain multiple
+    // formulas. Patch only changed cells and retain the AG filter/scroll.
+    const next=new Map(rows.map(r=>[String(r.formula_id),r]));
+    const remove=[],add=[];
+    grid.forEachNode(node=>{
+      const id=String(node.data?.formula_id??'');
+      if(!id)return;
+      const updated=next.get(id);
+      if(!updated)remove.push(node.data);
+      else if(Object.entries(updated).some(([field,value])=>node.data?.[field]!==value))
+        node.updateData({...node.data,...updated});
+    });
+    for(const [id,row] of next)if(!formulaData.has(id))add.push(row);
+    formulaData=next;
+    if(remove.length||add.length)grid.applyTransaction({remove,add});
+    if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
   },patchMdRows(rows){
     const next=new Map(rows.map(r=>[String(r.line_id),r]));
     const remove=[],add=[];
@@ -475,7 +513,7 @@ function mountEmptyGrid(host){
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
     expandPageOnCategory=null;lastCategoryModel='null';
-    mdData.clear();blockData.clear();
+    mdData.clear();blockData.clear();formulaData.clear();
     if(allPagesControl)allPagesControl.hidden=true;
     if(allPagesInput)allPagesInput.checked=false;
     grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
@@ -778,6 +816,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     focusMdLine(lineNo,{focus=true}={}){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo,{focus})??false;
     },
+    focusMdFormula(target){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdFormula(target)??false;
+    },
     markMdLine(lineNo,{reveal=false}={}){
       if(!editor.state.field(mdField))return false;
       if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
@@ -802,6 +843,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     patchMdRows(rows){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchMdRows(rows);
+    },
+    patchFormulaRows(rows){
+      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchFormulaRows(rows);
     },
     clearMdAgSelection(){
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clearSelection();
@@ -877,16 +921,16 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.setPdfPage(page)??false;
     },
     showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,
-      pageScope=null,allPagesInitially=false,expandPageOnCategory=null}={}){
+      pageScope=null,allPagesInitially=false,expandPageOnCategory=null,rowHeight=35}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
       port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,
-        pageScope,allPagesInitially,expandPageOnCategory,onRowSelected:row=>{
+        pageScope,allPagesInitially,expandPageOnCategory,rowHeight,onRowSelected:row=>{
         // MD rows use the semantic four-pane navigator to move the caret to
         // logical Block start. Do not focus this arbitrary AG physical row.
-        cm.select(row,{focus:row?.line_id==null});
+        cm.select(row,{focus:row?.line_id==null&&!row?.formula_id});
         onSelect?.(row);
       }});
     },
@@ -899,6 +943,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     focusPdfBlock({id,page,reveal=true}){
       return pdfSlot.current?.focusBlock?.({id,page,reveal})??false;
+    },
+    focusPdfFormula({id,page,bbox,reveal=true}){
+      return pdfSlot.current?.focusFormula?.({id,page,bbox,reveal})??false;
+    },
+    getPdfFormulaCrop(target){
+      return pdfSlot.current?.renderFormulaCrop?.(target)??Promise.resolve(null);
     },
     clearPdfFocus(){return pdfSlot.current?.clearFocus?.()??false;},
     clearSqlRows(){

@@ -61,10 +61,13 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
     onExtractText=null,extracting=false,selectedPage=null,
-    selectedBlockId=null,focusRequest=null;
+    selectedBlockId=null,focusRequest=null,formulaFocus=null;
   // Text authority: PDF.js getTextContent() from the original PDF page.
   // No MinerU block_json and no editable CM lines participate in availability.
   const nativePageTexts=new Map(),nativeBoxTexts=new Map(),nativeBoxPending=new Set();
+  // A small, scoped cache for rendered PDF source formula crops. Source
+  // image bytes stay in memory only and never become an editable authority.
+  const formulaCrops=new Map();
   const selectedBox=()=>{
     if(!ready||!pdf||overlayLevel!=='block'||selectedPage==null||
        selectedBlockId==null||typeof onExtractText!=='function')return null;
@@ -128,8 +131,10 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       revealFrame=0;
       if(disposed||focusRequest!==request||!ready||blockDrag)return;
       const host=viewer.getPageView(request.page-1)?.div;
-      const box=[...host?.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')??[]]
-        .find(node=>node.dataset.blockIds.split(' ').includes(request.id));
+      const box=formulaFocus?.page===request.page&&formulaFocus.id===request.id?
+        host?.querySelector('.lab-ocr-pdf-formula-focus'):
+        [...host?.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids]')??[]]
+          .find(node=>node.dataset.blockIds.split(' ').includes(request.id));
       // An uncached or virtualized page will call us again when painted.
       if(!box?.isConnected)return;
       const correction=blockRevealScrollDelta(box.getBoundingClientRect(),
@@ -216,7 +221,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     for(const observer of pbsLabelObservers.values())observer.disconnect();
     pbsLabelObservers.clear();pbsRelayoutByPage.clear();
     dropCandidatesByPage.clear();
-    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer'))node.remove();
+    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer,.lab-ocr-pdf-formula-focus'))node.remove();
     resetRailSpace();
   };
   const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
@@ -411,10 +416,31 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   function activateBlock(meta,notify){
     if(!meta?.blockId)return;
     selectedBlockId=String(meta.blockId);selectedPage=meta.page;
+    formulaFocus=null;
+    pages.querySelectorAll('.lab-ocr-pdf-formula-focus').forEach(node=>node.remove());
     focusRequest=null;
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();
     if(notify)onBlockSelect?.({...meta,blockId:selectedBlockId});
+  }
+  function paintFormulaFocus(page,size){
+    const host=viewer.getPageView(page-1)?.div;
+    if(!host)return false;
+    host.querySelector('.lab-ocr-pdf-formula-focus')?.remove();
+    if(!formulaFocus||formulaFocus.page!==page||
+       !Array.isArray(size)||size.length!==2||
+       !size.every(n=>Number.isFinite(n)&&n>0))return false;
+    const [x1,y1,x2,y2]=formulaFocus.bbox;
+    if(x1<0||y1<0||x2>size[0]||y2>size[1])return false;
+    const box=document.createElement('div');
+    box.className='lab-ocr-pdf-formula-focus';
+    box.dataset.formulaBlockId=formulaFocus.id;
+    box.style.left=(x1/size[0]*100)+'%';
+    box.style.top=(y1/size[1]*100)+'%';
+    box.style.width=((x2-x1)/size[0]*100)+'%';
+    box.style.height=((y2-y1)/size[1]*100)+'%';
+    host.append(box);
+    return true;
   }
   function paintPageBoxes(page,data){
     if(disposed||!pdf||overlayLevel==='off'||page>pdf.numPages)return;
@@ -616,6 +642,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       pbsRelayoutByPage.set(page,positionBadges);
     }
     updateSelectedNodes();updateExtractButton();
+    paintFormulaFocus(page,size);
     if(focusRequest?.page===page)scheduleFocusReveal();
   }
   function requestOverlayPage(page){
@@ -760,6 +787,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
         !Number.isInteger(page)||page<1||page>200)throw Error('Block 定位身份或页码无效');
     if(typeof reveal!=='boolean')throw Error('PDF Block 定位模式必须是布尔值');
     selectedBlockId=String(id);selectedPage=page;updateExtractButton();
+    formulaFocus=null;
+    pages.querySelectorAll('.lab-ocr-pdf-formula-focus').forEach(node=>node.remove());
     // Drag/Undo/Redo are structural edits, NOT a navigation request. Keep
     // current PDF.js page, scale and visual scroll exactly where the user
     // left them. Explicit AG -> PDF navigation continues to reveal/scroll.
@@ -774,8 +803,59 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     scheduleFocusReveal();
     return true;
   }
+  async function renderFormulaCrop({page,bbox,pageSize}={}){
+    if(disposed||!ready||!pdf||!Number.isInteger(page)||
+       page<1||page>pdf.numPages)return null;
+    const sourceSize=Array.isArray(pageSize)?pageSize:
+      overlayCache.get('block:'+page)?.pageSize;
+    if(!Array.isArray(sourceSize))return null;
+    const key=JSON.stringify([revision,page,bbox,sourceSize]);
+    if(formulaCrops.has(key))return formulaCrops.get(key);
+    const currentPdf=pdf,currentRevision=revision;
+    const pending=(async()=>{
+      try{
+        const {planFormulaCrop}=await import('./pdf-formula-crop.js');
+        const pdfPage=await currentPdf.getPage(page);
+        const base=pdfPage.getViewport({scale:1});
+        const plan=planFormulaCrop(bbox,sourceSize,base);
+        if(!plan||disposed||currentPdf!==pdf)return null;
+        const canvas=document.createElement('canvas');
+        canvas.width=plan.width;canvas.height=plan.height;
+        const ctx=canvas.getContext('2d',{alpha:false});
+        if(!ctx)return null;
+        ctx.fillStyle='#ffffff';ctx.fillRect(0,0,canvas.width,canvas.height);
+        const render=pdfPage.render({canvasContext:ctx,
+          viewport:pdfPage.getViewport({scale:plan.scale}),
+          transform:[1,0,0,1,plan.translateX,plan.translateY]});
+        await render.promise;
+        if(disposed||currentPdf!==pdf||currentRevision!==revision)return null;
+        return canvas.toDataURL('image/png');
+      }catch(error){
+        if(!disposed&&currentPdf===pdf)
+          onStatus('PDF 公式局部图生成失败：'+String(error?.message??error).slice(0,110),'warning');
+        return null;
+      }
+    })();
+    if(formulaCrops.size>70)formulaCrops.clear();
+    formulaCrops.set(key,pending);
+    return pending;
+  }
+  function focusFormula({id,page,bbox,reveal=true}={}){
+    if(!Array.isArray(bbox)||bbox.length!==4||
+       !bbox.every(Number.isFinite)||bbox[2]<=bbox[0]||bbox[3]<=bbox[1])
+      throw Error('PDF 公式 bbox 无效');
+    // Reuse block focus, page warm-up, overlay load and scroll ownership.
+    const accepted=focusBlock({id,page,reveal});
+    formulaFocus={id:String(id),page,bbox:[...bbox]};
+    const cached=overlayCache.get('block:'+page);
+    if(cached)paintFormulaFocus(page,cached.pageSize);
+    if(reveal&&focusRequest)scheduleFocusReveal();
+    return accepted;
+  }
   function clearFocus(){
     selectedBlockId=null;selectedPage=null;focusRequest=null;
+    formulaFocus=null;
+    pages.querySelectorAll('.lab-ocr-pdf-formula-focus').forEach(node=>node.remove());
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();return true;
   }
@@ -872,8 +952,9 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
     lastNotifiedPage=null;
-    focusRequest=null;selectedBlockId=null;selectedPage=null;blockParents.clear();
+    focusRequest=null;formulaFocus=null;selectedBlockId=null;selectedPage=null;blockParents.clear();
     nativePageTexts.clear();nativeBoxTexts.clear();nativeBoxPending.clear();
+    formulaCrops.clear();
     updateExtractButton();
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     pageObserver.disconnect();
@@ -921,12 +1002,13 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,focusBlock,clearFocus,invalidateOverlayPage,
+  return Object.freeze({loadPdf,setOverlays,focusBlock,focusFormula,renderFormulaCrop,clearFocus,invalidateOverlayPage,
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();
     if(revealFrame)cancelAnimationFrame(revealFrame);revealFrame=0;focusRequest=null;
     nativePageTexts.clear();nativeBoxTexts.clear();nativeBoxPending.clear();
+    formulaCrops.clear();
     if(resizeFrame)cancelAnimationFrame(resizeFrame);
     cssObserver.disconnect();clearOverlayNodes();
     pageObserver.disconnect();
