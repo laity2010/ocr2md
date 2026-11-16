@@ -44,3 +44,10 @@ Every directly focused object uses a solid 2px `#ffd46c` edge and `rgba(231,183,
 - Frame 原有 `focusMdLine(lineNo,{focus})` 接口被复用（共享 Frame 只是透传 `focus:false`）；CM6 在 `programmaticMdSelection` 下派发只改变 `selection` 的事务、滚动使光标可见，**不编辑源码、不创建 Undo/Redo 历史、不写 SQLite、不再次发布导航事件**。`focus:false` 避免 PDF/AG 点击时抢占键盘焦点或唤起 iPad 软键盘。AG 的 MD 行先设置表格选中状态而不自行将光标移到任意选中行，统一由四窗语义定位执行块首光标。
 - 源码窗自身的点击、键盘移动及文本编辑仍保留用户精确光标位置；非点击（如编辑后的持久化/结构历史）不自动重定位。PDF-only 或 OCR 已吸收等**没有对应 MD 物理行**的块不制造光标，保持原位置；没有 BlockID 的已存在手工 MD 行可以落回本行行首。
 - PDF「提取文本」从原始 PDF 文字层读取的来源不变：PDF 标签点击会首先把源码光标带到已有块首；若用户之后手动调整 CM6 光标，提取文本则插入最新手动光标位置。仍使用现有 CM6 Undo/Redo/SQL 保存。直接函数测试 `tests/lab-ocr-four-pane-location.test.mjs`，Chromium+iPad WebKit `tests/lab-ocr-md-full-source.browser.test.mjs`、`tests/lab-ocr-pdf-extract.browser.test.mjs` 验证 PDF/预览/AG→源码块首、AG 后续物理行、来源为空的 PDF-only 块、源码自身键盘光标保持与 PDF 提取插入。
+
+## 源码行号按钮及删除当前行（2026-11-16）
+
+- Lab Frame 的 CM6 源码行号 gutter 改成同位置的**行号按钮**（Main 基础 `lineNumbers()` 和 iOS 原生选择基底的首个扩展，仅替换这一个 gutter；不触碰折叠 gutter、CM6 其他编辑扩展、行号字号或四窗布局）。只有加载了可编辑 Markdown、对应物理行有稳定 LineID 时按钮可用；其他静态表模式不提供破坏性动作。点击该行号按钮弹出跟随位置的浮层菜单，**当前唯一菜单项「删除当前行」**。菜单不覆盖所点源码行、不移动 CM6 光标或清除选区；点击外部、Escape、源码滚动可关闭。
+- 点击菜单项时用**打开菜单时捕获的 LineID**查找最新的物理行，避免期间其它操作引起行号变化而误删；不是删除 CM6 当前光标所在行。一次原生 CM6 文本事务删除当前行及其下一换行符；最后一行改为删除前一换行符。唯一剩余行不能再从 CodeMirror 消失，删除其文字后保留一个空物理行。所有操作通过原有 CM6 `StateField` → MD 行表重组 → AG/MD 预览 → Undo/Redo → SQL CAS 保存，不直接操作 AG 或 SQLite。
+- 对删除的 MD 行同时携带原 `LineID`、`BlockID` 与相邻稳定 LineID，保存在**CM6 唯一运行态中的少量临时撤销候选**（最多 16 条，非新的存储/文档）；CM6 Undo 恢复相邻原始文本时重用原有 LineID/BlockID，不随意生成新 ID；其他未删除行的 ID 不变。Undo/Redo 本身仍由 CM6 历史管理。
+- 验收：`tests/lab-ocr-source-line-menu.test.mjs` 检查五种物理行位置/SQL 剩余 ID 与单独最后一行；`tests/lab-ocr-md-runtime.test.mjs` 覆盖 Undo/Redo 复原 LineID；`tests/lab-ocr-md-full-source.browser.test.mjs` 在 Chromium/iPad WebKit 模拟行号点击、菜单仅一项、选区不变、Escape、删除首/中/空/末行、原生撤销恢复、保存后刷新重载与未受影响行稳定。

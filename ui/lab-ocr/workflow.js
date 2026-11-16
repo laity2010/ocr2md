@@ -237,7 +237,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(!Array.isArray(result.rows)||!result.rows.length)
         throw Error('MD 行表为空，拒绝显示不完整文稿');
       frame.loadMdRuntime(createMdRuntime(result.rows,result.revision),{
-        reconcile:(state,text)=>editedMdRuntime(state,text,()=>'md-'+crypto.randomUUID()),
+        reconcile:(state,text,options)=>editedMdRuntime(state,text,
+          ()=>'md-'+crypto.randomUUID(),options),
         onChange:mdContentChanged,
         onSelection:mdCursorChanged,
       });

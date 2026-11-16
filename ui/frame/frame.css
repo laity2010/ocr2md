@@ -109,3 +109,34 @@
   outline-offset:2px;
   border-radius:3px;
 }
+
+/* CM6 physical line number buttons. Only the first/basic gutter is replaced;
+   folding gutter and native iOS selection keep their existing behavior. */
+#workspace .ocr-cm-line-button-gutter .cm-gutterElement{padding:0 2px}
+#workspace .ocr-cm-line-number-button{
+  display:inline-flex;align-items:center;justify-content:flex-end;
+  box-sizing:border-box;min-width:2ch;height:1.5em;
+  margin:0;padding:0 3px;border:0;border-radius:3px;
+  background:transparent;color:inherit;line-height:inherit;
+  font:inherit;font-variant-numeric:tabular-nums;text-align:right;cursor:pointer;
+}
+#workspace .ocr-cm-line-number-button:not(:disabled):is(:hover,:focus-visible){
+  background:#465748;color:#e7d5ae;outline:1px solid #778c70;
+}
+#workspace .ocr-cm-line-number-button:disabled{cursor:default}
+#workspace .ocr-cm-line-number-button[data-spacer="true"]{
+  visibility:hidden;pointer-events:none;
+}
+.ocr-cm-line-menu{
+  position:fixed;z-index:15000;min-width:135px;max-width:calc(100vw - 16px);
+  padding:4px;border:1px solid #697a6b;border-radius:5px;
+  background:#2b373a;color:#e5ddc7;
+  box-shadow:0 5px 16px rgba(0,0,0,.36);
+  font:13px/1.5 "OCR2MD Sarasa",monospace;
+}
+.ocr-cm-line-menu button{
+  display:block;width:100%;min-height:32px;padding:5px 10px;border:0;
+  border-radius:3px;background:transparent;color:inherit;
+  text-align:left;font:inherit;cursor:pointer;
+}
+.ocr-cm-line-menu button:is(:hover,:focus-visible){background:#465748;color:#f0d3ad}

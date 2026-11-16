@@ -607,6 +607,79 @@ try{
      ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:12000});
    assert.equal(mdRows.some(row=>row.text==='$$'),true,
      'Formula delimiter is a persisted CM physical line');
+   // CM6 line numbers are buttons. Clicking a gutter number opens one menu
+   // item without changing the source selection, and deleting the clicked
+   // physical row preserves all other LineID/BlockID relationships.
+   const cmPort=()=>page.evaluate(()=>{
+     const p=document.querySelector('.ocr-cm-source')?.ocrCmTable;
+     return {text:p?.mdDocument(),selection:p?.editorView()?.state.selection.main,
+       rows:p?.mdRuntime()?.rows,dirty:p?.mdRuntime()?.dirty};
+   });
+   const menuLine=async n=>{
+     await page.evaluate(n=>document.querySelector('.ocr-cm-source')
+       ?.ocrCmTable?.focusMdLine(n,{focus:false}),n);
+     const button=page.locator(`.ocr-cm-line-number-button[data-line-no="${n}"]:not(:disabled)`);
+     await button.click();
+     const menu=page.locator('.ocr-cm-line-menu');
+     await menu.waitFor();
+     assert.equal(await menu.locator('[role="menuitem"]').count(),1,
+       'Only the requested Delete current line action is available');
+     assert.equal(await menu.locator('[role="menuitem"]').innerText(),'删除当前行');
+     assert.equal(await menu.getAttribute('data-line-no'),String(n));
+     return menu;
+   };
+   const before=await cmPort();
+   // Outside menu click cancels without changing selection or document.
+   let popup=await menuLine(3);
+   let snapshot=await cmPort();
+   await popup.locator('.ocr-cm-line-delete').hover();
+   assert.deepEqual((await cmPort()).selection,snapshot.selection,
+     'Opening a gutter menu must not clear or move CM6 selection');
+   await page.keyboard.press('Escape');
+   assert.equal(await page.locator('.ocr-cm-line-menu').count(),0);
+   assert.equal((await cmPort()).text,before.text);
+   const removeAndUndo=async n=>{
+     const old=await cmPort();
+     const deletedId=old.rows[n-1].line_id;
+     const surviving=old.rows.filter(row=>row.line_id!==deletedId);
+     const menu=await menuLine(n);
+     const selection=await cmPort();
+     await menu.locator('.ocr-cm-line-delete').click();
+     await page.waitForFunction(id=>{
+       const cm=document.querySelector('.ocr-cm-source')?.ocrCmTable;
+       return cm?.mdRuntime()?.rows.every(row=>row.line_id!==id);
+     },deletedId,{timeout:6500});
+     const result=await cmPort();
+     assert.equal(result.dirty,true);
+     assert.deepEqual(result.rows.map(row=>row.line_id),surviving.map(row=>row.line_id));
+     assert.deepEqual(result.rows.map(row=>row.block_id),surviving.map(row=>row.block_id));
+     assert.equal(await page.locator('.ocr-cm-line-menu').count(),0);
+     await page.locator('#undo').click();
+     await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
+       ?.ocrCmTable?.mdDocument()===text,old.text,{timeout:6500});
+     assert.deepEqual((await cmPort()).rows.map(row=>row.line_id),
+       old.rows.map(row=>row.line_id),'Native Undo restores exact physical LineID order');
+     return {deletedId,selection};
+   };
+   // Middle text, original empty line, first line and last physical blank.
+   for(const n of [3,2,1,before.rows.length])await removeAndUndo(n);
+   assert.equal((await cmPort()).text,before.text);
+   // A saved deletion survives a reload and preserves every unaffected row ID.
+   const targeted=await cmPort();
+   const toDelete=targeted.rows[2].line_id;
+   popup=await menuLine(3);
+   await popup.locator('.ocr-cm-line-delete').click();
+   await page.waitForFunction(id=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdRuntime()?.rows.every(row=>row.line_id!==id),toDelete);
+   const deleted=await cmPort();
+   await page.locator('#global-save').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:12000});
+   assert.deepEqual(mdRows.map(row=>row.line_id),deleted.rows.map(row=>row.line_id));
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.waitForFunction(text=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdDocument()===text,deleted.text,{timeout:12000});
+   assert.deepEqual((await cmPort()).rows.map(row=>row.line_id),deleted.rows.map(row=>row.line_id));
    assert.deepEqual(errors,[]);
    console.log('LAB_OCR_MD_FULL_SOURCE_E2E_PASS',name,
      JSON.stringify({mdInit,mdLoads,saves,blocks,pdfs,revision,visits}));

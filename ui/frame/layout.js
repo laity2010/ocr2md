@@ -13,6 +13,7 @@ import {mineruCommentFolding,foldInitialMineruComments} from '../mineru-comment-
 import {obsidianMarkdown} from '../obsidian-markdown.js';
 import {obsidianSourceSyntax} from '../obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from '../obsidian-heading-markers.js';
+import {createMdLineGutter,physicalLineDeleteRange} from './md-line-gutter.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -72,6 +73,7 @@ function mountEmptySource(host){
   host.classList.toggle('ocr-ios-native-selection',nativeIOSSelection);
   const setMdRuntime=StateEffect.define();
   const setMdFocusLine=StateEffect.define();
+  const deletedMdLine=StateEffect.define();
   const mdFocusField=StateField.define({
     create:()=>Decoration.none,
     update(value,tr){
@@ -95,14 +97,39 @@ function mountEmptySource(host){
     create:()=>null,
     update(value,tr){
       for(const effect of tr.effects)if(effect.is(setMdRuntime))return effect.value;
-      return value&&tr.docChanged&&mdReducer?
-        mdReducer(value,tr.newDoc.toString()):value;
+      if(!value||!tr.docChanged||!mdReducer)return value;
+      const removed=tr.effects.find(effect=>effect.is(deletedMdLine));
+      return mdReducer(value,tr.newDoc.toString(),{
+        deletedLine:removed?.value??null});
     },
   });
-  const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
+  let editor;
+  const deleteMdLine=lineId=>{
+    const row=editor.state.field(mdField)?.rows.find(r=>r.line_id===lineId);
+    if(!row)return false;
+    const range=physicalLineDeleteRange(editor.state.doc,row.line_no);
+    if(!range||range.from===range.to)return false;
+    const rows=editor.state.field(mdField).rows;
+    const i=rows.findIndex(r=>r.line_id===lineId);
+    editor.dispatch({changes:range,effects:deletedMdLine.of({
+      row:{...row},previousId:rows[i-1]?.line_id??null,
+      followingId:rows[i+1]?.line_id??null,
+    }),annotations:Transaction.userEvent.of('delete.line')});
+    return true;
+  };
+  const lineGutter=createMdLineGutter({
+    isMarkdown:state=>Boolean(state.field(mdField)),
+    lineIdAt:lineNo=>editor?.state.field(mdField)?.rows[lineNo-1]?.line_id??null,
+    onDelete:deleteMdLine,
+  });
+  const base=nativeIOSSelection?nativeIOSBasicSetup:basicSetup;
+  // CodeMirror's stock lineNumbers() is the first extension in BOTH current
+  // standard/iOS base setups. Replace only that extension, retaining all
+  // mature editing, history, native iOS selection, folding and keybindings.
+  editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
     tableStateField,structuredRuntimeField,mdField,mdFocusField,
-    ...(nativeIOSSelection?nativeIOSBasicSetup:basicSetup),
+    lineGutter.extension,...base.slice(1),
     EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),mineruCommentFolding,
     obsidianMarkdown,syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
@@ -142,6 +169,7 @@ function mountEmptySource(host){
     mdRuntime(){return editor.state.field(mdField);},
     editorView(){return editor;},
     loadMarkdown(runtime,{reconcile,onChange,onSelection}={}){
+      lineGutter.close();
       if(!runtime?.rows?.length||typeof reconcile!=='function')throw Error('MD 初始化无效');
       mdReducer=reconcile;mdOnChange=onChange??null;mdOnSelection=onSelection??null;
       const text=runtime.rows.map(r=>r.text).join('\n');
@@ -166,6 +194,7 @@ function mountEmptySource(host){
         annotations:Transaction.addToHistory.of(false)});
     },
     clearMarkdown(){
+      lineGutter.close();
       mdReducer=null;mdOnChange=null;mdOnSelection=null;
       editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:''},
         effects:[setMdRuntime.of(null),setMdFocusLine.of(null),mdEditable.reconfigure([
@@ -205,6 +234,7 @@ function mountEmptySource(host){
       editor.focus();
       return true;
     },
+    deleteMdLine(lineId){return deleteMdLine(lineId);},
     editMdLine(lineId,text){
       const md=editor.state.field(mdField);
       const row=md?.rows.find(r=>r.line_id===lineId);
@@ -249,7 +279,8 @@ function mountEmptySource(host){
       effects:loadTableRows.of([])});},
     selected(){return editor.state.field(tableStateField).selectedId;},
   });
-  return {dispose(){delete host.ocrCmTable;editor.destroy();},layout:()=>editor.requestMeasure()};
+  return {dispose(){lineGutter.dispose();delete host.ocrCmTable;editor.destroy();},
+    layout:()=>editor.requestMeasure()};
 }
 function mountEmptyGrid(host){
   const columnDefs=[

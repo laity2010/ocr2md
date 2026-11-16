@@ -65,11 +65,32 @@ export function createMdRuntime(rows,revision=0){
   if(!Number.isSafeInteger(revision)||revision<0)fail('SQLite revision');
   return {rows,revision,savedRows:rows,version:0,dirty:false};
 }
-export function editedMdRuntime(state,newText,makeId){
+export function editedMdRuntime(state,newText,makeId,{deletedLine=null}={}){
   if(!state)fail('尚未载入 MD');
   const next=reconcileMdText(state.rows,newText,makeId);
   if(!mdSplice(state.rows,next))return state;
+  // Native CM6 history restores text. For a gutter-delete Undo it must also
+  // restore the SAME stable LineID and BlockID rather than generating a new
+  // one. Keep only a small transient tombstone list inside the authoritative
+  // CM6 MD StateField (never a second persisted line table).
+  const candidates=deletedLine?
+    [deletedLine,...(state.lineDeleteHistory??[]).filter(item=>
+      item.row.line_id!==deletedLine.row.line_id)].slice(0,16):
+    (state.lineDeleteHistory??[]);
+  for(const candidate of candidates){
+    if(next.some(row=>row.line_id===candidate.row.line_id))continue;
+    const match=next.findIndex((row,index)=>
+      row.text===candidate.row.text&&
+      (candidate.previousId===null||next[index-1]?.line_id===candidate.previousId)&&
+      (candidate.followingId===null||next[index+1]?.line_id===candidate.followingId)&&
+      (candidate.previousId!==null||index===0)&&
+      (candidate.followingId!==null||index===next.length-1));
+    if(match>=0)next[match]={...next[match],line_id:candidate.row.line_id,
+      block_id:candidate.row.block_id};
+  }
+  validateMdRows(next);
   return {...state,rows:next,version:state.version+1,
+    lineDeleteHistory:candidates,
     dirty:Boolean(mdSplice(state.savedRows,next))};
 }
 export function acknowledgeMdRuntime(state,savedRows,revision){

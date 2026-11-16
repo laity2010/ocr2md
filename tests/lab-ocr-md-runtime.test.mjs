@@ -37,6 +37,24 @@ state=acknowledgeMdRuntime(state,saved,1);
 assert.equal(state.revision,1);
 assert.equal(state.dirty,true);
 assert.equal(state.savedRows[0].text,'# Changed');
+// Native CM6 Undo restores both text and stable SQL line identities after
+// the one-item line-gutter Delete action; Redo and another Undo are safe.
+const prior=[
+ {line_id:'p',line_no:1,block_id:12,text:'Before'},
+ {line_id:'q',line_no:2,block_id:13,text:'Deleted middle'},
+ {line_id:'r',line_no:3,block_id:14,text:'After'},
+];
+let deletion=createMdRuntime(prior);
+const tombstone={row:{...prior[1]},previousId:'p',followingId:'r'};
+deletion=editedMdRuntime(deletion,'Before\nAfter',makeId,{deletedLine:tombstone});
+assert.deepEqual(deletion.rows.map(row=>row.line_id),['p','r']);
+deletion=editedMdRuntime(deletion,'Before\nDeleted middle\nAfter',makeId);
+assert.deepEqual(deletion.rows,prior,'Undo restores original LineID/BlockID');
+assert.equal(deletion.dirty,false);
+deletion=editedMdRuntime(deletion,'Before\nAfter',makeId);
+assert.deepEqual(deletion.rows.map(row=>row.line_id),['p','r']);
+deletion=editedMdRuntime(deletion,'Before\nDeleted middle\nAfter',makeId);
+assert.deepEqual(deletion.rows,prior,'Repeated Undo uses same LineID');
 const blockRows=[
  [10,null,0,'p1b0'],[11,10,0,'p1b0s0'],
  [20,null,1,'p1b1'],[21,20,0,'p1b1s0'],
