@@ -435,6 +435,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     const box=document.createElement('div');
     box.className='lab-ocr-pdf-formula-focus';
     box.dataset.formulaBlockId=formulaFocus.id;
+    box.dataset.formulaKind=formulaFocus.kind??'display';
     box.style.left=(x1/size[0]*100)+'%';
     box.style.top=(y1/size[1]*100)+'%';
     box.style.width=((x2-x1)/size[0]*100)+'%';
@@ -843,13 +844,14 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     formulaCrops.set(key,pending);
     return pending;
   }
-  function focusFormula({id,page,bbox,reveal=true}={}){
+  function focusFormula({id,page,bbox,kind=null,reveal=true}={}){
     if(!Array.isArray(bbox)||bbox.length!==4||
        !bbox.every(Number.isFinite)||bbox[2]<=bbox[0]||bbox[3]<=bbox[1])
       throw Error('PDF 公式 bbox 无效');
+    if(![null,'inline','display'].includes(kind))throw Error('PDF 公式类型无效');
     // Reuse block focus, page warm-up, overlay load and scroll ownership.
     const accepted=focusBlock({id,page,reveal});
-    formulaFocus={id:String(id),page,bbox:[...bbox]};
+    formulaFocus={id:String(id),page,bbox:[...bbox],kind};
     const cached=overlayCache.get('block:'+page);
     if(cached)paintFormulaFocus(page,cached.pageSize);
     if(reveal&&focusRequest)scheduleFocusReveal();

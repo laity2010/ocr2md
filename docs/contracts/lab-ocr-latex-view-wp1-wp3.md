@@ -29,3 +29,9 @@
 
 - 当前 sample 的 `p19b5` 同一行存在两处完全一致的 `r _ { t + 1 } ^ { P r i v a t e }`，原先因为相同文本重复被标为歧义、不给 MD 光标。修正规则只在整块 OCR 拼接文本与**当前** MD 行完全相同时按源 span 起点映射，得到源码第 394 行两个不同字符位置；全书 20 独立 +22 行内共 42 条 OCR 公式，当前可全部精确匹配；人工编辑后无法证明同一性时仍保留待定。
 - Chromium / iPad WebKit 的 `lab-ocr-latex-view.browser.test.mjs` 覆盖同一 MD 行两个公式分别点击、CM6 精确范围标记、PDF 不同 bbox、高亮清除、零保存；`lab-ocr-latex-index.test.mjs` 直接验证重复公式与原文不一致时拒绝猜测。
+
+## 行内公式淡色高亮（2026-11-16）
+
+- 公式级定位消息的 `formulaKind` 限定为 `inline` 或 `display`。仅 `inline` 使用统一 CSS 变量 `--ocr-inline-formula-fill`，在 CM6 精确源码范围及 PDF 对应 Span bbox 上同时使用；透明度降低，PDF 仅保留柔和 1px 边缘，取消旧橙色光晕。
+- 独立公式继续使用既有 CM6 选区匹配 / PDF 独立公式配色；不改变父块边界、公式坐标、数据写回，也不修改 Main 或 lab-frame 的外观。
+- Chromium / iPad WebKit 端到端测试需核验两个视图计算出的 rgba 完全一致、透明度与外框、独立公式不受影响以及无数据库写入。

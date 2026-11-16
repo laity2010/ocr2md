@@ -133,7 +133,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // One semantic event, four independent projections. Never store Markdown in
   // the shared View Store, and never let one pane call another pane's private DOM.
   function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null,
-    formulaColumn=null,formulaEndColumn=null,formulaBBox=null}={}){
+    formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}={}){
     if(currentSqlTable!=='md'||!md())return null;
     const target=resolveReviewLocation({lineId,blockId,lineNo},md().rows,cm()?.rows??[]);
     if(target){
@@ -149,6 +149,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         Number.isInteger(formulaColumn)&&formulaEndColumn>formulaColumn?
         {formulaEndColumn}:{}),
       ...(origin==='ag'&&Array.isArray(formulaBBox)?{formulaBBox}:{}),
+      ...(origin==='ag'&&formulaKind!==null?{formulaKind}:{}),
       });
       return exactMissing?{...target,lineId:null,lineNo:null}:target;
     }
@@ -181,7 +182,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(target.origin!=='cm6'&&target.intent==='click'){
       if(Number.isInteger(target.formulaColumn)&&target.lineNo)
         frame.focusMdFormula({lineNo:target.lineNo,column:target.formulaColumn,
-          endColumn:target.formulaEndColumn,focus:false});
+          endColumn:target.formulaEndColumn,kind:target.formulaKind,focus:false});
       else if(Array.isArray(target.formulaBBox)&&target.lineNo===null){
         // OCR-only/ambiguous Span: PDF-only focus, no fictitious MD caret.
       }else{
@@ -192,7 +193,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(target.blockId!=null&&target.page&&target.origin!=='pdf'){
       if(Array.isArray(target.formulaBBox))
         frame.focusPdfFormula({id:target.blockId,page:target.page,
-          bbox:target.formulaBBox,reveal:target.intent==='click'});
+          bbox:target.formulaBBox,kind:target.formulaKind,reveal:target.intent==='click'});
       else frame.focusPdfBlock({id:target.blockId,page:target.page,
         reveal:target.intent==='click'});
     }else if(target.blockId==null||!target.page)frame.clearPdfFocus();
@@ -663,7 +664,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
           ...(latex?{formulaColumn:row.column,
             formulaEndColumn:Number.isInteger(row.column)&&
               typeof row.formula==='string'?row.column+row.formula.length:null,
-            formulaBBox:row.pdf_bbox}:{}),
+            formulaBBox:row.pdf_bbox,
+            formulaKind:row.kind==='行内'?'inline':row.kind==='独立'?'display':null}:{}),
         });
         onStatus(latex?
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+

@@ -101,7 +101,8 @@ function mountEmptySource(host){
           const range=effect.value;
           value=range&&range.from>=0&&range.to>range.from&&
             range.to<=tr.newDoc.length?
-            Decoration.set([Decoration.mark({class:'ocr-four-pane-formula-active cm-selectionMatch'})
+            Decoration.set([Decoration.mark({class:'ocr-four-pane-formula-active cm-selectionMatch'+
+              (range.kind==='inline'?' ocr-four-pane-formula-inline':'')})
               .range(range.from,range.to)]):Decoration.none;
         }
       }
@@ -237,20 +238,20 @@ function mountEmptySource(host){
       finally{programmaticMdSelection=false;}
       if(focus)editor.focus();return true;
     },
-    focusMdFormula({lineNo,column,endColumn,focus=false}={}){
+    focusMdFormula({lineNo,column,endColumn,kind=null,focus=false}={}){
       // Formula-level offset and visible range (not merely the physical line)
       // use UTF-16 CodeMirror positions; this is a decoration, not an edit.
       if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
          lineNo<1||lineNo>editor.state.doc.lines||
          !Number.isInteger(column)||column<0)return false;
       const line=editor.state.doc.line(lineNo);
-      if(column>=line.length)return false;
+      if(column>=line.length||!([null,'inline','display'].includes(kind)))return false;
       const end=Number.isInteger(endColumn)&&endColumn>column&&
         endColumn<=line.length?endColumn:column+1;
       const position=line.from+column;
       programmaticMdSelection=true;
       try{editor.dispatch({selection:{anchor:position},
-        effects:[setMdFormulaRange.of({from:position,to:line.from+end}),
+        effects:[setMdFormulaRange.of({from:position,to:line.from+end,kind}),
           EditorView.scrollIntoView(position,{y:'center'})]});}
       finally{programmaticMdSelection=false;}
       if(focus)editor.focus();return true;
@@ -967,8 +968,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     focusPdfBlock({id,page,reveal=true}){
       return pdfSlot.current?.focusBlock?.({id,page,reveal})??false;
     },
-    focusPdfFormula({id,page,bbox,reveal=true}){
-      return pdfSlot.current?.focusFormula?.({id,page,bbox,reveal})??false;
+    focusPdfFormula({id,page,bbox,kind=null,reveal=true}){
+      return pdfSlot.current?.focusFormula?.({id,page,bbox,kind,reveal})??false;
     },
     getPdfFormulaCrop(target){
       return pdfSlot.current?.renderFormulaCrop?.(target)??Promise.resolve(null);

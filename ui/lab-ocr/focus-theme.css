@@ -5,6 +5,9 @@
 #workspace.ocr-review-focus-unified {
   --ocr-review-focus-edge:#ffd46c;
   --ocr-review-focus-fill:rgba(231,183,83,.20);
+  /* One soft tint for the small inline formula in CM6 and its PDF bbox. */
+  --ocr-inline-formula-fill:rgba(193,229,174,.24);
+  --ocr-inline-formula-edge:rgba(133,180,111,.58);
 }
 
 /* AG Grid's selected-row surface is also the review focus. Do not style the
@@ -65,4 +68,19 @@
   box-shadow:none;
   outline:2px dashed var(--ocr-review-focus-edge);
   outline-offset:1px;
+}
+
+/* Override CM6's more saturated stock selection-match fill for *inline*
+ * formulas only. Keep the stock classes/positioning; no extra underline,
+ * shadow or opaque covering over fine LaTeX characters. */
+#workspace.ocr-review-focus-unified .cm-line .ocr-four-pane-formula-active.ocr-four-pane-formula-inline {
+  background:var(--ocr-inline-formula-fill);
+  box-shadow:none;
+}
+/* PDF.js bbox uses the exact same fill variable; the thin outline protects
+ * legibility over white source pages without the old orange glow. */
+#workspace.ocr-review-focus-unified .lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-focus[data-formula-kind="inline"] {
+  background:var(--ocr-inline-formula-fill);
+  border:1px solid var(--ocr-inline-formula-edge);
+  box-shadow:none;
 }

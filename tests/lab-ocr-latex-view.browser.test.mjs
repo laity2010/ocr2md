@@ -149,6 +149,25 @@ try{
    assert(Math.abs(pos.top-205/842*100)<.05);
    assert.equal((await page.locator('.lab-ocr-pdf-formula-focus').evaluate(
      el=>getComputedStyle(el).pointerEvents)),'none');
+   // Inline formula uses one light, translucent fill for both source text
+   // and PDF's physical Span. Do not cover characters with opaque amber.
+   const inlineColors=await page.evaluate(()=>{
+     const source=document.querySelector('.ocr-cm-source .ocr-four-pane-formula-inline');
+     const pdf=document.querySelector('.lab-ocr-pdf-formula-focus');
+     return {sourceClass:source?.className,pdfKind:pdf?.dataset.formulaKind,
+       sourceFill:source&&getComputedStyle(source).backgroundColor,
+       pdfFill:pdf&&getComputedStyle(pdf).backgroundColor,
+       pdfBorder:pdf&&getComputedStyle(pdf).borderTopWidth,
+       pdfShadow:pdf&&getComputedStyle(pdf).boxShadow};
+   });
+   assert(inlineColors.sourceClass?.includes('cm-selectionMatch'));
+   assert.equal(inlineColors.pdfKind,'inline');
+   assert.equal(inlineColors.sourceFill,inlineColors.pdfFill,
+     'CM6 and PDF inline formulas must share the exact light fill');
+   const alpha=Number(inlineColors.sourceFill.match(/rgba?\([^)]*,\s*([\d.]+)\)$/)?.[1]);
+   assert(alpha>0&&alpha<0.35,'Inline fill must be light and translucent');
+   assert.equal(inlineColors.pdfBorder,'1px');
+   assert.equal(inlineColors.pdfShadow,'none');
    // Another formula on the SAME physical MD line must move the CM caret
    // to a different offset without rewriting any MD row.
    await exact('ocr:2:0:1');
@@ -179,10 +198,9 @@ try{
    assert(secondLeft>firstLeft+10,'Repeated formula must move to its own PDF Span');
    assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
      .allTextContents().then(parts=>parts.join('')),'r_t');
-   // The LaTeX mark MUST share CodeMirror's actual "highlight same text"
-   // theme, not an independently tuned amber background or underline.
-   // Select the second r_t with CM6 itself. Its built-in highlighter marks
-   // the first occurrence; compare that native match with the AG formula.
+   // Inline LaTeX deliberately softens the built-in match fill, but
+   // retains CM6's native match semantics and never adds an underline.
+   // Select the second r_t with CM6; its native highlighter marks the first.
    const sourceColors=await page.evaluate(async()=>{
      const editor=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
      const line=editor.state.doc.line(8);
@@ -203,13 +221,24 @@ try{
    assert(sourceColors.own?.className.includes('cm-selectionMatch'));
    assert(sourceColors.builtIn?.className.includes('cm-selectionMatch'),
      'CM6 stock highlightSelectionMatches must be active');
-   assert.equal(sourceColors.own.background,sourceColors.builtIn.background,
-     'LaTeX highlight must use the exact same built-in CM6 match color');
+   assert.equal(sourceColors.own.background,inlineColors.pdfFill,
+     'The inline LaTeX fill must match PDF, not the stronger stock CM6 match');
+   assert.notEqual(sourceColors.own.background,sourceColors.builtIn.background,
+     'Inline LaTeX must be softer than the default CM6 selection match');
    assert.equal(sourceColors.own.boxShadow,sourceColors.builtIn.boxShadow,
      'LaTeX highlight must not add a custom underline or shadow');
    await exact('ocr:1:0:0');
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
      ?.dataset.formulaBlockId==='1');
+   const displayColors=await page.evaluate(()=>({
+     sourceIsInline:!!document.querySelector('.ocr-cm-source .ocr-four-pane-formula-inline'),
+     pdfKind:document.querySelector('.lab-ocr-pdf-formula-focus')?.dataset.formulaKind,
+     pdfFill:getComputedStyle(document.querySelector('.lab-ocr-pdf-formula-focus')).backgroundColor,
+   }));
+   assert.equal(displayColors.sourceIsInline,false);
+   assert.equal(displayColors.pdfKind,'display');
+   assert.notEqual(displayColors.pdfFill,inlineColors.pdfFill,
+     'Display formulas retain their previous independent highlight color');
    assert.equal(await page.locator('.lab-ocr-latex-image img').count()>0,true,
      'Source-backed formula image must be present');
    // The optional MinerU CDN may deny access (403). The viewer must render
