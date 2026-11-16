@@ -43,12 +43,44 @@ WITH nodes AS (
  SELECT r.block_id,r.pbs,r.source_block_key,r.source_order,r.global_page,
         r.parent_block_id,r.sibling_order,r.block_path,r.absorbed_into_block_id,
         m.source_name,m.local_page,m.page_size_json,m.import_fingerprint,
+        m.block_json AS root_json,
         json_extract(m.block_json,r.source_json_path) AS node_json
  FROM block_review AS r
  JOIN minerujson AS m ON m.id=r.source_root_id
  WHERE m.row_kind='block' AND m.block_group='para_blocks'
    AND r.source_order=m.source_order AND r.global_page=m.global_page
    AND r.import_fingerprint=m.import_fingerprint
+), caption_source AS (
+ SELECT n.*,
+  CASE WHEN json_extract(n.node_json,'$.lines_deleted')=1
+       AND json_array_length(n.node_json,'$.lines')=0
+       AND json_extract(n.node_json,'$.type') IN ('table_caption','chart_caption')
+  THEN (
+   -- The immutable preproc root retains physical continued captions even
+   -- when MinerU para_blocks merges the following table across pages.
+   -- Exact root + child type/bbox AND unique match: fail closed on ambiguity.
+   SELECT CASE WHEN COUNT(*)=1 THEN MAX(json_extract(ch.value,'$.lines')) END
+   FROM minerujson AS pre
+   JOIN json_each(pre.block_json,'$.blocks') AS ch
+   WHERE pre.row_kind='block' AND pre.block_group='preproc_blocks'
+     AND pre.source_order=n.source_order AND pre.global_page=n.global_page
+     AND pre.import_fingerprint=n.import_fingerprint
+     AND json_extract(pre.block_json,'$.type')=json_extract(n.root_json,'$.type')
+     AND json_extract(pre.block_json,'$.bbox')=json_extract(n.root_json,'$.bbox')
+     AND json_extract(ch.value,'$.type')=json_extract(n.node_json,'$.type')
+     AND json_extract(ch.value,'$.bbox')=json_extract(n.node_json,'$.bbox')
+     AND json_array_length(ch.value,'$.lines')>0
+  ) END AS recovered_lines
+ FROM nodes AS n
+), resolved AS (
+ SELECT c.*,
+   CASE WHEN c.recovered_lines IS NOT NULL
+        THEN json_set(c.node_json,'$.lines',json(c.recovered_lines))
+        ELSE c.node_json END AS effective_json,
+   CASE WHEN c.recovered_lines IS NOT NULL THEN 'preproc_caption'
+        WHEN json_extract(c.node_json,'$.lines_deleted')=1 THEN 'para_deleted'
+        ELSE 'para_blocks' END AS content_source
+ FROM caption_source AS c
 )
 SELECT
  n.block_id AS block_id,n.pbs AS pbs,n.source_block_key AS source_block_key,
@@ -58,28 +90,62 @@ SELECT
  'para_blocks' AS block_group,n.block_path AS block_path,
  n.parent_block_id AS parent_block_id,n.sibling_order AS sibling_order,
  n.absorbed_into_block_id AS absorbed_into_block_id,
- CASE WHEN json_type(n.node_json,'$.index')='integer'
-      THEN json_extract(n.node_json,'$.index') ELSE NULL END AS block_index,
- COALESCE(CAST(json_extract(n.node_json,'$.type') AS TEXT),'') AS block_type,
- json_extract(n.node_json,'$.bbox') AS block_bbox_json,
- COALESCE(json_array_length(n.node_json,'$.lines'),0) AS line_count,
+ CASE WHEN json_type(n.effective_json,'$.index')='integer'
+      THEN json_extract(n.effective_json,'$.index') ELSE NULL END AS block_index,
+ COALESCE(CAST(json_extract(n.effective_json,'$.type') AS TEXT),'') AS block_type,
+ json_extract(n.effective_json,'$.bbox') AS block_bbox_json,
+ COALESCE(json_array_length(n.effective_json,'$.lines'),0) AS line_count,
  (SELECT COALESCE(SUM(json_array_length(l.value,'$.spans')),0)
-  FROM json_each(n.node_json,'$.lines') AS l) AS span_count,
+  FROM json_each(n.effective_json,'$.lines') AS l) AS span_count,
  (SELECT group_concat(DISTINCT json_extract(s.value,'$.type'))
-  FROM json_each(n.node_json,'$.lines') AS l
+  FROM json_each(n.effective_json,'$.lines') AS l
   JOIN json_each(l.value,'$.spans') AS s) AS span_types,
  SUBSTR(COALESCE((SELECT group_concat(
     COALESCE(json_extract(s.value,'$.content'),
              json_extract(s.value,'$.html'),json_extract(s.value,'$.image_path')), ' ')
-  FROM json_each(n.node_json,'$.lines') AS l
+  FROM json_each(n.effective_json,'$.lines') AS l
   JOIN json_each(l.value,'$.spans') AS s),''),
   1,260) AS content_preview,
- json_remove(n.node_json,'$.blocks') AS block_json,
- CASE WHEN json_type(n.node_json,'$.blocks') IS NULL THEN 0 ELSE 1 END
+ json_remove(n.effective_json,'$.blocks') AS block_json,
+ CASE WHEN json_type(n.effective_json,'$.blocks') IS NULL THEN 0 ELSE 1 END
    AS has_blocks_field,
- n.import_fingerprint AS import_fingerprint
-FROM nodes AS n
+ n.import_fingerprint AS import_fingerprint,
+ n.content_source AS content_source
+FROM resolved AS n
 """
+
+
+def refresh_block_view(book:Path)->dict:
+    """Recompile derived Block VIEW without resetting reviewed IDs or MD.
+
+    Explicit maintenance API; GET inspection stays read-only. All current
+    review relations, CAS versions and edited MD lines are preserved.
+    """
+    info=existing_info(book)
+    if not info:raise OCRImportError('请先导入 MinerU JSON 基础表')
+    with closing(sqlite3.connect(_db(book),timeout=30)) as conn:
+        try:
+            conn.execute('BEGIN IMMEDIATE')
+            if _object_type(conn,'block')!='view' or _object_type(conn,'block_review')!='table':
+                raise OCRImportError('仅支持现有逻辑块视图；不自动重建人工审阅记录')
+            count=conn.execute('SELECT COUNT(*) FROM block_review').fetchone()[0]
+            valid=conn.execute('SELECT COUNT(*) FROM block_review WHERE import_fingerprint=?',
+                               (info['signature'],)).fetchone()[0]
+            if count<1 or valid!=count:raise OCRImportError('Block 来源指纹不一致，拒绝修改')
+            before=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
+            if before!=count:raise OCRImportError('Block 视图行数异常，拒绝刷新')
+            conn.execute('DROP VIEW block')
+            conn.execute(VIEW_SCHEMA)
+            after=conn.execute('SELECT COUNT(*) FROM block').fetchone()[0]
+            if after!=before:raise OCRImportError('刷新后 Block 行数变化，拒绝提交')
+            if conn.execute('PRAGMA foreign_key_check').fetchall():
+                raise OCRImportError('Block 外键不完整，拒绝刷新')
+            conn.commit()
+            return {'status':'refreshed','blocks':after}
+        except Exception:
+            conn.rollback()
+            raise
+
 
 def _object_type(con:sqlite3.Connection,name:str)->str|None:
     row=con.execute('SELECT type FROM sqlite_master WHERE name=? AND type IN (\'view\',\'table\')',(name,)).fetchone()
