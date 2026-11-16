@@ -108,7 +108,11 @@ try{
    assert.equal(await extract.isDisabled(),true,'No selected source block');
    assert.equal(await page.locator('.lab-ocr-pdf-overlay-control,.lab-ocr-pdf-overlay-level').count(),0);
    assert.equal(await page.locator('.lab-ocr-pdf-controls select').count(),1,'Only zoom dropdown remains');
-   assert.equal(await page.locator('.lab-ocr-pdf-overlay-layer[data-level="block"]').count()>0,true);
+   // PDF.js can replace the overlay layer after PBS labels were observed;
+   // wait for an actual painted Block frame instead of sampling mid-repaint.
+   await page.waitForFunction(()=>Boolean(document.querySelector(
+     '.lab-ocr-pdf-overlay-layer[data-level="block"] .lab-ocr-pdf-overlay-box')),
+     null,{timeout:12000});
    const tag=id=>page.locator(`.lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
    // Image URL in source preview does NOT qualify as text.
    await tag(12).click();assert.equal(await extract.isDisabled(),true);
