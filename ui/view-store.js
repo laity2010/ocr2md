@@ -66,16 +66,13 @@ export function publishActivePanel(panelId){
  * Increment sequence even on repeated clicks so navigation may re-center.
  */
 export function publishLabFocus({origin,intent='click',lineId=null,blockId=null,
-  lineNo=null,page=null,pbs=null,sourceLineExact=false,formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}){
+  lineNo=null,page=null,pbs=null,formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}){
   if(!['ag','cm6','preview','pdf'].includes(origin))throw Error('Invalid review origin');
   if(lineId!==null&&(typeof lineId!=='string'||!lineId))throw Error('Invalid LineID');
   if(blockId!==null&&(!Number.isSafeInteger(blockId)||blockId<1))throw Error('Invalid BlockID');
   if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1))throw Error('Invalid line number');
   if(page!==null&&(!Number.isInteger(page)||page<1))throw Error('Invalid PDF page');
   if(!['click','edit'].includes(intent))throw Error('Invalid review intent');
-  if(typeof sourceLineExact!=='boolean'||
-     (sourceLineExact&&(origin!=='ag'||lineNo===null)))
-    throw Error('Invalid exact source-line focus');
   if(formulaColumn!==null&&(!Number.isInteger(formulaColumn)||formulaColumn<0||
      origin!=='ag'||lineNo===null))throw Error('Invalid formula caret column');
   if(formulaEndColumn!==null&&(!Number.isInteger(formulaEndColumn)||
@@ -89,7 +86,7 @@ export function publishLabFocus({origin,intent='click',lineId=null,blockId=null,
      formulaBBox[3]<=formulaBBox[1]||origin!=='ag'||!page||!blockId))
     throw Error('Invalid PDF formula bbox');
   viewStore.setState(state=>({labFocusTarget:Object.freeze({origin,intent,lineId,blockId,
-    lineNo,page,pbs,sourceLineExact,formulaColumn,formulaEndColumn,formulaKind,
+    lineNo,page,pbs,formulaColumn,formulaEndColumn,formulaKind,
     formulaBBox:formulaBBox?Object.freeze([...formulaBBox]):null,
     sequence:(state.labFocusTarget?.sequence||0)+1})}));
 }

@@ -395,7 +395,7 @@ function mountEmptyGrid(host){
     columnFields(){return grid.getColumnDefs()?.map(column=>column.field)??[];},
     show({rows,columns,onRowSelected,onFilterChanged,
     initialFilterModel=null,pageScope:scope=null,allPagesInitially=false,
-    expandPageOnCategory:category=null,rowHeight=35,getRowHeight=null}){
+    expandPageOnCategory:category=null,rowHeight=35}){
     selectedListener=onRowSelected??(()=>{});
     pageScope=scope;pdfPage=scope?.page??1;showAllPages=Boolean(scope&&allPagesInitially);
     expandPageOnCategory=category;lastCategoryModel='null';
@@ -407,14 +407,11 @@ function mountEmptyGrid(host){
       .map(r=>[String(r.block_id),r]));
     mdData=new Map(rows.filter(r=>r?.line_id!=null)
       .map(r=>[String(r.line_id),r]));
-    formulaData=new Map(rows.filter(r=>r?.formula_id!=null||r?.latex_heading_id!=null)
-      .map(r=>[String(r.formula_id??r.latex_heading_id),r]));
+    formulaData=new Map(rows.filter(r=>r?.formula_id!=null)
+      .map(r=>[String(r.formula_id),r]));
     if(rowHeight!==currentRowHeight){
       currentRowHeight=rowHeight;grid.setGridOption('rowHeight',rowHeight);
     }
-    // A title context row is compact; full formula rows preserve enough
-    // height for PDF crop. Reset when switching back to MD / Title views.
-    grid.setGridOption('getRowHeight',getRowHeight);
     // Ignore transient filter-change events while replacing a whole SQL table.
     filterListener=()=>{};
     // Different SQLite tables must not inherit one another's AG filters.
@@ -449,24 +446,11 @@ function mountEmptyGrid(host){
     return true;
   },patchFormulaRows(rows){
     // Formula IDs are not MD LineIDs: a physical line can contain multiple
-    // formulas. Context headings have stable synthetic IDs but NEVER become
-    // stored Markdown or fake formulas. Patch ordinary formula edits locally.
-    const next=new Map(rows.map(r=>[String(r.formula_id??r.latex_heading_id),r]));
-    const previousIds=[...formulaData.keys()];
-    const nextIds=[...next.keys()];
-    if(previousIds.length!==nextIds.length||
-       previousIds.some((id,index)=>id!==nextIds[index])){
-      // A heading was added/demoted or a formula moved: AG transaction.add
-      // appends rows at the bottom and breaks source hierarchy. Rebuild only
-      // for this structural event; retain AG filters and column state.
-      formulaData=next;
-      grid.setGridOption('rowData',rows.filter(isVisible));
-      if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
-      return;
-    }
+    // formulas. Patch only changed cells and retain the AG filter/scroll.
+    const next=new Map(rows.map(r=>[String(r.formula_id),r]));
     const remove=[],add=[];
     grid.forEachNode(node=>{
-      const id=String(node.data?.formula_id??node.data?.latex_heading_id??'');
+      const id=String(node.data?.formula_id??'');
       if(!id)return;
       const updated=next.get(id);
       if(!updated)remove.push(node.data);
@@ -961,15 +945,13 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.setPdfPage(page)??false;
     },
     showSqlRows(rows,columns,{onSelect,onFilterChanged,initialFilterModel=null,
-      pageScope=null,allPagesInitially=false,expandPageOnCategory=null,rowHeight=35,
-      getRowHeight=null}={}){
+      pageScope=null,allPagesInitially=false,expandPageOnCategory=null,rowHeight=35}={}){
       const port=container.querySelector('.ocr-outline-grid')?.ocrSqlGrid;
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!port||!cm)throw Error('AG 或 CM6 尚未初始化');
       cm.load(rows);
       port.show({rows:cm.rows(),columns,onFilterChanged,initialFilterModel,
-        pageScope,allPagesInitially,expandPageOnCategory,rowHeight,getRowHeight,
-        onRowSelected:row=>{
+        pageScope,allPagesInitially,expandPageOnCategory,rowHeight,onRowSelected:row=>{
         // MD rows use the semantic four-pane navigator to move the caret to
         // logical Block start. Do not focus this arbitrary AG physical row.
         cm.select(row,{focus:row?.line_id==null&&!row?.formula_id});

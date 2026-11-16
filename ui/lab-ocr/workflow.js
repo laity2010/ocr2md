@@ -9,7 +9,6 @@ import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
-import {projectLatexOutlineRows} from './latex-outline.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -121,8 +120,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let latexPresentation=null,agViewRequest=0,lastRenderedLatexSummary=null;
   let pdfPage=1;
   const projectedMdRows=()=>activeAgView==='latex'?
-    projectLatexOutlineRows(md()?.rows??[],cm()?.rows??[],
-      latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[]))):
+    latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
@@ -135,7 +133,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // One semantic event, four independent projections. Never store Markdown in
   // the shared View Store, and never let one pane call another pane's private DOM.
   function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null,
-    sourceLineExact=false,formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}={}){
+    formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}={}){
     if(currentSqlTable!=='md'||!md())return null;
     const target=resolveReviewLocation({lineId,blockId,lineNo},md().rows,cm()?.rows??[]);
     if(target){
@@ -143,7 +141,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       // line is its own formula. Keep PDF BlockID+bbox but clear MD caret.
       const exactMissing=origin==='ag'&&Array.isArray(formulaBBox)&&
         !Number.isInteger(formulaColumn);
-      publishLabFocus({origin,intent,...target,sourceLineExact,
+      publishLabFocus({origin,intent,...target,
       ...(exactMissing?{lineId:null,lineNo:null}:{}),
       ...(origin==='ag'&&Number.isInteger(formulaColumn)&&formulaColumn>=0?
         {formulaColumn}:{}),
@@ -188,8 +186,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       else if(Array.isArray(target.formulaBBox)&&target.lineNo===null){
         // OCR-only/ambiguous Span: PDF-only focus, no fictitious MD caret.
       }else{
-        const first=target.sourceLineExact?target.lineNo:
-          sourceBlockStartLine(target,md().rows);
+        const first=sourceBlockStartLine(target,md().rows);
         if(first!==null)frame.focusMdLine(first,{focus:false});
       }
     }
@@ -635,7 +632,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   function renderMdAg(){
     const title=activeAgView==='title',latex=activeAgView==='latex';
     const rows=projectedMdRows();
-    lastRenderedLatexSummary=latex?latexIndexSummary(rows.filter(r=>r.formula_id)):null;
+    lastRenderedLatexSummary=latex?latexIndexSummary(rows):null;
     const columns=latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
         getPdfFormulaCrop:target=>frame.getPdfFormulaCrop(target)}):
       title?MD_TITLE_COLUMNS:MD_COLUMNS;
@@ -661,14 +658,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       expandPageOnCategory:title?null:latex?'kind':'block_type',
       initialFilterModel:latex?null:{line_no:{values:['非空行']}},
       rowHeight:latex?134:35,
-      getRowHeight:latex?(params=>params.data?.latex_heading_id?35:134):null,
       onSelect:row=>{
-        if(latex&&row.latex_heading_id){
-          locateReview({origin:'ag',lineId:row.line_id,blockId:row.block_id,
-            lineNo:row.line_no,sourceLineExact:true});
-          onStatus(`LaTeX 标题 · H${row.heading_level} · ${row.heading_source}`,'info');
-          return;
-        }
         const target=locateReview({origin:'ag',lineId:row.line_id,
           blockId:row.block_id,lineNo:row.line_no,
           ...(latex?{formulaColumn:row.column,
