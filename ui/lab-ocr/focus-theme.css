@@ -109,3 +109,24 @@
   border:1px solid var(--ocr-latex-all-edge);
   box-shadow:none;border-radius:2px;
 }
+
+/* A selected LaTeX is already covered by the all-formulas tint above.
+ * Two translucent fills (selected line/Span + all-formula Span) multiply and
+ * wash out the glyphs, especially for display math on iPad Safari. In the
+ * LaTeX view only, selection contributes an outline, NOT another surface.
+ * All other AG modes retain their existing selection colors. */
+#workspace.ocr-review-focus-unified.ocr-latex-all-active .cm-line.ocr-four-pane-source-active,
+#workspace.ocr-review-focus-unified.ocr-latex-all-active .ocr-preview-md-scroll [data-ocr-sync-selected="true"],
+#workspace.ocr-review-focus-unified.ocr-latex-all-active .lab-ocr-pdf-overlay-box[data-selected="true"],
+#workspace.ocr-review-focus-unified.ocr-latex-all-active .lab-ocr-pdf-overlay-box[data-family-selected="true"] {
+  background:transparent;
+}
+#workspace.ocr-review-focus-unified.ocr-latex-all-active .cm-line .ocr-four-pane-formula-active {
+  background:transparent;
+  box-shadow:none;
+}
+#workspace.ocr-review-focus-unified.ocr-latex-all-active .lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-focus {
+  background:transparent;
+  box-shadow:none;
+  border:2px solid var(--ocr-review-focus-edge);
+}

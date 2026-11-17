@@ -215,8 +215,9 @@ try{
    assert(Math.abs(pos.top-205/842*100)<.05);
    assert.equal((await page.locator('.lab-ocr-pdf-formula-focus').evaluate(
      el=>getComputedStyle(el).pointerEvents)),'none');
-   // Inline formula uses one light, translucent fill for both source text
-   // and PDF's physical Span. Do not cover characters with opaque amber.
+   // In LaTeX View every formula already has one mid-tone fill.
+   // Selecting it must NOT stack a second translucent fill over CM6 or PDF.
+   // The selected line and PDF focus keep their gold outlines.
    const inlineColors=await page.evaluate(()=>{
      const source=document.querySelector('.ocr-cm-source .ocr-four-pane-formula-inline');
      const pdf=document.querySelector('.lab-ocr-pdf-formula-focus');
@@ -228,12 +229,33 @@ try{
    });
    assert(inlineColors.sourceClass?.includes('cm-selectionMatch'));
    assert.equal(inlineColors.pdfKind,'inline');
-   assert.equal(inlineColors.sourceFill,inlineColors.pdfFill,
-     'CM6 and PDF inline formulas must share the exact light fill');
-   const alpha=Number(inlineColors.sourceFill.match(/rgba?\([^)]*,\s*([\d.]+)\)$/)?.[1]);
-   assert(alpha>0&&alpha<0.35,'Inline fill must be light and translucent');
-   assert.equal(inlineColors.pdfBorder,'1px');
+   assert.equal(inlineColors.sourceFill,'rgba(0, 0, 0, 0)',
+     'Selected CM6 formula may not add another fill over the all-formula tint');
+   assert.equal(inlineColors.pdfFill,'rgba(0, 0, 0, 0)',
+     'PDF focus must be outline-only over its all-formula tinted bbox');
+   assert.equal(inlineColors.pdfBorder,'2px');
    assert.equal(inlineColors.pdfShadow,'none');
+   const selectedSurfaces=await page.evaluate(()=>{
+     const css=selector=>{
+       const el=document.querySelector(selector);
+       return el?{fill:getComputedStyle(el).backgroundColor,
+         outline:getComputedStyle(el).outlineWidth}:null;
+     };
+     return {
+       line:css('.ocr-cm-source .cm-line.ocr-four-pane-source-active'),
+       block:css('.lab-ocr-pdf-overlay-box[data-selected="true"]'),
+       preview:css('.ocr-preview-md-scroll [data-ocr-sync-selected="true"]'),
+       pdfAll:css('.lab-ocr-pdf-formula-all[data-formula-id="ocr:2:0:0"]'),
+     };
+   });
+   for(const key of ['line','block','preview']){
+     assert(selectedSurfaces[key],`Selected ${key} must exist`);
+     assert.equal(selectedSurfaces[key].fill,'rgba(0, 0, 0, 0)',
+       `Selected ${key} may not tint the formula a second time`);
+   }
+   assert.equal(selectedSurfaces.pdfAll?.fill,allStyles.pdf,
+     'Selected PDF span retains exactly the global LaTeX tint');
+   assert.equal(selectedSurfaces.line.outline,'2px');
    // Another formula on the SAME physical MD line must move the CM caret
    // to a different offset without rewriting any MD row.
    await exact('ocr:2:0:1');
@@ -290,10 +312,10 @@ try{
    assert(sourceColors.own?.className.includes('cm-selectionMatch'));
    assert(sourceColors.builtIn?.className.includes('cm-selectionMatch'),
      'CM6 stock highlightSelectionMatches must be active');
-   assert.equal(sourceColors.own.background,inlineColors.pdfFill,
-     'The inline LaTeX fill must match PDF, not the stronger stock CM6 match');
+   assert.equal(sourceColors.own.background,'rgba(0, 0, 0, 0)',
+     'Current formula focus adds no fill in LaTeX mode');
    assert.notEqual(sourceColors.own.background,sourceColors.builtIn.background,
-     'Inline LaTeX must be softer than the default CM6 selection match');
+     'The native CM6 selection-match highlighter remains independent');
    assert.equal(sourceColors.own.boxShadow,sourceColors.builtIn.boxShadow,
      'LaTeX highlight must not add a custom underline or shadow');
    await exact('ocr:1:0:0');
@@ -306,8 +328,13 @@ try{
    }));
    assert.equal(displayColors.sourceIsInline,false);
    assert.equal(displayColors.pdfKind,'display');
-   assert.notEqual(displayColors.pdfFill,inlineColors.pdfFill,
-     'Display formulas retain their previous independent highlight color');
+   assert.equal(displayColors.pdfFill,'rgba(0, 0, 0, 0)',
+     'Selected display LaTeX must not add a second tinted surface');
+   const displayTint=await page.locator(
+     '.lab-ocr-pdf-formula-all[data-formula-id="ocr:1:0:0"]').first()
+     .evaluate(el=>getComputedStyle(el).backgroundColor);
+   assert.equal(displayTint,allStyles.pdf,
+     'Display formula must remain readable with exactly the one global tint');
    assert.equal(await page.locator('.lab-ocr-latex-image img').count()>0,true,
      'Source-backed formula image must be present');
    // The optional MinerU CDN may deny access (403). The viewer must render

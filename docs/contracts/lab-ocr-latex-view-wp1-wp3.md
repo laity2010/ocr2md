@@ -64,3 +64,10 @@
 - `setLatexHighlights(rows)` 只读取 `projectLatexIndex` 的 `source_from/source_to` 和 `pdf_bbox/page_size`，PDF 通过公共 `setFormulaHighlights` 端口在懒加载前后均保留最新视图态。无 MD 匹配的 OCR-only 公式只在 PDF 高亮，MD-only 公式只在源码/MD 预览高亮，不捏造任何坐标。PDF 页面按需挂载、重渲染、缩放时沿用页面百分比坐标。
 - 切换离开 LaTeX View 立即清除 CodeMirror 全部公式 Decoration、PDF 公式标记与预览样式；不修改原独立公式/行内公式的旧选中颜色，不影响其他 AG 视图。源码编辑时以 CM6 最新行表重新投影，避免留下过时范围；全文变更不直接写入 SQLite 之外的额外存储。
 - Chromium/iPad WebKit 实测各三窗 `getComputedStyle(...).backgroundColor` 相等、透明度介于 0.32～0.43，同页多条公式/跨页全量标记、公式选择后的定位，以及离开视图三窗取消、零人工保存。老 MD-full-source 的标题 AG 列序断言存在独立历史失败，与这个公式高亮变更无直接关系，不能归入本次 PASS 范围。
+
+## 选中独立公式的高亮叠色修复（2026-11-17）
+
+- Safari 实机反馈：`p6b4s0` 的 `$$ ... $$` 独立公式同时受到**全公式**半透明底色、**当前行/预览段落**选中底色、**PDF Block 覆盖框**选中底色、**单公式**焦点底色叠加，公式文本被明显压暗；这不是 OCR 内容或 KaTeX 的错误。
+- **LaTeX View 专属单底色规则**：所有公式仍统一使用 `--ocr-latex-all-fill`，但 CM6 选中行和选中公式 Deco、MD Preview 当前段落以及 PDF 选中 Block/父子框、当前 Formula 焦点框本身都设为透明底色；保留当前行/段落与公式焦点的金色 `outline/border`，不会丢失当前位置。
+- 只使用 `#workspace.ocr-latex-all-active` 的 CSS 作用域处理叠色，不改 CM6/AG 运行态、原始 PDF bbox、MinerU JSON、Markdown 或 SQLite；离开 LaTeX View 后原先的行内浅色、独立公式焦点色和普通视图高亮仍按旧规则工作。
+- Chromium / iPad WebKit E2E 直接断言当前行、选中源码 Span、PDF 焦点/Block、MD Preview 段落的计算背景均为透明，PDF 本体的全公式标记仍保持唯一的统一底色，金色边框存在，点击公式定位与数据零写入保持原样。
