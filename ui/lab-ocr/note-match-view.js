@@ -55,7 +55,12 @@ export function projectNoteMatchRows(mdRows,blockRows,config=DEFAULT_NOTE_MATCH_
     if(!ref)continue;
     const candidates=pair.candidate_body_ids.length?pair.candidate_body_ids:[null];
     const base={pair_id:pair.pair_id,number:pair.number,status:pair.status,
-      reason:pair.reason,scope:ref.evidence.scope,
+      reason:pair.reason,scope:ref.evidence.scope,reference_id:pair.reference_id,
+      candidate_body_ids:pair.candidate_body_ids,
+      body_choices:Object.freeze(pair.candidate_body_ids.map(id=>{
+        const item=bodyById.get(id);
+        return Object.freeze({id,pbs:item?.pbs??'',line_no:item?.line_no??null});
+      })),
       candidate_count:pair.candidate_body_ids.length};
     rows.push(Object.freeze({...base,kind:'注引',note_row_id:`${pair.pair_id}:ref`,
       line_id:ref.line_id,line_no:ref.line_no,block_id:ref.block_id,pbs:ref.pbs,

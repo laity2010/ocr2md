@@ -717,7 +717,12 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     }
     const action=document.createElement('button');
     action.type='button';action.className='ocr-ag-extra-action';action.hidden=true;
-    bar.append(allPages,label,picker,action);element.append(bar);
+    const toggleLabel=document.createElement('label');
+    toggleLabel.className='ocr-ag-review-toggle';toggleLabel.hidden=true;
+    const toggle=document.createElement('input');toggle.type='checkbox';
+    const toggleText=document.createElement('span');
+    toggleLabel.append(toggle,toggleText);
+    bar.append(allPages,label,picker,action,toggleLabel);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
     owned=()=>mountEmptyGrid(grid);
@@ -919,6 +924,19 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    setAgToggle({label,checked=false,onChange}={}){
+      const control=container.querySelector('.ocr-outline-pane .ocr-ag-review-toggle');
+      if(!control)return false;
+      const input=control.querySelector('input'),title=control.querySelector('span');
+      control.hidden=!(label&&typeof onChange==='function');
+      control.closest('.ocr-ag-toolbar')?.classList.toggle('ocr-ag-with-review-toggle',
+        !control.hidden);
+      if(control.hidden){input.onchange=null;input.checked=false;title.textContent='';return false;}
+      title.textContent=String(label).slice(0,24);
+      input.checked=Boolean(checked);
+      input.onchange=()=>onChange(input.checked);
+      return true;
+    },
     setAgAction({label,onClick}={}){
       const button=container.querySelector('.ocr-outline-pane .ocr-ag-extra-action');
       if(!button)return false;

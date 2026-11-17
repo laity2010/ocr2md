@@ -13,6 +13,8 @@ import {projectBlockBreakRows,resolveBlockBreakFocus,renderBlockBreakJoinCell} f
 import {createBlockBreakReviewCell} from './block-break-review-cell.js';
 import {planBlockBreakMerge,emptyMdChildBlockIds} from './block-break-merge.js';
 import {projectNoteMatchRows,resolveNoteMatchFocus,compareNoteNumbers} from './note-match-view.js';
+import {projectReviewedNoteRows} from './note-pair-review.js';
+import {createNotePairReviewCell} from './note-pair-review-cell.js';
 import {DEFAULT_NOTE_MATCH_CONFIG,validateNoteMatchConfig} from './note-match-index.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
@@ -120,6 +122,8 @@ const MD_NOTE_COLUMNS=Object.freeze([
       node.title='点击这一行定位该端点，原文不会修改';
       return node;
     }},
+  {field:'review',headerName:'审阅',width:148,minWidth:134,sortable:true,
+    pinned:'right',lockPinned:true,lockPosition:'right'},
   {field:'status',headerName:'匹配状态',width:102,sortable:true,
     cellRenderer:params=>{
       const node=document.createElement('span');
@@ -172,6 +176,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let breakReviews=new Map(),recentlyMerged=new Map(),breakReviewEpoch=0;
   let noteConfig=DEFAULT_NOTE_MATCH_CONFIG,noteConfigRevision=null,noteConfigBook=null;
   let noteDialog=null,lastNoteProjection=null;
+  let noteReviews=new Map(),noteReviewEpoch=0,showIgnoredNotes=false;
+  const noteReviewBusy=new Set();
   const breakReviewBusy=new Set();
   let pdfPage=1;
   function mergedBreakRow(saved){
@@ -215,12 +221,17 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       .filter(saved=>!candidates.has(saved.issue_id)).map(mergedBreakRow).filter(Boolean);
     return [...pending,...merged].sort((a,b)=>a.before_line_no-b.before_line_no);
   }
+  function projectNoteReviewRows(){
+    const source=md()?.rows??[],blocks=cm()?.rows??[];
+    lastNoteProjection=projectNoteMatchRows(source,blocks,noteConfig);
+    return projectReviewedNoteRows(lastNoteProjection,noteReviews,source,
+      {showIgnored:showIgnoredNotes});
+  }
   const projectedMdRows=()=>activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
     activeAgView==='block-break'?projectBreakReviewRows():
-    activeAgView==='note-match'?(lastNoteProjection=projectNoteMatchRows(
-      md()?.rows??[],cm()?.rows??[],noteConfig)).rows:
+    activeAgView==='note-match'?projectNoteReviewRows():
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
   // One candidate's CM6 edit does not invalidate decisions for independent
   // candidates. Compare their two exact source lines and stable identities
@@ -333,6 +344,86 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       }else onStatus('断块审阅保存失败：'+error.message,'error');
     }finally{breakReviewBusy.delete(issue);}
   }
+  async function loadNoteReviews(){
+    const epoch=++noteReviewEpoch,book=workspace,op=operation;
+    if(md()?.dirty||cm()?.queue?.length)return false;
+    const result=await request('note-pair-reviews',{workspace:book});
+    if(epoch!==noteReviewEpoch||book!==workspace||op!==operation)return false;
+    // A CM6 edit arriving during the HTTP GET must never be relabelled as
+    // the previously persisted review. Leave the old cache untouched.
+    if(md()?.dirty||cm()?.queue?.length)return false;
+    const lines=new Map((md()?.rows??[]).map(row=>[row.line_id,row.text]));
+    noteReviews=new Map((result.reviews??[]).filter(item=>
+      typeof item.ref_id==='string'&&['忽略','待转换'].includes(item.decision)).map(item=>
+      [item.ref_id,{...item,
+        ref_source_text:item.valid?lines.get(item.ref_line_id):null,
+        body_source_text:item.valid&&item.body_line_id?lines.get(item.body_line_id):null}]));
+    return true;
+  }
+  function noteEndpoint(candidate){
+    const row=(md()?.rows??[]).find(item=>item.line_id===candidate?.line_id);
+    if(!row||row.block_id!==candidate.block_id||
+       row.text.slice(candidate.from,candidate.to)!==candidate.raw)return null;
+    return {candidateId:candidate.candidate_id,lineId:candidate.line_id,
+      blockId:candidate.block_id,from:candidate.from,to:candidate.to,
+      raw:candidate.raw,sourceText:row.text};
+  }
+  async function chooseNoteReview(row,decision,bodyId=null){
+    const book=workspace,op=operation,id=row?.reference_id;
+    if(!id||noteReviewBusy.has(id))return;
+    if(md()?.dirty||cm()?.queue?.length){
+      onStatus('请先保存当前 Block/MD 修改，再审阅注释候选','warning');return;
+    }
+    const candidate=projectNoteMatchRows(md()?.rows??[],cm()?.rows??[],noteConfig);
+    const ref=candidate.index.references.find(item=>item.candidate_id===id);
+    const pair=candidate.index.pairs.find(item=>item.reference_id===id);
+    const body=decision==='待转换'?
+      candidate.index.bodies.find(item=>item.candidate_id===bodyId&&
+        pair?.candidate_body_ids.includes(item.candidate_id)):null;
+    const reference=noteEndpoint(ref),selected=body?noteEndpoint(body):null;
+    if(!reference||(decision==='待转换'&&!selected)||
+       !['待定','忽略','待转换'].includes(decision)){
+      onStatus('注释审阅对象已变化或缺少确定注文，请刷新后重新选择','warning');return;
+    }
+    const prior=noteReviews.get(id),version=md().version;
+    noteReviewBusy.add(id);
+    try{
+      const result=await request('note-pair-review-set',{
+        workspace:book,reference,body:selected,decision,
+        expectedRevision:prior?.revision??null},true);
+      if(book!==workspace||op!==operation)return;
+      if(result.ref_id!==id||result.decision!==decision||
+         result.body_id!==(selected?.candidateId??null))throw Error('注释审阅回执不匹配');
+      if(decision==='待定')noteReviews.delete(id);
+      else noteReviews.set(id,{
+        ref_id:id,ref_line_id:reference.lineId,ref_block_id:reference.blockId,
+        ref_from:reference.from,ref_to:reference.to,ref_raw:reference.raw,
+        ref_source_text:reference.sourceText,
+        body_id:selected?.candidateId??null,body_line_id:selected?.lineId??null,
+        body_block_id:selected?.blockId??null,body_from:selected?.from??null,
+        body_to:selected?.to??null,body_raw:selected?.raw??null,
+        body_source_text:selected?.sourceText??null,
+        valid:version===md()?.version,decision,revision:result.revision});
+      if(activeAgView==='note-match'&&currentSqlTable==='md')
+        frame.patchNoteRows(projectedMdRows());
+      if(version!==md()?.version){
+        onStatus('注释审阅已保存，但原文同时发生修改；请检查证据是否过期','warning');return;
+      }
+      onStatus(`注释 ${ref.number} · ${decision==='待转换'?'确认配对（等待 WP3.2 转换）':decision}`+
+        ` · 审阅决定已保存，Markdown 未修改`,'ok');
+    }catch(error){
+      if(/审阅状态已有其他修改/.test(error.message)){
+        try{
+          const refreshed=await loadNoteReviews();
+          if(refreshed&&activeAgView==='note-match'&&currentSqlTable==='md')
+            frame.patchNoteRows(projectedMdRows());
+          onStatus(refreshed?'注释审阅已从 SQLite 更新，请核对并重新选择':
+            '注释审阅冲突且源码未保存；请保存后重新读取','warning');
+        }catch(err){onStatus('注释审阅同步失败：'+err.message,'error');}
+      }else onStatus('注释审阅保存失败：'+error.message,'error');
+    }finally{noteReviewBusy.delete(id);}
+  }
+  const noteReviewCell=createNotePairReviewCell(chooseNoteReview);
   const reviewCell=createBlockBreakReviewCell(chooseBreakReview);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
@@ -855,6 +946,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       throw Error('CM Block/MD 尚有待持久操作，必须先保存，拒绝切换/重建');
     breakReviews.clear();recentlyMerged.clear();++breakReviewEpoch;breakReviewBusy.clear();
     noteDialog?.dispose();noteDialog=null;
+    noteReviews.clear();++noteReviewEpoch;noteReviewBusy.clear();showIgnoredNotes=false;
     noteConfig=DEFAULT_NOTE_MATCH_CONFIG;noteConfigRevision=null;noteConfigBook=null;lastNoteProjection=null;
     persistence?.dispose();persistence=null;loadingRuntime=null;
     mdPersistence?.dispose();mdPersistence=null;mdLoading=null;
@@ -937,6 +1029,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     frame.showSqlRows(rows,columns.map(column=>({
       ...column,
       ...(broken&&column.field==='review'?{cellRenderer:reviewCell}:{}),
+      ...(notes&&column.field==='review'?{cellRenderer:noteReviewCell}:{}),
       ...(column.field==='text'&&!latex&&!broken&&!notes?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
@@ -987,6 +1080,12 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     });
     frame.setAgView(activeAgView);
     frame.setAgAction(notes?{label:'识别规则',onClick:()=>void openNoteRulesDialog()}:{});
+    frame.setAgToggle(notes?{label:'显示已忽略',checked:showIgnoredNotes,
+      onChange:value=>{
+        showIgnoredNotes=value;
+        if(activeAgView==='note-match'&&currentSqlTable==='md')
+          frame.patchNoteRows(projectedMdRows());
+      }}:{});
     frame.setLatexHighlights(latex?rows:[]);
     frame.setMdEditHistory();
     return rows.length;
@@ -996,12 +1095,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const token=++agViewRequest;
     if(view==='latex'&&!latexPresentation)
       latexPresentation=await import('./latex-view.js');
-    if(view==='note-match')try{await loadNoteRules();}
-      catch(error){onStatus('注释规则读取失败：'+error.message,'warning');return false;}
+    if(view==='note-match')try{
+      if(!await loadNoteRules())return false;
+      if(!await loadNoteReviews())
+        onStatus('源码尚未保存，仍可只读查看注释候选；人工决定需保存后再操作','warning');
+    }catch(error){onStatus('注释规则或审阅读取失败：'+error.message,'warning');return false;}
     if(view==='block-break')try{await loadBreakReviews();}
       catch(error){onStatus('断块审阅记录读取失败：'+error.message,'warning');return false;}
     if(token!==agViewRequest||currentSqlTable!=='md'||!md())return false;
     activeAgView=view;
+    if(view==='note-match')showIgnoredNotes=false;
     frame.setReviewPair(null);
     frame.clearMdNoteRange();
     frame.setAgView(view);
@@ -1014,7 +1117,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         `${lastNoteProjection?.index.stats.bodies??0} 注文、`+
         `${lastNoteProjection?.index.stats.matched??0} 已匹配、`+
         `${lastNoteProjection?.index.stats.need_review??0} 待核实、`+
-        `${lastNoteProjection?.missing_note_numbers.length??0} 个疑似缺号 · 按注号排序 · 只读`:
+        `${lastNoteProjection?.missing_note_numbers.length??0} 个疑似缺号 · `+
+        `支持人工忽略/确认配对（不改 MD）`:
       `AG ${view==='title'?'标题':view==='block-break'?'断块':'MD 行'}视图 · ${count} 条${view==='block-break'?'疑似断块 · 审阅结果可保存':'投影'} · 不自动修改 MD`,'ok');
     return true;
   }
@@ -1027,7 +1131,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       try{
         await ensureMdRuntime();
         if(activeAgView==='block-break')await loadBreakReviews();
-        if(activeAgView==='note-match'&&noteConfigBook!==workspace)await loadNoteRules();
+        if(activeAgView==='note-match'){
+          if(noteConfigBook!==workspace)await loadNoteRules();
+          await loadNoteReviews();
+        }
         const rows=md().rows;
         renderMdAg();
         currentSqlTable='md';
@@ -1043,7 +1150,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
     if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
     frame.setReviewPair(null);
-    frame.clearMdNoteRange();frame.setAgAction({});
+    frame.clearMdNoteRange();frame.setAgAction({});frame.setAgToggle({});
     const id=++loaded;
     onStatus(table==='block'&&cm()?.workspace===workspace?
       '正在从 CM6 内存态投影 Block 表…':`正在从 SQLite 加载 ${table} 表并交给 CM6…`,'info');
@@ -1116,6 +1223,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     ++loaded;
     breakReviews.clear();recentlyMerged.clear();++breakReviewEpoch;breakReviewBusy.clear();
     noteDialog?.dispose();noteDialog=null;
+    noteReviews.clear();++noteReviewEpoch;noteReviewBusy.clear();showIgnoredNotes=false;
     noteConfig=DEFAULT_NOTE_MATCH_CONFIG;noteConfigRevision=null;noteConfigBook=null;lastNoteProjection=null;
     persistence?.dispose();persistence=null;loadingRuntime=null;
     frame.replaceStructuredRuntime(null);
@@ -1146,5 +1254,5 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
     flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation,
     setAgView,dispose(){noteDialog?.dispose();unsubscribeLocation();
-      frame.setAgAction({});frame.setMdPreviewNavigation(null);}});
+      frame.setAgAction({});frame.setAgToggle({});frame.setMdPreviewNavigation(null);}});
 }

@@ -8,11 +8,16 @@
 #workspace .ocr-note-match-text{white-space:normal;overflow:hidden;text-overflow:ellipsis;
   font:inherit;line-height:1.5}
 #workspace .ocr-note-match-text[data-kind="注引"]{color:#dfc484}
-#workspace .ocr-note-match-text[data-kind="注文"]{color:#9fd4c6}
+/* End-point identity is BLUE; review uncertainty is ORANGE and boxed.
+ * Different hue + shape for iPad low-brightness readability. */
+#workspace .ocr-note-match-text[data-kind="注文"]{color:#84b7ff;
+  border-left:3px solid #478bd8;padding-left:5px;background:rgba(58,102,169,.13)}
 #workspace .ocr-note-match-status[data-status="已匹配"]{color:#a7c080}
-#workspace .ocr-note-match-status[data-status="待核实"],
+#workspace .ocr-note-match-status[data-status="待核实"]{
+  color:#ff9b62;background:rgba(198,78,42,.20);border:1px solid rgba(246,134,85,.55);
+  border-radius:4px;padding:2px 5px;font-weight:700}
 #workspace .ocr-note-match-status[data-status="缺注文"],
-#workspace .ocr-note-match-status[data-status="缺注引"]{color:#e9c46a}
+#workspace .ocr-note-match-status[data-status="缺注引"]{color:#efc96f}
 #workspace .ocr-note-match-status[data-status="编号冲突"]{color:#ed9b89}
 .ocr-note-match-rules-dialog{position:fixed;inset:auto;margin:auto;
   width:min(640px,calc(100vw - 24px));max-height:90vh;overflow:auto;
@@ -39,3 +44,33 @@
  * review. Keep the entire placeholder visibly distinct but fully filterable. */
 #workspace .ocr-note-match-status[data-status="疑似缺号"]{color:#efba60;font-weight:700}
 #workspace .ocr-note-match-text[data-kind="缺号"]{color:#e7ba71;font-style:italic}
+
+#workspace .ocr-ag-review-toggle{display:flex;align-items:center;gap:4px;
+  color:#c0c8cc;white-space:nowrap;font-size:11px}
+#workspace .ocr-ag-review-toggle[hidden]{display:none}
+#workspace .ocr-note-review-cell{display:inline-flex;align-items:center;height:100%}
+#workspace .ocr-note-review-trigger{font:inherit;color:#e3ddce;
+  background:#39454e;border:1px solid #667887;border-radius:5px;
+  padding:4px 7px;white-space:nowrap;cursor:pointer}
+#workspace .ocr-note-review-trigger[data-review="忽略"]{color:#aaaeb3;background:#36383a}
+#workspace .ocr-note-review-trigger[data-review="待转换"]{color:#a9dc9d;border-color:#719576}
+#workspace .ocr-note-review-trigger[data-review="需复核"]{color:#ff9b62;border-color:#bb7254}
+.ocr-note-review-menu{position:fixed;z-index:10040;min-width:242px;max-width:min(310px,96vw);
+  background:#29333b;border:1px solid #72859a;border-radius:6px;
+  padding:5px;box-shadow:0 8px 26px rgba(0,0,0,.65);color:#eee8dc}
+.ocr-note-review-option{display:block;width:100%;padding:9px 7px;text-align:left;
+  font:12px/1.4 "OCR2MD Sarasa",monospace;border:0;border-radius:4px;
+  color:#eee8dc;background:transparent;cursor:pointer}
+.ocr-note-review-option:hover,.ocr-note-review-option:focus{background:#445c6b}
+.ocr-note-review-hint{font-size:11px;color:#e6bd8c;margin:7px}
+#workspace .ocr-note-match-status[data-status="已忽略"]{color:#acafb4}
+#workspace .ocr-note-match-status[data-status="已确认"]{color:#a4dc9e;font-weight:700}
+
+/* A four-pane iPad can leave the AG toolbar narrow. Only the Note Match
+ * toolbar wraps controls; all other views retain the original one-line bar. */
+#workspace .ocr-ag-toolbar.ocr-ag-with-review-toggle{height:auto;min-height:34px;
+  flex-wrap:wrap;align-content:center;column-gap:7px;row-gap:4px}
+#workspace .ocr-ag-with-review-toggle .ocr-ag-toolbar-label{display:none}
+#workspace .ocr-ag-with-review-toggle .ocr-ag-module-select{width:132px;
+  flex:1 1 104px;min-width:84px}
+#workspace .ocr-ag-with-review-toggle .ocr-ag-review-toggle{flex:none}

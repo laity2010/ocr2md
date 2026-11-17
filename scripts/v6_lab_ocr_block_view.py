@@ -219,10 +219,12 @@ def initialize_block_projection(book:Path)->dict:
             tables={name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
             if 'block_break_review' in tables:
                 raise OCRImportError('已有断块人工审阅结果，禁止静默重建 Block')
+            if 'note_pair_review' in tables:
+                raise OCRImportError('已有注释人工审阅结果，禁止静默重建 Block')
             if 'md_line' in tables:
                 raise OCRImportError('MD 行表已有人工正文；禁止直接重建 Block 编号。须先独立备份并规划映射迁移')
             allowed={'minerujson','block','span','block_review','block_edit_meta',
-                     'block_edit_history','block_edit_receipt','block_source_link'}
+                     'block_edit_history','block_edit_receipt','block_source_link','note_pair_review'}
             if tables-allowed:raise OCRImportError('数据库存在未知实体表，拒绝重建')
             _page_sizes(conn,info['signature'])
             # Enumerate existing MinerU data in its original group order.

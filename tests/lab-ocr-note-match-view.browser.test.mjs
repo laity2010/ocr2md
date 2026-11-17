@@ -13,7 +13,7 @@ const vite=spawn('node',['node_modules/vite/bin/vite.js','--config',
   '--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
 let log='';vite.stdout.on('data',x=>log+=x);vite.stderr.on('data',x=>log+=x);
 const blocks=[
-  [101,'p1b0',0,'A study finds<sup>1</sup>, and it also cites[^1] and <sup>5</sup>.'],
+  [101,'p1b0',0,'A study finds<sup>1</sup>, and it also cites[^1] and <sup>5</sup>, plus (2).'],
   [102,'p2b1',1,'Further comparison<sup>2</sup>.'],
   [103,'p3b0',2,'## Notes'],
   [104,'p3b1',2,'1. One note applies to two citations.'],
@@ -46,7 +46,8 @@ try{
    const page=await browser.newPage({viewport:{width:1250,height:900},hasTouch:true});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    let mdLoads=0,mdSaves=0,blockSaves=0,ruleLoads=0,ruleSaves=0;
-   let savedRules=null,ruleRevision='initial-rev';
+   let savedRules=null,ruleRevision='initial-rev',reviewGets=0,reviewSaves=0;
+   const reviews=new Map();
    await page.addInitScript(({book})=>localStorage.setItem(
      'ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
        'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',
@@ -62,6 +63,28 @@ try{
      if(op==='rows')return json({table:'block',total:blocks.length,rows:blocks});
      if(op==='block-edit-state')return json({revision:0,cursor:0,history:[],canUndo:false,canRedo:false});
      if(op==='md-state'){mdLoads++;return json({status:'ready',revision:0,rows:md,total:md.length});}
+     if(op==='note-pair-reviews'){
+       reviewGets++;
+       return json({status:'ready',reviews:[...reviews.values()]});
+     }
+     if(op==='note-pair-review-set'){
+       const request=req.postDataJSON();reviewSaves++;
+       const ref=request.reference,body=request.body;
+       const old=reviews.get(ref.candidateId);
+       if((old?.revision??null)!==request.expectedRevision)
+         return route.fulfill({status:422,contentType:'application/json',
+           body:JSON.stringify({error:'注释审阅状态已有其他修改，须重新加载'})});
+       const revision=request.decision==='待定'?null:'0123456789abcdef'+String(reviewSaves).padStart(16,'0');
+       if(request.decision==='待定')reviews.delete(ref.candidateId);
+       else reviews.set(ref.candidateId,{
+         ref_id:ref.candidateId,ref_line_id:ref.lineId,ref_block_id:ref.blockId,
+         ref_from:ref.from,ref_to:ref.to,ref_raw:ref.raw,decision:request.decision,
+         body_id:body?.candidateId??null,body_line_id:body?.lineId??null,
+         body_block_id:body?.blockId??null,body_from:body?.from??null,
+         body_to:body?.to??null,body_raw:body?.raw??null,revision,valid:true});
+       return json({status:'saved',ref_id:ref.candidateId,decision:request.decision,
+         body_id:body?.candidateId??null,revision});
+     }
      if(op==='note-match-rules'){
        ruleLoads++;
        return json({status:'ready',revision:ruleRevision,
@@ -129,7 +152,7 @@ try{
    assert(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
      ?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId),
      'A second citation in the same LineID must have its own AG row ID');
-   assert.equal(ruleLoads,1);
+   assert.equal(ruleLoads,1);assert.equal(reviewGets,1);
    // Both existing alternative orders remain user-selectable, and neither
    // changes the source or creates any fictitious coordinates for the gap.
    const header=field=>page.locator(`.ocr-outline-grid .ag-header-cell[col-id="${field}"]`);
@@ -183,6 +206,75 @@ try{
    await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-preview-md-scroll [data-ocr-sync-selected]')]
      .some(node=>Number(node.dataset.sourceStart)<=4&&Number(node.dataset.sourceEnd)>4),
      null,{timeout:15000});
+   // The body text and the ambiguous status must differ in hue AND styling.
+   const colors=await page.evaluate(()=>{
+     const body=document.querySelector('.ag-row-selected .ocr-note-match-text[data-kind="注文"]');
+     const style=body?getComputedStyle(body):null;
+     return {text:style?.color,edge:style?.borderLeftColor,edgeWidth:style?.borderLeftWidth};
+   });
+   assert.equal(colors.text,'rgb(132, 183, 255)');
+   assert.equal(colors.edgeWidth,'3px');
+   const weakId='pair:ref:note-md-1:'+sourceLines[0].indexOf('(2)')+
+     ':ref.parenthesis:ref';
+   const weak=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'status'}),weakId);
+   assert.equal(weak?.status,'待核实');
+   const warning=await page.evaluate(()=>{
+     const cell=document.querySelector('.ag-row-selected .ocr-note-match-status[data-status="待核实"]');
+     const style=cell?getComputedStyle(cell):null;
+     return {text:style?.color,border:style?.borderTopWidth,background:style?.backgroundColor};
+   });
+   assert.equal(warning.text,'rgb(255, 155, 98)');
+   assert.equal(warning.border,'1px');
+   assert.notEqual(warning.text,colors.text);
+   // Ignore a weak reference -> immediately leave the current candidate
+   // queue, but remain recoverable through the AG-owned 'show ignored' toggle.
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-review-trigger').click();
+   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="忽略"]').click();
+   await page.waitForFunction(id=>!document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id,focusColumn:'status',preserveFilters:true}),
+     weakId,{timeout:12000});
+   assert.equal(reviewSaves,1);
+   await picker.selectOption('md');
+   await picker.selectOption('note-match');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
+   assert.equal(reviewGets,2,'Ignored decision must be reloaded from book SQLite');
+   assert.equal(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,preserveFilters:true}),weakId),null,
+     'Ignored candidate stays outside pending queue after reopening the View');
+   const showIgnored=page.locator('.ocr-outline-pane .ocr-ag-review-toggle input');
+   assert.equal(await showIgnored.isChecked(),false);
+   await showIgnored.check();
+   const ignored=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),weakId);
+   assert.equal(ignored?.review,'忽略');assert.equal(ignored?.status,'已忽略');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-review-trigger').click();
+   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="待定"]').click();
+   await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id,focusColumn:'review'})?.review==='待定',
+     weakId,{timeout:12000});
+   assert.equal(reviewSaves,2);
+   await showIgnored.uncheck();
+   // Reopening the view intentionally resets to number order. This explicit
+   // subsequent user click then verifies rule-save does NOT reset it.
+   await header('line_no').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="line_no"]')
+     ?.getAttribute('aria-sort')==='ascending');
+   // Confirm a unique body without editing or converting Markdown.
+   const firstId='pair:ref:note-md-1:'+sourceLines[0].indexOf('<sup>1</sup>')+
+     ':ref.html-sup:ref';
+   const first=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),firstId);
+   assert.equal(first?.review,'待定');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-review-trigger').click();
+   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="待转换"]').first().click();
+   await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id,focusColumn:'review'})?.review==='待转换',
+     firstId,{timeout:12000});
+   assert.equal(reviewSaves,3);
+   assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdDocument()),original,'Confirmation must not convert source in WP3.1');
    // One AG toolbar action controls the rules modal; no additional grid.
    const button=page.locator('.ocr-outline-pane .ocr-ag-extra-action');
    assert.equal(await button.textContent(),'识别规则');
@@ -211,18 +303,23 @@ try{
    await picker.selectOption('note-match');
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
-   assert.equal(ruleLoads,2);
+   assert.equal(ruleLoads,3);assert.equal(reviewGets,3);
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="number"]')
      ?.getAttribute('aria-sort')==='ascending');
    assert.equal(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId),null,
      'Switching AG Views must read saved per-book configuration');
+   const confirmedReload=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),firstId);
+   assert.equal(confirmedReload?.review,'待转换',
+     'Confirmed pairing is persisted on the book even across AG view reloading');
    assert.equal(mdLoads,1);
    assert.equal(mdSaves,0);assert.equal(blockSaves,0);
+   assert.equal(reviewSaves,3);
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument()),original);
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_NOTE_MATCH_WP2_BROWSER_PASS',name,{ruleLoads,ruleSaves,
+   console.log('LAB_OCR_NOTE_MATCH_WP3_1_BROWSER_PASS',name,{ruleLoads,ruleSaves,reviewGets,reviewSaves,
      mdLoads,mdSaves,blockSaves});
   }finally{await browser.close();}
  }

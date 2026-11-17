@@ -79,3 +79,27 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - `findMissingNoteNumbers(index)` 在**同一配置范围**内取注引和注文已发现数字注号的并集，只提示两端**已观测**编号之间的空缺：发现 `1、2、4` 会增加 `3 · 疑似缺号` 提示行。每条提示行的 `LineID/BlockID/源码行号` 为 `null`、PBS 为空，绝不造出不存在的原文或 PDF 框；点击时仅由全局状态栏提示“请检查 OCR 与编号规则”。已有注引没有注文、或反过来，沿用已有 `缺注文 / 缺注引` 状态，不重复虚报整号缺失。章节重启编号时使用 `scope:'chapter'` 分范围统计，防止把两个独立序列混合认定为断档；缺少足够证据时**不猜测第一个已见编号之前或最后一个之后**是否缺号。
 - `疑似缺号` 不是 WP3 的人工裁决，也不自动补号或转换 MD。真实 Buffett 示例注号 1–10 连续，因此缺号提示为 0；但原来位于 7 之后的正文枚举 `(1)`、`(2)` 将按数字排到注号 1、2 的匹配行附近，仍保持“待核实”。
 - `tests/lab-ocr-note-match-view.test.mjs` 直接覆盖数字 2/10、字母/符号、1/2/10 中间缺号、无虚假 LineID/PBS、按章节独立、未观测开头不猜测；`tests/lab-ocr-note-match-view.browser.test.mjs` 通过 Chromium/iPad WebKit 验证第5 AG 默认注号升序、虚线无关的缺号行与筛选、手动 PBS/行号排序、规则更新不重置手动排序、重新切换恢复注号顺序，以及 MD/Block 保存次数为0。
+
+## WCP43 WP3.1 · 人工审阅 + 注释配色（2026-11-17）
+
+### 可见行为
+
+- 注引/注文属于**端点类型**：注释候选端点（`注引` 金色，`注文` 蓝色 `#84b7ff` + 蓝色侧边条及浅蓝底）。`待核实` 属于**匹配状态**：橙红 `#ff9b62` + 独立描边橙底。状态、端点类型用不同色相及形状，不能继续复用注文字色渲染警示。
+- AG 同一「注释匹配」View 的固定末列为「审阅」。每个**注引候选**持有唯一审阅对象，同一 pair 的注引和注文行展示相同审阅状态；「缺注引」孤立注文、「疑似缺号」占位行不可进行伪审阅。
+- 审阅选项：`待定`（撤销人工决定）、`忽略`（人工确认不是要处理的注释）、`确认配对（待转换）`（当且仅当至少有候选注文时选择一个明确的 body CandidateID）。有多个同号注文时必须从菜单点选一个候选 PBS/行号，不依赖最近距离猜测。`待转换` 是编辑流程状态，不等于**已转换**；本 WP **不运行 CM6 脚注转换、不写 MD、不动 Block**，真正转换留 WP3.2。
+- 选 `忽略` 即刻从默认待审阅候选列表退出；AG 工具栏复用 Frame 的 `setAgToggle({label:'显示已忽略',...})` 随时显示并恢复 `待定`。只在 Note Match View 显示此复选框；AG 其他 View 的布局不变。对 iPad 狭窄四窗版面，只有带此复选框的 AG toolbar 可以自动折行。
+- 保存审阅是局部 AG `patchNoteRows`，不重新加载 SQL 或替换 CM6 编辑器；注号/PBS/行号原有排序与 AG 列过滤保持。工作区切换重置内存缓存及规则窗，按书籍重新读取。用户源码未保存时仍可只读看候选，但禁止保存人工决定。
+
+### 新持久化契约和权威边界
+
+- `scripts/v6_lab_ocr_note_pair_review.py` 仅负责 `read_note_pair_reviews(book)` 和 `set_note_pair_review(book,reference,body,decision,expected_revision)`；`GET /labs/lab-ocr/api/ocr/note-pair-reviews` 是**只读**，没有扩展表仍返回空记录；`POST /labs/lab-ocr/api/ocr/note-pair-review-set` 校验 Main Cookie、Origin 和书籍工作目录授权，采用现有 SQLite 库的 `BEGIN IMMEDIATE`，只在第一次人工决定后创建扩展表 `note_pair_review`。
+- `note_pair_review` 的主键为 **ref CandidateID**（稳定 LineID + UTF-16 位置 + 规则 ID，非 PBS、非注号），保存 ref LineID、BlockID、字符范围、原文上标、整行 SHA256，及可选明确选择的 body CandidateID、LineID、BlockID、字符范围、整行 SHA256。一个注文允许多个注引复用；单注引仅对应一条人工审阅决定。
+- 每次更新生成随机 revision，用户请求必须携带上一版 revision 或 `null`；若另一设备修改则返回 422，不自动覆盖。服务端同时核对 SQLite `md_line` 真实原文、BlockID、LineID 和字符区间；SQL 中修改过的原文不能带旧快照冒充新证据。`GET` 不把过期记录宣称有效；UI 从当前 CM6 运行态重新对齐每条引用及 body 候选，过期时只提示 `需复核`。
+- 原始 MinerU/MD 数据仍为唯一权威：审阅表不保存可写的第二份 Markdown，禁止在 GET 时创建表，禁止在保存审阅时修改 `md_line` 或 `block_review`。旧来源覆盖/Block 重建会发现这张人工审阅表并拒绝静默覆盖。书籍级规则仍由 `.ocr2md-note-match-rules.json` 负责，不复制入新 SQL 表。
+- 公共 Frame 只新增小 API `setAgToggle`；注释模块直接 API `projectReviewedNoteRows` 纯函数、`createNotePairReviewCell` 审阅菜单、后端读写 API 均有直接/浏览器测试。暂不对其他 AG View 引入复选框或单独状态存储。
+
+### 回归
+
+- `node tests/lab-ocr-note-pair-review.test.mjs` 验证同一行多注引、忽略/恢复、明确 body 冲突选取、原文变化仅对应候选失效。
+- `python3 tests/lab-ocr-note-pair-review.test.py -v` 在隔离书籍中验证 GET 绝不建表、POST 建表、CAS 并发/覆盖保护、完整 md_line 不变、书籍间隔离、HTTP 未授权/错误 Origin 拒绝；所有数据变更仅发生在合成 book 的 SQLite。
+- `node tests/lab-ocr-note-match-view.browser.test.mjs` 用 Chromium + iPad WebKit 验证蓝色注文 vs 橙红警示的实际 CSS 色值和描边、忽略立即退出、重新进入 View 仍被忽略、显示已忽略后恢复、选择明确注文成为待转换、规则保存和排序保持、MD/Block 保存次数=0。
