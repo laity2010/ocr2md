@@ -24,6 +24,9 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS block_break_review(
  before_line_id TEXT NOT NULL,
  after_line_id TEXT NOT NULL,
  evidence_sha256 TEXT NOT NULL,
+ joined_sha256 TEXT,
+ split_offset INTEGER,
+ merge_glue TEXT,
  decision TEXT NOT NULL CHECK(decision IN ('断块合并','忽略')),
  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  PRIMARY KEY(before_block_id,after_block_id)
@@ -41,7 +44,7 @@ def _evidence(before_id,after_id,before_text,after_text):
     return hashlib.sha256(raw.encode('utf-8')).hexdigest()
 
 
-def _line_and_block(db,before_block_id,after_block_id,before_line_id,after_line_id):
+def _line_and_block(db,before_block_id,after_block_id,before_line_id,after_line_id,*,merged=False):
     if before_block_id==after_block_id:
         raise OCRImportError('断块的前后 BlockID 必须不同')
     blocks=[db.execute('''SELECT block_id,parent_block_id,sibling_order,
@@ -76,36 +79,65 @@ def _line_and_block(db,before_block_id,after_block_id,before_line_id,after_line_
                               (after_block_id,after_line_id)):
         row=db.execute('SELECT line_no,text,block_id FROM md_line WHERE line_id=?',
                        (line_id,)).fetchone()
-        if not row or row[2]!=block_id or not row[1].strip():
+        if not row or row[2]!=block_id or (not row[1].strip() and not (merged and block_id==after_block_id)):
             raise OCRImportError('断块 MD LineID 所属关系已经变化')
-        boundary=db.execute('''SELECT line_id FROM md_line WHERE block_id=?
-                     AND trim(text)<>'' ORDER BY line_no {} LIMIT 1'''.format(
-                        'DESC' if block_id==before_block_id else 'ASC'),
-                        (block_id,)).fetchone()
+        boundary=db.execute('SELECT line_id FROM md_line WHERE block_id=? '
+              + ('ORDER BY line_no ASC LIMIT 1' if merged and block_id==after_block_id
+                 else "AND trim(text)<>'' ORDER BY line_no "+
+                  ('DESC' if block_id==before_block_id else 'ASC')+' LIMIT 1'),
+              (block_id,)).fetchone()
         if not boundary or boundary[0]!=line_id:
             raise OCRImportError('断块接续端点已不再是该 Block 的首末正文行')
+        if merged and block_id==after_block_id and db.execute(
+            "SELECT 1 FROM md_line WHERE block_id=? AND trim(text)<>'' LIMIT 1",
+            (block_id,)).fetchone():
+            raise OCRImportError('合并后块仍有非空正文')
         lines.append(row)
     if lines[0][0]>=lines[1][0]:
         raise OCRImportError('断块接续 MD 行顺序已变化')
     return lines
 
 
+def _merge_values(before_text,after_text):
+    strip=before_text.rstrip().endswith('-')
+    left=before_text.rstrip()[:-1] if strip else before_text.rstrip()
+    glue='' if strip else ' '
+    return left+glue+after_text.lstrip(),len(left),glue
+
+
+def _merge_columns(db):
+    return {'joined_sha256','split_offset','merge_glue'}.issubset(
+        {r[1] for r in db.execute(f'PRAGMA table_info({TABLE})')})
+
+
 def read_block_break_reviews(book:Path):
     with closing(sqlite3.connect(f'file:{_db(book)}?mode=ro',uri=True,timeout=10)) as db:
         _check_signature(db,book)
         if not _has_table(db):return {'status':'ready','reviews':[]}
+        extra='joined_sha256,split_offset,merge_glue' if _merge_columns(db) else 'NULL,NULL,NULL'
+        query=('SELECT before_block_id,after_block_id,before_line_id,after_line_id,'
+               'evidence_sha256,decision,'+extra+' FROM block_break_review '
+               'ORDER BY before_block_id,after_block_id')
         result=[]
-        for row in db.execute('''SELECT before_block_id,after_block_id,
-                       before_line_id,after_line_id,evidence_sha256,decision
-                       FROM block_break_review ORDER BY before_block_id,after_block_id'''):
-            before_id,after_id,before_line_id,after_line_id,evidence,decision=row
+        for row in db.execute(query):
+            before_id,after_id,before_line_id,after_line_id,evidence,decision,joined_sha,offset,glue=row
+            issue=f'block-break:{before_id}:{after_id}'
             try:lines=_line_and_block(db,before_id,after_id,before_line_id,after_line_id)
-            except OCRImportError:continue
-            if _evidence(before_line_id,after_line_id,lines[0][1],lines[1][1])!=evidence:
+            except OCRImportError:lines=None
+            if lines and _evidence(before_line_id,after_line_id,lines[0][1],lines[1][1])==evidence:
+                result.append({'issue_id':issue,'before_line_id':before_line_id,
+                   'after_line_id':after_line_id,'decision':decision,'merged':False})
                 continue
-            result.append({'issue_id':f'block-break:{before_id}:{after_id}',
-                           'before_line_id':before_line_id,'after_line_id':after_line_id,
-                           'decision':decision})
+            if decision!='断块合并' or not joined_sha:continue
+            try:lines=_line_and_block(db,before_id,after_id,before_line_id,after_line_id,merged=True)
+            except OCRImportError:continue
+            if lines[1][1]!='' or hashlib.sha256(lines[0][1].encode('utf-8')).hexdigest()!=joined_sha:
+                continue
+            if type(offset) is not int or offset<1 or offset>len(lines[0][1]) or glue not in ('',' '):
+                continue
+            result.append({'issue_id':issue,'before_line_id':before_line_id,
+               'after_line_id':after_line_id,'decision':'断块合并','merged':True,
+               'split_offset':offset,'merge_glue':glue})
         return {'status':'ready','reviews':result}
 
 
@@ -132,6 +164,8 @@ def set_block_break_review(book:Path,before_block_id,after_block_id,
             if lines[0][1]!=before_text or lines[1][1]!=after_text:
                 raise OCRImportError('断块文本已变化，先保存并重新加载候选')
             evidence=_evidence(before_line_id,after_line_id,before_text,after_text)
+            joined,split_offset,glue=_merge_values(before_text,after_text)
+            joined_sha=hashlib.sha256(joined.encode('utf-8')).hexdigest() if decision=='断块合并' else None
             prior=db.execute('''SELECT decision,evidence_sha256 FROM block_break_review
                     WHERE before_block_id=? AND after_block_id=?''',
                     (before_block_id,after_block_id)).fetchone() if _has_table(db) else None
@@ -144,16 +178,28 @@ def set_block_break_review(book:Path,before_block_id,after_block_id,
                           (before_block_id,after_block_id))
             else:
                 db.execute(SCHEMA)
+                if not _merge_columns(db):
+                    existing={r[1] for r in db.execute(f'PRAGMA table_info({TABLE})')}
+                    for column,definition in [('joined_sha256','TEXT'),
+                        ('split_offset','INTEGER'),('merge_glue','TEXT')]:
+                        if column not in existing:
+                            db.execute(f'ALTER TABLE {TABLE} ADD COLUMN {column} {definition}')
                 db.execute('''INSERT INTO block_break_review
                    (before_block_id,after_block_id,before_line_id,after_line_id,
-                    evidence_sha256,decision) VALUES(?,?,?,?,?,?)
+                    evidence_sha256,joined_sha256,split_offset,merge_glue,decision)
+                   VALUES(?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(before_block_id,after_block_id) DO UPDATE SET
                    before_line_id=excluded.before_line_id,
                    after_line_id=excluded.after_line_id,
                    evidence_sha256=excluded.evidence_sha256,
-                   decision=excluded.decision,updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')''',
+                   joined_sha256=excluded.joined_sha256,
+                   split_offset=excluded.split_offset,
+                   merge_glue=excluded.merge_glue,
+                   decision=excluded.decision,
+                   updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')''',
                    (before_block_id,after_block_id,before_line_id,after_line_id,
-                    evidence,decision))
+                    evidence,joined_sha,split_offset if joined_sha else None,
+                    glue if joined_sha else None,decision))
             db.commit()
             return {'status':'saved','issue_id':f'block-break:{before_block_id}:{after_block_id}',
                     'decision':decision}

@@ -32,7 +32,7 @@ try{
  const menu=body.children.at(-1);
  assert.equal(menu.attributes.role,'listbox');
  assert.deepEqual(menu.children.map(option=>option.dataset.review),REVIEW_DECISIONS);
- assert.equal(menu.children[1].textContent,'断块合并（仅记录）');
+ assert.equal(menu.children[1].textContent,'断块合并');
  assert.equal(menu.children[1].attributes['aria-selected'],'false');
  menu.children[1].emit('click');
  await new Promise(resolve=>setImmediate(resolve));
@@ -44,7 +44,9 @@ try{
  const nextMenu=body.children.at(-1);
  nextMenu.children[1].emit('click');
  await new Promise(resolve=>setImmediate(resolve));
- assert.equal(actions.length,1,'selecting the existing decision is a no-op');
+ assert.equal(actions.length,2,'Legacy record-only merge must be executable by selecting again');
+ const merged=renderer({data:{review:'断块合并',merged:true}});
+ assert.equal(merged.children[0].disabled,true,'Completed merge requires CM6 Undo to reverse');
  console.log('LAB_OCR_BLOCK_BREAK_REVIEW_CELL_DIRECT_PASS');
 }finally{
  globalThis.document=saved.document;globalThis.innerWidth=saved.innerWidth;

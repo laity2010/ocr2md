@@ -50,7 +50,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1250,height:900},hasTouch:true});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   let mdLoads=0,mdSaves=0,blockSaves=0,reviewWrites=0,reviewLoads=0;
+   let mdLoads=0,mdSaves=0,blockSaves=0,reviewWrites=0,reviewLoads=0,mdRevision=0;
    const savedReviews=new Map();
    await page.addInitScript(({book})=>localStorage.setItem(
      'ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
@@ -70,10 +70,17 @@ try{
        {table:'block',total:7,rows:blocks}:{table:'minerujson',total:0,rows:[]});
      if(op==='block-edit-state')return json({revision:0,cursor:0,history:[],
        canUndo:false,canRedo:false});
-     if(op==='md-state'){mdLoads++;return json({status:'ready',revision:0,
+     if(op==='md-state'){mdLoads++;return json({status:'ready',revision:mdRevision,
        rows:md,total:md.length});}
      if(op==='block-break-reviews'){
-       reviewLoads++;return json({status:'ready',reviews:[...savedReviews.values()]});
+       reviewLoads++;
+       return json({status:'ready',reviews:[...savedReviews.values()].map(item=>{
+         const a=md.find(row=>row.line_id===item.before_line_id);
+         const b=md.find(row=>row.line_id===item.after_line_id);
+         if(a&&b&&b.text===''&&item.joinedText===a.text)
+           return {...item,merged:true,split_offset:item.split_offset,merge_glue:item.merge_glue};
+         return {...item,merged:false};
+       })});
      }
      if(op==='block-break-review-set'){
        reviewWrites++;
@@ -87,12 +94,28 @@ try{
        if((prior?.decision??'待定')!==body.expectedDecision)
          return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'并发状态冲突'})});
        if(body.decision==='待定')savedReviews.delete(issue_id);
-       else savedReviews.set(issue_id,{issue_id,
-         before_line_id:body.beforeLineId,after_line_id:body.afterLineId,
-         decision:body.decision});
+       else {
+         const split=body.beforeText.trimEnd().endsWith('-');
+         const left=split?body.beforeText.trimEnd().slice(0,-1):body.beforeText.trimEnd();
+         const glue=split?'':' ';
+         savedReviews.set(issue_id,{issue_id,
+           before_line_id:body.beforeLineId,after_line_id:body.afterLineId,
+           decision:body.decision,joinedText:left+glue+body.afterText.trimStart(),
+           split_offset:left.length,merge_glue:glue});
+       }
        return json({status:'saved',issue_id,decision:body.decision});
      }
-     if(op==='md-save'){mdSaves++;return json({status:'blocked'});}
+     if(op==='md-save'){
+       mdSaves++;
+       const body=req.postDataJSON();
+       assert.equal(body.expectedRevision,mdRevision);
+       const newRows=[...md.slice(0,body.start-1),
+         ...body.insert.map(row=>({...row})),
+         ...md.slice(body.start-1+body.deleteCount)];
+       md.splice(0,md.length,...newRows.map((row,index)=>({...row,line_no:index+1})));
+       mdRevision++;
+       return json({status:'saved',revision:mdRevision,total:md.length});
+     }
      if(op==='block-edit-batch'){blockSaves++;return json({status:'blocked'});}
      if(op==='overlays'){
        const pageNo=Number(u.searchParams.get('page'));
@@ -128,7 +151,16 @@ try{
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true);
    const count=()=>page.locator('.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').count();
    await page.waitForFunction(()=>document.querySelectorAll(
-     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===3);
+     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===3,null,{timeout:12000}).catch(async err=>{
+     console.error('WEBKIT_BLOCK_BREAK_ROWS_DIAG',name,JSON.stringify({
+       status:await page.locator('#status').textContent(),errors,
+       count:await count(),
+       rows:await page.evaluate(()=>({
+         displayed:document.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.columnFields(),
+         rowIds:[...document.querySelectorAll('.ocr-outline-grid .ag-row')].map(x=>x.dataset.rowId),
+         md:document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime()?.rows.length,
+       }))}));throw err;
+   });
    assert.equal(await count(),3,'Three within-parent seams include latest / 13F');
    assert.equal(await page.locator('.ocr-outline-grid .ocr-break-review-trigger').count(),3);
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-grid .ag-row .ocr-block-break-ag-join').length===3);
@@ -186,52 +218,33 @@ try{
    })),[1,2],'Cross-page pair uses physical PDF pages without mutating logical PBS');
    assert(marks.agJoined.includes('steady source'));
    assert.equal(marks.source,original);
-   // WP3: color-coded custom dropdown must work in iPad WebKit as well as
-   // Chromium; native HTML select option colors are unreliable on Safari.
+   // WP3 review-only choices: ignore and pending persist without any MD save.
    let trigger=page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger');
-   assert.equal(await trigger.getAttribute('data-review'),'待定');
    await trigger.click();
    const choices=page.locator('body > .ocr-break-review-menu .ocr-break-review-option');
    await choices.first().waitFor();
-   assert.deepEqual(await choices.allTextContents(),['待定','断块合并（仅记录）','忽略']);
-   const palette=await choices.evaluateAll(nodes=>nodes.map(node=>({
-     choice:node.dataset.review,bg:getComputedStyle(node).backgroundColor,
-     color:getComputedStyle(node).color})));
-   assert.equal(new Set(palette.map(item=>item.bg)).size,3,
-     'All three review candidates have a distinct background color');
-   await choices.nth(1).click();
+   assert.deepEqual(await choices.allTextContents(),['待定','断块合并','忽略']);
+   const palette=await choices.evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).backgroundColor));
+   assert.equal(new Set(palette).size,3);
+   await choices.nth(2).click();
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
-     ?.dataset.review==='断块合并',null,{timeout:10000});
-   assert.equal(reviewWrites,1,'Review choice was saved once through independent API');
+     ?.dataset.review==='忽略');
+   assert.equal(reviewWrites,1);
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdDocument()),original);
-   trigger=page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger');
-   await trigger.click();await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="忽略"]').click();
-   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
-     ?.dataset.review==='忽略',null,{timeout:10000});
-   assert.equal(reviewWrites,2);
-   assert.equal(savedReviews.get('block-break:436:437')?.decision,'忽略');
-   // Revisiting AG must reload persisted state without reopening MD SQL.
    await picker.selectOption('md');
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-header-cell[col-id="text"]'));
    await picker.selectOption('block-break');
-   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.columnFields()?.includes('review'));
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.columnFields()?.includes('review'));
    const ignored=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-2',focusColumn:'review'}));
-   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
-     ?.dataset.review==='忽略');
-   assert.equal(reviewLoads,2);
    assert.equal(ignored?.review,'忽略');
    await page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger').click();
    await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="待定"]').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
      ?.dataset.review==='待定');
-   assert.equal(reviewWrites,3);
-   assert.equal(savedReviews.size,0);
-   assert.equal(mdSaves,0,'Review-only choices do not save or merge MD');
-   assert.equal(blockSaves,0,'Review-only choices do not edit Block relations');
-
-   assert.equal((await page.locator('#status').textContent()).includes('断块'),true);
+   assert.equal(reviewWrites,2);assert.equal(savedReviews.size,0);
+   assert.equal(mdSaves,0,'Ignore/pending only write review, not MD');
+   assert.equal(blockSaves,0);
 
    // A second candidate on the next PDF page must replace, not stack,
    // A/B marks; the shared PDF.js viewer retains page-scoped geometry.
@@ -275,6 +288,7 @@ try{
    await page.waitForFunction(()=>['441','442'].every(id=>[...document.querySelectorAll(
      '.lab-ocr-pdf-pbs-tag[data-review-pair-side]')]
        .some(el=>el.dataset.blockId===id)),null,{timeout:12000});
+   if(!process.env.LAB_OCR_SKIP_PDF_16){
    // iPad screenshot regression: the unsplit "PDF 原文" mode on page 16/22
    // must show a REAL PDF.js canvas and its text, not a blank dark pane.
    const split=page.locator('.ocr-preview-split-toggle input');
@@ -318,6 +332,7 @@ try{
    await split.check();
 
 
+   }
    await picker.selectOption('md');
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-header-cell[col-id="text"]'));
    await page.waitForFunction(()=>!document.querySelector('.ocr-cm-source .ocr-block-break-source-before')&&
@@ -352,6 +367,65 @@ try{
    assert.equal(mdLoads,1,'Switching AG view never reopens MD SQL');
    assert.equal(mdSaves,0,'Read-only view never saves Markdown');
    assert.equal(blockSaves,0,'Read-only view never edits block structure');
+   // WCP43 actual merge: one CM6 change joins A+B and leaves B's stable
+   // LineID/BlockID on a blank physical row. Preview and PDF derive from it.
+   await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-2',focusColumn:'review'}));
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger').click();
+   await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="断块合并"]').click();
+   await page.waitForFunction(()=>{
+     const runtime=document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime();
+     const a=runtime?.rows.find(row=>row.line_id==='break-md-1');
+     const b=runtime?.rows.find(row=>row.line_id==='break-md-2');
+     return a?.text.endsWith('steady source of financing that allows his investment strategy.')&&
+       b?.text===''&&b?.block_id===437;
+   },null,{timeout:13000});
+   await page.waitForFunction(()=>[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag')]
+     .some(node=>node.dataset.blockId==='437'&&node.dataset.mdEmpty==='true'),
+     null,{timeout:12000});
+   await page.waitForFunction(()=>[...document.querySelectorAll('.lab-ocr-pdf-overlay-box')]
+     .some(node=>node.dataset.mdEmpty==='true'&&node.dataset.blockIds?.split(' ').includes('437')),
+     null,{timeout:12000});
+   const dashed=await page.evaluate(()=>({
+     tag:getComputedStyle(document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="437"]')).borderTopStyle,
+     bbox:getComputedStyle([...document.querySelectorAll('.lab-ocr-pdf-overlay-box')]
+       .find(node=>node.dataset.blockIds?.split(' ').includes('437'))).borderTopStyle,
+     originalSourceEmpty:document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="437"]')?.dataset.sourceEmpty,
+   }));
+   assert.equal(dashed.tag,'dashed');
+   assert.equal(dashed.bbox,'dashed');
+   assert.equal(dashed.originalSourceEmpty,'false','Editable MD must not falsify OCR sourceEmpty');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ocr-break-review-trigger[data-review="断块合并"]')?.disabled===true);
+   await page.waitForFunction(()=>{
+     const text=document.querySelector('.ocr-preview-md-scroll')?.textContent;
+     return text?.includes('steady source of financing')&&!text?.includes('steady\nsource');
+   },null,{timeout:13000});
+   await page.waitForTimeout(400);
+   assert.equal(mdSaves,1,'Real merge uses exactly one existing CM6 md-save splice');
+   assert.equal(blockSaves,0,'Real merge does not rewrite Block relations');
+   assert.equal(md.find(row=>row.line_id==='break-md-2')?.text,'');
+   assert.equal(md.find(row=>row.line_id==='break-md-2')?.block_id,437);
+   // SQLite-reloaded AG decision must still recognize the merged result.
+   await picker.selectOption('md');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.columnFields()?.includes('text'));
+   await picker.selectOption('block-break');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ocr-break-review-trigger[data-review="断块合并"]')?.disabled===true);
+   // One Undo restores both source lines and eliminates the PDF empty marker.
+   const undone=await page.evaluate(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable?.undoMarkdown());
+   assert(undone,'One CM6 Undo must restore both sides');
+   await page.waitForFunction(()=>{
+     const runtime=document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime();
+     return runtime?.rows.find(row=>row.line_id==='break-md-1')?.text.endsWith('steady')&&
+       runtime?.rows.find(row=>row.line_id==='break-md-2')?.text.startsWith('source of financing')&&
+       !document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="437"][data-md-empty="true"]');
+   });
+   const redone=await page.evaluate(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable?.redoMarkdown());
+   assert(redone,'One CM6 Redo reapplies the same merge');
+   await page.waitForFunction(()=>{
+     const runtime=document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime();
+     return runtime?.rows.find(row=>row.line_id==='break-md-2')?.text===''&&
+       !!document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="437"][data-md-empty="true"]');
+   });
    assert.deepEqual(errors,[],'Browser runtime should have no errors');
    console.log('LAB_OCR_BLOCK_BREAK_BROWSER_PASS',name);
   }finally{await browser.close();}

@@ -82,6 +82,56 @@ class BlockBreakReviewStorage(unittest.TestCase):
    with sqlite3.connect(book/'ocr2md.sqlite') as db:
     self.assertTrue(db.execute("SELECT 1 FROM sqlite_master WHERE name='block_break_review'").fetchone())
 
+ def test_legacy_wp3_review_table_upgrades_in_place(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   book=Path(tmp);args=setup(book)
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    db.execute("""CREATE TABLE block_break_review(
+      before_block_id INTEGER NOT NULL,after_block_id INTEGER NOT NULL,
+      before_line_id TEXT NOT NULL,after_line_id TEXT NOT NULL,
+      evidence_sha256 TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK(decision IN ('断块合并','忽略')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+      PRIMARY KEY(before_block_id,after_block_id))""")
+   self.assertEqual(read_block_break_reviews(book)['reviews'],[])
+   self.assertEqual(save(book,args)['decision'],'断块合并')
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    columns={row[1] for row in db.execute('PRAGMA table_info(block_break_review)')}
+    self.assertTrue({'joined_sha256','split_offset','merge_glue'}.issubset(columns))
+    self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
+   self.assertEqual(read_block_break_reviews(book)['reviews'][0]['merged'],False,
+     'Review-only WP3 metadata does not invent an actual merge')
+
+ def test_real_merge_splice_persists_and_undo_recognizes_state(self):
+  from v6_lab_ocr_md import persist_md_splice
+  with tempfile.TemporaryDirectory() as tmp:
+   book=Path(tmp);args=setup(book)
+   saved=read_md(book)
+   original=originals(book)
+   result=save(book,args,decision='断块合并',expected='待定')
+   self.assertEqual(result['status'],'saved')
+   joined=args['before_text']+' '+args['after_text']
+   index=next(i for i,row in enumerate(saved['rows']) if row['line_id']==args['before_line_id'])
+   pair=saved['rows'][index:index+1]
+   # Synthetic fixture has different Block rows between A and B; commit two
+   # source-preserving contiguous single-row splices through normal CAS.
+   a={**pair[0],'text':joined}
+   persist_md_splice(book,0,'merge-test-a-001',a['line_no'],1,[a])
+   b=next(row for row in read_md(book)['rows'] if row['line_id']==args['after_line_id'])
+   persist_md_splice(book,1,'merge-test-b-001',b['line_no'],1,[{**b,'text':''}])
+   recognized=read_block_break_reviews(book)['reviews']
+   self.assertEqual(recognized[0]['merged'],True)
+   self.assertEqual(recognized[0]['split_offset'],len(args['before_text']))
+   self.assertEqual(recognized[0]['merge_glue'],' ')
+   self.assertEqual(originals(book),original)
+   self.assertEqual([r['line_id'] for r in read_md(book)['rows']],
+                    [r['line_id'] for r in saved['rows']])
+   # Undo restores the SAME identities and removes merged visual state.
+   persist_md_splice(book,2,'merge-undo-a-01',a['line_no'],1,[pair[0]])
+   persist_md_splice(book,3,'merge-undo-b-01',b['line_no'],1,[b])
+   self.assertEqual(read_block_break_reviews(book)['reviews'][0]['merged'],False)
+   self.assertEqual(originals(book),original)
+
  def test_http_authorization_and_colored_decisions_endpoint(self):
   with tempfile.TemporaryDirectory() as tmp:
    root=Path(tmp);book=root/'book';book.mkdir();args=setup(book)

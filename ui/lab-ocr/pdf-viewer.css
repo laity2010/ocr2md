@@ -160,3 +160,21 @@
  box-shadow:0 0 0 2px rgba(26,31,32,.75),0 0 10px rgba(248,166,38,.35);
  border-radius:2px;
 }
+
+/* Editable MD's post-merge empty child is NOT the immutable OCR sourceEmpty.
+ * The original PDF bbox and PBS stay mounted; selected also stays dashed. */
+.lab-ocr-pdf-overlay-box[data-md-empty="true"] {
+  box-shadow:none;
+  border:max(1px,var(--lab-ocr-pdf-overlay-border-width,.75px)) dashed #95b989;
+  background:rgba(111,163,119,.055);
+}
+.lab-ocr-pdf-overlay-box[data-md-empty="true"][data-child="true"] {border-color:#79c3a0;}
+.lab-ocr-pdf-pbs-tag[data-md-empty="true"] {border-style:dashed;}
+.lab-ocr-pdf-overlay-box[data-md-empty="true"][data-selected="true"],
+.lab-ocr-pdf-overlay-box[data-md-empty="true"][data-family-selected="true"] {
+  outline-style:dashed;
+}
+.lab-ocr-pdf-pbs-tag[data-md-empty="true"][data-selected="true"],
+.lab-ocr-pdf-pbs-tag[data-md-empty="true"][data-family-selected="true"] {
+  border-style:dashed;box-shadow:none;outline:2px dashed #eec45b;outline-offset:1px;
+}

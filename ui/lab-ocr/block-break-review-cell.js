@@ -12,11 +12,13 @@ export function createBlockBreakReviewCell(onChoose){
     const root=document.createElement('span');root.className='ocr-break-review-cell';
     const trigger=document.createElement('button');trigger.type='button';
     trigger.className='ocr-break-review-trigger';trigger.dataset.review=value;
-    trigger.textContent=value+' ▾';
+    trigger.textContent=row?.merged?'断块合并 ✓':value+' ▾';
+    trigger.disabled=Boolean(row?.merged);
     trigger.setAttribute('aria-haspopup','listbox');
     trigger.setAttribute('aria-expanded','false');
     trigger.setAttribute('aria-label',`审阅 ${row?.before_pbs??''} → ${row?.after_pbs??''}，当前${value}`);
-    trigger.title='选择审阅结论；断块合并仅记录决定，不直接修改 Markdown';
+    trigger.title=row?.merged?'正文已通过 CM6 合并；要恢复请使用源码 Undo':
+      '选择断块合并会立即改动 CM6 原文并清空后块，支持 Undo';
     trigger.addEventListener('pointerdown',e=>e.stopPropagation());
     trigger.addEventListener('click',e=>{
       e.preventDefault();e.stopPropagation();
@@ -50,12 +52,13 @@ export function createBlockBreakReviewCell(onChoose){
         item.className='ocr-break-review-option';
         item.dataset.review=choice;item.setAttribute('role','option');
         item.setAttribute('aria-selected',String(value===choice));
-        item.textContent=choice==='断块合并'?'断块合并（仅记录）':choice;
+        item.textContent=choice;
         item.addEventListener('pointerdown',event=>event.stopPropagation());
         item.addEventListener('click',event=>{
           event.preventDefault();event.stopPropagation();
           close();
-          if(choice!==value)Promise.resolve().then(()=>onChoose(row,choice))
+          if(choice!==value||(choice==='断块合并'&&!row?.merged))
+            Promise.resolve().then(()=>onChoose(row,choice))
             .catch(()=>{}); // workflow reports errors in the global status strip
         });
         menu.append(item);

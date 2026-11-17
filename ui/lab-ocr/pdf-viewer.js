@@ -61,7 +61,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
     onExtractText=null,extracting=false,selectedPage=null,
-    selectedBlockId=null,focusRequest=null,formulaFocus=null,allFormulaHighlights=[],reviewPair=[];
+    selectedBlockId=null,focusRequest=null,formulaFocus=null,allFormulaHighlights=[],reviewPair=[],mdEmptyBlockIds=new Set();
   // Text authority: PDF.js getTextContent() from the original PDF page.
   // No MinerU block_json and no editable CM lines participate in availability.
   const nativePageTexts=new Map(),nativeBoxTexts=new Map(),nativeBoxPending=new Set();
@@ -422,6 +422,14 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     updateSelectedNodes();
     return reviewPair.length;
   }
+  function setEmptyMdBlocks(ids=[]){
+    if(disposed)throw Error('PDF Viewer 已销毁');
+    if(!Array.isArray(ids)||ids.some(id=>!Number.isSafeInteger(id)||id<1))
+      throw Error('PDF 空文本块 BlockID 无效');
+    mdEmptyBlockIds=new Set(ids.map(String));
+    updateSelectedNodes();
+    return mdEmptyBlockIds.size;
+  }
   const updateSelectedNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids],.lab-ocr-pdf-pbs-tag[data-block-ids]')){
       const state=highlightKind(node.dataset.blockIds.split(' '));
@@ -429,6 +437,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       node.dataset.familySelected=String(state==='family');
       const hostPage=Number(node.closest('.page[data-page-number]')?.dataset.pageNumber);
       const ids=node.dataset.blockIds.split(' ');
+      const empty=ids.some(id=>mdEmptyBlockIds.has(id));
+      node.dataset.mdEmpty=String(empty);
       const side=reviewPairSide(ids.filter(id=>reviewPair.some(item=>
         item.id===id&&item.page===hostPage)));
       if(side)node.dataset.reviewPairSide=side;
@@ -1018,7 +1028,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
     lastNotifiedPage=null;
-    focusRequest=null;formulaFocus=null;reviewPair=[];selectedBlockId=null;selectedPage=null;blockParents.clear();
+    focusRequest=null;formulaFocus=null;reviewPair=[];mdEmptyBlockIds.clear();selectedBlockId=null;selectedPage=null;blockParents.clear();
     nativePageTexts.clear();nativeBoxTexts.clear();nativeBoxPending.clear();
     formulaCrops.clear();
     updateExtractButton();
@@ -1068,7 +1078,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,setFormulaHighlights,setReviewPair,
+  return Object.freeze({loadPdf,setOverlays,setFormulaHighlights,setReviewPair,setEmptyMdBlocks,
     focusBlock,focusFormula,renderFormulaCrop,clearFocus,invalidateOverlayPage,
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;

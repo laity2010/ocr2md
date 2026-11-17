@@ -11,6 +11,7 @@ import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-vi
 import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
 import {projectBlockBreakRows,resolveBlockBreakFocus,renderBlockBreakJoinCell} from './block-break-view.js';
 import {createBlockBreakReviewCell} from './block-break-review-cell.js';
+import {planBlockBreakMerge,emptyMdChildBlockIds} from './block-break-merge.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -137,20 +138,58 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let currentSqlTable=null;
   let activeAgView='md'; // AG presentation only; CM6 and SQLite are unchanged.
   let latexPresentation=null,agViewRequest=0,lastRenderedLatexSummary=null;
-  let breakReviews=new Map(),breakReviewEpoch=0;
+  let breakReviews=new Map(),recentlyMerged=new Map(),breakReviewEpoch=0;
   const breakReviewBusy=new Set();
   let pdfPage=1;
+  function mergedBreakRow(saved){
+    if(saved?.decision!=='断块合并'||!saved.merged)return null;
+    const a=md()?.rows.find(row=>row.line_id===saved.before_line_id);
+    const b=md()?.rows.find(row=>row.line_id===saved.after_line_id);
+    const ba=cm()?.rows.find(row=>row.block_id===a?.block_id);
+    const bb=cm()?.rows.find(row=>row.block_id===b?.block_id);
+    const offset=saved.split_offset,glue=saved.merge_glue;
+    if(!a||!b||!ba||!bb||b.text!==''||
+       typeof offset!=='number'||offset<1||offset>=a.text.length||
+       !['',' '].includes(glue)||a.text.slice(offset,offset+glue.length)!==glue)return null;
+    const left=a.text.slice(0,offset),right=a.text.slice(offset+glue.length);
+    if(!right.trim())return null;
+    const parent=ba.parent_block_id==null?ba:cm().rows.find(row=>
+      row.block_id===ba.parent_block_id);
+    const beforeToken=/([A-Za-z]{2,60})-?$/.exec(left.trimEnd())?.[1]??'';
+    const afterToken=/^([A-Za-z0-9]{2,60})/.exec(right.trimStart())?.[1]??'';
+    return {issue_id:saved.issue_id,pbs:parent?.pbs??ba.pbs,
+      parent_block_id:parent?.block_id??ba.block_id,
+      before_block_id:ba.block_id,after_block_id:bb.block_id,
+      before_pbs:ba.pbs,after_pbs:bb.pbs,
+      before_line_id:a.line_id,after_line_id:b.line_id,
+      before_line_no:a.line_no,line_no:b.line_no,
+      block_id:b.block_id,line_id:b.line_id,global_page:bb.global_page,
+      before_token:beforeToken,after_token:afterToken,
+      before_text:left.slice(-110),after_text:right.slice(0,110),
+      boundary:beforeToken+' / '+afterToken,
+      join_preview:left.slice(-110)+glue+right.slice(0,110),
+      reason:'已通过 CM6 合并，后块保留空行及原 PDF 覆盖框',
+      kind:'已合并',review:'断块合并',merged:true};
+  }
+  function projectBreakReviewRows(){
+    const pending=projectBlockBreakRows(md()?.rows??[],cm()?.rows??[]).map(
+      row=>({...row,review:breakReviewDecision(row)}));
+    const candidates=new Set(pending.map(row=>row.issue_id));
+    const merged=[...new Map([...breakReviews,...recentlyMerged]).values()]
+      .filter(saved=>!candidates.has(saved.issue_id)).map(mergedBreakRow).filter(Boolean);
+    return [...pending,...merged].sort((a,b)=>a.before_line_no-b.before_line_no);
+  }
   const projectedMdRows=()=>activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
-    activeAgView==='block-break'?projectBlockBreakRows(md()?.rows??[],cm()?.rows??[]).map(
-      row=>({...row,review:breakReviewDecision(row)})):
+    activeAgView==='block-break'?projectBreakReviewRows():
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
   function breakReviewDecision(row){
     const saved=breakReviews.get(row.issue_id);
     return !md()?.dirty&&!cm()?.queue?.length&&
       saved?.before_line_id===row.before_line_id&&
-      saved?.after_line_id===row.after_line_id?saved.decision:'待定';
+      saved?.after_line_id===row.after_line_id&&
+      !(saved.decision==='断块合并'&&!saved.merged)?saved.decision:'待定';
   }
   async function loadBreakReviews(){
     const epoch=++breakReviewEpoch,book=workspace,op=operation;
@@ -175,7 +214,15 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const before=md().rows.find(item=>item.line_id===current.before_line_id);
     const after=md().rows.find(item=>item.line_id===current.after_line_id);
     if(!before||!after)return;
-    const expected=breakReviewDecision(current);
+    const recorded=breakReviews.get(issue);
+    const expected=recorded?.before_line_id===current.before_line_id&&
+      recorded?.after_line_id===current.after_line_id?recorded.decision:breakReviewDecision(current);
+    let plan=null;
+    if(decision==='断块合并'){
+      try{plan=planBlockBreakMerge(current,md().rows,cm().rows);}
+      catch(error){onStatus('断块合并不可执行：'+error.message,'warning');return;}
+    }
+    const mdVersion=md().version;
     breakReviewBusy.add(issue);
     try{
       const saved=await request('block-break-review-set',{workspace:book,
@@ -185,12 +232,31 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         decision,expectedDecision:expected},true);
       if(op!==operation||book!==workspace)return;
       if(saved.issue_id!==issue||saved.decision!==decision)throw Error('审阅回执与候选不一致');
+      if(md().version!==mdVersion){
+        onStatus('断块审阅时原文被编辑，请重新载入该候选并检查原文','warning');return;
+      }
+      if(plan){
+        // Keep the status row visible through CM6's synchronous onChange,
+        // which replaces the original candidate with an empty-child row.
+        recentlyMerged.set(issue,{issue_id:issue,decision:'断块合并',
+          merged:true,before_line_id:plan.beforeLineId,after_line_id:plan.afterLineId,
+          split_offset:plan.joinLeftLength,merge_glue:plan.joinGlue,
+          joinedText:plan.joinedText});
+        frame.mergeMdBlockBreak(plan);
+        // Fast persistence prevents losing a reviewed merge if the browser
+        // reloads. This is still the existing CM6 md-save/CAS pipeline.
+        await flushMdChanges();
+        if(op!==operation||book!==workspace)return;
+        breakReviews.set(issue,{...recentlyMerged.get(issue)});
+        onStatus(`✓ 已合并 ${current.before_pbs} → ${current.after_pbs} · 后块保留空行和虚线 PDF 框 · CM6 可撤销`,'ok');
+        return;
+      }
       if(decision==='待定')breakReviews.delete(issue);
       else breakReviews.set(issue,{issue_id:issue,decision,
         before_line_id:before.line_id,after_line_id:after.line_id});
       if(activeAgView==='block-break'&&currentSqlTable==='md')
         frame.patchMdRows(projectedMdRows());
-      onStatus(`断块审阅 · ${current.before_pbs} → ${current.after_pbs} · ${decision} · 已保存到 SQLite（MD 未改）`,'ok');
+      onStatus(`断块审阅 · ${current.before_pbs} → ${current.after_pbs} · ${decision} · 已保存（原文未变）`,'ok');
     }catch(error){
       onStatus('断块审阅保存失败：'+error.message,'error');
     }finally{breakReviewBusy.delete(issue);}
@@ -298,6 +364,12 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   function mdContentChanged(next){
     breakReviews.clear();++breakReviewEpoch; // decisions require saved text evidence
+    for(const [id,item] of recentlyMerged){
+      const before=next.rows.find(row=>row.line_id===item.before_line_id);
+      const after=next.rows.find(row=>row.line_id===item.after_line_id);
+      if(before?.text!==item.joinedText||after?.text!=='')recentlyMerged.delete(id);
+    }
+    frame.setEmptyMdBlocks(emptyMdChildBlockIds(next.rows,cm()?.rows??[]));
     frame.setReviewPair(null,{skipSource:true}); // CM6 docChanged already clears its own decorations
     if(currentSqlTable==='md'){
       if(activeAgView==='latex'){
@@ -359,6 +431,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         onSelection:mdCursorChanged,
       });
       frame.setMarkdownPreview(result.rows.map(r=>r.text).join('\n'),{nativeInlineMath:true});
+      frame.setEmptyMdBlocks(emptyMdChildBlockIds(result.rows,cm()?.rows??[]));
       mdReady=true;
       bindMdPersistence();
       revealNavigation();
@@ -451,6 +524,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   function reflectCmBlockChange(result,selectedId){
     if(!result.changed)return;
+    frame.setEmptyMdBlocks(emptyMdChildBlockIds(md()?.rows??[],result.state?.rows??cm()?.rows??[]));
     breakReviews.clear();++breakReviewEpoch; // source parentage changed; invalidate prior review projection
     frame.setReviewPair(null); // Block relationships may have moved
     if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
@@ -648,7 +722,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     if(cm()?.queue.length||md()?.dirty)
       throw Error('CM Block/MD 尚有待持久操作，必须先保存，拒绝切换/重建');
-    breakReviews.clear();++breakReviewEpoch;breakReviewBusy.clear();
+    breakReviews.clear();recentlyMerged.clear();++breakReviewEpoch;breakReviewBusy.clear();
     persistence?.dispose();persistence=null;loadingRuntime=null;
     mdPersistence?.dispose();mdPersistence=null;mdLoading=null;
     frame.replaceStructuredRuntime(null);
@@ -751,7 +825,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       rowHeight:latex?134:broken?92:35,
       onSelect:row=>{
         const target=locateReview({origin:'ag',lineId:row.line_id,
-          ...(broken?{blockBreakId:row.issue_id}:{}),
+          ...(broken&&!row.merged?{blockBreakId:row.issue_id}:{}),
           blockId:row.block_id,lineNo:row.line_no,
           ...(latex?{formulaColumn:row.column,
             formulaEndColumn:Number.isInteger(row.column)&&
@@ -759,7 +833,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
             formulaBBox:row.pdf_bbox,
             formulaKind:row.kind==='行内'?'inline':row.kind==='独立'?'display':null}:{}),
         });
-        onStatus(broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · 审阅 ${row.review??'待定'}`:
+        onStatus(broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · ${row.merged?'已合并，后块空白、PDF 虚线':'审阅 '+(row.review??'待定')}`:
           latex?
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+
             (target?.lineNo?`MD ${target.lineNo}`:'仅 PDF / OCR'):
@@ -885,7 +959,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const result=await request('initialize-sql',{workspace:active,confirmReset:true},true);
     if(workspace!==active)throw Error('书籍已切换，必须重新检查初始化结果');
     ++loaded;
-    breakReviews.clear();++breakReviewEpoch;breakReviewBusy.clear();
+    breakReviews.clear();recentlyMerged.clear();++breakReviewEpoch;breakReviewBusy.clear();
     persistence?.dispose();persistence=null;loadingRuntime=null;
     frame.replaceStructuredRuntime(null);
     frame.setSqlEditHistory();

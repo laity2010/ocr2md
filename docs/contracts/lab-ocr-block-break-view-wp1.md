@@ -78,3 +78,19 @@
 - `python3 tests/lab-ocr-block-break-review.test.py`：独立合成书籍、本地 SQL、GET 不建表、持久化/重载、CAS 冲突、MD 文本过期、父子关系变动、原始文件与 MD 内容保全、真实 loopback HTTP Origin 与 Main Cookie 权限。
 - `node tests/lab-ocr-block-break-review-cell.test.mjs`：不依赖 AG/DOM 浏览器的菜单公开 API 测试，覆盖三候选、颜色标记数据、关闭行为、相同决定不重复发送。
 - `node tests/lab-ocr-block-break-view.browser.test.mjs`：Chromium/iPad WebKit 验证彩色菜单三个选项、记录→忽略→切 View 重载→待定、AG 局部刷新、未保存 MD/Block、现有四窗双端定位及 PDF 第16/22页非空白绘制。`lab-ocr-latex-view.browser.test.mjs`、`lab-ocr-overlay-filter.browser.test.mjs` 做跨模块回归。
+
+## WCP43 用户更正 · 「断块合并」必须立刻真正接续（2026-11-17）
+
+早期 WP3 把「断块合并」错误地做成仅记录，用户明确要求选择后**立即看到源码和 MD 预览已合并**、**后块 PBS/BlockID 保留但内容为空**、**后块原始 PDF 覆盖框为虚线**。自此该选项不再只是标签。实施路径：
+
+1. `ui/lab-ocr/block-break-merge.js` 纯函数 `planBlockBreakMerge(candidate,mdRows,blockRows)` 验证父/子或兄弟无中间子块、物理 A/B 行直接相邻、B 块**只有一条非空正文行**、原文词界仍一致。拒绝多正文行、结构块或关系变更（不可静默丢失其他行）。普通续接加一个英文空格，跨块断词删除 A 的尾部连字符后拼接；返回完整 CM6 编辑计划及保留的两个 LineID/BlockID。`emptyMdChildBlockIds(mdRows,blockRows)` 仅从当前 CM6 MD 行状态派生正文为空的子块 ID；保留 OCR 原始 `sourceEmpty` 不变。
+2. `ui/frame/layout.js` 的 `mergeMdBlockBreak(plan)` 经 CM6 Frame 公开 API 在**一个 CodeMirror 事务**里更新 A 行为拼接文本、B 原行为空字符串，**保留两行之间的 `\n`**，不删 B LineID、BlockID，不移动兄弟顺序或 PBS；一个 Undo 恢复两行，Redo 恢复合并。`mdContentChanged` 立即更新 AG 增量投影、Markdown 预览及 `setEmptyMdBlocks`，后台仍由现有 `md-save` CAS splice 持久化，不新建第二份 MD 编辑权威。
+3. `ui/lab-ocr/pdf-viewer.js` 新增 `setEmptyMdBlocks(ids)` 纯展示 API，只按稳定 BlockID 设置 `data-md-empty`，沿用现有 PDF.js **原始 bbox/PBS 标签**。`ui/lab-ocr/pdf-viewer.css` 为它单独绘制虚线边框（选中时依旧虚线），**不修改原来的 `data-source-empty` OCR 证据**。懒加载桥缓存这些 ID，缩放及页面虚拟重绘后恢复。不再向 Markdown 预览增加卡片。
+4. `block_break_review` 扩展 `joined_sha256/split_offset/merge_glue`，仅存拼接证据摘要和界点，不额外存重复原文。旧 WP3 的「断块合并」记录仍未实际编辑，所以重开会显示「待定」，用户再次选同一选项才能真正合并；真正合并后，SQL 保存行对应的 A 已接续/B 为空，会标记 `merged=true`；重开 View 仍保留「已合并」AG 行。反向 Undo 恢复原文时，不假冒仍处于已合并状态。`待定 / 忽略` 始终只写审阅决定，绝不改变 MD。
+5. 只有审阅 POST 后端验证当前证据成功才触发 CM6 合并，紧接着通过现有后台持久化保存。失败时不能虚报成功。由于 MD 事务必须保留原始行身份，当前仅允许一条正文行的后块自动合并；复杂情形提示用户手工处理，而非猜测合并。
+
+### 新增验收
+
+- `node tests/lab-ocr-block-break-merge.test.mjs` 直接覆盖纯计划与空块投影、13F/普通英文接续、连字符、身份不变与多行防丢失。
+- `python3 tests/lab-ocr-block-break-review.test.py` 合成书籍中模拟 MD CAS splice，验证 merged digest GET 识别、重开后字段、持久化 Undo 原文恢复、MinerU 原件不改动、旧记录兼容。
+- `node tests/lab-ocr-block-break-view.browser.test.mjs` Chromium/iPad WebKit 合并后 A 连贯、B 空行但 BlockID/LineID 相同、MD 预览已更新、原 PDF bbox/PBS 存在且虚线、单次 `md-save`、无 `block-edit-batch`、AG 仍列已合并、CM6 Undo/Redo 一次可恢复/重做。跨平台 PDF 原生第16页完整渲染另按既有回归独立验收。

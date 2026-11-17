@@ -8,10 +8,10 @@ import './title-view.css';
 document.getElementById('workspace')?.classList.add('ocr-review-focus-unified');
 registerFramePdfPane(context=>{
   let disposed=false,viewer=null,initialization=null,overlayConfig=null,
-    pendingFocus=null,activeSource=null,formulaHighlights=[],reviewPair=null;
+    pendingFocus=null,activeSource=null,formulaHighlights=[],reviewPair=null,emptyMdBlocks=[];
   return Object.freeze({
     async loadPdf(source){
-      if(source!==activeSource){pendingFocus=null;reviewPair=null;viewer?.setReviewPair(null);activeSource=source;}
+      if(source!==activeSource){pendingFocus=null;reviewPair=null;emptyMdBlocks=[];viewer?.setReviewPair(null);viewer?.setEmptyMdBlocks([]);activeSource=source;}
       if(!source)return viewer?.loadPdf(null)??false;
       if(!initialization)initialization=import('./pdf-viewer.js').then(module=>{
         if(disposed)return null;
@@ -19,6 +19,7 @@ registerFramePdfPane(context=>{
         if(overlayConfig)viewer.setOverlays(overlayConfig);
         viewer.setFormulaHighlights(formulaHighlights);
         viewer.setReviewPair(reviewPair);
+        viewer.setEmptyMdBlocks(emptyMdBlocks);
         return viewer;
       });
       const mounted=await initialization;
@@ -36,6 +37,7 @@ registerFramePdfPane(context=>{
       return viewer?.setFormulaHighlights(rows)??rows.length;
     },
     setReviewPair(pair){reviewPair=pair;return viewer?.setReviewPair(pair)??(pair?.length??0);},
+    setEmptyMdBlocks(ids=[]){emptyMdBlocks=[...ids];return viewer?.setEmptyMdBlocks(ids)??ids.length;},
     focusBlock(target){pendingFocus=target;return viewer?.focusBlock(target)??false;},
     focusFormula(target){pendingFocus={...target,formula:true};
       return viewer?.focusFormula(target)??false;},

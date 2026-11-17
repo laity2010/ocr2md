@@ -341,6 +341,31 @@ function mountEmptySource(host){
       return true;
     },
     deleteMdLine(lineId){return deleteMdLine(lineId);},
+    mergeMdBlockBreak(plan){
+      const runtime=editor.state.field(mdField);
+      const before=runtime?.rows.find(row=>row.line_id===plan?.beforeLineId);
+      const after=runtime?.rows.find(row=>row.line_id===plan?.afterLineId);
+      if(!before||!after||before.block_id!==plan.beforeBlockId||
+         after.block_id!==plan.afterBlockId||
+         before.line_no+1!==after.line_no||before.text!==plan.beforeText||
+         after.text!==plan.afterText||!plan.joinedText?.trim())
+        throw Error('CM6 断块原文或身份已变化，拒绝过期合并');
+      const lineA=editor.state.doc.line(before.line_no);
+      const lineB=editor.state.doc.line(after.line_no);
+      if(lineA.text!==before.text||lineB.text!==after.text)
+        throw Error('CM6 文档尚未与行表对齐，拒绝合并');
+      // One history entry, TWO simultaneous text changes. Keep the newline
+      // and B's physical line so reconcileMdText preserves both LineIDs.
+      editor.dispatch({changes:[
+        {from:lineA.from,to:lineA.to,insert:plan.joinedText},
+        {from:lineB.from,to:lineB.to,insert:''},
+      ],annotations:Transaction.userEvent.of('input.block-break-merge')});
+      const next=editor.state.field(mdField);
+      if(!next?.rows.some(row=>row.line_id===after.line_id&&
+            row.block_id===after.block_id&&row.text===''))
+        throw Error('CM6 未保留后块空行，请检查合并事务');
+      return true;
+    },
     editMdLine(lineId,text){
       const md=editor.state.field(mdField);
       const row=md?.rows.find(r=>r.line_id===lineId);
@@ -720,6 +745,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
         if(pdfSlot.overlays)viewer.setOverlays(pdfSlot.overlays);
         viewer.setFormulaHighlights?.(pdfSlot.formulaHighlights);
         viewer.setReviewPair?.(pdfSlot.reviewPair);
+        viewer.setEmptyMdBlocks?.(pdfSlot.emptyMdBlocks);
         if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
       }
       return {dispose(){
@@ -769,7 +795,7 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   onAgViewChange=()=>{},agViewOptions=[],moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
-  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,formulaHighlights:[],reviewPair:null};
+  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,formulaHighlights:[],reviewPair:null,emptyMdBlocks:[]};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus,
       agViewOptions,onAgViewChange)});
@@ -846,6 +872,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       }
       return true;
     },
+    setEmptyMdBlocks(ids=[]){
+      if(!Array.isArray(ids)||ids.some(id=>!Number.isSafeInteger(id)||id<1))
+        throw Error('PDF 空正文 BlockID 无效');
+      pdfSlot.emptyMdBlocks=[...ids];
+      return pdfSlot.current?.setEmptyMdBlocks?.(pdfSlot.emptyMdBlocks)??ids.length;
+    },
     setReviewPair(pair=null,{skipSource=false}={}){
       // Ordinary source navigation/editing must not traverse the whole MD
       // preview or dispatch another CM6 transaction when no pair is active.
@@ -920,7 +952,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       ++previewToken;
       if(previewTimer!==null){clearTimeout(previewTimer);previewTimer=null;}
       if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
-      previewSelectedLine=null;pdfSlot.reviewPair=null;
+      previewSelectedLine=null;pdfSlot.reviewPair=null;pdfSlot.emptyMdBlocks=[];
+      pdfSlot.current?.setEmptyMdBlocks?.([]);
       pdfSlot.current?.setReviewPair?.(null);
     },
     focusMdLine(lineNo,{focus=true}={}){
@@ -953,8 +986,38 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       editor.dispatch({effects});
       return true;
     },
+    mergeMdBlockBreak(plan){
+      const runtime=editor.state.field(mdField);
+      const before=runtime?.rows.find(row=>row.line_id===plan?.beforeLineId);
+      const after=runtime?.rows.find(row=>row.line_id===plan?.afterLineId);
+      if(!before||!after||before.block_id!==plan.beforeBlockId||
+         after.block_id!==plan.afterBlockId||
+         before.line_no+1!==after.line_no||before.text!==plan.beforeText||
+         after.text!==plan.afterText||!plan.joinedText?.trim())
+        throw Error('CM6 断块原文或身份已变化，拒绝过期合并');
+      const lineA=editor.state.doc.line(before.line_no);
+      const lineB=editor.state.doc.line(after.line_no);
+      if(lineA.text!==before.text||lineB.text!==after.text)
+        throw Error('CM6 文档尚未与行表对齐，拒绝合并');
+      // One history entry, TWO simultaneous text changes. Keep the newline
+      // and B's physical line so reconcileMdText preserves both LineIDs.
+      editor.dispatch({changes:[
+        {from:lineA.from,to:lineA.to,insert:plan.joinedText},
+        {from:lineB.from,to:lineB.to,insert:''},
+      ],annotations:Transaction.userEvent.of('input.block-break-merge')});
+      const next=editor.state.field(mdField);
+      if(!next?.rows.some(row=>row.line_id===after.line_id&&
+            row.block_id===after.block_id&&row.text===''))
+        throw Error('CM6 未保留后块空行，请检查合并事务');
+      return true;
+    },
     editMdLine(lineId,text){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.editMdLine(lineId,text)??false;
+    },
+    mergeMdBlockBreak(plan){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 尚未初始化');
+      return cm.mergeMdBlockBreak(plan);
     },
     insertMdAtCursor(text){
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
