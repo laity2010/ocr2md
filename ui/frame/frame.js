@@ -82,7 +82,7 @@ function previewStatus(message,kind='info'){
   topStatus(message,kind);
 }
 const frame=createFrameWorkspace($('workspace'),{onStatus:previewStatus,onModuleChange:userShowModule,
-  agViewOptions:labName==='lab-ocr'?[{value:'md',label:'MD 行'},{value:'title',label:'标题'},{value:'latex',label:'LaTeX'},{value:'block-break',label:'断块'},{value:'note-match',label:'注释匹配'}]:[],
+  agViewOptions:labName==='lab-ocr'?[{value:'md',label:'MD 行'},{value:'title',label:'标题'},{value:'latex',label:'LaTeX'},{value:'block-break',label:'断块'},{value:'note-match',label:'注释匹配'},{value:'media',label:'媒体'}]:[],
   onAgViewChange:async view=>{
     if(!ocrWorkflow)return;
     try{

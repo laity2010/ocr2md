@@ -16,6 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
+from v6_media import download_chunk as media_download_chunk, status as media_status, inventory as media_inventory, read_local as media_read_local
 from v6_lab_ocr_span import minerujson2span, span_rows
 from v6_lab_ocr_block import minerujson2block, block_rows
 from v6_lab_ocr_block_view import inspect_block_projection,initialize_block_projection
@@ -132,8 +133,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch','md-state','md-initialize','md-save','block-break-reviews','block-break-review-set','note-match-rules','note-match-rules-save','note-pair-reviews','note-pair-review-set','note-pair-convert-prepare','note-pair-group-prepare','note-pair-convert-issues'):raise APIError(404,'未知的 OCR API')
-        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch','md-initialize','md-save','block-break-review-set','note-match-rules-save','note-pair-review-set','note-pair-convert-prepare','note-pair-group-prepare','note-pair-convert-issues')
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch','md-state','md-initialize','md-save','block-break-reviews','block-break-review-set','note-match-rules','note-match-rules-save','note-pair-reviews','note-pair-review-set','note-pair-convert-prepare','note-pair-group-prepare','note-pair-convert-issues','media-inventory','media-status','media-chunk','media-file'):raise APIError(404,'未知的 OCR API')
+        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch','md-initialize','md-save','block-break-review-set','note-match-rules-save','note-pair-review-set','note-pair-convert-prepare','note-pair-group-prepare','note-pair-convert-issues','media-chunk')
         if (op in post_ops)!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
@@ -154,6 +155,34 @@ class Handler(BaseHTTPRequestHandler):
         else:
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
+        # Media uses the EXISTING Main module's byte-store implementation,
+        # scoped to this authorized Lab book; never call Main active_doc().
+        # A virtual document location places all media in <book>/media/.
+        if op.startswith('media-'):
+            doc=book/'.ocr2md-lab-media-scope.md'
+            try:
+                if op=='media-inventory':
+                    return self.respond(200,{'files':media_inventory(doc)})
+                if op=='media-status':
+                    return self.respond(200,media_status(doc,query.get('url')))
+                if op=='media-chunk':
+                    if not isinstance(query.get('url'),str):raise APIError(422,'媒体 URL 无效')
+                    return self.respond(200,media_download_chunk(doc,query['url']))
+                if op=='media-file':
+                    raw=query.get('path','')
+                    if not isinstance(raw,str) or not raw.startswith('media/'):
+                        raise APIError(422,'媒体路径无效')
+                    data,kind=media_read_local(doc,raw[6:])
+                    self.send_response(200)
+                    self.send_header('Content-Type',kind)
+                    self.send_header('Content-Length',str(len(data)))
+                    self.send_header('Cache-Control','private, no-store')
+                    self.send_header('X-Content-Type-Options','nosniff')
+                    self.end_headers()
+                    if self.command=='GET':self.wfile.write(data)
+                    return
+            except (ValueError,FileNotFoundError) as error:
+                raise APIError(422,str(error)[:300]) from error
         if op=='note-pair-convert-issues':
             return self.respond(200,set_note_pair_conversion_issues(book,
                 query.get('items')))

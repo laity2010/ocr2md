@@ -1,0 +1,8 @@
+#workspace .ocr-lab-media-preview{display:flex;align-items:center;justify-content:center;
+  height:100%;min-height:48px;color:#cbd9c7;text-decoration:none}
+#workspace .ocr-lab-media-thumb{height:55px;max-width:100%;max-height:68px;
+  object-fit:contain;border-radius:3px}
+#workspace .ocr-lab-media-action{font:inherit;border:1px solid #718e79;
+  border-radius:4px;background:#385247;color:#e6e4d7;padding:5px 8px;
+  cursor:pointer;touch-action:manipulation}
+#workspace .ocr-lab-media-url{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

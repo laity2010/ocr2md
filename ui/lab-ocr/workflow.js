@@ -137,6 +137,20 @@ const MD_NOTE_COLUMNS=Object.freeze([
   {field:'note_row_id',headerName:'候选ID',hide:true},
   {field:'line_id',headerName:'LineID',hide:true},
 ]);
+const MD_MEDIA_COLUMNS=Object.freeze([
+  {field:'preview_path',headerName:'预览',width:104,sortable:false},
+  {field:'line_no',headerName:'源码行',width:88,sortable:true,sort:'asc',
+    pinned:'left',lockPinned:true,lockPosition:'left'},
+  {field:'pbs',headerName:'PBS',width:110,sortable:true,comparator:comparePBS},
+  {field:'source_kind',headerName:'来源',width:86,sortable:true},
+  {field:'status',headerName:'状态',width:102,sortable:true},
+  {field:'progress',headerName:'进度',width:102,sortable:false},
+  {field:'adopted',headerName:'引用',width:84,sortable:true},
+  {field:'url',headerName:'媒体链接',flex:2,minWidth:245,sortable:false},
+  {field:'action',headerName:'操作',width:99,sortable:false,
+    pinned:'right',lockPinned:true,lockPosition:'right'},
+  {field:'media_row_id',headerName:'媒体行 ID',hide:true,sortable:false},
+]);
 const MD_TITLE_COLUMNS=Object.freeze([
   // Outline text remains visible while users inspect/filter metadata columns.
   // Fixed width is intentional: AG Grid's flex width and pinned columns
@@ -176,6 +190,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let noteReviews=new Map(),noteReviewEpoch=0;
   const noteReviewBusy=new Set();
   let noteBatchBusy=false;
+  let mediaView=null;
   const noteLastConvertIssue=new Map();
   const breakReviewBusy=new Set();
   let pdfPage=1;
@@ -226,7 +241,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return projectReviewedNoteRows(lastNoteProjection,noteReviews,source,
       {showIgnored:true,dirty:Boolean(md()?.dirty)});
   }
-  const projectedMdRows=()=>activeAgView==='latex'?
+  const projectedMdRows=()=>activeAgView==='media'?mediaView?.rows()??[]:
+    activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
     activeAgView==='block-break'?projectBreakReviewRows():
@@ -900,7 +916,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     frame.setEmptyMdBlocks(emptyMdChildBlockIds(next.rows,cm()?.rows??[]));
     frame.setReviewPair(null,{skipSource:true}); // CM6 docChanged already clears its own decorations
     if(currentSqlTable==='md'){
-      if(activeAgView==='note-match')frame.patchNoteRows(projectedMdRows());
+      if(activeAgView==='media')frame.patchMediaRows(projectedMdRows());
+      else if(activeAgView==='note-match')frame.patchNoteRows(projectedMdRows());
       else if(activeAgView==='latex'){
         const rows=projectedMdRows();
         frame.patchFormulaRows(rows);
@@ -1084,7 +1101,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         mdContentChanged(updated);
       }else if(currentSqlTable==='md'){
         // A Block's PBS may change without changing its MD text/order.
-        if(activeAgView==='note-match')frame.patchNoteRows(projectedMdRows());
+        if(activeAgView==='media')frame.patchMediaRows(projectedMdRows());
+        else if(activeAgView==='note-match')frame.patchNoteRows(projectedMdRows());
         else if(activeAgView==='latex'){
           const rows=projectedMdRows();
           frame.patchFormulaRows(rows);
@@ -1344,18 +1362,21 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // AG view switching is a re-projection of the resident CM6 Markdown.
   // It never reopens SQLite or replaces the MD editor StateField.
   function renderMdAg(){
-    const title=activeAgView==='title',latex=activeAgView==='latex',
+    const media=activeAgView==='media',
+      title=activeAgView==='title',latex=activeAgView==='latex',
       broken=activeAgView==='block-break',notes=activeAgView==='note-match';
     const rows=projectedMdRows();
     lastRenderedLatexSummary=latex?latexIndexSummary(rows):null;
-    const columns=latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
+    const columns=media?MD_MEDIA_COLUMNS:latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
         getPdfFormulaCrop:target=>frame.getPdfFormulaCrop(target)}):
       title?MD_TITLE_COLUMNS:broken?MD_BREAK_COLUMNS:notes?MD_NOTE_COLUMNS:MD_COLUMNS;
     frame.showSqlRows(rows,columns.map(column=>({
       ...column,
       ...(broken&&column.field==='review'?{cellRenderer:reviewCell}:{}),
       ...(notes&&column.field==='match_state'?{cellRenderer:noteStatusCell}:{}),
-      ...(column.field==='text'&&!latex&&!broken&&!notes?{editable:true,valueSetter:params=>{
+      ...(media&&column.field==='preview_path'?{cellRenderer:mediaView.previewCell}:{}),
+      ...(media&&column.field==='action'?{cellRenderer:mediaView.actionCell}:{}),
+      ...(column.field==='text'&&!media&&!latex&&!broken&&!notes?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
           return false;
@@ -1365,17 +1386,24 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         return false;
       }}:{}),
       filter:column.filter??EnumCheckboxFilter,
-      filterValueGetter:column.filterValueGetter??(params=>column.field==='line_no'?
+      filterValueGetter:column.filterValueGetter??(params=>column.field==='line_no'&&!media?
         mdLineKind(params.data?.text):column.field==='pbs'?
           pbsPageKey(params.data?.pbs):params.data?.[column.field]??''),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     })),{
       pageScope:{page:pdfPage},
-      allPagesInitially:title||latex||broken||notes,
-      expandPageOnCategory:title?null:latex||broken||notes?'kind':'block_type',
-      initialFilterModel:latex||broken||notes?null:{line_no:{values:['非空行']}},
-      rowHeight:latex?134:broken?92:notes?66:35,
+      allPagesInitially:title||latex||broken||notes||media,
+      expandPageOnCategory:title||media?null:latex||broken||notes?'kind':'block_type',
+      initialFilterModel:latex||broken||notes||media?null:{line_no:{values:['非空行']}},
+      rowHeight:latex?134:broken?92:notes?66:media?78:35,
       onSelect:row=>{
+        if(media){
+          if(row.line_id){locateReview({origin:'ag',lineId:row.line_id,
+            blockId:row.block_id,lineNo:row.line_no});
+            onStatus(`媒体 · 第 ${row.line_no} 行 · ${row.status}`);}
+          else onStatus(`未引用本地媒体 · ${row.url}`);
+          return;
+        }
         if(notes){
           const anchor=resolveNoteMatchFocus(row,md()?.rows??[],cm()?.rows??[]);
           if(!anchor){onStatus(row.status==='疑似缺号'?`注号 ${row.number} 疑似缺失 · ${row.reason}`:
@@ -1404,7 +1432,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       },
     });
     frame.setAgView(activeAgView);
-    frame.setAgFunctions(notes?[
+    frame.setAgFunctions(media?[
+      {id:'download-all',label:'下载并替换全部',onClick:()=>mediaView.downloadAll()},
+      {id:'refresh',label:'刷新媒体清单',onClick:()=>mediaView.scan()},
+    ]:notes?[
       {id:'convert',label:'转换匹配',onClick:()=>convertMatchedNotes().catch(error=>
         onStatus('转换匹配失败：'+error.message,'error'))},
       {id:'rules',label:'识别规则',onClick:()=>openNoteRulesDialog().catch(error=>
@@ -1416,10 +1447,21 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return rows.length;
   }
   async function setAgView(view){
-    if(!['md','title','latex','block-break','note-match'].includes(view))throw Error('未知 AG 过滤视图');
+    if(!['md','title','latex','block-break','note-match','media'].includes(view))throw Error('未知 AG 过滤视图');
     const token=++agViewRequest;
     if(view==='latex'&&!latexPresentation)
       latexPresentation=await import('./latex-view.js');
+    if(view==='media'&&!mediaView){
+      const {createLabOcrMediaView}=await import('./media-view.js');
+      mediaView=createLabOcrMediaView({request,
+        read:()=>({workspace,mdRows:md()?.rows,source:frame.mdDocument(),
+          blocks:cm()?.rows??[]}),
+        replace:edits=>frame.replaceMdMediaReferences(edits),
+        onChanged:rows=>{
+          if(activeAgView==='media'&&currentSqlTable==='md')
+            frame.patchMediaRows(rows);
+        },onStatus});
+    }
     if(view==='note-match')try{
       if(!await loadNoteRules())return false;
       if(!await loadNoteReviews())
@@ -1428,13 +1470,18 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(view==='block-break')try{await loadBreakReviews();}
       catch(error){onStatus('断块审阅记录读取失败：'+error.message,'warning');return false;}
     if(token!==agViewRequest||currentSqlTable!=='md'||!md())return false;
+    mediaView?.setActive(false);
     activeAgView=view;
     frame.setReviewPair(null);
     frame.clearMdNoteRange();
     frame.setAgView(view);
     const count=renderMdAg();
+    mediaView?.setActive(view==='media');
+    if(view==='media')void mediaView.scan().catch(error=>
+      onStatus('媒体清单刷新失败：'+error.message,'warning'));
     const summary=lastRenderedLatexSummary;
-    onStatus(view==='latex'?`AG LaTeX · ${summary.total} 条，原始 ${summary.original}，`+
+    onStatus(view==='media'?`AG 媒体 · ${count} 条 · 点击操作下载/续传，功能菜单可批量本地化 · 不新增 SQL 媒体表`:
+      view==='latex'?`AG LaTeX · ${summary.total} 条，原始 ${summary.original}，`+
       `精确匹配 ${summary.matched}，仅 OCR ${summary.ocrOnly}，仅 MD ${summary.mdOnly}，`+
       `有歧义 ${summary.ambiguous}，原图 ${summary.images} · 只读`:
       view==='note-match'?`AG 注释匹配 · ${lastNoteProjection?.index.stats.references??0} 注引、`+
@@ -1462,6 +1509,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         const rows=md().rows;
         renderMdAg();
         currentSqlTable='md';
+        if(activeAgView==='media'){mediaView?.setActive(true);
+          void mediaView?.scan().catch(error=>onStatus('媒体清单刷新失败：'+error.message,'warning'));}
         frame.setMdEditHistory();
         if(selectedId!=null){
           const selected=frame.selectSqlRowById({field:'block_id',id:selectedId,preserveFilters:true});
@@ -1473,6 +1522,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     }
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
     if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
+    mediaView?.setActive(false);
     frame.setReviewPair(null);
     frame.clearMdNoteRange();frame.setAgFunctions([]);frame.setAgAction({});frame.setAgToggle({});
     const id=++loaded;
@@ -1577,6 +1627,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   return Object.freeze({savedWorkspace,initialize,initializeSql,afterSave,openSql,
     sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
     flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation,
-    setAgView,dispose(){noteDialog?.dispose();unsubscribeLocation();
+    setAgView,dispose(){mediaView?.dispose();noteDialog?.dispose();unsubscribeLocation();
       frame.setAgFunctions([]);frame.setAgAction({});frame.setAgToggle({});frame.setMdPreviewNavigation(null);}});
 }

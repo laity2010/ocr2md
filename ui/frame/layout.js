@@ -430,6 +430,32 @@ function mountEmptySource(host){
       }
       return true;
     },
+    replaceMdMediaReferences(edits){
+      const md=editor.state.field(mdField),source=editor.state.doc.toString();
+      if(!md||!Array.isArray(edits)||!edits.length||edits.length>20000)
+        throw Error('CM6 媒体替换计划无效');
+      const changes=[];
+      for(const edit of edits){
+        if(!Number.isInteger(edit.from)||!Number.isInteger(edit.to)||
+           edit.from<0||edit.to<=edit.from||edit.to>source.length||
+           typeof edit.expected!=='string'||
+           !/^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(edit.insert)||
+           source.slice(edit.from,edit.to)!==edit.expected||
+           edit.expected.includes('\n'))
+          throw Error('媒体原文或路径已变化，拒绝过期替换');
+        changes.push({from:edit.from,to:edit.to,insert:edit.insert});
+      }
+      changes.sort((a,b)=>a.from-b.from);
+      if(changes.some((change,i)=>i&&change.from<changes[i-1].to))
+        throw Error('媒体替换的 CM6 区间重叠');
+      // Exactly one undoable CM6 transaction. The resident MD StateField
+      // derives stable LineIDs and the existing md-save/CAS persists to SQL.
+      editor.dispatch({changes,
+        annotations:Transaction.userEvent.of('input.media-localize')});
+      if(editor.state.doc.lines!==md.rows.length)
+        throw Error('媒体替换不应改变物理 Markdown 行数');
+      return {changed:changes.length};
+    },
     editMdLine(lineId,text){
       const md=editor.state.field(mdField);
       const row=md?.rows.find(r=>r.line_id===lineId);
@@ -490,7 +516,7 @@ function mountEmptyGrid(host){
   // The switch belongs to the AG toolbar, not to the AG Grid column model.
   const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
   const allPagesInput=allPagesControl?.querySelector('input')??null;
-  let formulaData=new Map(),noteData=new Map(),currentRowHeight=35;
+  let formulaData=new Map(),noteData=new Map(),mediaData=new Map(),currentRowHeight=35;
   let pageScope=null,pdfPage=1,showAllPages=false;
   let expandPageOnCategory=null,lastCategoryModel='null';
   const isVisible=row=>row?.absorbed_into_block_id==null;
@@ -555,6 +581,8 @@ function mountEmptyGrid(host){
       .map(r=>[String(r.line_id),r]));
     noteData=new Map(rows.filter(r=>r?.note_row_id!=null)
       .map(r=>[String(r.note_row_id),r]));
+    mediaData=new Map(rows.filter(r=>r?.media_row_id!=null)
+      .map(r=>[String(r.media_row_id),r]));
     formulaData=new Map(rows.filter(r=>r?.formula_id!=null)
       .map(r=>[String(r.formula_id),r]));
     if(rowHeight!==currentRowHeight){
@@ -633,6 +661,21 @@ function mountEmptyGrid(host){
     noteData=next;
     if(remove.length||add.length)grid.applyTransaction({remove,add});
     if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
+  },patchMediaRows(rows){
+    const next=new Map(rows.map(r=>[String(r.media_row_id),r]));
+    const remove=[],add=[];
+    grid.forEachNode(node=>{
+      const id=String(node.data?.media_row_id??'');
+      if(!id)return;
+      const updated=next.get(id);
+      if(!updated)remove.push(node.data);
+      else if(Object.entries(updated).some(([field,value])=>node.data?.[field]!==value))
+        node.updateData({...node.data,...updated});
+    });
+    for(const [id,row] of next)if(!mediaData.has(id))add.push(row);
+    mediaData=next;
+    if(remove.length||add.length)grid.applyTransaction({remove,add});
+    if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
   },patchMdRows(rows){
     const next=new Map(rows.map(r=>[String(r.line_id),r]));
     const remove=[],add=[];
@@ -709,7 +752,7 @@ function mountEmptyGrid(host){
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
     expandPageOnCategory=null;lastCategoryModel='null';
-    mdData.clear();blockData.clear();formulaData.clear();noteData.clear();
+    mdData.clear();blockData.clear();formulaData.clear();noteData.clear();mediaData.clear();
     if(allPagesControl)allPagesControl.hidden=true;
     if(allPagesInput)allPagesInput.checked=false;
     grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
@@ -1257,6 +1300,11 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
         throw Error('CM6 未保留后块空行，请检查合并事务');
       return true;
     },
+    replaceMdMediaReferences(edits){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 源码窗尚未初始化');
+      return cm.replaceMdMediaReferences(edits);
+    },
     editMdLine(lineId,text){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.editMdLine(lineId,text)??false;
     },
@@ -1283,6 +1331,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     patchNoteRows(rows){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchNoteRows(rows);
+    },
+    patchMediaRows(rows){
+      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchMediaRows(rows);
     },
     clearMdAgSelection(){
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clearSelection();
