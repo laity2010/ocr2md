@@ -123,7 +123,7 @@ const MD_NOTE_COLUMNS=Object.freeze([
       node.title='点击这一行定位该端点，原文不会修改';
       return node;
     }},
-  {field:'match_state',headerName:'匹配状态',width:132,minWidth:112,sortable:true,
+  {field:'match_state',headerName:'匹配状态',width:132,minWidth:112,sortable:false,
     pinned:'right',lockPinned:true,lockPosition:'right'},
   {field:'pbs',headerName:'PBS',width:125,sortable:true,comparator:comparePBS},
   {field:'line_no',headerName:'源码行',width:92,sortable:true},

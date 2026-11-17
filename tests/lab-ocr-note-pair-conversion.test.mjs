@@ -44,4 +44,45 @@ const multi=check(['See<sup>1</sup>','## Notes','1. First','  continued','',
 assert.deepEqual(multi.plan.updates.map(x=>x.afterText),
   ['See[^1]','[^1]: First','      continued','        second paragraph']);
 assert.equal(multi.plan.continuationLineIds.length,3);
+// OCR hard-wrap within one immutable BlockID is structural evidence that
+// an unindented physical continuation still belongs to the SAME note.
+const sameBlock=['See<sup>7</sup>','## Notes',
+  '7. For example, Berkshire began by purchasing insurance businesses that delivered an',
+  'underwriting profit. Even more important, float grew over time.'];
+const note7=check(sameBlock,0,0,{continuation:'same-block'});
+// `check` creates one block per line; emulate MinerU's actual single
+// paragraph block by binding the continuation to its parent BlockID.
+const sameRows=note7.md.map((row,i)=>i===3?{...row,block_id:note7.md[2].block_id}:row);
+const idx7=projectNoteMatchIndex(sameRows,[],{continuation:'same-block'});
+assert.equal(idx7.bodies.find(x=>x.number==='7').body_line_ids.length,2);
+const a7=note7.args;
+const plan7=planNotePairConversion({...a7,mdRows:sameRows,
+  bodyId:idx7.bodies.find(x=>x.number==='7').candidate_id});
+assert.deepEqual(plan7.updates.map(row=>[row.lineNo,row.afterText]),[
+  [1,'See[^7]'],[3,'[^7]: For example, Berkshire began by purchasing insurance businesses that delivered an'],
+  [4,'    underwriting profit. Even more important, float grew over time.'],
+]);
+assert.equal(plan7.continuationLineIds.length,1);
+assert.deepEqual(note7.plan.updates.map(row=>row.lineNo),[1,3],
+  'Same-block scanner must NOT include an unindented line in a different BlockID');
+// With notes-section cross-block continuation, fail closed unless indentation
+// is explicit (even though the scanner can find both lines).
+assert.throws(()=>check(sameBlock,0,0,{continuation:'notes-section'}),
+  /没有明确缩进/);
+// Even inside one BlockID a blank line is a paragraph boundary; the next
+// unindented line is not automatically swallowed into the same footnote.
+const withBlank=['See<sup>7</sup>','## Notes','7. A sentence','',
+  'Another paragraph without indentation'];
+const base=withBlank.map((text,i)=>({line_no:i+1,line_id:'blank-'+i,
+  block_id:i>=2?77:70+i,text}));
+const scanned=projectNoteMatchIndex(base,[],{continuation:'same-block'});
+const rb=scanned.references[0],bb=scanned.bodies[0];
+assert.equal(bb.body_line_ids.length,3);
+assert.throws(()=>planNotePairConversion({mdRows:base,referenceId:rb.candidate_id,
+  bodyId:bb.candidate_id,review:{decision:'待转换',valid:true,
+    body_id:bb.candidate_id,ref_line_id:rb.line_id,ref_block_id:rb.block_id,
+    ref_from:rb.from,ref_to:rb.to,ref_raw:rb.raw,ref_source_text:base[0].text,
+    body_line_id:bb.line_id,body_block_id:bb.block_id,
+    body_from:bb.from,body_to:bb.to,body_raw:bb.raw,
+    body_source_text:base[2].text}}),/没有明确缩进/);
 console.log('LAB_OCR_NOTE_PAIR_CONVERSION_DIRECT_PASS');

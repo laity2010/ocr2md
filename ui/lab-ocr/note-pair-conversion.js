@@ -72,13 +72,27 @@ export function planNotePairConversion({mdRows,blockRows=[],configuration,
     if(!definition.text.endsWith(first))fail('注文内容与识别结果不一致');
     add(definition,prefix+' '+first);
     if(body.body_line_ids.length>100)fail('注文过长，需人工检查分段');
+    let previous=definition;
     for(const lineId of body.body_line_ids.slice(1)){
       const row=rows.get(lineId);
-      if(!row||row.line_no<=definition.line_no||row.line_no>definition.line_no+100)
+      if(!row||row.line_no<=definition.line_no||row.line_no>definition.line_no+100||
+         row.line_no!==previous.line_no+1)
         fail('注文续行 LineID 不连续');
-      if(row.text.trim()&&!/^(?: {2,}|\t)/.test(row.text))
-        fail('注文续行没有明确缩进，需人工审阅后再转换');
-      if(row.text.trim())add(row,'    '+row.text);
+      if(row.text.trim()){
+        const explicitlyIndented=/^(?: {2,}|\t)/.test(row.text);
+        // MinerU can split ONE logical paragraph into adjacent unindented
+        // physical MD lines. Accept that only with structural evidence:
+        // the same immutable BlockID, immediately adjacent source rows,
+        // no intervening empty paragraph. A separate block or a paragraph
+        // after a blank still requires explicit indentation/review.
+        const continuousSameBlock=row.block_id!=null&&
+          row.block_id===definition.block_id&&
+          previous.block_id===definition.block_id&&Boolean(previous.text.trim());
+        if(!explicitlyIndented&&!continuousSameBlock)
+          fail('注文续行没有明确缩进，需人工审阅后再转换');
+        add(row,'    '+row.text);
+      }
+      previous=row;
     }
   }
   if(updates.size===0)fail('注引与注文已经是 Obsidian 脚注，无需转换');

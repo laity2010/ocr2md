@@ -109,7 +109,7 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 ### 执行合同与 UI
 
 - 「审阅」列中只有 **人工确认配对 = 待转换** 且来源未过期的注引行，才能点击 `执行转换 · 写入 Obsidian 脚注`。自动识别的「已匹配」**不能**直接转换；无可选正文、编号冲突、跨章节重复注号、书籍自定义不支持的注文格式、原文与证据不一致均 fail closed，保留原文。
-- 内置可转换：HTML sup（含反斜杠转义）、Markdown `[^N]`、上标数字/括号等注引形式，配对的数字点号/括号/方括号、Notes 标签和现有 Markdown 注文。保留正文所有实际字符，仅替换注文首行标签为 `[^N]: `；多行注文只有续行已有明确缩进才附加四格缩进，拒绝把未缩进的未知段落吞进脚注。一个源行只做一次修改，**不增加或删除物理行**；正文后继行的 LineID、BlockID 及 PDF 覆盖框身份保持不变。其他编号/复杂布局先保留待定，由 WP3.3 对照 OCR 审阅。
+- 内置可转换：HTML sup（含反斜杠转义）、Markdown `[^N]`、上标数字/括号等注引形式，配对的数字点号/括号/方括号、Notes 标签和现有 Markdown 注文。保留正文所有实际字符，仅替换注文首行标签为 `[^N]: `；多行注文对已有缩进的续行附加四格缩进；对未缩进的续行，只有首行与续行位于同一不可变 BlockID、MD 物理行连续、前一行非空时才附加四格缩进；跨块或空行后的未知段落仍拒绝吞入脚注。一个源行只做一次修改，**不增加或删除物理行**；正文后继行的 LineID、BlockID 及 PDF 覆盖框身份保持不变。其他编号/复杂布局先保留待定，由 WP3.3 对照 OCR 审阅。
 - `ui/lab-ocr/note-pair-conversion.js` 唯一导出 `planNotePairConversion({mdRows,blockRows,configuration,referenceId,bodyId,review})`，只生成 `{updates:[{lineId,lineNo,blockId,beforeText,afterText}], convertedReferenceId,convertedBodyId,...}`，不持有第二份可编辑原文、不直接访问 DOM/SQL；重号的 Obsidian 全局 ID 冲突一律拒绝。`ui/frame/layout.js` 扩展 `frame.convertMdNotePair(plan)`，验证 CM6 当前 StateField、源行内容和身份，**一个 `editor.dispatch({changes:[...]})`** 完成所有源行修改；CM6 史栈单次 Undo/Redo 可恢复配对全部更改，后续保存继续走原 `md-persistence.js -> md-save` 版本 CAS。没有单独的 Markdown 落盘接口。
 - 一组注文可被多个注引引用。先转换第一个已审阅注引和注文正文；第二个注引经过**重新审阅新 Markdown 注文**后，只修改自己的注引，不重复转换或复制注文。源行同号多引用相互影响位置的高级情况仍留待 WP3.3。注文第一行和续行已经是 Markdown `[^N]:` 时不会再次改写。
 - 转换状态为：`待转换`（人工确认、原文还没转）、`转换待保存`（已在 CM6 转换但未获 md-save CAS 回执）、`已转换`（所有目标行的 SQLite 已保存证据通过），以及原文变化后的 `需复核`。已转换不可再点一次，若需回退用现有 CM6 Undo/Redo；Undo 恢复原文本后自动重新识别人工待转换状态，Redo 则恢复已转换。重新进入 View 时 SQLite 只读查询已转换证据，不能把一个尚未实际落盘的准备操作冒充完成。
@@ -161,3 +161,11 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - `python3 tests/lab-ocr-note-pair-group.test.py -v`：隔离合成书籍中整组两人审阅 CAS 原子准备、前态只读、后态两成员成功、Undo/Redo、先 10 成功再 9 加入及 Undo 后旧 10 仍成功、失败原因持久化和显式状态清除、实际单一 HTTP Cookie/Origin/405 方法边界。
 - `node tests/lab-ocr-note-pair-group.browser.test.mjs`，及通过 `NOTE_PARTIAL_MODE=1`、`NOTE_FAIL_MODE=1` 分别在 Chromium 与 iPad WebKit 运行：新 9/10 同行原子转换、先成功 10 后补转 9 的回执跟随、已转换五态下拉只读、模拟某个非同行脚注转换失败且在 AG `EnumCheckboxFilter` 勾选「转换失败」后仅剩失败行；CM6 Undo/Redo、原 MD CAS、重开 View、Block 保存次数 0。
 - 真实 Buffett 样本**只读**运行同组纯规划：第286行的 9、10 与第346、348行注文恰好生成三条行更新；测试阶段没有执行任何 `md-save` 或人工审阅 `POST` 写入真实书籍。
+
+
+## WCP43 · 注号 7 OCR 续行补齐与匹配状态禁排序（2026-11-17）
+
+- Buffett 书籍的只读 SQLite 样本确认：注号 7 注引在第136行，注文第341行和第342行同属 `BlockID=471`（PBS 当前 `p17b8`），第341行结尾为句中 `... delivered an `，第342行开头是 `underwriting profit.`，没有 Markdown 缩进。此前 `planNotePairConversion` 的“只接受已有明确缩进的订单续行”规则误将这一 OCR 行折行判为需人工处理，导致 AG 显示「转换失败」。
+- 修复仅允许 **同一不可变 BlockID 内**的未缩进连续正文参与安全转换；相邻 `line_no` 必须精确递增、上一物理行非空、中间不得存在空白段落；既有扫描器仍负责判定候选所属的注号、章节/Notes 范围，转换规划不另猜订单关系。对于跨块、空白段落后、来源位置错乱的未缩进续行继续 fail closed。转换保留英文内容和全部 MD 行结构，注引/首行/续行用一次 CM6 事务修改；第342行只在开头添加四格缩进。BlockID、LineID、PBS、PDF 覆盖框不变，保存仍走原 MD CAS。
+- **「匹配状态」列** `sortable:false`：禁用列头触摸排序以避免误操作，但保留原先的 `EnumCheckboxFilter`，仍可按「已匹配 / 待核实 / 忽略 / 已转换 / 转换失败」筛选。默认按数字注号排序，PBS 和源码行仍可人工排序；已转换是只读派生状态，不能手动伪造。
+- 直接回归：`node tests/lab-ocr-note-pair-conversion.test.mjs` 验证同块未缩进续行通过、跨块拒绝和空行后拒绝；真实 Buffett SQLite 的 **只读** 调用 `planNotePairConversion` 确认第136、341、342行恰好三条改动；`tests/lab-ocr-note-7-continuation.browser.test.mjs` 通过 Chromium/iPad-WebKit 验证一次 CM6 事务、单次 MD CAS、Undo/Redo、重开仍为已转换、Block 保存 0；`tests/lab-ocr-note-match-view.browser.test.mjs` 点击匹配状态列头两次不会改变默认注号排序，匹配状态列的现有筛选按钮不消失。

@@ -137,6 +137,21 @@ try{
    assert(defaultOrder.every((number,i)=>i===0||
      Number(number)>=Number(defaultOrder[i-1])),
      'Displayed numeric order must be nondecreasing: '+defaultOrder);
+   // The editable status dropdown is adjacent to a narrow pinned header.
+   // Clicking that header must never reorder the AG rows accidentally;
+   // the existing status-value filter must remain available.
+   const statusHeader=page.locator('.ocr-outline-grid .ag-header-cell[col-id="match_state"]');
+   assert.equal(await statusHeader.getAttribute('aria-sort'),null,
+     'Disabled AG sort has no aria-sort attribute');
+   const statusFilter=await statusHeader.locator('.ag-header-cell-filter-button').count();
+   assert(statusFilter>0,'Disabled sort must not remove the AG status filter');
+   await statusHeader.locator('.ag-header-cell-text').click();
+   await statusHeader.locator('.ag-header-cell-text').click();
+   assert.equal(await statusHeader.getAttribute('aria-sort'),null,
+     'AG match_state column must not sort when tapped');
+   assert.equal(await page.locator('.ocr-outline-grid .ag-header-cell[col-id="number"]')
+     .getAttribute('aria-sort'),'ascending',
+     'Disabling match_state sort preserves current user-selected sort column');
    const gap=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id:'gap:book:4',focusColumn:'match_state'}));
    assert.equal(gap?.status,'疑似缺号');
