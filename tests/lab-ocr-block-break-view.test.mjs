@@ -1,6 +1,6 @@
 /** WP1: no SQL/CMD mutation, only split boundaries of ONE logical parent. */
 import assert from 'node:assert/strict';
-import {projectBlockBreakRows} from '../ui/lab-ocr/block-break-view.js';
+import {projectBlockBreakRows,resolveBlockBreakFocus} from '../ui/lab-ocr/block-break-view.js';
 const block=(block_id,pbs,parent_block_id,sibling_order,block_type='text',page=15)=>({
   block_id,pbs,parent_block_id,sibling_order,block_type,global_page:page,
   block_group:'para_blocks',absorbed_into_block_id:null,
@@ -27,6 +27,21 @@ assert.equal(rows[0].before_line_id,'c');
 assert.equal(rows[0].before_line_no,310);
 assert.equal(rows[0].block_id,437,'Locates AFTER block through existing four-pane port');
 assert.equal(rows[0].kind,'跨块续接');
+const pair=resolveBlockBreakFocus({issueId:rows[0].issue_id,
+  lineId:rows[0].line_id,blockId:rows[0].block_id},md,blocks);
+assert.deepEqual(pair,{before:{lineNo:310,blockId:436,page:16,
+  token:'steady',text:rows[0].before_text},
+  after:{lineNo:311,blockId:437,page:16,
+    token:'source',text:rows[0].after_text},hyphenated:false});
+assert(Object.isFrozen(pair)&&Object.isFrozen(pair.before));
+assert.equal(resolveBlockBreakFocus({issueId:rows[0].issue_id,
+  lineId:'stale',blockId:437},md,blocks),null);
+assert.equal(resolveBlockBreakFocus({issueId:rows[0].issue_id,
+  lineId:rows[0].line_id,blockId:999},md,blocks),null);
+assert.equal(resolveBlockBreakFocus({issueId:rows[0].issue_id,
+  lineId:rows[0].line_id,blockId:437},md.map(r=>r.line_id==='c'?
+  {...r,text:'Sentence ends.'}:r),blocks),null);
+
 assert.deepEqual(blocks,originalBlocks);
 assert.deepEqual(md,originalMd);
 // The exact same logical edge survives PBS renumbering and row shifts.

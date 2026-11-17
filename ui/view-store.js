@@ -66,7 +66,7 @@ export function publishActivePanel(panelId){
  * Increment sequence even on repeated clicks so navigation may re-center.
  */
 export function publishLabFocus({origin,intent='click',lineId=null,blockId=null,
-  lineNo=null,page=null,pbs=null,formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}){
+  lineNo=null,page=null,pbs=null,formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null,blockBreakId=null}){
   if(!['ag','cm6','preview','pdf'].includes(origin))throw Error('Invalid review origin');
   if(lineId!==null&&(typeof lineId!=='string'||!lineId))throw Error('Invalid LineID');
   if(blockId!==null&&(!Number.isSafeInteger(blockId)||blockId<1))throw Error('Invalid BlockID');
@@ -85,8 +85,11 @@ export function publishLabFocus({origin,intent='click',lineId=null,blockId=null,
      !formulaBBox.every(Number.isFinite)||formulaBBox[2]<=formulaBBox[0]||
      formulaBBox[3]<=formulaBBox[1]||origin!=='ag'||!page||!blockId))
     throw Error('Invalid PDF formula bbox');
+  if(blockBreakId!==null&&(!/^block-break:[1-9]\d*:[1-9]\d*$/.test(blockBreakId)||
+     origin!=='ag'||!lineId||!blockId||!lineNo))
+    throw Error('Invalid block-break review identity');
   viewStore.setState(state=>({labFocusTarget:Object.freeze({origin,intent,lineId,blockId,
-    lineNo,page,pbs,formulaColumn,formulaEndColumn,formulaKind,
+    lineNo,page,pbs,formulaColumn,formulaEndColumn,formulaKind,blockBreakId,
     formulaBBox:formulaBBox?Object.freeze([...formulaBBox]):null,
     sequence:(state.labFocusTarget?.sequence||0)+1})}));
 }

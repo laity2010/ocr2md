@@ -61,7 +61,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
     onExtractText=null,extracting=false,selectedPage=null,
-    selectedBlockId=null,focusRequest=null,formulaFocus=null,allFormulaHighlights=[];
+    selectedBlockId=null,focusRequest=null,formulaFocus=null,allFormulaHighlights=[],reviewPair=[];
   // Text authority: PDF.js getTextContent() from the original PDF page.
   // No MinerU block_json and no editable CM lines participate in availability.
   const nativePageTexts=new Map(),nativeBoxTexts=new Map(),nativeBoxPending=new Set();
@@ -406,11 +406,33 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       blockIds:new Set([blockId])});
   }
   const highlightKind=ids=>blockHighlight(ids,selectedBlockId,blockParents);
+  const reviewPairSide=ids=>{
+    const values=ids.map(String);
+    const sides=reviewPair.filter(item=>values.includes(item.id)).map(item=>item.side);
+    return sides.length===2?'both':sides[0]??'';
+  };
+  function setReviewPair(pair=null){
+    if(disposed)throw Error('PDF Viewer 已销毁');
+    if(pair!==null&&(!Array.isArray(pair)||pair.length!==2||
+       pair.some(item=>!item||!['before','after'].includes(item.side)||
+         !Number.isSafeInteger(item.blockId)||item.blockId<1||
+         !Number.isInteger(item.page)||item.page<1)))
+      throw Error('PDF 双端审阅目标无效');
+    reviewPair=pair?.map(item=>({id:String(item.blockId),page:item.page,side:item.side}))??[];
+    updateSelectedNodes();
+    return reviewPair.length;
+  }
   const updateSelectedNodes=()=>{
     for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-box[data-block-ids],.lab-ocr-pdf-pbs-tag[data-block-ids]')){
       const state=highlightKind(node.dataset.blockIds.split(' '));
       node.dataset.selected=String(state==='direct');
       node.dataset.familySelected=String(state==='family');
+      const hostPage=Number(node.closest('.page[data-page-number]')?.dataset.pageNumber);
+      const ids=node.dataset.blockIds.split(' ');
+      const side=reviewPairSide(ids.filter(id=>reviewPair.some(item=>
+        item.id===id&&item.page===hostPage)));
+      if(side)node.dataset.reviewPairSide=side;
+      else delete node.dataset.reviewPairSide;
     }
   };
   function activateBlock(meta,notify){
@@ -996,7 +1018,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(oldTask)await oldTask.destroy();
     pdf=null;ready=false;overlayRevision++;overlayCache.clear();overlayPending.clear();
     lastNotifiedPage=null;
-    focusRequest=null;formulaFocus=null;selectedBlockId=null;selectedPage=null;blockParents.clear();
+    focusRequest=null;formulaFocus=null;reviewPair=[];selectedBlockId=null;selectedPage=null;blockParents.clear();
     nativePageTexts.clear();nativeBoxTexts.clear();nativeBoxPending.clear();
     formulaCrops.clear();
     updateExtractButton();
@@ -1046,7 +1068,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,setFormulaHighlights,
+  return Object.freeze({loadPdf,setOverlays,setFormulaHighlights,setReviewPair,
     focusBlock,focusFormula,renderFormulaCrop,clearFocus,invalidateOverlayPage,
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;

@@ -75,6 +75,7 @@ function mountEmptySource(host){
   const setMdFocusLine=StateEffect.define();
   const setMdFormulaRange=StateEffect.define();
   const setMdAllFormulaRanges=StateEffect.define();
+  const setMdReviewPair=StateEffect.define();
   const deletedMdLine=StateEffect.define();
   const mdFocusField=StateField.define({
     create:()=>Decoration.none,
@@ -104,6 +105,32 @@ function mountEmptySource(host){
             ranges.push(Decoration.mark({class:'ocr-latex-view-formula-all'}).range(from,to));
         }
         value=Decoration.set(ranges.sort((a,b)=>a.from-b.from||a.to-b.to));
+      }
+      return value;
+    },
+    provide:field=>EditorView.decorations.from(field),
+  });
+  const mdReviewPairField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      value=tr.docChanged?Decoration.none:value.map(tr.changes);
+      for(const effect of tr.effects)if(effect.is(setMdReviewPair)){
+        const pair=effect.value,ranges=[];
+        for(const side of ['before','after']){
+          const item=pair?.[side];
+          if(!Number.isInteger(item?.lineNo)||item.lineNo<1||
+             item.lineNo>tr.newDoc.lines||typeof item.token!=='string'||
+             !/^[A-Za-z]{2,60}-?$/.test(item.token))continue;
+          const line=tr.newDoc.line(item.lineNo);
+          const source=line.text;
+          const index=side==='before'?source.trimEnd().lastIndexOf(item.token):
+            source.search(/\S/);
+          if(index<0||source.slice(index,index+item.token.length)!==item.token||
+             (side==='before'&&index+item.token.length!==source.trimEnd().length))continue;
+          ranges.push(Decoration.mark({class:'ocr-block-break-source-'+side})
+            .range(line.from+index,line.from+index+item.token.length));
+        }
+        value=ranges.length?Decoration.set(ranges.sort((a,b)=>a.from-b.from)):Decoration.none;
       }
       return value;
     },
@@ -172,7 +199,7 @@ function mountEmptySource(host){
   // mature editing, history, native iOS selection, folding and keybindings.
   editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
-    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,mdAllFormulaField,
+    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,mdAllFormulaField,mdReviewPairField,
     lineGutter.extension,...base.slice(1),
     EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),mineruCommentFolding,
@@ -212,6 +239,10 @@ function mountEmptySource(host){
     clearTableSelection(){editor.dispatch({effects:selectTableRow.of(null)});},
     mdRuntime(){return editor.state.field(mdField);},
     editorView(){return editor;},
+    setReviewPair(pair=null){
+      editor.dispatch({effects:setMdReviewPair.of(pair)});
+      return Boolean(pair);
+    },
     setLatexHighlights(rows=[]){
       const ranges=rows.filter(row=>Number.isInteger(row?.source_from)&&
         Number.isInteger(row?.source_to)&&row.source_to>row.source_from)
@@ -688,6 +719,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
         pdfSlot.current=viewer;
         if(pdfSlot.overlays)viewer.setOverlays(pdfSlot.overlays);
         viewer.setFormulaHighlights?.(pdfSlot.formulaHighlights);
+        viewer.setReviewPair?.(pdfSlot.reviewPair);
         if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
       }
       return {dispose(){
@@ -737,12 +769,13 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   onAgViewChange=()=>{},agViewOptions=[],moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
-  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,formulaHighlights:[]};
+  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,formulaHighlights:[],reviewPair:null};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus,
       agViewOptions,onAgViewChange)});
   let previewToken=0,previewTimer=null;
   let previewClickCallback=null,previewSelectedLine=null,previewSync=null,previewClickArea=null;
+  let reviewPair=null;
   const mdArea=()=>pdfSlot.preview?.mdArea??null;
   const previewAnchors=()=>[...mdArea()?.querySelectorAll('[data-source-start][data-source-end]')??[]];
   function highlightPreviewLine(lineNo,{reveal=false}={}){
@@ -762,6 +795,39 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     if(target){target.dataset.ocrSyncSelected='true';
       if(reveal)target.scrollIntoView({block:'center',inline:'nearest'});}
     return Boolean(target);
+  }
+  function paintReviewPairPreview(){
+    const area=mdArea();
+    if(!area)return;
+    for(const anchor of previewAnchors())delete anchor.dataset.ocrReviewPair;
+    const pane=area.closest('.ocr-preview-pane');
+    pane?.querySelector('.ocr-review-pair-card')?.remove();
+    pane?.classList.toggle('ocr-review-pair-visible',Boolean(reviewPair));
+    if(!reviewPair)return;
+    const mark=(lineNo,side)=>{
+      const match=previewAnchors().filter(node=>{
+        const from=Number(node.dataset.sourceStart),to=Number(node.dataset.sourceEnd);
+        return Number.isInteger(from)&&Number.isInteger(to)&&lineNo>=from&&lineNo<to;
+      }).sort((a,b)=>(Number(a.dataset.sourceEnd)-Number(a.dataset.sourceStart))-
+        (Number(b.dataset.sourceEnd)-Number(b.dataset.sourceStart)))[0];
+      if(match){const prior=match.dataset.ocrReviewPair;
+        match.dataset.ocrReviewPair=prior&&prior!==side?'both':side;}
+    };
+    mark(reviewPair.before.lineNo,'before');mark(reviewPair.after.lineNo,'after');
+    if(!pane)return;
+    const card=document.createElement('div');
+    card.className='ocr-review-pair-card';card.setAttribute('role','note');
+    const title=document.createElement('div');title.className='ocr-review-pair-title';
+    title.textContent='断块 · 接续预览（只读，不修改正文）';
+    const body=document.createElement('div');body.className='ocr-review-pair-joined';
+    const a=document.createElement('span');a.className='ocr-review-pair-before';
+    a.textContent=reviewPair.before.text;
+    const seam=document.createElement('span');seam.className='ocr-review-pair-seam';
+    seam.textContent=reviewPair.hyphenated?'':' ';
+    const b=document.createElement('span');b.className='ocr-review-pair-after';
+    b.textContent=reviewPair.after.text;
+    body.append(a,seam,b);card.append(title,body);
+    pane.insertBefore(card,area);
   }
   function previewClick(event){
     const node=event.target instanceof Element?
@@ -814,6 +880,26 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       }
       return true;
     },
+    setReviewPair(pair=null,{skipSource=false}={}){
+      // Ordinary source navigation/editing must not traverse the whole MD
+      // preview or dispatch another CM6 transaction when no pair is active.
+      if(pair===null&&reviewPair===null&&pdfSlot.reviewPair===null)return false;
+      if(pair!==null&&(!pair.before||!pair.after||
+         [pair.before,pair.after].some(item=>!Number.isInteger(item.lineNo)||
+           item.lineNo<1||!Number.isSafeInteger(item.blockId)||item.blockId<1||
+           !Number.isInteger(item.page)||item.page<1||
+           typeof item.text!=='string'||item.text.length>300||
+           typeof item.token!=='string'||!item.token)))
+        throw Error('双端审阅投影无效');
+      reviewPair=pair;pdfSlot.reviewPair=pair?['before','after'].map(side=>({
+        side,blockId:pair[side].blockId,page:pair[side].page})):null;
+      // CM6 already drops token decorations in its docChanged transaction.
+      // Avoid nested EditorView.dispatch from the MD update listener.
+      if(!skipSource)container.querySelector('.ocr-cm-source')?.ocrCmTable?.setReviewPair(pair);
+      pdfSlot.current?.setReviewPair?.(pdfSlot.reviewPair);
+      paintReviewPairPreview();
+      return Boolean(pair);
+    },
     setMdPreviewNavigation(callback){
       if(callback!==null&&typeof callback!=='function')throw Error('MD 预览定位回调无效');
       previewClickCallback=callback;bindPreviewClick();
@@ -842,6 +928,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
           pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source,{nativeInlineMath});
           sync?.afterRender(preserved);
           highlightPreviewLine(previewSelectedLine);
+          paintReviewPairPreview();
         }).catch(error=>onStatus('MD 预览渲染失败：'+error.message,'warning'));
       },240);
     },
@@ -869,7 +956,10 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       ++previewToken;
       if(previewTimer!==null){clearTimeout(previewTimer);previewTimer=null;}
       if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
-      previewSelectedLine=null;
+      previewSelectedLine=null;reviewPair=null;pdfSlot.reviewPair=null;
+      pdfSlot.current?.setReviewPair?.(null);
+      container.querySelector('.ocr-preview-pane .ocr-review-pair-card')?.remove();
+      container.querySelector('.ocr-preview-pane')?.classList.remove('ocr-review-pair-visible');
     },
     focusMdLine(lineNo,{focus=true}={}){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo,{focus})??false;

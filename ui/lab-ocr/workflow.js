@@ -9,7 +9,7 @@ import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
-import {projectBlockBreakRows} from './block-break-view.js';
+import {projectBlockBreakRows,resolveBlockBreakFocus} from './block-break-view.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -149,7 +149,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // One semantic event, four independent projections. Never store Markdown in
   // the shared View Store, and never let one pane call another pane's private DOM.
   function locateReview({origin,intent='click',lineId=null,blockId=null,lineNo=null,
-    formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null}={}){
+    formulaColumn=null,formulaEndColumn=null,formulaBBox=null,formulaKind=null,blockBreakId=null}={}){
     if(currentSqlTable!=='md'||!md())return null;
     const target=resolveReviewLocation({lineId,blockId,lineNo},md().rows,cm()?.rows??[]);
     if(target){
@@ -166,6 +166,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         {formulaEndColumn}:{}),
       ...(origin==='ag'&&Array.isArray(formulaBBox)?{formulaBBox}:{}),
       ...(origin==='ag'&&formulaKind!==null?{formulaKind}:{}),
+      ...(origin==='ag'&&blockBreakId?{blockBreakId}:{}),
       });
       return exactMissing?{...target,lineId:null,lineNo:null}:target;
     }
@@ -213,6 +214,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       else frame.focusPdfBlock({id:target.blockId,page:target.page,
         reveal:target.intent==='click'});
     }else if(target.blockId==null||!target.page)frame.clearPdfFocus();
+    frame.setReviewPair(activeAgView==='block-break'&&target.blockBreakId?
+      resolveBlockBreakFocus({issueId:target.blockBreakId,
+        lineId:target.lineId,blockId:target.blockId},md().rows,cm()?.rows??[]):null);
   });
   frame.setMdPreviewNavigation(lineNo=>locateReview({origin:'preview',lineNo}));
   function refreshBlockUndoRedo(){
@@ -236,6 +240,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return persistence;
   }
   function mdContentChanged(next){
+    frame.setReviewPair(null,{skipSource:true}); // CM6 docChanged already clears its own decorations
     if(currentSqlTable==='md'){
       if(activeAgView==='latex'){
         const rows=projectedMdRows();
@@ -388,6 +393,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   function reflectCmBlockChange(result,selectedId){
     if(!result.changed)return;
+    frame.setReviewPair(null); // Block relationships may have moved
     if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
     if(md()){
       const nextRows=reorderMdByBlocks(md().rows,cm().rows);
@@ -644,7 +650,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       await flushAllChanges();
     }
     if(saved===workspace&&tableReady)return true; // never reload CM from an old SQL snapshot
-    if(!saved){++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();
+    if(!saved){frame.setReviewPair(null);++operation;workspace='';tableReady=false;spanReady=false;blockReady=false;currentSqlTable=null;hideNavigation();
       frame.clearSqlRows();prepareOverlays('');warmPdf('');await showModule('settings');
       onStatus('尚未绑定工作区，请在全局设置中选择书籍目录','warning');return false;}
     const success=await inspectAndImport(saved);
@@ -684,6 +690,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       rowHeight:latex?134:35,
       onSelect:row=>{
         const target=locateReview({origin:'ag',lineId:row.line_id,
+          ...(broken?{blockBreakId:row.issue_id}:{}),
           blockId:row.block_id,lineNo:row.line_no,
           ...(latex?{formulaColumn:row.column,
             formulaEndColumn:Number.isInteger(row.column)&&
@@ -711,6 +718,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       latexPresentation=await import('./latex-view.js');
     if(token!==agViewRequest||currentSqlTable!=='md'||!md())return false;
     activeAgView=view;
+    frame.setReviewPair(null);
     frame.setAgView(view);
     const count=renderMdAg();
     const summary=lastRenderedLatexSummary;
@@ -742,6 +750,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     }
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
     if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
+    frame.setReviewPair(null);
     const id=++loaded;
     onStatus(table==='block'&&cm()?.workspace===workspace?
       '正在从 CM6 内存态投影 Block 表…':`正在从 SQLite 加载 ${table} 表并交给 CM6…`,'info');

@@ -29,3 +29,19 @@
 ## 已知独立回归
 
 - `tests/lab-ocr-md-full-source.browser.test.mjs` 当前仍在**已有**标题视图列序检查失败：显示 `text,line_no,level,pbs`，期望 `text,line_no,pbs,level`。本次仅新增下拉选项，没有修改标题视图列定义或 AG 通用列序；这项独立历史失败按 FAIL/BLOCKED 留痕，不能冒充 WP1 全量通过。
+
+## WCP43 · WP2/3：A/B 双端审阅（只读，2026-11-17）
+
+- `projectBlockBreakRows` 新增 `before_token / after_token`，仍从最新 CM6 Markdown 段落边界派生。新公开纯函数 `resolveBlockBreakFocus({issueId,lineId,blockId},mdRows,blockRows)` 重新校验点击时当前候选、After LineID 与 BlockID，返回两端 `{lineNo,blockId,page,token,text}` 和 `hyphenated`；不信任 AG 旧缓存行、不再从 PBS 推导身份，源内容变化则返回 `null`。
+- 统一四窗 `publishLabFocus` 仅扩展经过验证的 `blockBreakId`，消息中**不放 Markdown 正文**；普通 AG、PDF、CM6、预览导航事件均无此 ID。Frame 使用单个 `setReviewPair(pair | null, {skipSource})` 展示瞬态状态。`skipSource:true` 仅供 CM6 `docChanged` 监听回调：CM6 的 Decoration StateField 已在同一次编辑事务自动失效，不能再嵌套调用 `EditorView.dispatch`。切离 View、其他方向导航、Block 变更、工作区切换与文本编辑会清除旧定位。
+- **CM6 原文**：两个独立 `Decoration.mark` 只标记前块末尾/后块开头的可证明英文 token，沿用已有整行高亮和 caret，不改实际文本、LineID 或 Undo 历史。
+- **MD 预览**：复用当前 Main Markdown 渲染结果的 `data-source-start/end` 节点，在原 DOM 上添加 `data-ocr-review-pair=before/after/both`（一个 Markdown 段落可能含两个源行，不能伪造两份对应 DOM）。另在预览工具栏下方、滚动正文上方显示一个只读、可换行的「断块 · 接续预览」卡片，用两个 `textContent` 片段拼接；不用 `innerHTML` 注入 Markdown，卡片不是文档源，也不参与保存。预览重渲染按当前 pair 再次打标。
+- **PDF**：`setReviewPair` 只引用现有 PDF.js `block` 覆盖框和 PBS 标签上的稳定 `data-block-ids`，对 A/B 页分别标注 `data-review-pair-side`；没有创建第二份 bbox，也不重载 PDF。坐标、PBS 标签、父子树、PDF 页码、当前选中后块的定位仍由原 PDF Viewer 负责；跨物理页前块可在前一页，后一页作为主焦点。缩放、页面虚拟重绘后自动恢复 A/B 标记；同一 bbox 的别名只绘一块区域并用标签区分。
+- **视觉原则**：A 端暖金色、B 端青绿色；强调文字边界与原始框线，不为两个高亮区域叠加多重半透明底色。所有 CSS 仅在 Lab-OCR 的 `#workspace.ocr-review-focus-unified` 下生效。
+- **WP2 不包含**：仲裁、SQL 审阅状态、合并/拆分 Block、行重写、额外的 Markdown 引擎或将接续预览回填正文。这些属于后续 WP3 决策。
+
+### WP2 验收
+
+- 直接 API 测试 `lab-ocr-block-break-view.test.mjs` 验证当前态 A/B 投影、不可变对象、过期 ID 失效；`lab-ocr-four-pane-location.test.mjs` 校验消息仅有稳定 ID、不含正文、拒绝伪造 origin。
+- 浏览器 `lab-ocr-block-break-view.browser.test.mjs`（Chromium 与 iPad WebKit）：A/B 正文 token、真实 Markdown 节点标记、只读接续卡片、不同物理页 PDF 标签/框、PDF 缩放后保持标注、选下一个候选更新而不叠加、切离清空、正文编辑清空并立即还原不触发 SQL 写入；另验证 Markdown 字符串与 LineID 不因审阅发生变化。
+- LaTeX 专项浏览器回归不能因 WP2 的 CodeMirror Decoration、PDF 覆盖框标记或预览重渲染倒退。原 `lab-ocr-pdf-viewer.browser.test.mjs` 的 `No extra PDF buttons` 旧断言仍要求 PDF 按钮数为 0，但现存 PDF 工具栏已有「提取文本」按钮；它在 WP2 之前即已存在，属于历史测试契约不匹配，不为本轮删按钮过关。

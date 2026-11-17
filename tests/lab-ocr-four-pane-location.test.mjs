@@ -74,3 +74,20 @@ for(const payload of [
 ])assert.throws(()=>publishLabFocus(payload));
 unFormula();
 console.log('LAB_OCR_FORMULA_FOCUS_BUS_PASS');
+
+// Pair events only carry stable IDs. No source bytes are stored on the bus.
+const pairEvents=[];
+const stopPair=viewStore.subscribe((next,prior)=>{
+  if(next.labFocusTarget!==prior.labFocusTarget)pairEvents.push(next.labFocusTarget);
+});
+publishLabFocus({origin:'ag',lineId:'c',blockId:12,lineNo:3,page:3,
+  blockBreakId:'block-break:11:12'});
+assert.equal(pairEvents.at(-1).blockBreakId,'block-break:11:12');
+assert(!Object.keys(pairEvents.at(-1)).includes('text'));
+for(const item of [
+  {origin:'pdf',lineId:'c',blockId:12,lineNo:3,blockBreakId:'block-break:11:12'},
+  {origin:'ag',lineId:'c',blockId:12,lineNo:3,blockBreakId:'invalid'},
+  {origin:'ag',blockId:12,lineNo:3,blockBreakId:'block-break:11:12'},
+])assert.throws(()=>publishLabFocus(item));
+stopPair();
+console.log('LAB_OCR_PAIR_FOCUS_BUS_PASS');

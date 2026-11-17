@@ -8,16 +8,17 @@ import './title-view.css';
 document.getElementById('workspace')?.classList.add('ocr-review-focus-unified');
 registerFramePdfPane(context=>{
   let disposed=false,viewer=null,initialization=null,overlayConfig=null,
-    pendingFocus=null,activeSource=null,formulaHighlights=[];
+    pendingFocus=null,activeSource=null,formulaHighlights=[],reviewPair=null;
   return Object.freeze({
     async loadPdf(source){
-      if(source!==activeSource){pendingFocus=null;activeSource=source;}
+      if(source!==activeSource){pendingFocus=null;reviewPair=null;viewer?.setReviewPair(null);activeSource=source;}
       if(!source)return viewer?.loadPdf(null)??false;
       if(!initialization)initialization=import('./pdf-viewer.js').then(module=>{
         if(disposed)return null;
         viewer=module.mountLabOcrPdf(context);
         if(overlayConfig)viewer.setOverlays(overlayConfig);
         viewer.setFormulaHighlights(formulaHighlights);
+        viewer.setReviewPair(reviewPair);
         return viewer;
       });
       const mounted=await initialization;
@@ -34,6 +35,7 @@ registerFramePdfPane(context=>{
       formulaHighlights=rows;
       return viewer?.setFormulaHighlights(rows)??rows.length;
     },
+    setReviewPair(pair){reviewPair=pair;return viewer?.setReviewPair(pair)??(pair?.length??0);},
     focusBlock(target){pendingFocus=target;return viewer?.focusBlock(target)??false;},
     focusFormula(target){pendingFocus={...target,formula:true};
       return viewer?.focusFormula(target)??false;},
@@ -41,7 +43,7 @@ registerFramePdfPane(context=>{
       const mounted=viewer??await initialization?.catch(()=>null);
       return mounted?.renderFormulaCrop(target)??null;
     },
-    clearFocus(){pendingFocus=null;return viewer?.clearFocus()??false;},
+    clearFocus(){pendingFocus=null;reviewPair=null;viewer?.setReviewPair(null);return viewer?.clearFocus()??false;},
     invalidateOverlayPage(page,changedRows){
       return viewer?.invalidateOverlayPage(page,changedRows)??false;
     },

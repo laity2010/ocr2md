@@ -26,7 +26,8 @@ function seamEvidence(left,right){
       '前块未以句末标点结束，后块以小写单词继续',
     before_text:aText,after_text:bText,
     join_preview:aText+(splitWord?'':' ')+bText,
-    boundary:end[1]+end[2]+' / '+start[1]};
+    boundary:end[1]+end[2]+' / '+start[1],
+    before_token:end[1]+end[2],after_token:start[1]};
 }
 
 /** One candidate per adjacent prose Block pair inside one logical root.
@@ -88,4 +89,26 @@ export function projectBlockBreakRows(mdRows,blockRows){
   }
   return result.sort((a,b)=>a.before_line_no-b.before_line_no||
     a.line_no-b.line_no||a.issue_id.localeCompare(b.issue_id));
+}
+
+/** WP2: resolve an ephemeral A/B location from today's CM6 state, not a
+ * previously clicked AG row. Stale IssueID/LineID/BlockID is rejected.
+ */
+export function resolveBlockBreakFocus({issueId,lineId,blockId}={},mdRows=[],blockRows=[]){
+  if(typeof issueId!=='string'||!/^block-break:[1-9]\d*:[1-9]\d*$/.test(issueId)||
+     typeof lineId!=='string'||!Number.isSafeInteger(blockId)||blockId<1)return null;
+  const row=projectBlockBreakRows(mdRows,blockRows).find(item=>
+    item.issue_id===issueId&&item.line_id===lineId&&item.block_id===blockId);
+  if(!row)return null;
+  const before=blockRows.find(item=>item.block_id===row.before_block_id);
+  const after=blockRows.find(item=>item.block_id===row.after_block_id);
+  if(!before||!after||!Number.isInteger(before.global_page)||before.global_page<0||
+     !Number.isInteger(after.global_page)||after.global_page<0)return null;
+  return Object.freeze({
+    before:Object.freeze({lineNo:row.before_line_no,blockId:before.block_id,
+      page:before.global_page+1,token:row.before_token,text:row.before_text}),
+    after:Object.freeze({lineNo:row.line_no,blockId:after.block_id,
+      page:after.global_page+1,token:row.after_token,text:row.after_text}),
+    hyphenated:row.kind==='跨块断词',
+  });
 }
