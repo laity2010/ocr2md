@@ -74,3 +74,8 @@
 #workspace .ocr-ag-with-review-toggle .ocr-ag-module-select{width:132px;
   flex:1 1 104px;min-width:84px}
 #workspace .ocr-ag-with-review-toggle .ocr-ag-review-toggle{flex:none}
+
+#workspace .ocr-note-review-trigger[data-review="已转换"]{color:#92d3e7;
+  border-color:#5589a2;background:#293f49}
+#workspace .ocr-note-match-status[data-status="已转换"]{color:#92d3e7;
+  font-weight:700}

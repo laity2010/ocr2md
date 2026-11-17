@@ -12,10 +12,12 @@ export function createNotePairReviewCell(onChoose){
     const trigger=document.createElement('button');trigger.type='button';
     trigger.className='ocr-note-review-trigger';trigger.dataset.review=status;
     trigger.textContent=(status==='待转换'?'待转换 ✓':status)+' ▾';
+    if(status==='已转换')trigger.disabled=true;
     trigger.setAttribute('aria-label',`审阅注号 ${row.number}，当前${status}`);
     trigger.setAttribute('aria-haspopup','listbox');
     trigger.setAttribute('aria-expanded','false');
-    trigger.title='仅保存人工决定；WP3.1 不修改 Markdown';
+    trigger.title=status==='已转换'?'已转换；使用 CM6 Undo/Redo 回退':
+      '待转换是已确认配对，执行转换时才通过 CM6 修改 Markdown';
     trigger.addEventListener('pointerdown',e=>e.stopPropagation());
     trigger.addEventListener('click',e=>{
       e.preventDefault();e.stopPropagation();
@@ -53,6 +55,8 @@ export function createNotePairReviewCell(onChoose){
       };
       add('待定 · 清除人工决定','待定');
       add('忽略 · 退出待审阅队列','忽略');
+      if(status==='待转换'&&row.kind==='注引')
+        add('执行转换 · 写入 Obsidian 脚注','转换');
       for(const option of row.body_choices??[])
         add('确认配对（待转换） → '+(option.pbs||'无 PBS')+
           ' · 行'+(option.line_no??'?'),'待转换',option.id);

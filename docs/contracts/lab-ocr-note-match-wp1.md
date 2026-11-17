@@ -103,3 +103,25 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - `node tests/lab-ocr-note-pair-review.test.mjs` 验证同一行多注引、忽略/恢复、明确 body 冲突选取、原文变化仅对应候选失效。
 - `python3 tests/lab-ocr-note-pair-review.test.py -v` 在隔离书籍中验证 GET 绝不建表、POST 建表、CAS 并发/覆盖保护、完整 md_line 不变、书籍间隔离、HTTP 未授权/错误 Origin 拒绝；所有数据变更仅发生在合成 book 的 SQLite。
 - `node tests/lab-ocr-note-match-view.browser.test.mjs` 用 Chromium + iPad WebKit 验证蓝色注文 vs 橙红警示的实际 CSS 色值和描边、忽略立即退出、重新进入 View 仍被忽略、显示已忽略后恢复、选择明确注文成为待转换、规则保存和排序保持、MD/Block 保存次数=0。
+
+## WCP43 WP3.2 · CM6 原子脚注转换（2026-11-17）
+
+### 执行合同与 UI
+
+- 「审阅」列中只有 **人工确认配对 = 待转换** 且来源未过期的注引行，才能点击 `执行转换 · 写入 Obsidian 脚注`。自动识别的「已匹配」**不能**直接转换；无可选正文、编号冲突、跨章节重复注号、书籍自定义不支持的注文格式、原文与证据不一致均 fail closed，保留原文。
+- 内置可转换：HTML sup（含反斜杠转义）、Markdown `[^N]`、上标数字/括号等注引形式，配对的数字点号/括号/方括号、Notes 标签和现有 Markdown 注文。保留正文所有实际字符，仅替换注文首行标签为 `[^N]: `；多行注文只有续行已有明确缩进才附加四格缩进，拒绝把未缩进的未知段落吞进脚注。一个源行只做一次修改，**不增加或删除物理行**；正文后继行的 LineID、BlockID 及 PDF 覆盖框身份保持不变。其他编号/复杂布局先保留待定，由 WP3.3 对照 OCR 审阅。
+- `ui/lab-ocr/note-pair-conversion.js` 唯一导出 `planNotePairConversion({mdRows,blockRows,configuration,referenceId,bodyId,review})`，只生成 `{updates:[{lineId,lineNo,blockId,beforeText,afterText}], convertedReferenceId,convertedBodyId,...}`，不持有第二份可编辑原文、不直接访问 DOM/SQL；重号的 Obsidian 全局 ID 冲突一律拒绝。`ui/frame/layout.js` 扩展 `frame.convertMdNotePair(plan)`，验证 CM6 当前 StateField、源行内容和身份，**一个 `editor.dispatch({changes:[...]})`** 完成所有源行修改；CM6 史栈单次 Undo/Redo 可恢复配对全部更改，后续保存继续走原 `md-persistence.js -> md-save` 版本 CAS。没有单独的 Markdown 落盘接口。
+- 一组注文可被多个注引引用。先转换第一个已审阅注引和注文正文；第二个注引经过**重新审阅新 Markdown 注文**后，只修改自己的注引，不重复转换或复制注文。源行同号多引用相互影响位置的高级情况仍留待 WP3.3。注文第一行和续行已经是 Markdown `[^N]:` 时不会再次改写。
+- 转换状态为：`待转换`（人工确认、原文还没转）、`转换待保存`（已在 CM6 转换但未获 md-save CAS 回执）、`已转换`（所有目标行的 SQLite 已保存证据通过），以及原文变化后的 `需复核`。已转换不可再点一次，若需回退用现有 CM6 Undo/Redo；Undo 恢复原文本后自动重新识别人工待转换状态，Redo 则恢复已转换。重新进入 View 时 SQLite 只读查询已转换证据，不能把一个尚未实际落盘的准备操作冒充完成。
+
+### 审阅回执与崩溃恢复
+
+- `scripts/v6_lab_ocr_note_pair_conversion.py` 独立 API `arm_note_pair_conversion(book,reference_id,expected_revision,plan)`，挂至**现有** Lab-OCR API `POST note-pair-convert-prepare`；仅依 Main 的 Cookie/Origin/工作目录授权，`BEGIN IMMEDIATE` 校验人工审阅版本、Ref/Body MD 原文、所有计划改动行与 BlockID，**只写审阅表中的可选 `conversion_json` 证据与 revision**。对老书籍表按需 `ALTER TABLE` 新增一列，不复制或改写正文。每个条目仅记录当前行身份和 `before_sha256/after_sha256`，并不保存另一个 Markdown 内容权威。
+- prepare 成功后前端再次核查 CM6 `version`、未保存状态与当前书籍，然后调用 **一次** CM6 事务，最后立即 `flushMdChanges()` 走既有 MD CAS；如果窗口在提交前关闭，GET 仍把旧文本识别为 `待转换`；如果只保存部分行，GET 不会报告已转换。若转换发生 SQLite revision 冲突，CM6 未落盘文本留在现有 Undo 栈，状态栏明确报错，不执行不安全的自动覆盖或补偿写入。
+- `read_note_pair_reviews` 读取转换回执时通过 SQLite MD 逐行比较全部后态 SHA；判断完毕才把 `conversion.converted_ref_id / converted_body_id` 的当前候选映射为已转换。原始 Row Source 文本证明仍保留，用于 Undo 重现时的审阅状态判断，旧规则与人工忽略记录不被重写。Python 对原文位置使用与 JS/CM6 一致的 **UTF-16 字符偏移**，避免 Unicode 非 BMP 字符造成误选。
+
+### 测试边界
+
+- `node tests/lab-ocr-note-pair-conversion.test.mjs`：多注引语法、内置注文语法、同一注文共享多注引、既有 Markdown 注文不重复改写、强校验拒绝原文/编号冲突、跨行缩进边界。
+- `python3 tests/lab-ocr-note-pair-conversion.test.py -v`：隔离临时书籍、准备回执只写 review 表、CAS/原文无变化/冲突、MD 完全落盘后才报告已转换，部分落盘不报告已转换，Undo/Redo 恢复原/后态，真实 HTTP Cookie/Origin/方法隔离。
+- `node tests/lab-ocr-note-pair-conversion.browser.test.mjs`：Chromium 与 iPad WebKit 通过真实 Lab Frame + CM6 + 合成 SQL 后端；先人工确认，再执行单次 CM6 改两端、SQL CAS 落盘、Undo 一次还原全文、Redo 恢复，第二个注引共享已转换注文时不重复写注文，重新开 View 仍识别 `已转换`；LineID/BlockID 保持、Block 保存次数为 0。

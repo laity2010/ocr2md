@@ -26,6 +26,7 @@ from v6_lab_ocr_md import read_md, initialize_md, persist_md_splice
 from v6_lab_ocr_block_break_review import read_block_break_reviews,set_block_break_review
 from v6_lab_ocr_note_match_config import read_note_match_config,save_note_match_config
 from v6_lab_ocr_note_pair_review import read_note_pair_reviews,set_note_pair_review
+from v6_lab_ocr_note_pair_conversion import arm_note_pair_conversion
 from v6_lab_ocr_store import (inspect_workspace, import_workspace, existing_info,
                               rows, fingerprint, OCRImportError)
 
@@ -131,8 +132,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(200,{'service':'lab-ocr-store','status':'ready'})
         if not parsed.path.startswith(PREFIX):raise APIError(404,'未知的 OCR API')
         op=parsed.path[len(PREFIX):]
-        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch','md-state','md-initialize','md-save','block-break-reviews','block-break-review-set','note-match-rules','note-match-rules-save','note-pair-reviews','note-pair-review-set'):raise APIError(404,'未知的 OCR API')
-        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch','md-initialize','md-save','block-break-review-set','note-match-rules-save','note-pair-review-set')
+        if op not in ('inspect','import','rows','minerujson2span','minerujson2block','initialize-sql','pdf','overlays','block-edit','block-edit-state','block-edit-batch','md-state','md-initialize','md-save','block-break-reviews','block-break-review-set','note-match-rules','note-match-rules-save','note-pair-reviews','note-pair-review-set','note-pair-convert-prepare'):raise APIError(404,'未知的 OCR API')
+        post_ops=('import','minerujson2span','minerujson2block','initialize-sql','block-edit','block-edit-batch','md-initialize','md-save','block-break-review-set','note-match-rules-save','note-pair-review-set','note-pair-convert-prepare')
         if (op in post_ops)!=(self.command=='POST') or self.command not in (('GET','POST','HEAD') if op=='pdf' else ('GET','POST')):
             raise APIError(405,'不支持此请求方法')
         if self.command=='POST' and self.headers.get('Origin') not in ALLOWED_ORIGINS:
@@ -142,7 +143,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 n=int(self.headers.get('Content-Length','-1'))
             except ValueError:n=-1
-            if not 1<=n<=(MAX_MD_BODY if op in ('md-save','note-pair-review-set') else MAX_BODY):
+            if not 1<=n<=(MAX_MD_BODY if op in ('md-save','note-pair-review-set','note-pair-convert-prepare') else MAX_BODY):
                 raise APIError(413,'请求体超出允许范围')
             try:
                 body=json.loads(self.rfile.read(n))
@@ -153,6 +154,10 @@ class Handler(BaseHTTPRequestHandler):
         else:
             query={k:v[-1] for k,v in parse_qs(parsed.query,keep_blank_values=True).items()}
         book=_book(query.get('workspace',''),roots)
+        if op=='note-pair-convert-prepare':
+            return self.respond(200,arm_note_pair_conversion(book,
+                query.get('referenceId'),query.get('expectedRevision'),
+                query.get('plan')))
         if op=='note-pair-reviews':
             return self.respond(200,read_note_pair_reviews(book))
         if op=='note-pair-review-set':

@@ -33,6 +33,7 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS note_pair_review(
  body_to INTEGER,
  body_raw TEXT,
  body_source_sha256 TEXT,
+ conversion_json TEXT,
  revision TEXT NOT NULL,
  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  CHECK((decision='忽略' AND body_id IS NULL) OR
@@ -50,6 +51,15 @@ def _hash(value):
     return hashlib.sha256(value.encode('utf-8')).hexdigest()
 
 
+def _utf16_range(text,start,end):
+    # WP1 / CodeMirror offsets are JavaScript UTF-16 code units, NOT
+    # Python Unicode codepoints. Emoji / astral characters before a marker
+    # must not invalidate a correct human review or select a wrong token.
+    data=text.encode('utf-16-le','surrogatepass')
+    if end*2>len(data):return None
+    return data[start*2:end*2].decode('utf-16-le','surrogatepass')
+
+
 def _read_line(db,line_id,block_id,offset,end,raw,expected_text=None):
     if type(line_id) is not str or not LINE_RE.fullmatch(line_id) or \
        (block_id is not None and (type(block_id) is not int or not 0<block_id<100_000_000)) or \
@@ -58,7 +68,7 @@ def _read_line(db,line_id,block_id,offset,end,raw,expected_text=None):
        type(raw) is not str or not raw or len(raw)>4000:
         raise OCRImportError('注释审阅来源位置无效')
     row=db.execute('SELECT text,block_id FROM md_line WHERE line_id=?',(line_id,)).fetchone()
-    if row is None or row[1]!=block_id or row[0][offset:end]!=raw:
+    if row is None or row[1]!=block_id or _utf16_range(row[0],offset,end)!=raw:
         raise OCRImportError('注释候选 LineID、BlockID 或原文已变化，请重新加载')
     if expected_text is not None and (type(expected_text) is not str or
        len(expected_text)>200_000 or row[0]!=expected_text):
@@ -95,9 +105,11 @@ def read_note_pair_reviews(book:Path):
         db.row_factory=sqlite3.Row
         _check_signature(db,book)
         if not _present(db):return {'status':'ready','reviews':[]}
+        from v6_lab_ocr_note_pair_conversion import receipt_state
         items=[]
         for row in db.execute('SELECT * FROM note_pair_review ORDER BY ref_line_id,ref_from'):
             item=dict(row)
+            state=receipt_state(db,item)
             items.append({'ref_id':item['ref_id'],'ref_line_id':item['ref_line_id'],
               'ref_block_id':item['ref_block_id'],'ref_from':item['ref_from'],
               'ref_to':item['ref_to'],'ref_raw':item['ref_raw'],
@@ -105,7 +117,9 @@ def read_note_pair_reviews(book:Path):
               'body_line_id':item['body_line_id'],'body_block_id':item['body_block_id'],
               'body_from':item['body_from'],'body_to':item['body_to'],
               'body_raw':item['body_raw'],'revision':item['revision'],
-              'valid':_valid_record(db,item)})
+              'valid':_valid_record(db,item),
+              'converted':state['converted'],
+              'conversion':state['conversion']})
         return {'status':'ready','reviews':items}
 
 
@@ -142,6 +156,8 @@ def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
                                     (ref['candidateId'],))
             else:
                 db.execute(SCHEMA)
+                if 'conversion_json' not in {r[1] for r in db.execute('PRAGMA table_info(note_pair_review)')}:
+                    db.execute('ALTER TABLE note_pair_review ADD COLUMN conversion_json TEXT')
                 revision=uuid.uuid4().hex
                 db.execute('''INSERT INTO note_pair_review(
                   ref_id,ref_line_id,ref_block_id,ref_from,ref_to,ref_raw,
@@ -157,6 +173,7 @@ def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
                   body_from=excluded.body_from,body_to=excluded.body_to,
                   body_raw=excluded.body_raw,body_source_sha256=excluded.body_source_sha256,
                   revision=excluded.revision,
+                  conversion_json=NULL,
                   updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')''',
                   (ref['candidateId'],ref['lineId'],ref['blockId'],ref['from'],ref['to'],
                    ref['raw'],_hash(ref_text),decision,

@@ -397,6 +397,38 @@ function mountEmptySource(host){
         throw Error('CM6 未保留后块空行，请检查合并事务');
       return true;
     },
+    convertMdNotePair(plan){
+      const runtime=editor.state.field(mdField);
+      if(!runtime||!Array.isArray(plan?.updates)||
+         plan.updates.length<1||plan.updates.length>102)
+        throw Error('CM6 注释转换计划无效');
+      const changes=[];
+      for(const patch of plan.updates){
+        const current=runtime.rows.find(row=>row.line_id===patch.lineId);
+        if(!current||current.line_no!==patch.lineNo||
+           current.block_id!==patch.blockId||current.text!==patch.beforeText||
+           typeof patch.afterText!=='string'||/[\r\n]/.test(patch.afterText)||
+           patch.afterText===patch.beforeText)
+          throw Error('注释转换的 LineID/BlockID/原文已变化，拒绝 CM6 写入');
+        const line=editor.state.doc.line(current.line_no);
+        if(line.text!==patch.beforeText)throw Error('CM6 注释转换文档未对齐');
+        changes.push({from:line.from,to:line.to,insert:patch.afterText});
+      }
+      changes.sort((a,b)=>a.from-b.from);
+      if(changes.some((change,i)=>i&&change.from<=changes[i-1].to))
+        throw Error('CM6 注释转换范围重叠');
+      // One atomic CM6 history entry, no physical newline is added/removed.
+      // Existing mdOnChange and SQL md-save/CAS handle persistence.
+      editor.dispatch({changes,
+        annotations:Transaction.userEvent.of('input.note-footnote-convert')});
+      const next=editor.state.field(mdField);
+      for(const patch of plan.updates){
+        const row=next?.rows.find(item=>item.line_id===patch.lineId);
+        if(row?.block_id!==patch.blockId||row?.text!==patch.afterText)
+          throw Error('CM6 注释转换后行身份校验失败');
+      }
+      return true;
+    },
     editMdLine(lineId,text){
       const md=editor.state.field(mdField);
       const row=md?.rows.find(r=>r.line_id===lineId);
@@ -1109,6 +1141,11 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
       if(!cm)throw Error('CM6 尚未初始化');
       return cm.mergeMdBlockBreak(plan);
+    },
+    convertMdNotePair(plan){
+      const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
+      if(!cm)throw Error('CM6 尚未初始化');
+      return cm.convertMdNotePair(plan);
     },
     insertMdAtCursor(text){
       const cm=container.querySelector('.ocr-cm-source')?.ocrCmTable;
