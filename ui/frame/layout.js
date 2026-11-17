@@ -74,6 +74,7 @@ function mountEmptySource(host){
   const setMdRuntime=StateEffect.define();
   const setMdFocusLine=StateEffect.define();
   const setMdFormulaRange=StateEffect.define();
+  const setMdAllFormulaRanges=StateEffect.define();
   const deletedMdLine=StateEffect.define();
   const mdFocusField=StateField.define({
     create:()=>Decoration.none,
@@ -86,6 +87,23 @@ function mountEmptySource(host){
             Decoration.set([Decoration.line({class:'ocr-four-pane-source-active'})
               .range(tr.newDoc.line(line).from)]):Decoration.none;
         }
+      }
+      return value;
+    },
+    provide:field=>EditorView.decorations.from(field),
+  });
+  const mdAllFormulaField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      value=tr.docChanged?Decoration.none:value.map(tr.changes);
+      for(const effect of tr.effects)if(effect.is(setMdAllFormulaRanges)){
+        const ranges=[];
+        for(const {from,to} of effect.value??[]){
+          if(Number.isInteger(from)&&Number.isInteger(to)&&from>=0&&
+             to>from&&to<=tr.newDoc.length)
+            ranges.push(Decoration.mark({class:'ocr-latex-view-formula-all'}).range(from,to));
+        }
+        value=Decoration.set(ranges.sort((a,b)=>a.from-b.from||a.to-b.to));
       }
       return value;
     },
@@ -154,7 +172,7 @@ function mountEmptySource(host){
   // mature editing, history, native iOS selection, folding and keybindings.
   editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
-    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,
+    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,mdAllFormulaField,
     lineGutter.extension,...base.slice(1),
     EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),mineruCommentFolding,
@@ -194,6 +212,14 @@ function mountEmptySource(host){
     clearTableSelection(){editor.dispatch({effects:selectTableRow.of(null)});},
     mdRuntime(){return editor.state.field(mdField);},
     editorView(){return editor;},
+    setLatexHighlights(rows=[]){
+      const ranges=rows.filter(row=>Number.isInteger(row?.source_from)&&
+        Number.isInteger(row?.source_to)&&row.source_to>row.source_from)
+        .map(row=>({from:row.source_from,to:row.source_to}));
+      editor.dispatch({effects:setMdAllFormulaRanges.of(ranges)});
+      return ranges.length;
+    },
+
     loadMarkdown(runtime,{reconcile,onChange,onSelection}={}){
       lineGutter.close();
       if(!runtime?.rows?.length||typeof reconcile!=='function')throw Error('MD 初始化无效');
@@ -661,6 +687,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
         const viewer=pdfPaneMount({surface,toolbar:pdfTools,onStatus});
         pdfSlot.current=viewer;
         if(pdfSlot.overlays)viewer.setOverlays(pdfSlot.overlays);
+        viewer.setFormulaHighlights?.(pdfSlot.formulaHighlights);
         if(pdfSlot.source)void viewer.loadPdf(pdfSlot.source).catch(()=>{});
       }
       return {dispose(){
@@ -710,7 +737,7 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   onAgViewChange=()=>{},agViewOptions=[],moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
-  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null};
+  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,formulaHighlights:[]};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus,
       agViewOptions,onAgViewChange)});
@@ -778,7 +805,14 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     setAgView(value){
       const picker=container.querySelector('.ocr-outline-pane .ocr-ag-module-select');
       if(!picker||![...picker.options].some(option=>option.value===value))return false;
-      picker.value=value;return true;
+      picker.value=value;
+      container.classList.toggle('ocr-latex-all-active',value==='latex');
+      if(value!=='latex'){
+        container.querySelector('.ocr-cm-source')?.ocrCmTable?.setLatexHighlights([]);
+        pdfSlot.formulaHighlights=[];
+        pdfSlot.current?.setFormulaHighlights?.([]);
+      }
+      return true;
     },
     setMdPreviewNavigation(callback){
       if(callback!==null&&typeof callback!=='function')throw Error('MD 预览定位回调无效');
@@ -839,6 +873,16 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     focusMdLine(lineNo,{focus=true}={}){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo,{focus})??false;
+    },
+    setLatexHighlights(rows=[]){
+      const count=container.querySelector('.ocr-cm-source')?.ocrCmTable
+        ?.setLatexHighlights(rows)??0;
+      pdfSlot.formulaHighlights=rows.filter(row=>row?.formula_id&&
+        Number.isInteger(row.page)&&Array.isArray(row.pdf_bbox)&&
+        Array.isArray(row.page_size)).map(row=>({
+          id:row.formula_id,page:row.page,bbox:row.pdf_bbox,pageSize:row.page_size}));
+      pdfSlot.current?.setFormulaHighlights?.(pdfSlot.formulaHighlights);
+      return count;
     },
     focusMdFormula(target){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdFormula(target)??false;

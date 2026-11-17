@@ -61,7 +61,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
   let overlayLevel='off',loadOverlayPage=null,overlayRevision=0,blockGroups=null,allowSpan=true;
   let onBlockSelect=null,onBlockDragIntent=null,projectPage=null,onPageChange=null,
     onExtractText=null,extracting=false,selectedPage=null,
-    selectedBlockId=null,focusRequest=null,formulaFocus=null;
+    selectedBlockId=null,focusRequest=null,formulaFocus=null,allFormulaHighlights=[];
   // Text authority: PDF.js getTextContent() from the original PDF page.
   // No MinerU block_json and no editable CM lines participate in availability.
   const nativePageTexts=new Map(),nativeBoxTexts=new Map(),nativeBoxPending=new Set();
@@ -221,7 +221,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     for(const observer of pbsLabelObservers.values())observer.disconnect();
     pbsLabelObservers.clear();pbsRelayoutByPage.clear();
     dropCandidatesByPage.clear();
-    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer,.lab-ocr-pdf-formula-focus'))node.remove();
+    for(const node of pages.querySelectorAll('.lab-ocr-pdf-overlay-layer,.lab-ocr-pdf-pbs-layer,.lab-ocr-pdf-formula-focus,.lab-ocr-pdf-formula-all'))node.remove();
     resetRailSpace();
   };
   const blockIdOf=item=>item?.blockId==null?null:String(item.blockId);
@@ -422,6 +422,43 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     if(revealFrame){cancelAnimationFrame(revealFrame);revealFrame=0;}
     updateSelectedNodes();updateExtractButton();
     if(notify)onBlockSelect?.({...meta,blockId:selectedBlockId});
+  }
+  /** All formula geometry is a read-only presentation supplied by the Lab
+   * workflow. Only visible PDF.js page divs get DOM markers; no OCR queries,
+   * image fetches or persistent cache of alternate source truth. */
+  function paintAllFormulaHighlights(page){
+    const host=viewer.getPageView(page-1)?.div;
+    if(!host)return false;
+    host.querySelectorAll('.lab-ocr-pdf-formula-all').forEach(node=>node.remove());
+    for(const item of allFormulaHighlights){
+      if(item.page!==page)continue;
+      const [width,height]=item.pageSize;
+      const [x1,y1,x2,y2]=item.bbox;
+      if(x1<0||y1<0||x2>width||y2>height)continue;
+      const mark=document.createElement('div');
+      mark.className='lab-ocr-pdf-formula-all';
+      mark.dataset.formulaId=item.id;
+      mark.style.left=(x1/width*100)+'%';
+      mark.style.top=(y1/height*100)+'%';
+      mark.style.width=((x2-x1)/width*100)+'%';
+      mark.style.height=((y2-y1)/height*100)+'%';
+      host.append(mark);
+    }
+    return true;
+  }
+  function setFormulaHighlights(rows=[]){
+    if(disposed)throw Error('PDF Viewer 已销毁');
+    if(!Array.isArray(rows))throw TypeError('PDF LaTeX 标记必须为数组');
+    allFormulaHighlights=rows.filter(item=>
+      item&&typeof item.id==='string'&&Number.isInteger(item.page)&&item.page>0&&
+      Array.isArray(item.pageSize)&&item.pageSize.length===2&&
+      item.pageSize.every(n=>Number.isFinite(n)&&n>0)&&
+      Array.isArray(item.bbox)&&item.bbox.length===4&&
+      item.bbox.every(Number.isFinite)&&item.bbox[2]>item.bbox[0]&&
+      item.bbox[3]>item.bbox[1]);
+    for(const host of pages.querySelectorAll('.page[data-page-number]'))
+      paintAllFormulaHighlights(Number(host.dataset.pageNumber));
+    return allFormulaHighlights.length;
   }
   function paintFormulaFocus(page,size){
     const host=viewer.getPageView(page-1)?.div;
@@ -643,6 +680,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
       pbsRelayoutByPage.set(page,positionBadges);
     }
     updateSelectedNodes();updateExtractButton();
+    paintAllFormulaHighlights(page);
     paintFormulaFocus(page,size);
     if(focusRequest?.page===page)scheduleFocusReveal();
   }
@@ -907,6 +945,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     // its cached overlay once, without a database query or a PDF reload.
     const cached=overlayCache.get(overlayLevel+':'+event.pageNumber);
     if(cached)paintPageBoxes(event.pageNumber,cached);
+    else paintAllFormulaHighlights(event.pageNumber);
     if(focusRequest?.page===event.pageNumber)scheduleFocusReveal();
     if(event.pageNumber!==1||!resolvePaint)return;
     const complete=resolvePaint;resolvePaint=null;complete(!event.error);
@@ -1007,7 +1046,8 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{}}){
     return loading;
   }
   readyControls();
-  return Object.freeze({loadPdf,setOverlays,focusBlock,focusFormula,renderFormulaCrop,clearFocus,invalidateOverlayPage,
+  return Object.freeze({loadPdf,setOverlays,setFormulaHighlights,
+    focusBlock,focusFormula,renderFormulaCrop,clearFocus,invalidateOverlayPage,
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();

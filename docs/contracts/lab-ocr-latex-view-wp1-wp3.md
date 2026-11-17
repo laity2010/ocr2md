@@ -56,3 +56,11 @@
 - 修正：严格限定在 **稳定 BlockID + 相同公式类型** 中恰有 **1 条原始 OCR Span 和 1 条显式定界的 MD 公式**，且无法按原字符串匹配时，使用这个唯一稳定结构关系关联，标为 `已修订`；AG 的 `formula`、KaTeX 渲染结果、CM6 起始和全文字符范围均以**当前 CM6 MD**为唯一权威；保留原始 `formula_id`、`original_formula`、`pdf_bbox` 和页码便于核验原 PDF。禁止按相似字符串、相邻 Block、多个候选公式顺序猜测关联。
 - `latexIndexSummary.matched` 同时统计 `已匹配` 和 `已修订`，新增 `revised` 便于识别修改量；无匹配时 `仅 OCR` / `仅 MD` / `有歧义` 仍如实显示。
 - 测试以真实 `sample` p7b1s0 校核：修订后仅一条公式，`ocr:207:0:0` → MD 第128行、公式字符列1，KaTeX 可解析，原 PDF bbox `[53,216,226,234]` 保持。另有合成书浏览器测试覆盖 corrected MD / malformed OCR、AG 状态着色和点击定位，防止修正后继续显示旧的「渲染失败」。
+
+## LaTeX View：三窗全部公式中间色（2026-11-17）
+
+- 仅在 AG「LaTeX」视图启用全局只读公式标记：**当前 CM6 Markdown** 中可确定字符范围的所有公式用 `StateField` 的 `Decoration.mark`，PDF 按原始 MinerU 公式 `bbox/page_size` 对当前可见 PDF.js 页面绘制非交互标记，Markdown 预览复用其已渲染的行内/独立 KaTeX 容器，不生成第二份原文。
+- 三窗共用 `--ocr-latex-all-fill:rgba(190,211,140,.37)`，较行内公式的浅色 `rgba(193,229,174,.24)` 清楚，但不盖住现有独立公式选择焦点的强金色边框；PDF 的所有公式边框细而淡。选中公式的焦点叠在通用标记上，仍可区分当前选择。
+- `setLatexHighlights(rows)` 只读取 `projectLatexIndex` 的 `source_from/source_to` 和 `pdf_bbox/page_size`，PDF 通过公共 `setFormulaHighlights` 端口在懒加载前后均保留最新视图态。无 MD 匹配的 OCR-only 公式只在 PDF 高亮，MD-only 公式只在源码/MD 预览高亮，不捏造任何坐标。PDF 页面按需挂载、重渲染、缩放时沿用页面百分比坐标。
+- 切换离开 LaTeX View 立即清除 CodeMirror 全部公式 Decoration、PDF 公式标记与预览样式；不修改原独立公式/行内公式的旧选中颜色，不影响其他 AG 视图。源码编辑时以 CM6 最新行表重新投影，避免留下过时范围；全文变更不直接写入 SQLite 之外的额外存储。
+- Chromium/iPad WebKit 实测各三窗 `getComputedStyle(...).backgroundColor` 相等、透明度介于 0.32～0.43，同页多条公式/跨页全量标记、公式选择后的定位，以及离开视图三窗取消、零人工保存。老 MD-full-source 的标题 AG 列序断言存在独立历史失败，与这个公式高亮变更无直接关系，不能归入本次 PASS 范围。

@@ -8,6 +8,9 @@
   /* One soft tint for the small inline formula in CM6 and its PDF bbox. */
   --ocr-inline-formula-fill:rgba(193,229,174,.24);
   --ocr-inline-formula-edge:rgba(133,180,111,.58);
+  /* Middle strength: stronger than pale inline, softer than gold focus. */
+  --ocr-latex-all-fill:rgba(190,211,140,.37);
+  --ocr-latex-all-edge:rgba(155,183,103,.62);
 }
 
 /* AG Grid's selected-row surface is also the review focus. Do not style the
@@ -83,4 +86,26 @@
   background:var(--ocr-inline-formula-fill);
   border:1px solid var(--ocr-inline-formula-edge);
   box-shadow:none;
+}
+
+/* LaTeX view only: every proven formula receives the same intermediate
+ * highlight in CM6, Markdown preview and the original PDF. This derived
+ * overlay never replaces the stronger selected-formula focus outline. */
+#workspace.ocr-latex-all-active .cm-line .ocr-latex-view-formula-all {
+  background:var(--ocr-latex-all-fill);
+  box-shadow:none;
+  border-radius:2px;
+}
+#workspace.ocr-latex-all-active .ocr-preview-md-scroll :is(
+  .ocr-reviewed-inline-latex, .ocr-reviewed-inline-error,
+  .ocr-math .katex, .ocr-math-fallback) {
+  background:var(--ocr-latex-all-fill);
+  border-radius:2px;
+  box-shadow:none;
+}
+#workspace.ocr-latex-all-active .lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-all {
+  position:absolute;z-index:8;box-sizing:border-box;pointer-events:none;
+  background:var(--ocr-latex-all-fill);
+  border:1px solid var(--ocr-latex-all-edge);
+  box-shadow:none;border-radius:2px;
 }

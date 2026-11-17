@@ -147,6 +147,39 @@ try{
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true,
      'LaTeX view must initially list all PDF pages');
    assert.equal(await page.locator('.lab-ocr-latex-preview .katex').count()>=1,true);
+   // New LaTeX-only visual layer marks *all* formulas (selected or not) in
+   // three panes from the same current MD formula index/PDF source geometry.
+   await page.waitForFunction(()=>document.querySelector('#workspace')
+     ?.classList.contains('ocr-latex-all-active'));
+   // CodeMirror splits one decoration at syntax tokens; concatenate their
+   // visible text just like the selected-formula test below.
+   await page.waitForFunction(()=>[...document.querySelectorAll(
+     '.ocr-cm-source .ocr-latex-view-formula-all')]
+       .map(el=>el.textContent).join('').includes('a+b'));
+   await page.waitForFunction(()=>[...document.querySelectorAll(
+     '.lab-ocr-pdf-formula-all')].length>=3);
+   const allStyles=await page.evaluate(()=>{
+     const pick=sel=>document.querySelector(sel);
+     const source=pick('.ocr-cm-source .ocr-latex-view-formula-all');
+     const pdf=pick('.lab-ocr-pdf-formula-all');
+     const preview=pick('.ocr-preview-md-scroll .ocr-reviewed-inline-latex');
+     const display=pick('.ocr-preview-md-scroll .ocr-math .katex');
+     const rgba=el=>el&&getComputedStyle(el).backgroundColor;
+     return {source:rgba(source),pdf:rgba(pdf),preview:rgba(preview),
+       display:rgba(display),count:document.querySelectorAll('.lab-ocr-pdf-formula-all').length,
+       pdfPointer:pdf&&getComputedStyle(pdf).pointerEvents};
+   });
+   assert(allStyles.source&&allStyles.preview&&allStyles.pdf&&allStyles.display,
+     'CM6, PDF and MD preview must all highlight LaTeX');
+   assert.equal(allStyles.source,allStyles.pdf);
+   assert.equal(allStyles.source,allStyles.preview);
+   assert.equal(allStyles.source,allStyles.display);
+   assert.equal(allStyles.pdfPointer,'none');
+   const allAlpha=Number(allStyles.source.match(/rgba?\([^)]*,\s*([\d.]+)\)$/)?.[1]);
+   assert(allAlpha>=0.32&&allAlpha<=0.43,
+     'All-formula tint must be stronger than inline 0.24 but not harsh');
+   assert.equal(await page.locator('.lab-ocr-pdf-formula-all[data-formula-id="ocr:2:0:0"]').count(),1);
+   assert.equal(await page.locator('.lab-ocr-pdf-formula-all[data-formula-id="ocr:2:0:1"]').count(),1);
    // Select the FIRST inline OCR Span by the public AG semantic ID, then
    // click the displayed row (not a programmatic selection shortcut).
    const exact=async id=>{
@@ -217,6 +250,9 @@ try{
    },null,{timeout:9000});
    await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-formula-focus')
      ?.dataset.formulaBlockId==='4',null,{timeout:9000});
+   await page.waitForFunction(()=>document.querySelectorAll(
+     '.page[data-page-number="2"] .lab-ocr-pdf-formula-all').length>=4,
+     null,{timeout:9000});
    const firstLeft=await page.locator('.lab-ocr-pdf-formula-focus')
      .evaluate(box=>parseFloat(box.style.left));
    assert.equal(await page.locator('.ocr-cm-source .ocr-four-pane-formula-active')
@@ -358,6 +394,17 @@ try{
      ?.ocrCmTable?.mdRuntime()?.dirty),false);
    assert.equal(saves,0,'Read-only formula view cannot generate SQL writes');
    assert.equal(remoteFormulaRequests,0,'AG must not fetch MinerU formula image URLs');
+   // Switching away from LaTeX cleans both the CM6 decoration and the PDF
+   // overlay. Preview retains rendered math but without the view-only tint.
+   await picker.selectOption('md');
+   await page.waitForFunction(()=>!document.querySelector('#workspace')
+     ?.classList.contains('ocr-latex-all-active'));
+   assert.equal(await page.locator('.ocr-cm-source .ocr-latex-view-formula-all').count(),0);
+   assert.equal(await page.locator('.lab-ocr-pdf-formula-all').count(),0);
+   assert.equal(await page.evaluate(()=>getComputedStyle(document.querySelector(
+      '.ocr-preview-md-scroll .ocr-reviewed-inline-latex')).backgroundColor),
+     'rgba(0, 0, 0, 0)');
+   assert.equal(saves,0,'Switching AG views must never save Markdown');
    assert.deepEqual(errors,[],'No browser page errors');
    console.log('LAB_OCR_LATEX_VIEW_E2E_PASS',label,JSON.stringify({
      formulas:8,matched:6,revised:1,ocrOnly:1,mdOnly:1,saves,loaded}));

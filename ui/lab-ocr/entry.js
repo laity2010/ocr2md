@@ -7,7 +7,8 @@ import './title-view.css';
 // Only Lab OCR installs the shared four-pane review-focus palette.
 document.getElementById('workspace')?.classList.add('ocr-review-focus-unified');
 registerFramePdfPane(context=>{
-  let disposed=false,viewer=null,initialization=null,overlayConfig=null,pendingFocus=null,activeSource=null;
+  let disposed=false,viewer=null,initialization=null,overlayConfig=null,
+    pendingFocus=null,activeSource=null,formulaHighlights=[];
   return Object.freeze({
     async loadPdf(source){
       if(source!==activeSource){pendingFocus=null;activeSource=source;}
@@ -16,6 +17,7 @@ registerFramePdfPane(context=>{
         if(disposed)return null;
         viewer=module.mountLabOcrPdf(context);
         if(overlayConfig)viewer.setOverlays(overlayConfig);
+        viewer.setFormulaHighlights(formulaHighlights);
         return viewer;
       });
       const mounted=await initialization;
@@ -28,6 +30,10 @@ registerFramePdfPane(context=>{
       return loaded;
     },
     setOverlays(config){overlayConfig={...overlayConfig,...config};return viewer?.setOverlays(config)??false;},
+    setFormulaHighlights(rows=[]){
+      formulaHighlights=rows;
+      return viewer?.setFormulaHighlights(rows)??rows.length;
+    },
     focusBlock(target){pendingFocus=target;return viewer?.focusBlock(target)??false;},
     focusFormula(target){pendingFocus={...target,formula:true};
       return viewer?.focusFormula(target)??false;},

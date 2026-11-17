@@ -221,7 +221,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   function mdContentChanged(next){
     if(currentSqlTable==='md'){
-      if(activeAgView==='latex')frame.patchFormulaRows(projectedMdRows());
+      if(activeAgView==='latex'){
+        const rows=projectedMdRows();
+        frame.patchFormulaRows(rows);
+        frame.setLatexHighlights(rows);
+      }
       else frame.patchMdRows(projectedMdRows());
     }
     if(currentSqlTable==='md')frame.setMdEditHistory();
@@ -379,7 +383,11 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         mdContentChanged(updated);
       }else if(currentSqlTable==='md'){
         // A Block's PBS may change without changing its MD text/order.
-        if(activeAgView==='latex')frame.patchFormulaRows(projectedMdRows());
+        if(activeAgView==='latex'){
+          const rows=projectedMdRows();
+          frame.patchFormulaRows(rows);
+          frame.setLatexHighlights(rows);
+        }
         else frame.patchMdRows(projectedMdRows());
       }
     }
@@ -675,6 +683,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       },
     });
     frame.setAgView(activeAgView);
+    frame.setLatexHighlights(latex?rows:[]);
     frame.setMdEditHistory();
     return rows.length;
   }
