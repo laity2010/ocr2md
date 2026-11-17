@@ -112,3 +112,32 @@ export function resolveBlockBreakFocus({issueId,lineId,blockId}={},mdRows=[],blo
     hyphenated:row.kind==='跨块断词',
   });
 }
+
+/** AG-only colored continuation. Never inject HTML or add UI to MD/PDF pane. */
+export function renderBlockBreakJoinCell(params){
+  const root=document.createElement('span');
+  root.className='ocr-block-break-ag-join';
+  const row=params.data;
+  if(!row)return root;
+  // The visible excerpt puts the break itself within the first few lines of
+  // a narrow AG pane. Full joined text stays in the underlying projection.
+  const left=String(row.before_text??'');
+  const right=String(row.after_text??'');
+  const a=String(row.before_token??'');
+  const b=String(row.after_token??'');
+  const leftContext=a&&left.endsWith(a)?left.slice(0,-a.length):left;
+  const rightContext=b&&right.startsWith(b)?right.slice(b.length):right;
+  const append=(name,value)=>{
+    const node=document.createElement('span');
+    node.className='ocr-block-break-ag-'+name;
+    node.textContent=value;
+    root.append(node);
+  };
+  append('before-context',(leftContext.length>54?'…':'')+leftContext.slice(-54));
+  append('before-token',a);
+  append('join-space',row.kind==='跨块断词'?'':' ');
+  append('after-token',b);
+  append('after-context',rightContext.slice(0,75)+(rightContext.length>75?'…':''));
+  root.title=row.join_preview??'';
+  return root;
+}

@@ -1,6 +1,6 @@
 /** WP1: no SQL/CMD mutation, only split boundaries of ONE logical parent. */
 import assert from 'node:assert/strict';
-import {projectBlockBreakRows,resolveBlockBreakFocus} from '../ui/lab-ocr/block-break-view.js';
+import {projectBlockBreakRows,resolveBlockBreakFocus,renderBlockBreakJoinCell} from '../ui/lab-ocr/block-break-view.js';
 const block=(block_id,pbs,parent_block_id,sibling_order,block_type='text',page=15)=>({
   block_id,pbs,parent_block_id,sibling_order,block_type,global_page:page,
   block_group:'para_blocks',absorbed_into_block_id:null,
@@ -90,3 +90,27 @@ for(const a of ['The conclusion.', '# Headline', '$$','| Col |','[Link](https://
   assert.equal(result.length,0,'No speculative split after '+a);
 }
 console.log('LAB_OCR_BLOCK_BREAK_VIEW_PASS');
+
+// Direct public cell API: colored tokens, real joined data, and safe text-only
+// DOM construction. A narrow AG viewport doesn't need a second preview pane.
+const originalDocument=globalThis.document;
+class CellNode {
+  constructor(){this.children=[];this._text='';this.className='';this.title='';}
+  get textContent(){return this._text+this.children.map(x=>x.textContent).join('');}
+  set textContent(value){this._text=String(value);this.children=[];}
+  append(...items){this.children.push(...items);}
+}
+try{
+  globalThis.document={createElement:()=>new CellNode()};
+  const cell=renderBlockBreakJoinCell({data:rows[0]});
+  assert.equal(cell.className,'ocr-block-break-ag-join');
+  assert.equal(cell.children.find(x=>x.className==='ocr-block-break-ag-before-token')?.textContent,'steady');
+  assert.equal(cell.children.find(x=>x.className==='ocr-block-break-ag-after-token')?.textContent,'source');
+  assert.match(cell.textContent,/steady source of financing/);
+  assert.equal(cell.title,rows[0].join_preview);
+  const attack=renderBlockBreakJoinCell({data:{...rows[0],before_text:'<img src=x onerror=alert(1)>steady'}});
+  assert(attack.textContent.includes('<img src=x onerror=alert(1)>'));
+  assert(attack.children.every(node=>node.innerHTML===undefined),
+    'AG renderer must not parse untrusted Markdown/HTML as markup');
+}finally{globalThis.document=originalDocument;}
+console.log('LAB_OCR_BLOCK_BREAK_AG_JOIN_CELL_PASS');

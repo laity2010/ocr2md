@@ -43,5 +43,9 @@
 ### WP2 验收
 
 - 直接 API 测试 `lab-ocr-block-break-view.test.mjs` 验证当前态 A/B 投影、不可变对象、过期 ID 失效；`lab-ocr-four-pane-location.test.mjs` 校验消息仅有稳定 ID、不含正文、拒绝伪造 origin。
-- 浏览器 `lab-ocr-block-break-view.browser.test.mjs`（Chromium 与 iPad WebKit）：A/B 正文 token、真实 Markdown 节点标记、只读接续卡片、不同物理页 PDF 标签/框、PDF 缩放后保持标注、选下一个候选更新而不叠加、切离清空、正文编辑清空并立即还原不触发 SQL 写入；另验证 Markdown 字符串与 LineID 不因审阅发生变化。
+- 浏览器 `lab-ocr-block-break-view.browser.test.mjs`（Chromium 与 iPad WebKit）：A/B CM6 token、AG 第二列彩色拼接单元、MD 无卡片及第三行 grid、不同物理页 PDF 标签/框、PDF 缩放后保持标注、选下一个候选更新而不叠加、切离清空、正文编辑清空并立即还原不触发 SQL 写入；在**不切分 PDF 预览、PDF 模式、22 页文件第 16 页**检查实际 PDF.js canvas 可见且有非白像素，防止只验证页码和 canvas 空壳。另验证 Markdown 字符串与 LineID 不因审阅发生变化。
 - LaTeX 专项浏览器回归不能因 WP2 的 CodeMirror Decoration、PDF 覆盖框标记或预览重渲染倒退。原 `lab-ocr-pdf-viewer.browser.test.mjs` 的 `No extra PDF buttons` 旧断言仍要求 PDF 按钮数为 0，但现存 PDF 工具栏已有「提取文本」按钮；它在 WP2 之前即已存在，属于历史测试契约不匹配，不为本轮删按钮过关。
+
+### 2026-11-17 用户 Safari 截图反馈与纠正
+
+用户 iPad Safari 显示「PDF 原文」工具栏页 16 / 22，但正文整个区域空白，同时指出接续着色应在 AG 表，不能在 Markdown 预览。之前为卡片向公共 `.ocr-preview-pane` 插入元素并修改 Grid 行数，是不必要的侵入，已整体移除，恢复框架原本 34px 工具栏 + 自适应预览正文两行布局。Chromium 与 iPad WebKit 专项以 PDF 22 页、第 16 页实际 canvas 可见/像素非白和 AG 彩色单元为发布门槛；并不宣称已经远程操作用户实际 Safari 标签页。

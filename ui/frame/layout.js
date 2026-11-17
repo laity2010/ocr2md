@@ -775,7 +775,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       agViewOptions,onAgViewChange)});
   let previewToken=0,previewTimer=null;
   let previewClickCallback=null,previewSelectedLine=null,previewSync=null,previewClickArea=null;
-  let reviewPair=null;
   const mdArea=()=>pdfSlot.preview?.mdArea??null;
   const previewAnchors=()=>[...mdArea()?.querySelectorAll('[data-source-start][data-source-end]')??[]];
   function highlightPreviewLine(lineNo,{reveal=false}={}){
@@ -795,39 +794,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     if(target){target.dataset.ocrSyncSelected='true';
       if(reveal)target.scrollIntoView({block:'center',inline:'nearest'});}
     return Boolean(target);
-  }
-  function paintReviewPairPreview(){
-    const area=mdArea();
-    if(!area)return;
-    for(const anchor of previewAnchors())delete anchor.dataset.ocrReviewPair;
-    const pane=area.closest('.ocr-preview-pane');
-    pane?.querySelector('.ocr-review-pair-card')?.remove();
-    pane?.classList.toggle('ocr-review-pair-visible',Boolean(reviewPair));
-    if(!reviewPair)return;
-    const mark=(lineNo,side)=>{
-      const match=previewAnchors().filter(node=>{
-        const from=Number(node.dataset.sourceStart),to=Number(node.dataset.sourceEnd);
-        return Number.isInteger(from)&&Number.isInteger(to)&&lineNo>=from&&lineNo<to;
-      }).sort((a,b)=>(Number(a.dataset.sourceEnd)-Number(a.dataset.sourceStart))-
-        (Number(b.dataset.sourceEnd)-Number(b.dataset.sourceStart)))[0];
-      if(match){const prior=match.dataset.ocrReviewPair;
-        match.dataset.ocrReviewPair=prior&&prior!==side?'both':side;}
-    };
-    mark(reviewPair.before.lineNo,'before');mark(reviewPair.after.lineNo,'after');
-    if(!pane)return;
-    const card=document.createElement('div');
-    card.className='ocr-review-pair-card';card.setAttribute('role','note');
-    const title=document.createElement('div');title.className='ocr-review-pair-title';
-    title.textContent='断块 · 接续预览（只读，不修改正文）';
-    const body=document.createElement('div');body.className='ocr-review-pair-joined';
-    const a=document.createElement('span');a.className='ocr-review-pair-before';
-    a.textContent=reviewPair.before.text;
-    const seam=document.createElement('span');seam.className='ocr-review-pair-seam';
-    seam.textContent=reviewPair.hyphenated?'':' ';
-    const b=document.createElement('span');b.className='ocr-review-pair-after';
-    b.textContent=reviewPair.after.text;
-    body.append(a,seam,b);card.append(title,body);
-    pane.insertBefore(card,area);
   }
   function previewClick(event){
     const node=event.target instanceof Element?
@@ -883,7 +849,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     setReviewPair(pair=null,{skipSource=false}={}){
       // Ordinary source navigation/editing must not traverse the whole MD
       // preview or dispatch another CM6 transaction when no pair is active.
-      if(pair===null&&reviewPair===null&&pdfSlot.reviewPair===null)return false;
+      if(pair===null&&pdfSlot.reviewPair===null)return false;
       if(pair!==null&&(!pair.before||!pair.after||
          [pair.before,pair.after].some(item=>!Number.isInteger(item.lineNo)||
            item.lineNo<1||!Number.isSafeInteger(item.blockId)||item.blockId<1||
@@ -891,13 +857,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
            typeof item.text!=='string'||item.text.length>300||
            typeof item.token!=='string'||!item.token)))
         throw Error('双端审阅投影无效');
-      reviewPair=pair;pdfSlot.reviewPair=pair?['before','after'].map(side=>({
+      pdfSlot.reviewPair=pair?['before','after'].map(side=>({
         side,blockId:pair[side].blockId,page:pair[side].page})):null;
       // CM6 already drops token decorations in its docChanged transaction.
       // Avoid nested EditorView.dispatch from the MD update listener.
       if(!skipSource)container.querySelector('.ocr-cm-source')?.ocrCmTable?.setReviewPair(pair);
       pdfSlot.current?.setReviewPair?.(pdfSlot.reviewPair);
-      paintReviewPairPreview();
       return Boolean(pair);
     },
     setMdPreviewNavigation(callback){
@@ -928,7 +893,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
           pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source,{nativeInlineMath});
           sync?.afterRender(preserved);
           highlightPreviewLine(previewSelectedLine);
-          paintReviewPairPreview();
         }).catch(error=>onStatus('MD 预览渲染失败：'+error.message,'warning'));
       },240);
     },
@@ -956,10 +920,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       ++previewToken;
       if(previewTimer!==null){clearTimeout(previewTimer);previewTimer=null;}
       if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
-      previewSelectedLine=null;reviewPair=null;pdfSlot.reviewPair=null;
+      previewSelectedLine=null;pdfSlot.reviewPair=null;
       pdfSlot.current?.setReviewPair?.(null);
-      container.querySelector('.ocr-preview-pane .ocr-review-pair-card')?.remove();
-      container.querySelector('.ocr-preview-pane')?.classList.remove('ocr-review-pair-visible');
     },
     focusMdLine(lineNo,{focus=true}={}){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdLine(lineNo,{focus})??false;

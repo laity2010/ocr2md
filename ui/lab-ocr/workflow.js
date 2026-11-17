@@ -9,7 +9,7 @@ import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
-import {projectBlockBreakRows,resolveBlockBreakFocus} from './block-break-view.js';
+import {projectBlockBreakRows,resolveBlockBreakFocus,renderBlockBreakJoinCell} from './block-break-view.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -87,8 +87,10 @@ const MD_COLUMNS=Object.freeze([
   {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
 ]);
 const MD_BREAK_COLUMNS=Object.freeze([
-  {field:'pbs',headerName:'逻辑块 PBS',width:125,sortable:true,comparator:comparePBS,
+  {field:'pbs',headerName:'逻辑块 PBS',width:105,sortable:true,comparator:comparePBS,
     pinned:'left',lockPinned:true,lockPosition:'left'},
+  {field:'join_preview',headerName:'接续预览 A / B',width:310,minWidth:205,
+    cellRenderer:renderBlockBreakJoinCell,cellClass:'ocr-ag-block-break-preview',sortable:false},
   {field:'before_pbs',headerName:'前块',width:120,sortable:true,comparator:comparePBS},
   {field:'after_pbs',headerName:'后块',width:120,sortable:true,comparator:comparePBS},
   {field:'before_line_no',headerName:'前行',width:78,sortable:true},
@@ -96,7 +98,6 @@ const MD_BREAK_COLUMNS=Object.freeze([
   {field:'kind',headerName:'类型',width:105,sortable:true},
   {field:'before_text',headerName:'前文末尾',minWidth:185,flex:1,sortable:false},
   {field:'after_text',headerName:'后文开头',minWidth:185,flex:1,sortable:false},
-  {field:'join_preview',headerName:'接续预览',minWidth:240,flex:1.2,sortable:false},
   {field:'reason',headerName:'检测依据',minWidth:210,flex:1,sortable:false},
   {field:'issue_id',headerName:'断块 ID',hide:true,sortable:false},
 ]);
@@ -687,7 +688,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       allPagesInitially:title||latex||broken,
       expandPageOnCategory:title?null:latex||broken?'kind':'block_type',
       initialFilterModel:latex||broken?null:{line_no:{values:['非空行']}},
-      rowHeight:latex?134:35,
+      rowHeight:latex?134:broken?92:35,
       onSelect:row=>{
         const target=locateReview({origin:'ag',lineId:row.line_id,
           ...(broken?{blockBreakId:row.issue_id}:{}),

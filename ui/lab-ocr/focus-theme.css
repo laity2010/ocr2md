@@ -141,15 +141,6 @@
   background:rgba(133,205,201,.13);border-bottom:2px solid #80cdc8;
   border-radius:2px;font-weight:600;
 }
-#workspace.ocr-review-focus-unified .ocr-preview-md-scroll [data-ocr-review-pair="before"] {
-  outline:2px dashed #eec45b;outline-offset:2px;
-}
-#workspace.ocr-review-focus-unified .ocr-preview-md-scroll [data-ocr-review-pair="after"] {
-  outline:2px dashed #80cdc8;outline-offset:2px;
-}
-#workspace.ocr-review-focus-unified .ocr-preview-md-scroll [data-ocr-review-pair="both"] {
-  outline:2px dashed #b7d7a4;outline-offset:2px;
-}
 #workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-box[data-review-pair-side],
 #workspace.ocr-review-focus-unified .lab-ocr-pdf-overlay-box[data-review-pair-side][data-selected="true"] {
   background:transparent;opacity:1;
@@ -168,33 +159,27 @@
 #workspace.ocr-review-focus-unified .lab-ocr-pdf-pbs-tag[data-review-pair-side="after"] {
   box-shadow:0 0 0 2px #80cdc8;
 }
-/* Same shared preview pane, not a second Markdown renderer. A temporary
- * card reserves its own grid row instead of covering user text. */
-#workspace .ocr-preview-pane.ocr-review-pair-visible {
-  grid-template-rows:34px minmax(0,max-content) minmax(0,1fr);
+
+/* WP2 correction: A/B join preview belongs to AG only. The shared Markdown
+ * and PDF preview pane retains its original two-row CSS grid and PDF.js size. */
+#workspace .ocr-outline-grid .ocr-ag-block-break-preview .ag-cell-wrapper,
+#workspace .ocr-outline-grid .ocr-ag-block-break-preview .ag-cell-value {
+  align-items:flex-start;white-space:normal;overflow:hidden;
+  height:100%;width:100%;
 }
-#workspace .ocr-preview-pane.ocr-review-pair-visible>.ocr-preview-md-scroll,
-#workspace .ocr-preview-pane.ocr-review-pair-visible>.ocr-preview-pdf-host {
-  grid-row:3;
+#workspace .ocr-outline-grid .ocr-block-break-ag-join {
+  display:block;max-width:100%;padding:5px 0;
+  font:inherit;line-height:1.45;white-space:normal;
+  overflow-wrap:anywhere;color:#d8d2bc;
 }
-#workspace .ocr-review-pair-card {
-  grid-column:1;grid-row:2;min-width:0;max-height:108px;overflow:auto;
-  padding:7px 10px;background:#293b3d;color:#d3c6aa;
-  border-bottom:1px solid #6e9385;font:12px/1.5 "OCR2MD Sarasa",monospace;
+#workspace .ocr-outline-grid .ocr-block-break-ag-before-token {
+  background:rgba(232,184,87,.20);color:#ffe09a;
+  border-bottom:2px solid #eec45b;font-weight:700;border-radius:2px;
 }
-#workspace .ocr-review-pair-title {color:#a7c080;font-weight:600;margin-bottom:3px;}
-#workspace .ocr-review-pair-joined {white-space:pre-wrap;overflow-wrap:anywhere;}
-#workspace .ocr-review-pair-before {border-bottom:2px solid #eec45b;}
-#workspace .ocr-review-pair-after {border-bottom:2px solid #80cdc8;}
-#workspace .ocr-review-pair-seam {white-space:pre;}
-/* A review card belongs to Markdown preview; the alternate single-PDF mode
- * keeps its original two-row layout with no card covering PDF controls. */
-#workspace .ocr-preview-pane.ocr-review-pair-visible[data-preview-mode="pdf"] {
-  grid-template-rows:34px minmax(0,1fr);
+#workspace .ocr-outline-grid .ocr-block-break-ag-after-token {
+  background:rgba(133,205,201,.20);color:#a1f2e8;
+  border-bottom:2px solid #80cdc8;font-weight:700;border-radius:2px;
 }
-#workspace .ocr-preview-pane[data-preview-mode="pdf"]>.ocr-review-pair-card {
-  display:none;
-}
-#workspace .ocr-preview-pane.ocr-review-pair-visible[data-preview-mode="pdf"]>.ocr-preview-pdf-host {
-  grid-row:2;
-}
+#workspace .ocr-outline-grid .ocr-block-break-ag-before-context,
+#workspace .ocr-outline-grid .ocr-block-break-ag-after-context {color:#c4c9bb;}
+#workspace .ocr-outline-grid .ocr-block-break-ag-join-space {white-space:pre;}

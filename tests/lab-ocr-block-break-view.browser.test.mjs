@@ -58,9 +58,9 @@ try{
      const json=obj=>route.fulfill({status:200,contentType:'application/json',
        body:JSON.stringify(obj)});
      if(op==='pdf')return route.fulfill({status:200,contentType:'application/pdf',
-       body:makeLabOcrPdf(2)});
-     if(op==='inspect')return json({status:'unchanged',blocks:5,pages:2,
-       pdf:'test.pdf',sources:[{name:'fixture.json',pages:2}],mdSupported:true});
+       body:makeLabOcrPdf(22)});
+     if(op==='inspect')return json({status:'unchanged',blocks:5,pages:22,
+       pdf:'test.pdf',sources:[{name:'fixture.json',pages:22}],mdSupported:true});
      if(op==='minerujson2block')return json({status:'ready',kind:'view',blocks:5});
      if(op==='rows')return json(u.searchParams.get('table')==='block'?
        {table:'block',total:5,rows:blocks}:{table:'minerujson',total:0,rows:[]});
@@ -98,13 +98,14 @@ try{
    const cols=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields());
    assert.deepEqual(cols.slice(0,6),
-     ['pbs','before_pbs','after_pbs','before_line_no','line_no','kind']);
+     ['pbs','join_preview','before_pbs','after_pbs','before_line_no','line_no']);
    assert(cols.includes('join_preview')&&cols.includes('reason'));
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true);
    const count=()=>page.locator('.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').count();
    await page.waitForFunction(()=>document.querySelectorAll(
      '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===2);
    assert.equal(await count(),2,'Only two within-parent seams');
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-grid .ag-row .ocr-block-break-ag-join').length===2);
    // Reuse AG page checkbox (no second view filter implementation).
    await page.locator('.ocr-ag-all-pages input').uncheck();
    await page.waitForFunction(()=>document.querySelectorAll(
@@ -124,16 +125,21 @@ try{
    await page.waitForFunction(()=>[...document.querySelectorAll(
      '.lab-ocr-pdf-pbs-tag[data-selected="true"]')]
        .some(el=>el.dataset.blockId==='437'),null,{timeout:10000});
-   // WP2: source marks exact boundary tokens, the actual Markdown DOM
-   // receives pair provenance, and the derived card lets users read across
-   // the source split without writing any Markdown or PDF geometry.
+   // User correction: A/B joined-color preview must be inside AG, not the
+   // Markdown / PDF pane. Keep only regular Markdown highlighting there.
    await page.waitForFunction(()=>
      document.querySelector('.ocr-cm-source .ocr-block-break-source-before')?.textContent==='steady'&&
      document.querySelector('.ocr-cm-source .ocr-block-break-source-after')?.textContent==='source');
-   await page.waitForFunction(()=>document.querySelector('.ocr-review-pair-card')
-     ?.textContent.includes('steady source of financing'));
-   await page.waitForFunction(()=>document.querySelector(
-     '.ocr-preview-md-scroll [data-ocr-review-pair]'));
+   await page.waitForFunction(()=>{
+     const selected=document.querySelector('.ocr-outline-grid .ag-row-selected');
+     return selected?.querySelector('.ocr-block-break-ag-before-token')?.textContent==='steady'&&
+       selected?.querySelector('.ocr-block-break-ag-after-token')?.textContent==='source';
+   });
+   assert.equal(await page.locator('.ocr-preview-pane .ocr-review-pair-card').count(),0);
+   assert.equal(await page.locator('.ocr-preview-md-scroll [data-ocr-review-pair]').count(),0);
+   const agJoin=await page.locator('.ocr-outline-grid .ag-row-selected .ocr-block-break-ag-join').textContent();
+   assert(agJoin.includes('steady source of financing'),
+     'AG, not Markdown preview, hosts continuous A/B color preview');
    // The first seam spans physical PDF pages 1 → 2 but stays in logical p1b4.
    await page.waitForFunction(()=>['436','437'].every(id=>[...document.querySelectorAll(
      '.lab-ocr-pdf-pbs-tag[data-review-pair-side]')]
@@ -143,7 +149,7 @@ try{
      after:document.querySelector('.ocr-block-break-source-after')?.textContent,
      side436:document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="436"]')?.dataset.reviewPairSide,
      side437:document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="437"]')?.dataset.reviewPairSide,
-     card:document.querySelector('.ocr-review-pair-card')?.textContent,
+     agJoined:document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-block-break-ag-join')?.textContent,
      source:document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdDocument(),
    }));
    assert.equal(marks.before,'steady');assert.equal(marks.after,'source');
@@ -152,7 +158,7 @@ try{
      const tag=document.querySelector(`.lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
      return Number(tag?.closest('.page[data-page-number]')?.dataset.pageNumber);
    })),[1,2],'Cross-page pair uses physical PDF pages without mutating logical PBS');
-   assert(marks.card.includes('steady source'));
+   assert(marks.agJoined.includes('steady source'));
    assert.equal(marks.source,original);
    assert.equal((await page.locator('#status').textContent()).includes('断块'),true);
 
@@ -168,19 +174,61 @@ try{
    await page.waitForFunction(()=>['439','440'].every(id=>[...document.querySelectorAll(
      '.lab-ocr-pdf-pbs-tag[data-review-pair-side]')]
        .some(el=>el.dataset.blockId===id)),null,{timeout:12000});
-   assert.equal(await page.locator('.ocr-review-pair-card').count(),1,
-     'Selection never appends stale review cards');
+   assert.equal(await page.locator('.ocr-review-pair-card').count(),0,
+     'Markdown preview must not contain continuation cards');
+   assert.equal(await page.locator('.ocr-outline-grid .ag-row-selected .ocr-block-break-ag-before-token').textContent(),'second');
    assert.equal(await page.locator('.ocr-cm-source .ocr-block-break-source-before').count(),1);
    // Changing zoom repaints original page overlays but retains both sides.
    await page.locator('.lab-ocr-pdf-scale').selectOption('125');
    await page.waitForFunction(()=>['439','440'].every(id=>[...document.querySelectorAll(
      '.lab-ocr-pdf-pbs-tag[data-review-pair-side]')]
        .some(el=>el.dataset.blockId===id)),null,{timeout:12000});
+   // iPad screenshot regression: the unsplit "PDF 原文" mode on page 16/22
+   // must show a REAL PDF.js canvas and its text, not a blank dark pane.
+   const split=page.locator('.ocr-preview-split-toggle input');
+   await split.uncheck();
+   await page.locator('.ocr-preview-mode').selectOption('pdf');
+   await page.locator('.lab-ocr-pdf-page').fill('16');
+   await page.locator('.lab-ocr-pdf-page').dispatchEvent('change');
+   await page.waitForFunction(()=>document.querySelector('.lab-ocr-pdf-page')?.value==='16');
+   await page.waitForFunction(()=>{
+     const pane=document.querySelector('.ocr-preview-pane');
+     const paper=pane?.querySelector('.lab-ocr-pdf-scroller .page[data-page-number="16"]');
+     const canvas=paper?.querySelector('canvas');
+     const scroller=pane?.querySelector('.lab-ocr-pdf-scroller');
+     if(!canvas||!scroller||!paper)return false;
+     const bounds=canvas.getBoundingClientRect(),view=scroller.getBoundingClientRect();
+     return canvas.width>20&&canvas.height>20&&bounds.width>20&&bounds.height>20&&
+       bounds.top<view.bottom&&bounds.bottom>view.top&&view.height>100;
+   },null,{timeout:18000});
+   const pdfState=await page.evaluate(()=>{
+     const pane=document.querySelector('.ocr-preview-pane');
+     const canvas=pane?.querySelector('.lab-ocr-pdf-scroller .page[data-page-number="16"] canvas');
+     return {mode:pane?.dataset.previewMode,grid:getComputedStyle(pane).gridTemplateRows,
+       canvasWidth:canvas?.width,canvasHeight:canvas?.height,
+       text:pane?.querySelector('.lab-ocr-pdf-scroller .page[data-page-number="16"] .textLayer')?.textContent,
+       nonWhitePixels:(()=>{if(!canvas)return -1;const c=canvas.getContext('2d',{willReadFrequently:true});
+         if(!c)return -1;const pixels=c.getImageData(0,0,canvas.width,canvas.height).data;
+         let count=0;for(let y=0;y<canvas.height;y+=5)for(let x=0;x<canvas.width;x+=5){
+           const i=(y*canvas.width+x)*4;if(pixels[i]+pixels[i+1]+pixels[i+2]<700)count++;}
+         return count;})(),
+       pairCardCount:pane?.querySelectorAll('.ocr-review-pair-card').length,
+       staleThirdRow:pane?.classList.contains('ocr-review-pair-visible')};
+   });
+   assert.equal(pdfState.mode,'pdf');
+   assert.equal(pdfState.pairCardCount,0);
+   assert.equal(pdfState.staleThirdRow,false);
+   assert(pdfState.canvasWidth>20&&pdfState.canvasHeight>20);
+   assert(pdfState.nonWhitePixels>10,
+     'The Safari page 16 canvas must contain actually painted PDF text, not a blank canvas: '+JSON.stringify(pdfState));
+   if(pdfState.text!==undefined)assert(pdfState.text.includes('OCR Lab PDF page 16'));
+   await page.locator('.ocr-preview-mode').selectOption('md');
+   await split.check();
+
 
    await picker.selectOption('md');
    await page.waitForFunction(()=>document.querySelector('#workspace .ag-header-cell[col-id="text"]'));
-   await page.waitForFunction(()=>!document.querySelector('.ocr-review-pair-card')&&
-     !document.querySelector('.ocr-cm-source .ocr-block-break-source-before')&&
+   await page.waitForFunction(()=>!document.querySelector('.ocr-cm-source .ocr-block-break-source-before')&&
      !document.querySelector('.lab-ocr-pdf-pbs-tag[data-review-pair-side]'));
 
    await picker.selectOption('block-break');
@@ -192,15 +240,14 @@ try{
    await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-2',focusColumn:'pbs'}));
    await page.locator('.ocr-outline-grid .ag-row-selected .ag-cell[col-id="pbs"]').click();
-   await page.waitForFunction(()=>Boolean(document.querySelector('.ocr-review-pair-card')));
+   await page.waitForFunction(()=>Boolean(document.querySelector('.ocr-cm-source .ocr-block-break-source-before')));
    const editCleared=await page.evaluate(()=>{
      const editor=document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView();
      if(!editor)return false;
      const from=editor.state.doc.toString().indexOf('steady');
      if(from<0)return false;
      editor.dispatch({changes:{from,to:from+6,insert:'Steady'}});
-     const cleared=!document.querySelector('.ocr-review-pair-card')&&
-       !document.querySelector('.ocr-cm-source .ocr-block-break-source-before')&&
+     const cleared=!document.querySelector('.ocr-cm-source .ocr-block-break-source-before')&&
        !document.querySelector('.lab-ocr-pdf-pbs-tag[data-review-pair-side]');
      editor.dispatch({changes:{from,to:from+6,insert:'steady'}});
      return cleared;
