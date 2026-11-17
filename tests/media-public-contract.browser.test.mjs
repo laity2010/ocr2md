@@ -36,6 +36,15 @@ try{
         check(found.filter(row=>row.url===remote).length===2,'findMedia duplicate references');
         check(found.some(row=>row.local&&row.url===local),'findMedia local links');
         check(found.every(row=>source.slice(row.from,row.to)===row.url),'findMedia exact URL offsets');
+        const angleSource=`![MinerU](<${remote}>)\n`+
+          `![local](<${local}>)\n`+
+          `<!-- minerujson:v1:ignored ![secret](<${rejected}>) -->`;
+        const angleFound=media.findMedia(angleSource);
+        check(angleFound.length===2,'findMedia angle-enclosed Markdown images');
+        check(angleFound[0].url===remote&&angleFound[1].url===local,
+          'findMedia angle-wrapped remote/local values');
+        check(angleFound.every(row=>angleSource.slice(row.from,row.to)===row.url),
+          'findMedia angle-wrapped exact URL offsets');
         const req=[];const reports=[];const edits=[];
         const originalFetch=globalThis.fetch;
         const counts=new Map();
