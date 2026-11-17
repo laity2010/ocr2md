@@ -135,7 +135,7 @@ try{
      '#workspace select.ocr-source-file-select')?.value==='sql:md',null,{timeout:18000});
    const picker=page.locator('.ocr-outline-pane .ocr-ag-module-select');
    assert.deepEqual(await picker.locator('option').allTextContents(),
-     ['MD 行','标题','LaTeX','断块']);
+     ['MD 行','标题','LaTeX','断块','注释匹配']);
    const original=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument());
    await picker.selectOption('block-break');

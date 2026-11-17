@@ -1,0 +1,36 @@
+/* Same AG grid and CM6; no second Markdown renderer or pane. */
+#workspace .ocr-ag-extra-action{flex:none;height:27px;padding:2px 9px;
+  font:inherit;background:#344a42;border:1px solid #769281;border-radius:4px;
+  color:#d3c6aa;cursor:pointer}
+#workspace .ocr-ag-extra-action[hidden]{display:none}
+#workspace .ocr-note-match-source-active{background:rgba(101,207,196,.26);
+  box-shadow:0 0 0 1px rgba(130,218,205,.7) inset;border-radius:2px}
+#workspace .ocr-note-match-text{white-space:normal;overflow:hidden;text-overflow:ellipsis;
+  font:inherit;line-height:1.5}
+#workspace .ocr-note-match-text[data-kind="注引"]{color:#dfc484}
+#workspace .ocr-note-match-text[data-kind="注文"]{color:#9fd4c6}
+#workspace .ocr-note-match-status[data-status="已匹配"]{color:#a7c080}
+#workspace .ocr-note-match-status[data-status="待核实"],
+#workspace .ocr-note-match-status[data-status="缺注文"],
+#workspace .ocr-note-match-status[data-status="缺注引"]{color:#e9c46a}
+#workspace .ocr-note-match-status[data-status="编号冲突"]{color:#ed9b89}
+.ocr-note-match-rules-dialog{position:fixed;inset:auto;margin:auto;
+  width:min(640px,calc(100vw - 24px));max-height:90vh;overflow:auto;
+  border:1px solid #65786f;border-radius:9px;background:#273338;color:#d3c6aa;
+  padding:16px;font:13px/1.5 "OCR2MD Sarasa",monospace}
+.ocr-note-match-rules-dialog::backdrop{background:rgba(0,0,0,.68)}
+.ocr-note-match-rules-dialog h2{font-size:16px;margin:0 0 6px}
+.ocr-note-match-rules-dialog p{margin:5px 0 12px}
+.ocr-note-rule-set{border:1px solid #4b6157;border-radius:5px;
+  display:flex;flex-wrap:wrap;gap:5px 13px;margin:8px 0;padding:9px}
+.ocr-note-rule-set legend{font-weight:bold}
+.ocr-note-rule-set label,.ocr-note-rule-weak{display:flex;align-items:center;gap:5px}
+.ocr-note-rule-choices{display:flex;flex-wrap:wrap;gap:9px;margin:10px 0}
+.ocr-note-rule-choices>label{display:flex;align-items:center;gap:5px}
+.ocr-note-rule-choices select,.ocr-note-match-rules-dialog textarea{color:#d3c6aa;
+  background:#1d2c30;border:1px solid #64776d;border-radius:4px;padding:5px}
+.ocr-note-match-rules-dialog textarea{box-sizing:border-box;width:100%;resize:vertical}
+.ocr-note-rule-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.ocr-note-rule-actions button{padding:7px 12px;border:1px solid #678477;border-radius:5px;
+  background:#34483f;color:#d3c6aa}
+.ocr-note-rule-feedback{color:#e9c46a;min-height:1.5em}

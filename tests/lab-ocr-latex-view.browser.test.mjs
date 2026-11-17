@@ -120,7 +120,7 @@ try{
      '.ocr-preview-md-scroll .ocr-reviewed-inline-latex .katex').length>=3,
      null,{timeout:14000});
    const picker=page.locator('.ocr-outline-pane .ocr-ag-module-select');
-   assert.deepEqual(await picker.locator('option').allTextContents(),['MD 行','标题','LaTeX','断块']);
+   assert.deepEqual(await picker.locator('option').allTextContents(),['MD 行','标题','LaTeX','断块','注释匹配']);
    const originalText=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument());
    await picker.selectOption('latex');

@@ -91,3 +91,25 @@ for(const item of [
 ])assert.throws(()=>publishLabFocus(item));
 stopPair();
 console.log('LAB_OCR_PAIR_FOCUS_BUS_PASS');
+
+// Note-match endpoints are precise within one physical source line, unlike
+// formula-only highlights or the Block-start fallback. Only AG may publish.
+const noteEvents=[];
+const stopNote=viewStore.subscribe((next,prior)=>{
+  if(next.labFocusTarget!==prior.labFocusTarget)noteEvents.push(next.labFocusTarget);
+});
+publishLabFocus({origin:'ag',lineId:'c',blockId:12,lineNo:3,page:3,
+  noteFrom:4,noteTo:10});
+assert.equal(noteEvents.at(-1).noteFrom,4);
+assert.equal(noteEvents.at(-1).noteTo,10);
+assert(!Object.keys(noteEvents.at(-1)).includes('text'));
+for(const item of [
+  {origin:'pdf',lineId:'c',blockId:12,lineNo:3,noteFrom:1,noteTo:3},
+  {origin:'ag',lineId:'c',blockId:12,lineNo:3,noteFrom:-1,noteTo:2},
+  {origin:'ag',lineId:'c',blockId:12,lineNo:3,noteFrom:2,noteTo:2},
+  {origin:'ag',lineId:'c',blockId:12,lineNo:3,noteFrom:2},
+  {origin:'ag',lineId:'c',blockId:12,noteFrom:0,noteTo:2},
+  {origin:'ag',lineId:'c',blockId:12,lineNo:3,noteFrom:2,noteTo:5,formulaColumn:2},
+])assert.throws(()=>publishLabFocus(item));
+stopNote();
+console.log('LAB_OCR_NOTE_RANGE_FOCUS_BUS_DIRECT_PASS');

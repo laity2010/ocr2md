@@ -4,6 +4,7 @@
 import {registerFramePdfPane} from '../frame/layout.js';
 import './focus-theme.css';
 import './title-view.css';
+import './note-match-view.css';
 // Only Lab OCR installs the shared four-pane review-focus palette.
 document.getElementById('workspace')?.classList.add('ocr-review-focus-unified');
 registerFramePdfPane(context=>{

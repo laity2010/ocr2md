@@ -48,3 +48,26 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 ```
 
 直接测试覆盖：格式混用、默认弱证据不强配、多引一注、缺项、重复编号、全书/章节边界、多行/多段注文、默认排除 OCR 伪上标与代码公式、可配置书籍专用 `§1` 和字母上标、输入不修改和来源字段。浏览器用原生 Chromium 与 iPad WebKit 验证模块同结果，且不挂载/修改书籍、SQL 或 PDF。
+
+## WCP43 WP2/3 · AG 注释匹配、四窗端点与书籍规则（2026-11-17）
+
+### 公开模块/API 契约
+
+- `ui/lab-ocr/note-match-view.js`：`projectNoteMatchRows(mdRows,blockRows,config)` 仅组合 WP1 只读候选与 `pairs[]`，同一注引形成「注引／注文」两条 AG 行；多个注引共享注文时**每条匹配各有独立 AG `note_row_id`**（从候选 ID 派生），但同一注文 `LineID/BlockID` 不复制或修改。编号歧义时列出所有候选注文；缺少的一端显示占位行；独立孤立注文仍保留可定位记录。`resolveNoteMatchFocus(noteRow,mdRows,blockRows)` 重新验证当前 CM6 的 LineID、BlockID、字符范围、精确原始字串后才返回定位消息（否则 `null`，拒绝过期候选）。均有独立直接测试。
+- `ui/lab-ocr/workflow.js` 将 `note-match` 注册为第五个 AG View；始终使用现有 `frame.showSqlRows`/CM6 MD StateField/同一 PDF viewer。固定前列注号，展示端点、原文、状态、PBS、行号、规则 ID、证据级别、理由和候选数量，使用原有 `EnumCheckboxFilter` 对字段和配对状态筛选。原文列是**只读**。切换或源码修改只重投影内存 CM6，不重新读取 SQL 正文。
+- `ui/frame/layout.js` 扩展两个窄公共边界：`frame.setAgAction({label,onClick})` 让活动 View 在现有 AG Toolbar 放一个「识别规则」按钮，离开即隐藏；`frame.patchNoteRows(rows)` 以 `note_row_id` 对现有 AG 做增量更新，保留过滤/滚动，而不是按可重复的 LineID 错误合并。同一 Frame 的 `focusMdNoteRange({lineNo,from,to,focus:false})` 在 CM6 当前行以 UTF-16 字符范围高亮注号，`clearMdNoteRange()` 清除；源码实际语法色不被覆盖成公式色。
+- `ui/view-store.js` 的既有 `publishLabFocus` 消息扩展可选 `noteFrom` / `noteTo`；仅接受 `origin:'ag'`、正整数源行、同一行合法字符段，并经四窗订阅器驱动源码精确 caret、Markdown 预览对应行、PDF 原始 BlockID 覆盖框，不将 Markdown 内容或注号文本放进消息 Store。端点缺失不可虚构位置。
+- `ui/lab-ocr/note-match-rules-dialog.js` 的 `createNoteMatchRulesDialog({onSave})` 生成一个书籍规则对话框：注引/注文内置规则分别勾选，编号范围（全书/按章节）、H1–H6 作用域、续行策略、弱证据选项、自定义 `book.ref.*` / `book.body.*` JSON 正则。高级 JSON 必须有命名组，出错不保存；取消不修改规则，成功应用后立即重算 AG。无需复制全局设置组件，UI 只服务该模块。
+
+### 书籍级配置持久化，非新 SQL 表
+
+- 新增 `scripts/v6_lab_ocr_note_match_config.py` 的 `read_note_match_config(book)` 与 `save_note_match_config(book,config,expected_revision)`；配合原有单一 Lab-OCR HTTP 服务的 `GET note-match-rules` 和 `POST note-match-rules-save`。两者复用 Main Cookie 授权、目录防符号链接及 POST Origin 校验，**无新 Tunnel 或后台服务**。
+- 当前书籍工作目录下使用隐藏文件 `.ocr2md-note-match-rules.json` 记录规则（以及 `.ocr2md-note-match-rules.lock` 用于操作锁）。GET 不创建任何文件；POST 才经版本 SHA CAS、输入字段白名单、安全的临时文件+原子替换、拒绝 symlink 保存。不同书籍从独立路径读取，不用浏览器 `localStorage` 的偶然值推测用户在其他设备的配置。
+- 严禁因规则更改写入 `md_line`、`block_review`、MinerU JSON、PDF 或用户媒体。本阶段只保存识别规则，不保存任何「已经确认匹配」或「已转换」结论；只有 WP3 在独立授权操作中才允许变更 Markdown。
+
+### 新增测试 / 边界
+
+- `node tests/lab-ocr-note-match-view.test.mjs`（AG 两端、重复引用唯一行、缺失/冲突、源证据过期直接测试）。
+- `python3 tests/lab-ocr-note-match-rules.test.py`（合成书籍独立规则、读只读、CAS 冲突、非法规则、symlink、真实 HTTP Cookie/Origin/方法边界，不需要建 SQLite）。
+- `node tests/lab-ocr-note-match-view.browser.test.mjs`：Chromium 与 iPad WebKit，原生 Lab Frame + 合成 API，AG 5 View 正确、两端独立源码/PDF/MD 预览定位、按书籍修改规则后候选增删、切换 View 重载配置、没有 MD/Block 保存请求。
+- 回归：标题/LaTeX/断块的 AG 选项列表新增 `注释匹配` 是预期的接口扩展，不得删除旧 View 或改变旧列身份；同时验证 PDF 原覆盖框、LaTeX 异步渲染和断块的 CM6 Undo/Redo。

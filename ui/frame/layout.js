@@ -76,6 +76,7 @@ function mountEmptySource(host){
   const setMdFormulaRange=StateEffect.define();
   const setMdAllFormulaRanges=StateEffect.define();
   const setMdReviewPair=StateEffect.define();
+  const setMdNoteRange=StateEffect.define();
   const deletedMdLine=StateEffect.define();
   const mdFocusField=StateField.define({
     create:()=>Decoration.none,
@@ -131,6 +132,21 @@ function mountEmptySource(host){
             .range(line.from+index,line.from+index+item.token.length));
         }
         value=ranges.length?Decoration.set(ranges.sort((a,b)=>a.from-b.from)):Decoration.none;
+      }
+      return value;
+    },
+    provide:field=>EditorView.decorations.from(field),
+  });
+  const mdNoteFocusField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      value=tr.docChanged?Decoration.none:value.map(tr.changes);
+      for(const effect of tr.effects)if(effect.is(setMdNoteRange)){
+        const range=effect.value;
+        value=range&&Number.isInteger(range.from)&&Number.isInteger(range.to)&&
+          range.from>=0&&range.to>range.from&&range.to<=tr.newDoc.length?
+          Decoration.set([Decoration.mark({class:'ocr-note-match-source-active'})
+            .range(range.from,range.to)]):Decoration.none;
       }
       return value;
     },
@@ -199,7 +215,7 @@ function mountEmptySource(host){
   // mature editing, history, native iOS selection, folding and keybindings.
   editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     mdEditable.of([EditorState.readOnly.of(true),EditorView.editable.of(false)]),
-    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,mdAllFormulaField,mdReviewPairField,
+    tableStateField,structuredRuntimeField,mdField,mdFocusField,mdFormulaFocusField,mdAllFormulaField,mdReviewPairField,mdNoteFocusField,
     lineGutter.extension,...base.slice(1),
     EditorView.lineWrapping,EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),mineruCommentFolding,
@@ -284,13 +300,28 @@ function mountEmptySource(host){
           EditorState.readOnly.of(true),EditorView.editable.of(false)])],
         annotations:Transaction.addToHistory.of(false)});
     },
+    focusMdNoteRange({lineNo,from,to,focus=false}={}){
+      if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
+         lineNo<1||lineNo>editor.state.doc.lines||
+         !Number.isInteger(from)||!Number.isInteger(to))return false;
+      const line=editor.state.doc.line(lineNo);
+      if(from<0||to<=from||to>line.length)return false;
+      const start=line.from+from;
+      programmaticMdSelection=true;
+      try{editor.dispatch({selection:{anchor:start},
+        effects:[setMdNoteRange.of({from:start,to:line.from+to}),
+          EditorView.scrollIntoView(start,{y:'center'})]});}
+      finally{programmaticMdSelection=false;}
+      if(focus)editor.focus();return true;
+    },
+    clearMdNoteRange(){editor.dispatch({effects:setMdNoteRange.of(null)});},
     focusMdLine(lineNo,{focus=true}={}){
       if(!editor.state.field(mdField)||!Number.isInteger(lineNo)||
          lineNo<1||lineNo>editor.state.doc.lines)return false;
       const position=editor.state.doc.line(lineNo).from;
       programmaticMdSelection=true;
       try{editor.dispatch({selection:{anchor:position},
-        effects:[setMdFormulaRange.of(null),
+        effects:[setMdFormulaRange.of(null),setMdNoteRange.of(null),
           EditorView.scrollIntoView(position,{y:'center'})]});}
       finally{programmaticMdSelection=false;}
       if(focus)editor.focus();return true;
@@ -321,7 +352,7 @@ function mountEmptySource(host){
       const prior=current.value?editor.state.doc.lineAt(current.from).number:null;
       // A popup belongs to the highlighted focus line, never to a stale one.
       if(prior!==lineNo)lineGutter.close();
-      const effects=[setMdFocusLine.of(lineNo),setMdFormulaRange.of(null)];
+      const effects=[setMdFocusLine.of(lineNo),setMdFormulaRange.of(null),setMdNoteRange.of(null)];
       if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
         editor.state.doc.line(lineNo).from,{y:'center'}));
       editor.dispatch({effects});
@@ -426,7 +457,7 @@ function mountEmptyGrid(host){
   // The switch belongs to the AG toolbar, not to the AG Grid column model.
   const allPagesControl=host.closest('.ocr-outline-pane')?.querySelector('.ocr-ag-all-pages');
   const allPagesInput=allPagesControl?.querySelector('input')??null;
-  let formulaData=new Map(),currentRowHeight=35;
+  let formulaData=new Map(),noteData=new Map(),currentRowHeight=35;
   let pageScope=null,pdfPage=1,showAllPages=false;
   let expandPageOnCategory=null,lastCategoryModel='null';
   const isVisible=row=>row?.absorbed_into_block_id==null;
@@ -489,6 +520,8 @@ function mountEmptyGrid(host){
       .map(r=>[String(r.block_id),r]));
     mdData=new Map(rows.filter(r=>r?.line_id!=null)
       .map(r=>[String(r.line_id),r]));
+    noteData=new Map(rows.filter(r=>r?.note_row_id!=null)
+      .map(r=>[String(r.note_row_id),r]));
     formulaData=new Map(rows.filter(r=>r?.formula_id!=null)
       .map(r=>[String(r.formula_id),r]));
     if(rowHeight!==currentRowHeight){
@@ -541,6 +574,23 @@ function mountEmptyGrid(host){
     });
     for(const [id,row] of next)if(!formulaData.has(id))add.push(row);
     formulaData=next;
+    if(remove.length||add.length)grid.applyTransaction({remove,add});
+    if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
+  },patchNoteRows(rows){
+    // Note citations are many-to-one: a single LineID may occur in several
+    // AG rows. The stable projection key is note_row_id, not LineID/PBS.
+    const next=new Map(rows.map(r=>[String(r.note_row_id),r]));
+    const remove=[],add=[];
+    grid.forEachNode(node=>{
+      const id=String(node.data?.note_row_id??'');
+      if(!id)return;
+      const updated=next.get(id);
+      if(!updated)remove.push(node.data);
+      else if(Object.entries(updated).some(([field,value])=>node.data?.[field]!==value))
+        node.updateData({...node.data,...updated});
+    });
+    for(const [id,row] of next)if(!noteData.has(id))add.push(row);
+    noteData=next;
     if(remove.length||add.length)grid.applyTransaction({remove,add});
     if(Object.keys(grid.getFilterModel()??{}).length)grid.onFilterChanged();
   },patchMdRows(rows){
@@ -619,7 +669,7 @@ function mountEmptyGrid(host){
     return selected.node.data;
   },clear(){selectedListener=()=>{};filterListener=()=>{};pageScope=null;showAllPages=false;
     expandPageOnCategory=null;lastCategoryModel='null';
-    mdData.clear();blockData.clear();formulaData.clear();
+    mdData.clear();blockData.clear();formulaData.clear();noteData.clear();
     if(allPagesControl)allPagesControl.hidden=true;
     if(allPagesInput)allPagesInput.checked=false;
     grid.setGridOption('rowData',[]);grid.setGridOption('columnDefs',columnDefs);}});
@@ -658,7 +708,9 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
         onModuleChange?.(next);
       });
     }
-    bar.append(allPages,label,picker);element.append(bar);
+    const action=document.createElement('button');
+    action.type='button';action.className='ocr-ag-extra-action';action.hidden=true;
+    bar.append(allPages,label,picker,action);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
     owned=()=>mountEmptyGrid(grid);
@@ -860,6 +912,14 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    setAgAction({label,onClick}={}){
+      const button=container.querySelector('.ocr-outline-pane .ocr-ag-extra-action');
+      if(!button)return false;
+      button.hidden=!(label&&typeof onClick==='function');
+      button.textContent=button.hidden?'':String(label).slice(0,20);
+      button.onclick=button.hidden?null:onClick;
+      return !button.hidden;
+    },
     setAgView(value){
       const picker=container.querySelector('.ocr-outline-pane .ocr-ag-module-select');
       if(!picker||![...picker.options].some(option=>option.value===value))return false;
@@ -972,6 +1032,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     focusMdFormula(target){
       return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdFormula(target)??false;
     },
+    focusMdNoteRange(target){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.focusMdNoteRange(target)??false;
+    },
+    clearMdNoteRange(){
+      return container.querySelector('.ocr-cm-source')?.ocrCmTable?.clearMdNoteRange()??false;
+    },
     markMdLine(lineNo,{reveal=false}={}){
       if(!editor.state.field(mdField))return false;
       if(lineNo!==null&&(!Number.isInteger(lineNo)||lineNo<1||
@@ -980,7 +1046,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       const prior=current.value?editor.state.doc.lineAt(current.from).number:null;
       // A popup belongs to the highlighted focus line, never to a stale one.
       if(prior!==lineNo)lineGutter.close();
-      const effects=[setMdFocusLine.of(lineNo),setMdFormulaRange.of(null)];
+      const effects=[setMdFocusLine.of(lineNo),setMdFormulaRange.of(null),setMdNoteRange.of(null)];
       if(reveal&&lineNo!==null)effects.push(EditorView.scrollIntoView(
         editor.state.doc.line(lineNo).from,{y:'center'}));
       editor.dispatch({effects});
@@ -1029,6 +1095,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     patchFormulaRows(rows){
       return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchFormulaRows(rows);
+    },
+    patchNoteRows(rows){
+      return container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.patchNoteRows(rows);
     },
     clearMdAgSelection(){
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clearSelection();
