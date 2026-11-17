@@ -49,3 +49,10 @@
 ### 2026-11-17 用户 Safari 截图反馈与纠正
 
 用户 iPad Safari 显示「PDF 原文」工具栏页 16 / 22，但正文整个区域空白，同时指出接续着色应在 AG 表，不能在 Markdown 预览。之前为卡片向公共 `.ocr-preview-pane` 插入元素并修改 Grid 行数，是不必要的侵入，已整体移除，恢复框架原本 34px 工具栏 + 自适应预览正文两行布局。Chromium 与 iPad WebKit 专项以 PDF 22 页、第 16 页实际 canvas 可见/像素非白和 AG 彩色单元为发布门槛；并不宣称已经远程操作用户实际 Safari 标签页。
+
+### WCP43 · 漏报修复：p9b3s0（2026-11-17）
+
+- **真实来源**：用户指出 p9b3s0 漏检。从 Lab-OCR 的 sample SQLite 只读快照核对 BlockID 251 (`p9b3`) 第 166 行末尾 `... on the basis of the latest`，BlockID 252 (`p9b3s0`) 第 167 行起始 `13F, and the portfolio was rebalanced monthly ...`。两块存在稳定 `parent_block_id=251` 的父子关系，原有结构没有问题；先前检测只认 `[a-z]` 小写开头，拒绝了数字+大写字母的 SEC 文件代号 `13F`。
+- `projectBlockBreakRows` 在原小写词规则之外，仅扩展 `[1-9][0-9]{0,3}[A-Z]{1,5}` 这类 **数字+大写字母代码**；它属于待人工审阅候选，不意味着独立数字、年份、标题或已经完整终句可以合并。保留公式/非正文屏障和结构排除。`resolveBlockBreakFocus` 继续根据现行 MD+Block 状态复核稳定 ID。
+- 必须同步调整 CM6 `mdReviewPairField` 接受 `13F` 作为 `after_token`，否则 AG 可以列出而源码第二端仍无法精确标记。AG 第二列继续 `textContent` 安全渲染，`latest` 暖金、`13F` 青绿，MD 预览不插入任何接续卡片。
+- **实际快照结果**：修复后由 3 条增至 4 条：`p9b3→p9b3s0 latest/13F`、`p13b5→p13b5s0 systematic/portfolio`、`p16b4→p16b4s0 steady/source`、`p16b9→p16b9s0 investors/might`。被公式隔开的 `p19b2→p19b2s1` 仍不报告。直接测试包含 `13F`、`13`、`2024`、完整句末、标题与 LaTeX，浏览器专项夹具包含 `p9b3→p9b3s0` 的 AG/CM6/PDF 三端选中。

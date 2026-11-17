@@ -18,6 +18,8 @@ const raw=[
   [438,'p1b5',null,5,0,'Another paragraph entirely.'],
   [439,'p2b1',null,1,1,'The pattern permits a second'],
   [440,'p2b1s0',439,0,1,'example showing a split phrase.'],
+  [441,'p9b3',null,3,8,'The stocks were refreshed on the basis of the latest'],
+  [442,'p9b3s0',441,0,8,'13F, and the portfolio was rebalanced monthly.'],
 ];
 const blocks=raw.map(([block_id,pbs,parent_block_id,sibling_order,global_page,text])=>({
   block_id,pbs,parent_block_id,sibling_order,global_page,block_type:'text',
@@ -32,6 +34,7 @@ const md=[
   [1,436,raw[0][5]],[2,437,raw[1][5]],[3,437,''],
   [4,438,raw[2][5]],[5,438,''],[6,439,raw[3][5]],
   [7,440,raw[4][5]],[8,440,''],
+  [9,441,raw[5][5]],[10,442,raw[6][5]],[11,442,''],
 ].map(([line_no,block_id,text])=>({line_no,line_id:'break-md-'+line_no,
   block_id,text}));
 try{
@@ -59,11 +62,11 @@ try{
        body:JSON.stringify(obj)});
      if(op==='pdf')return route.fulfill({status:200,contentType:'application/pdf',
        body:makeLabOcrPdf(22)});
-     if(op==='inspect')return json({status:'unchanged',blocks:5,pages:22,
+     if(op==='inspect')return json({status:'unchanged',blocks:7,pages:22,
        pdf:'test.pdf',sources:[{name:'fixture.json',pages:22}],mdSupported:true});
-     if(op==='minerujson2block')return json({status:'ready',kind:'view',blocks:5});
+     if(op==='minerujson2block')return json({status:'ready',kind:'view',blocks:7});
      if(op==='rows')return json(u.searchParams.get('table')==='block'?
-       {table:'block',total:5,rows:blocks}:{table:'minerujson',total:0,rows:[]});
+       {table:'block',total:7,rows:blocks}:{table:'minerujson',total:0,rows:[]});
      if(op==='block-edit-state')return json({revision:0,cursor:0,history:[],
        canUndo:false,canRedo:false});
      if(op==='md-state'){mdLoads++;return json({status:'ready',revision:0,
@@ -103,16 +106,16 @@ try{
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true);
    const count=()=>page.locator('.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').count();
    await page.waitForFunction(()=>document.querySelectorAll(
-     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===2);
-   assert.equal(await count(),2,'Only two within-parent seams');
-   await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-grid .ag-row .ocr-block-break-ag-join').length===2);
+     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===3);
+   assert.equal(await count(),3,'Three within-parent seams include latest / 13F');
+   await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-grid .ag-row .ocr-block-break-ag-join').length===3);
    // Reuse AG page checkbox (no second view filter implementation).
    await page.locator('.ocr-ag-all-pages input').uncheck();
    await page.waitForFunction(()=>document.querySelectorAll(
      '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===1);
    await page.locator('.ocr-ag-all-pages input').check();
    await page.waitForFunction(()=>document.querySelectorAll(
-     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===2);
+     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===3);
    const picked=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-2',focusColumn:'pbs'}));
    assert(picked&&picked.issue_id==='block-break:436:437');
@@ -183,6 +186,27 @@ try{
    await page.waitForFunction(()=>['439','440'].every(id=>[...document.querySelectorAll(
      '.lab-ocr-pdf-pbs-tag[data-review-pair-side]')]
        .some(el=>el.dataset.blockId===id)),null,{timeout:12000});
+   // Real WCP43 missing case: numeric+uppercase opening token '13F'.
+   const filing=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-10',focusColumn:'pbs'}));
+   assert(filing&&filing.issue_id==='block-break:441:442'&&
+     filing.boundary==='latest / 13F');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ag-cell[col-id="pbs"]').click();
+   await page.waitForFunction(()=>
+     document.querySelector('.ocr-cm-source .ocr-block-break-source-before')?.textContent==='latest'&&
+     document.querySelector('.ocr-cm-source .ocr-block-break-source-after')?.textContent==='13F',
+     null,{timeout:10000});
+   await page.waitForFunction(()=>{
+     const selected=document.querySelector('.ocr-outline-grid .ag-row-selected');
+     return selected?.querySelector('.ocr-block-break-ag-before-token')?.textContent==='latest'&&
+       selected?.querySelector('.ocr-block-break-ag-after-token')?.textContent==='13F';
+   });
+   assert.equal(await page.locator('.ocr-outline-grid .ag-row-selected .ocr-block-break-ag-after-token')
+     .textContent(),'13F');
+   assert.equal(await page.locator('.ocr-review-pair-card').count(),0);
+   await page.waitForFunction(()=>['441','442'].every(id=>[...document.querySelectorAll(
+     '.lab-ocr-pdf-pbs-tag[data-review-pair-side]')]
+       .some(el=>el.dataset.blockId===id)),null,{timeout:12000});
    // iPad screenshot regression: the unsplit "PDF 原文" mode on page 16/22
    // must show a REAL PDF.js canvas and its text, not a blank dark pane.
    const split=page.locator('.ocr-preview-split-toggle input');
@@ -233,7 +257,7 @@ try{
 
    await picker.selectOption('block-break');
    await page.waitForFunction(()=>document.querySelectorAll(
-     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===2);
+     '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===3);
    // Return to a candidate and simulate an ordinary source text edit. CM6
    // clears its own Decoration during docChanged, while workflow clears
    // derived PDF/preview marks WITHOUT nested CodeMirror transactions.

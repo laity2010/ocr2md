@@ -15,19 +15,24 @@ function seamEvidence(left,right){
   const tail=a.slice(-100),head=b.slice(0,100);
   if(BAD_SEAM.test(tail)||BAD_SEAM.test(head))return null;
   const end=/([A-Za-z]{2,45})(-?)$/u.exec(a);
-  const start=/^([a-z]{2,60})\b/u.exec(b);
+  // OCR often splits after a lowercase word and before an uppercase
+  // alphanumeric filing/code such as 'latest / 13F'. Treat only a narrow
+  // number+uppercase code as a candidate, not arbitrary numbers/headings.
+  const start=/^(?:([a-z]{2,60})|([1-9][0-9]{0,3}[A-Z]{1,5}))\b/u.exec(b);
   if(!end||!start)return null;
+  const nextToken=start[1]??start[2];
   // A full stop or an uppercase paragraph start is not evidence of an OCR
   // split. Markdown line breaks alone are not proof of a broken block.
   const splitWord=end[2]==='-';
   const aText=a.slice(-110),bText=b.slice(0,110);
   return {kind:splitWord?'跨块断词':'跨块续接',
     reason:splitWord?'前块以连字符结束，后块以小写单词开始':
-      '前块未以句末标点结束，后块以小写单词继续',
+      (start[2]?'前块未完成，后块以数字字母组合的资料代号继续':
+        '前块未以句末标点结束，后块以小写单词继续'),
     before_text:aText,after_text:bText,
     join_preview:aText+(splitWord?'':' ')+bText,
-    boundary:end[1]+end[2]+' / '+start[1],
-    before_token:end[1]+end[2],after_token:start[1]};
+    boundary:end[1]+end[2]+' / '+nextToken,
+    before_token:end[1]+end[2],after_token:nextToken};
 }
 
 /** One candidate per adjacent prose Block pair inside one logical root.

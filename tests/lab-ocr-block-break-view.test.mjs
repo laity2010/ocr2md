@@ -27,6 +27,33 @@ assert.equal(rows[0].before_line_id,'c');
 assert.equal(rows[0].before_line_no,310);
 assert.equal(rows[0].block_id,437,'Locates AFTER block through existing four-pane port');
 assert.equal(rows[0].kind,'跨块续接');
+// Real WCP43 miss: OCR split prose immediately before SEC filing code 13F.
+// Numeric-only starts, sentence-final punctuation and headings are NOT a
+// reason to join distinct blocks.
+const filingBlocks=[block(251,'p9b3',null,3,'text',8),
+  block(252,'p9b3s0',251,0,'text',8)];
+const filingRows=[{line_id:'filing-before',line_no:166,block_id:251,
+  text:'The stocks in the portfolio were refreshed on the basis of the latest'},
+  {line_id:'filing-after',line_no:167,block_id:252,
+    text:'13F, and the portfolio was rebalanced monthly.'}];
+const filingCandidates=projectBlockBreakRows(filingRows,filingBlocks);
+assert.equal(filingCandidates.length,1);
+assert.deepEqual([filingCandidates[0].issue_id,filingCandidates[0].boundary,
+  filingCandidates[0].before_token,filingCandidates[0].after_token],
+  ['block-break:251:252','latest / 13F','latest','13F']);
+assert.match(filingCandidates[0].join_preview,/latest 13F, and the portfolio/);
+assert.deepEqual(resolveBlockBreakFocus({issueId:'block-break:251:252',
+  lineId:'filing-after',blockId:252},filingRows,filingBlocks)?.after,
+  {lineNo:167,blockId:252,page:9,token:'13F',text:'13F, and the portfolio was rebalanced monthly.'});
+for(const starts of ['13, the filing...', '2024, the year...', 'Next section of the report',
+   '# 13F heading', '$$\\text{13F}$$']){
+  const lines=[filingRows[0],{...filingRows[1],text:starts}];
+  assert.equal(projectBlockBreakRows(lines,filingBlocks).length,0,
+    'Do not over-detect first token: '+starts);
+}
+assert.equal(projectBlockBreakRows([{...filingRows[0],text:filingRows[0].text+'.'},filingRows[1]],
+  filingBlocks).length,0);
+
 const pair=resolveBlockBreakFocus({issueId:rows[0].issue_id,
   lineId:rows[0].line_id,blockId:rows[0].block_id},md,blocks);
 assert.deepEqual(pair,{before:{lineNo:310,blockId:436,page:16,
@@ -108,6 +135,10 @@ try{
   assert.equal(cell.children.find(x=>x.className==='ocr-block-break-ag-after-token')?.textContent,'source');
   assert.match(cell.textContent,/steady source of financing/);
   assert.equal(cell.title,rows[0].join_preview);
+  const filingCell=renderBlockBreakJoinCell({data:filingCandidates[0]});
+  assert.equal(filingCell.children.find(x=>x.className==='ocr-block-break-ag-before-token')?.textContent,'latest');
+  assert.equal(filingCell.children.find(x=>x.className==='ocr-block-break-ag-after-token')?.textContent,'13F');
+  assert(filingCell.textContent.includes('latest 13F,'));
   const attack=renderBlockBreakJoinCell({data:{...rows[0],before_text:'<img src=x onerror=alert(1)>steady'}});
   assert(attack.textContent.includes('<img src=x onerror=alert(1)>'));
   assert(attack.children.every(node=>node.innerHTML===undefined),

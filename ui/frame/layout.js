@@ -120,7 +120,7 @@ function mountEmptySource(host){
           const item=pair?.[side];
           if(!Number.isInteger(item?.lineNo)||item.lineNo<1||
              item.lineNo>tr.newDoc.lines||typeof item.token!=='string'||
-             !/^[A-Za-z]{2,60}-?$/.test(item.token))continue;
+             !/^(?:[A-Za-z]{2,60}-?|[1-9][0-9]{0,3}[A-Z]{1,5})$/.test(item.token))continue;
           const line=tr.newDoc.line(item.lineNo);
           const source=line.text;
           const index=side==='before'?source.trimEnd().lastIndexOf(item.token):
