@@ -9,6 +9,7 @@ import {createMdPersistence} from './md-persistence.js';
 import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
+import {projectBlockBreakRows} from './block-break-view.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -85,6 +86,20 @@ const MD_COLUMNS=Object.freeze([
   ...BLOCK_COLUMNS.filter(column=>!['pbs','block_type'].includes(column.field)),
   {field:'line_id',headerName:'LineID',width:230,hide:true,sortable:false},
 ]);
+const MD_BREAK_COLUMNS=Object.freeze([
+  {field:'pbs',headerName:'逻辑块 PBS',width:125,sortable:true,comparator:comparePBS,
+    pinned:'left',lockPinned:true,lockPosition:'left'},
+  {field:'before_pbs',headerName:'前块',width:120,sortable:true,comparator:comparePBS},
+  {field:'after_pbs',headerName:'后块',width:120,sortable:true,comparator:comparePBS},
+  {field:'before_line_no',headerName:'前行',width:78,sortable:true},
+  {field:'line_no',headerName:'后行',width:78,sortable:true},
+  {field:'kind',headerName:'类型',width:105,sortable:true},
+  {field:'before_text',headerName:'前文末尾',minWidth:185,flex:1,sortable:false},
+  {field:'after_text',headerName:'后文开头',minWidth:185,flex:1,sortable:false},
+  {field:'join_preview',headerName:'接续预览',minWidth:240,flex:1.2,sortable:false},
+  {field:'reason',headerName:'检测依据',minWidth:210,flex:1,sortable:false},
+  {field:'issue_id',headerName:'断块 ID',hide:true,sortable:false},
+]);
 const MD_TITLE_COLUMNS=Object.freeze([
   // Outline text remains visible while users inspect/filter metadata columns.
   // Fixed width is intentional: AG Grid's flex width and pinned columns
@@ -122,6 +137,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   const projectedMdRows=()=>activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
+    activeAgView==='block-break'?projectBlockBreakRows(md()?.rows??[],cm()?.rows??[]):
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
@@ -638,15 +654,15 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // AG view switching is a re-projection of the resident CM6 Markdown.
   // It never reopens SQLite or replaces the MD editor StateField.
   function renderMdAg(){
-    const title=activeAgView==='title',latex=activeAgView==='latex';
+    const title=activeAgView==='title',latex=activeAgView==='latex',broken=activeAgView==='block-break';
     const rows=projectedMdRows();
     lastRenderedLatexSummary=latex?latexIndexSummary(rows):null;
     const columns=latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
         getPdfFormulaCrop:target=>frame.getPdfFormulaCrop(target)}):
-      title?MD_TITLE_COLUMNS:MD_COLUMNS;
+      title?MD_TITLE_COLUMNS:broken?MD_BREAK_COLUMNS:MD_COLUMNS;
     frame.showSqlRows(rows,columns.map(column=>({
       ...column,
-      ...(column.field==='text'&&!latex?{editable:true,valueSetter:params=>{
+      ...(column.field==='text'&&!latex&&!broken?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
           return false;
@@ -662,9 +678,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     })),{
       pageScope:{page:pdfPage},
-      allPagesInitially:title||latex,
-      expandPageOnCategory:title?null:latex?'kind':'block_type',
-      initialFilterModel:latex?null:{line_no:{values:['非空行']}},
+      allPagesInitially:title||latex||broken,
+      expandPageOnCategory:title?null:latex||broken?'kind':'block_type',
+      initialFilterModel:latex||broken?null:{line_no:{values:['非空行']}},
       rowHeight:latex?134:35,
       onSelect:row=>{
         const target=locateReview({origin:'ag',lineId:row.line_id,
@@ -675,7 +691,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
             formulaBBox:row.pdf_bbox,
             formulaKind:row.kind==='行内'?'inline':row.kind==='独立'?'display':null}:{}),
         });
-        onStatus(latex?
+        onStatus(broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · 只读候选`:
+          latex?
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+
             (target?.lineNo?`MD ${target.lineNo}`:'仅 PDF / OCR'):
           `MD 四窗定位 · ${row.line_no} · BlockID ${row.block_id??'NULL'}`,
@@ -688,7 +705,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return rows.length;
   }
   async function setAgView(view){
-    if(!['md','title','latex'].includes(view))throw Error('未知 AG 过滤视图');
+    if(!['md','title','latex','block-break'].includes(view))throw Error('未知 AG 过滤视图');
     const token=++agViewRequest;
     if(view==='latex'&&!latexPresentation)
       latexPresentation=await import('./latex-view.js');
@@ -700,7 +717,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     onStatus(view==='latex'?`AG LaTeX · ${summary.total} 条，原始 ${summary.original}，`+
       `精确匹配 ${summary.matched}，仅 OCR ${summary.ocrOnly}，仅 MD ${summary.mdOnly}，`+
       `有歧义 ${summary.ambiguous}，原图 ${summary.images} · 只读`:
-      `AG ${view==='title'?'标题':'MD 行'}视图 · ${count} 条投影 · 不修改 MD/SQLite`,'ok');
+      `AG ${view==='title'?'标题':view==='block-break'?'断块':'MD 行'}视图 · ${count} 条${view==='block-break'?'疑似断块':'投影'} · 不修改 MD/SQLite`,'ok');
     return true;
   }
   async function openSql(table='minerujson',{selectedId=null}={}){
