@@ -37,6 +37,31 @@ const ruleDefinition={
   'body.symbol':{rx:/^[ \t]{0,3}([*†‡])[ \t]+(\S.*)$/u,strength:'ambiguous'},
   'body.letter-dot':{rx:/^[ \t]{0,3}([A-Za-z])\\?[.][ \t]+(\S.*)$/u,strength:'ambiguous'},
 };
+/** Human-readable samples are tied to the SAME built-in regex definitions.
+ * The rule UI is a choice between known formats, not an expression editor.
+ */
+const ruleSamples=Object.freeze({
+  'ref.html-sup':['HTML 上标','正文<sup>7</sup>'],
+  'ref.md-footnote':['Markdown 脚注','正文[^7]'],
+  'ref.unicode-sup':['Unicode 上标','正文⁷'],
+  'ref.bracket':['方括号','正文[7]'],
+  'ref.parenthesis':['圆括号','正文(7)'],
+  'ref.symbol':['符号','正文†'],
+  'ref.html-alpha':['英文字母上标','正文<sup>a</sup>'],
+  'body.md-footnote':['Markdown 脚注正文','[^7]: 注文内容'],
+  'body.number-dot':['数字加句点','7. 注文内容'],
+  'body.number-paren':['数字加右括号','7) 注文内容'],
+  'body.number-bracket':['数字方括号','[7] 注文内容'],
+  'body.labelled':['Note 标签','Note 7: 注文内容'],
+  'body.symbol':['符号','† 注文内容'],
+  'body.letter-dot':['字母加句点','a. 注文内容'],
+});
+export const NOTE_RULE_PRESETS=Object.freeze(Object.fromEntries(
+  Object.entries(ruleSamples).map(([id,[label,example]])=>{
+    const {rx,strength}=ruleDefinition[id];
+    return [id,Object.freeze({id,label,example,
+      pattern:`/${rx.source}/${rx.flags}`,strength})];
+  })));
 const numerals=Object.freeze({'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4',
   '⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9','∗':'*'});
 const headingPattern=/^[ \t]{0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/u;

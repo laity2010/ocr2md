@@ -176,3 +176,11 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - 公共 Frame 维持**唯一 API `setAgFunctions([{id,label,onClick}])` 不变**，内部从 `<select>` 改成**触摸点击的菜单按钮 `功能 ▾` + `role=menu` 下的真正 `<button role=menuitem>`**。按钮每次点击都打开动作列表，动作项每次点击立即调用回调；执行后自动关闭并复位标签为「功能 ▾」，没有保留上次选中的 native option 状态。点击外部或 Escape 关闭、切换 AG View 或销毁 Frame 自动关闭、无功能时禁用。菜单渲染为独立的 document-layer popup，避免 iPad 窄栏的 AG/Dockview overflow 截断；异步动作异常进入现有全局状态栏，不被静默吞掉。
 - `功能 → 转换匹配` 的入口**收到实际点击后立即**发送全局状态 `已收到转换匹配命令，正在核对 N 个注引`；无 MD/View、未保存、无匹配、重复点击、异步失败均有明确全局状态。原转换计划、人工确认、SQL CAS 与 CM6 单事务不修改；实际真实书籍仍由用户点击后写入，本次测试不自动写用户书籍。
 - `tests/lab-frame-layout.direct.browser.test.mjs` 用 Chromium 和 WebKit 对同一个功能连点**两次**，验证两次都触发、菜单关闭与角色/复位正确、切 View 清理菜单。`tests/lab-ocr-note-7-continuation.browser.test.mjs` 用 iPad WebKit/Chromium 验证注号 7 成功转换、再次点击同一功能返回「没有可转换」而非静默，以及先有「转换失败」审阅记录、重新设为「已匹配」后执行转换的真实交互序列。旧注释 View、同一行 9/10、独立多注引等全部通过相同点击菜单回归。
+
+## WCP43 · 注释格式配置极简化（2026-11-17）
+
+- 用户操作仅需 **注号格式**和**注文格式**两个单选下拉，选择框选项即包含内置名称和可辨识样本；当前选择下方显示其样例与**对应的实际内置 Regex source/flags**，来自唯一 `ui/lab-ocr/note-match-index.js` 规则字典，避免界面写一套看似正确但与运行态不同的表达式。取消规则 checkbox 阵列、章节设置、弱匹配开关及自定义 JSON 编辑入口，不另建规则引擎/SQL 表。
+- 单项选择在既有 per-book `note-match-rules` CAS 中仍使用同一个 `referenceRules`、`bodyRules` 数组；选择单一来源格式时**同时保留**规范化的 `ref.md-footnote`/`body.md-footnote` 引擎规则以显示、定位、复核**已经转换**的 Obsidian `[^7]`、`[^7]:`，不能让已转换内容在 AG 中消失。选择标准 Markdown 格式本身时去重，不添加第二份同规则。
+- 已存储的旧书籍可能是多种格式组合或自定义 Regex：在其首次打开新版规则弹窗时用一个 `当前书籍的原有多格式组合（保留不变）` 选项，**不自动更改**当前匹配；用户选择某个内置规则时仅替换该方向，另一方向未修改的内置规则和自定义配置保留。`scope/chapterLevel/continuation/weakAutoMatch` 等既有结构设置隐藏但原样透传，避免悄悄改变笔记章节、续行边界。
+- 保存成功立即更新 AG 候选，不更改 CM6 MD/Block，也不删除人工审阅与转换回执；重新打开规则界面能识别已保存的单个源格式，并可再次选择新格式。
+- 验收：`tests/lab-ocr-note-rule-presets.test.mjs` 检查全部 14 个内置样例与真实正则一致、单一选择与已转换 Markdown 共存；`tests/lab-ocr-note-match-view.browser.test.mjs` 在 Chromium 和 iPad WebKit 验证弹窗只有两个 `select`、没有 checkbox/textarea、自带样例与 Regex、当前多格式书籍不自动覆盖、选择源格式+注文格式保存后立即去掉未启用的原生候选且保留标准 Markdown、切回 View 后从书籍 SQL 规则读取且 `scope`/续行设置不变。现有 Python `note-match-rules` CAS 测试继续通过。

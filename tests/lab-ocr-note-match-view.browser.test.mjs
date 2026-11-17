@@ -304,21 +304,56 @@ try{
    await page.locator('.ocr-ag-function-item[data-action="rules"]').click();
    const dialog=page.locator('.ocr-note-match-rules-dialog');
    await dialog.waitFor({state:'visible'});
-   const scope=dialog.locator('select').first();
-   await scope.selectOption('chapter');
-   await dialog.locator('input[value="ref.md-footnote"]').uncheck();
-   const custom=dialog.locator('textarea');
-   assert.equal(await custom.inputValue(),'[]');
-   await dialog.getByRole('button',{name:'应用并保存规则'}).click();
+   const refFormat=dialog.getByRole('combobox',{name:'注号格式'});
+   const bodyFormat=dialog.getByRole('combobox',{name:'注文格式'});
+   assert.equal(await dialog.locator('select').count(),2);
+   assert.equal(await dialog.locator('input,textarea').count(),0);
+   // Prior books with mixed formats must NOT be silently rewritten just by
+   // opening the new two-selector interface.
+   assert.equal(await refFormat.inputValue(),'__existing__');
+   assert.equal(await bodyFormat.inputValue(),'__existing__');
+   assert.deepEqual(await refFormat.locator('option').allTextContents(),[
+     '当前书籍的原有多格式组合（保留不变）',
+     'HTML 上标 · 正文<sup>7</sup>',
+     'Markdown 脚注 · 正文[^7]',
+     'Unicode 上标 · 正文⁷',
+     '方括号 · 正文[7]',
+     '圆括号 · 正文(7)',
+     '符号 · 正文†',
+     '英文字母上标 · 正文<sup>a</sup>']);
+   await refFormat.selectOption('ref.html-sup');
+   await bodyFormat.selectOption('body.number-dot');
+   assert.equal(await dialog.locator('.ocr-note-rule-sample').first().textContent(),
+     '样例：正文<sup>7</sup>');
+   assert((await dialog.locator('.ocr-note-rule-regex').first().textContent())
+     .includes('<sup'));
+   assert.equal(await dialog.locator('.ocr-note-rule-sample').nth(1).textContent(),
+     '样例：7. 注文内容');
+   await dialog.getByRole('button',{name:'保存并重新识别'}).click();
    await dialog.waitFor({state:'hidden'});
-   assert.equal(ruleSaves,1);assert.equal(savedRules.scope,'chapter');
-   assert(!savedRules.referenceRules.includes('ref.md-footnote'));
+   assert.equal(ruleSaves,1);
+   assert.equal(savedRules.scope,'book','Old book scope must be preserved');
+   assert.equal(savedRules.continuation,'same-block');
+   assert.deepEqual(savedRules.referenceRules,['ref.html-sup','ref.md-footnote']);
+   assert.deepEqual(savedRules.bodyRules,['body.number-dot','body.md-footnote']);
+   await functions.click();
+   await page.locator('.ocr-ag-function-item[data-action="rules"]').click();
+   await dialog.waitFor({state:'visible'});
+   assert.equal(await refFormat.inputValue(),'ref.html-sup');
+   assert.equal(await bodyFormat.inputValue(),'body.number-dot');
+   assert.equal(await dialog.locator('select').count(),2);
+   await dialog.getByRole('button',{name:'取消'}).click();
+   await dialog.waitFor({state:'hidden'});
+   assert.equal(ruleSaves,1,'Reopening selected format cannot rewrite book rules');
    // Updating the note rows must preserve the manual line sort: only a
    // fresh View activation installs the numeric default again.
    assert.equal(await header('line_no').getAttribute('aria-sort'),'ascending');
    const removed=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),weakId);
+   assert.equal(removed,null,'Selecting one source pattern must remove competing parenthesis matches');
+   const normalized=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId);
-   assert.equal(removed,null,'Saving book rules must remove now-disabled candidates without reloading CM6');
+   assert(normalized,'Existing Markdown footnote markers must remain visible for converted notes');
    await picker.selectOption('md');
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('text'));
@@ -330,8 +365,11 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="number"]')
      ?.getAttribute('aria-sort')==='ascending');
    assert.equal(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId),null,
-     'Switching AG Views must read saved per-book configuration');
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),weakId),null,
+     'Switching AG Views must read persisted source format choices');
+   assert(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId),
+     'Switching views must preserve standard Markdown footnote markers');
    const confirmedReload=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),firstId);
    assert.equal(confirmedReload?.review,'待转换',
