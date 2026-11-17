@@ -14,7 +14,8 @@ export function projectReviewedNoteRows(projection,reviews,mdRows,{showIgnored=f
     if(id)convertedById.set(id,saved);
   }
   const decorated=projection.rows.map(row=>{
-    if(!row.reference_id)return Object.freeze({...row,review:'—',review_revision:null});
+    if(!row.reference_id)return Object.freeze({...row,review:'—',
+      match_state:'待核实',review_revision:null});
     const ref=references.get(row.reference_id);
     const saved=reviews.get(row.reference_id)??convertedById.get(row.reference_id);
     const conversion=saved?.conversion;
@@ -36,7 +37,11 @@ export function projectReviewedNoteRows(projection,reviews,mdRows,{showIgnored=f
       saved?(valid?saved.decision:'需复核'):'待定';
     const status=review==='忽略'?'已忽略':review==='待转换'?'已确认':
       review==='需复核'?'待核实':review==='已转换'||review==='转换待保存'?review:row.status;
-    return Object.freeze({...row,review,status,
+    const match_state=review==='忽略'?'忽略':
+      ['待核实','需复核'].includes(review)?'待核实':
+      ['待转换','已转换','转换待保存'].includes(review)||row.status==='已匹配'?
+        '已匹配':'待核实';
+    return Object.freeze({...row,review,status,match_state,
       review_revision:saved?.revision??null,
       selected_body_id:converted?conversion.converted_body_id:
         valid?saved?.body_id??null:null,

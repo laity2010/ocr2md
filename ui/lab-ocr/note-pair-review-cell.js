@@ -1,78 +1,89 @@
-/** Safari-safe review menu, modelled on proven break-review popup.
- * Note: '确认配对' means pending conversion, NOT an actual MD edit.
+/** AG Note Match status cell: exactly three editable values.
+ * Only explicit user action persists an override. In ambiguous cases the
+ * second-stage body choice is mandatory, never silently pick one.
  */
-let activeClose=null;
-export function createNotePairReviewCell(onChoose){
-  if(typeof onChoose!=='function')throw TypeError('注释审阅回调无效');
-  return function renderCell(params){
-    const row=params.data,eligible=Boolean(row?.reference_id);
-    const status=eligible?row.review??'待定':'—';
-    const root=document.createElement('span');root.className='ocr-note-review-cell';
-    if(!eligible){root.textContent='—';return root;}
-    const trigger=document.createElement('button');trigger.type='button';
-    trigger.className='ocr-note-review-trigger';trigger.dataset.review=status;
-    trigger.textContent=(status==='待转换'?'待转换 ✓':status)+' ▾';
-    if(status==='已转换')trigger.disabled=true;
-    trigger.setAttribute('aria-label',`审阅注号 ${row.number}，当前${status}`);
-    trigger.setAttribute('aria-haspopup','listbox');
-    trigger.setAttribute('aria-expanded','false');
-    trigger.title=status==='已转换'?'已转换；使用 CM6 Undo/Redo 回退':
-      '待转换是已确认配对，执行转换时才通过 CM6 修改 Markdown';
-    trigger.addEventListener('pointerdown',e=>e.stopPropagation());
-    trigger.addEventListener('click',e=>{
-      e.preventDefault();e.stopPropagation();
-      activeClose?.();
-      const menu=document.createElement('div');menu.className='ocr-note-review-menu';
-      menu.setAttribute('role','listbox');menu.setAttribute('aria-label','注释匹配审阅候选');
-      const rect=trigger.getBoundingClientRect();
-      menu.style.left=Math.max(5,Math.min(rect.left,innerWidth-270))+'px';
-      menu.style.top=Math.max(5,Math.min(rect.bottom+5,innerHeight-245))+'px';
-      let closed=false;
-      const close=()=>{
-        if(closed)return;closed=true;menu.remove();
-        trigger.setAttribute('aria-expanded','false');
-        document.removeEventListener('pointerdown',outside,true);
-        document.removeEventListener('keydown',key,true);
-        if(activeClose===close)activeClose=null;
+export const NOTE_MATCH_STATUS_OPTIONS=Object.freeze(['已匹配','待核实','忽略']);
+
+export function createNoteMatchStatusCell(onChoose){
+  if(typeof onChoose!=='function')throw TypeError('注释状态操作回调无效');
+  return function renderCell({data:row}){
+    const root=document.createElement('span');
+    root.className='ocr-note-review-cell';
+    const status=row?.match_state??'待核实';
+    if(!row?.reference_id){
+      const label=document.createElement('span');
+      label.className='ocr-note-match-status';label.dataset.status=status;
+      label.textContent=status;root.append(label);return root;
+    }
+    const select=document.createElement('select');
+    select.className='ocr-note-match-status-select';
+    select.dataset.status=status;
+    select.setAttribute('aria-label',`注号 ${row.number} 匹配状态`);
+    for(const item of NOTE_MATCH_STATUS_OPTIONS)select.add(new Option(item,item));
+    select.value=NOTE_MATCH_STATUS_OPTIONS.includes(status)?status:'待核实';
+    const converted=row.review==='已转换'||row.review==='转换待保存';
+    select.disabled=converted;
+    select.title=converted?'转换后的源码由 CM6 Undo/Redo 恢复，不在此覆盖审阅证据':
+      '修改匹配状态后立即保存人工决定；转换统一使用 AG 功能菜单';
+    for(const type of ['pointerdown','click','mousedown'])
+      select.addEventListener(type,event=>event.stopPropagation());
+    let chooser=null;
+    const outside=event=>{
+      if(chooser&&!chooser.contains(event.target)&&event.target!==select)
+        closeChooser(true);
+    };
+    const closeChooser=(cancel=false)=>{
+      chooser?.remove();chooser=null;
+      document.removeEventListener('pointerdown',outside,true);
+      if(cancel)select.value=status;
+    };
+    select.addEventListener('change',()=>{
+      closeChooser();
+      const next=select.value,previous=status;
+      // Selecting the already displayed status does not create redundant
+      // SQL writes; converting is intentionally a separate function.
+      if(next===previous)return;
+      const commit=(choice,bodyId=null)=>{
+        Promise.resolve().then(()=>onChoose(row,choice,bodyId)).then(success=>{
+          if(!success)select.value=previous;
+        }).catch(()=>{select.value=previous;});
       };
-      const outside=ev=>{if(!menu.contains(ev.target)&&!trigger.contains(ev.target))close();};
-      const key=ev=>{if(ev.key==='Escape'){ev.preventDefault();close();trigger.focus();}};
-      const add=(label,choice,bodyId=null)=>{
-        const button=document.createElement('button');button.type='button';
-        button.className='ocr-note-review-option';button.dataset.review=choice;
-        if(bodyId)button.dataset.bodyId=bodyId;
-        button.setAttribute('role','option');
-        button.setAttribute('aria-selected',String(choice===status&&
-          (choice!=='待转换'||bodyId===row.selected_body_id)));
-        button.textContent=label;
-        button.addEventListener('pointerdown',event=>event.stopPropagation());
-        button.addEventListener('click',event=>{
-          event.preventDefault();event.stopPropagation();close();
-          if(choice!==status||choice==='待转换'&&bodyId!==row.selected_body_id)
-            Promise.resolve().then(()=>onChoose(row,choice,bodyId)).catch(()=>{});
-        });
-        menu.append(button);
-      };
-      add('待定 · 清除人工决定','待定');
-      add('忽略 · 退出待审阅队列','忽略');
-      if(status==='待转换'&&row.kind==='注引')
-        add('执行转换 · 写入 Obsidian 脚注','转换');
-      for(const option of row.body_choices??[])
-        add('确认配对（待转换） → '+(option.pbs||'无 PBS')+
-          ' · 行'+(option.line_no??'?'),'待转换',option.id);
-      if(!row.body_choices?.length){
-        const hint=document.createElement('p');
-        hint.textContent='未找到候选注文，暂不可确认配对';
-        hint.className='ocr-note-review-hint';menu.append(hint);
-      }
-      document.body.append(menu);
-      trigger.setAttribute('aria-expanded','true');
+      if(next==='忽略'){commit('忽略');return;}
+      if(next==='待核实'){commit('待核实');return;}
+      const choices=row.body_choices??[];
+      if(!choices.length){select.value=previous;commit('待转换');return;}
+      if(choices.length===1){commit('待转换',choices[0].id);return;}
+      // Second-stage selector only appears for an ambiguous note number.
+      // The status dropdown itself still has exactly three values.
+      chooser=document.createElement('select');
+      chooser.className='ocr-note-body-choice';
+      chooser.setAttribute('aria-label',`注号 ${row.number} 选择对应注文`);
+      chooser.add(new Option('选择注文…',''));
+      for(const item of choices)
+        chooser.add(new Option(`${item.pbs||'无 PBS'} · 行${item.line_no??'?'}`,item.id));
+      for(const type of ['pointerdown','click','mousedown'])
+        chooser.addEventListener(type,event=>event.stopPropagation());
+      chooser.addEventListener('change',()=>{
+        const selected=chooser.value;closeChooser(!selected);
+        if(selected)commit('待转换',selected);
+      });
+      // Pinned AG columns are narrow and overflow-clipped. Place the
+      // second-stage selector on the document layer, as the old reviewed
+      // picker did, so iPad users can actually select among several bodies.
+      const rect=select.getBoundingClientRect();
+      chooser.style.position='fixed';chooser.style.zIndex='10045';
+      chooser.style.width='min(220px,90vw)';
+      chooser.style.left=Math.max(5,Math.min(rect.left,innerWidth-230))+'px';
+      chooser.style.top=Math.max(5,Math.min(rect.bottom+5,innerHeight-40))+'px';
+      document.body.append(chooser);
       document.addEventListener('pointerdown',outside,true);
-      document.addEventListener('keydown',key,true);
-      // CM6 / PDF / AG virtual scrolling may fire while opening the menu.
-      // Never dismiss a deliberate review choice on an unrelated scroll.
-      activeClose=close;
+      chooser.focus();
     });
-    root.append(trigger);return root;
+    root.append(select);
+    if(converted){
+      const marker=document.createElement('span');marker.className='ocr-note-converted-marker';
+      marker.textContent='✓';marker.title=row.review;root.append(marker);
+    }
+    return root;
   };
 }

@@ -25,7 +25,7 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS note_pair_review(
  ref_to INTEGER NOT NULL,
  ref_raw TEXT NOT NULL,
  ref_source_sha256 TEXT NOT NULL,
- decision TEXT NOT NULL CHECK(decision IN ('忽略','待转换')),
+ decision TEXT NOT NULL CHECK(decision IN ('忽略','待核实','待转换')),
  body_id TEXT,
  body_line_id TEXT,
  body_block_id INTEGER,
@@ -36,7 +36,7 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS note_pair_review(
  conversion_json TEXT,
  revision TEXT NOT NULL,
  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
- CHECK((decision='忽略' AND body_id IS NULL) OR
+ CHECK((decision IN ('忽略','待核实') AND body_id IS NULL) OR
        (decision='待转换' AND body_id IS NOT NULL))
 )'''
 ID_RE=re.compile(r'^(?:ref|body):([\w:-]{1,130}):([0-9]{1,6}):((?:ref|body)\.[a-z][\w-]*|book\.(?:ref|body)\.[a-z][a-z0-9-]*)$')
@@ -45,6 +45,29 @@ LINE_RE=re.compile(r'^[\w:-]{1,130}$')
 
 def _present(db):
     return db.execute('SELECT 1 FROM sqlite_master WHERE type=\'table\' AND name=?',(TABLE,)).fetchone() is not None
+
+def _ensure_review_schema(db,decision):
+    """Allow the three visible statuses on existing WP3.1 books without
+    discarding the previous decisions or conversion evidence. All changes
+    occur inside the caller's SQLite BEGIN IMMEDIATE transaction."""
+    if decision!='待核实' or not _present(db):return
+    old_sql=db.execute('SELECT sql FROM sqlite_master WHERE type=\'table\' AND name=?',
+                       (TABLE,)).fetchone()[0]
+    if "'待核实'" in old_sql:return
+    temp='note_pair_review_migrating'
+    if db.execute('SELECT 1 FROM sqlite_master WHERE name=?',(temp,)).fetchone():
+        raise OCRImportError('注释审阅迁移存在同名临时表，拒绝修改')
+    db.execute(SCHEMA.replace('CREATE TABLE IF NOT EXISTS note_pair_review(',
+                              f'CREATE TABLE {temp}('))
+    previous={column[1] for column in db.execute('PRAGMA table_info(note_pair_review)')}
+    target={column[1] for column in db.execute(f'PRAGMA table_info({temp})')}
+    columns=sorted(previous & target)
+    if not {'ref_id','decision','revision'}.issubset(columns):
+        raise OCRImportError('注释审阅表不兼容，拒绝迁移')
+    names=','.join(columns)
+    db.execute(f'INSERT INTO {temp} ({names}) SELECT {names} FROM note_pair_review')
+    db.execute('DROP TABLE note_pair_review')
+    db.execute(f'ALTER TABLE {temp} RENAME TO note_pair_review')
 
 
 def _hash(value):
@@ -124,7 +147,7 @@ def read_note_pair_reviews(book:Path):
 
 
 def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
-    if decision not in ('待定','忽略','待转换'):
+    if decision not in ('待定','忽略','待核实','待转换'):
         raise OCRImportError('注释审阅决定无效')
     if expected_revision is not None and (type(expected_revision) is not str or
        not re.fullmatch(r'[0-9a-f]{32}',expected_revision)):
@@ -135,12 +158,13 @@ def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
         if ref['candidateId']==selected['candidateId']:
             raise OCRImportError('注引不能选择自身为注文')
     else:
-        if body is not None:raise OCRImportError('忽略或待定时不得携带注文选择')
+        if body is not None:raise OCRImportError('忽略、待核实或待定时不得携带注文选择')
         selected=None
     with closing(sqlite3.connect(_db(book),timeout=20)) as db:
         try:
             db.execute('BEGIN IMMEDIATE')
             _check_signature(db,book)
+            _ensure_review_schema(db,decision)
             ref_text=_read_line(db,ref['lineId'],ref['blockId'],ref['from'],
                                 ref['to'],ref['raw'],ref['sourceText'])
             body_text=_read_line(db,selected['lineId'],selected['blockId'],

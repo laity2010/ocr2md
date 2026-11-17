@@ -32,6 +32,10 @@
 .ocr-ag-module-select{background:#293b3c;color:#d3c6aa;border:1px solid #60766b;
   border-radius:4px;font:12px/1.3 "OCR2MD Sarasa",monospace;height:27px;
   padding:2px 6px;min-width:0;max-width:100%;width:140px}
+.ocr-ag-function-select{flex:none;width:84px;min-width:68px;max-width:105px;
+  height:27px;background:#344a42;color:#d3c6aa;border:1px solid #769281;
+  border-radius:4px;font:12px/1.3 "OCR2MD Sarasa",monospace;padding:2px 3px}
+.ocr-ag-function-select:disabled{opacity:.55}
 .ocr-settings-ag-pane{display:flex;flex-direction:column;min-height:0}
 .ocr-settings-ag-pane>.ocr-outline-grid{flex:1 1 0;min-height:0}
 .ocr-source-undo-redo{display:flex;align-items:center;gap:4px;flex:none}

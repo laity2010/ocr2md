@@ -132,70 +132,60 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
    const firstFrom=source[0].indexOf('<sup>1</sup>');
-   const oldId=`pair:ref:convert-line-0:${firstFrom}:ref.html-sup:ref`;
-   const newId=`pair:ref:convert-line-0:${firstFrom}:ref.md-footnote:ref`;
+   const secondFrom=source[1].indexOf('<sup>1</sup>');
+   const firstId=`pair:ref:convert-line-0:${firstFrom}:ref.md-footnote:ref`;
+   const secondId=`pair:ref:convert-line-1:${secondFrom}:ref.md-footnote:ref`;
    const select=async id=>page.evaluate(value=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id:value,focusColumn:'review'}),id);
-   assert.equal((await select(oldId))?.review,'待定');
-   await page.locator('.ocr-outline-grid .ocr-note-review-trigger[data-review="待定"]').first().click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="待转换"]').first().click();
-   await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'})?.review==='待转换',oldId);
-   await page.locator('.ocr-outline-grid .ocr-note-review-trigger[data-review="待转换"]').first().click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="转换"]').click();
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id:value,focusColumn:'match_state'}),id);
+   const func=page.locator('.ocr-outline-pane .ocr-ag-function-select');
+   assert.deepEqual(await func.locator('option').allTextContents(),
+     ['功能','转换匹配','识别规则']);
+   assert(!await func.isDisabled());
+   const oldFirst=`pair:ref:convert-line-0:${firstFrom}:ref.html-sup:ref`;
+   const oldSecond=`pair:ref:convert-line-1:${secondFrom}:ref.html-sup:ref`;
+   assert.equal((await select(oldFirst))?.match_state,'已匹配');
+   assert.equal((await select(oldSecond))?.match_state,'已匹配');
+   // One command processes both safely matched citations. The second
+   // citation reuses the now-normalized body, never copying the definition.
+   await func.selectOption('convert');
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent
+     ?.includes('已转换 2 个'),null,{timeout:30000});
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdDocument().includes('We saw[^1] here.')&&
-     document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdDocument().includes('[^1]: The first shared note.'),
-     null,{timeout:16000});
-   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:16000});
-   assert.equal(mdSaves,1);assert.equal(armCount,1);assert.equal(blockSaves,0);
-   const afterFirst=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:15000});
+   const converted=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument());
-   const verified=await select(newId);
-   assert.equal(verified?.review,'已转换');
-   // Undo/Redo is ONE CM6 transaction across the reference and definition.
+   assert(converted.includes('We saw[^1] here.'));
+   assert(converted.includes('Later we cite [^1] too.'));
+   assert(converted.includes('[^1]: The first shared note.'));
+   assert.equal(converted.match(/\[\^1\]:/g)?.length,1);
+   assert.equal(converted.match(/\[\^1\]/g)?.length,3);
+   assert.equal(mdSaves,2);assert.equal(armCount,2);assert.equal(blockSaves,0);
+   assert.equal(reviewSetCount,2,'Only the matching candidates get explicit CAS decisions');
+   assert.equal((await select(firstId))?.review,'已转换');
+   assert.equal((await select(secondId))?.review,'已转换');
+   assert.equal((await select(secondId))?.match_state,'已匹配');
+   // Each pair remains one CM6 Undo/Redo transaction, including its body
+   // edit when applicable. No second Markdown writer is involved.
    assert(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.undoMarkdown()));
    const afterUndo=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument());
-   assert.equal(afterUndo,source.join('\n'));
-   assert.equal((await select(oldId))?.review,'待转换');
+   assert(afterUndo.includes('We saw<sup>1</sup> here.'));
+   assert(afterUndo.includes('Later we cite [^1] too.'));
    assert(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.redoMarkdown()));
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdDocument()),afterFirst);
-   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:16000});
-   // Reopening the AG view reads the book receipt; it is converted only
-   // because every post-conversion line matches the persisted evidence.
-   await picker.selectOption('md');await picker.selectOption('note-match');
-   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
-   assert.equal((await select(newId))?.review,'已转换');
-   // Second reference points to the already-normalized body. The body must
-   // not be changed or duplicated when converting this reference.
-   const secondFrom=source[1].indexOf('<sup>1</sup>');
-   const secondOldId=`pair:ref:convert-line-1:${secondFrom}:ref.html-sup:ref`;
-   const secondNewId=`pair:ref:convert-line-1:${secondFrom}:ref.md-footnote:ref`;
-   assert.equal((await select(secondOldId))?.review,'待定');
-   await page.locator('.ocr-outline-grid .ocr-note-review-trigger[data-review="待定"]').first().click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="待转换"]').first().click();
-   await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'})?.review==='待转换',secondOldId);
-   await page.locator('.ocr-outline-grid .ocr-note-review-trigger[data-review="待转换"]').first().click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="转换"]').click();
-   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdDocument().includes('Later we cite [^1] too.'),null,{timeout:15000});
+     ?.ocrCmTable?.mdDocument()),converted);
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdRuntime()?.dirty===false,null,{timeout:15000});
-   assert.equal(mdSaves,2);assert.equal(armCount,2);
-   const finalMd=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdDocument());
-   assert.equal(finalMd.match(/\[\^1\]:/g)?.length,1);
-   assert.equal(finalMd.match(/\[\^1\]/g)?.length,3);
-   assert.equal((await select(newId))?.review,'已转换');
-   assert.equal((await select(secondNewId))?.review,'已转换');
+   // Reloading AG reads saved book receipts and still marks both as matched.
+   await picker.selectOption('md');
+   assert(await func.isDisabled());
+   await picker.selectOption('note-match');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields()?.includes('match_state'));
+   assert.equal((await select(firstId))?.review,'已转换');
+   assert.equal((await select(secondId))?.review,'已转换');
    const identity=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdRuntime().rows.map(x=>({lineId:x.line_id,blockId:x.block_id})));
    assert.deepEqual(identity,initialRows.map(x=>({lineId:x.line_id,blockId:x.block_id})));

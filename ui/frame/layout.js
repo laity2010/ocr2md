@@ -747,6 +747,11 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
         onModuleChange?.(next);
       });
     }
+    const functions=document.createElement('select');
+    functions.className='ocr-ag-function-select';
+    functions.setAttribute('aria-label','当前 AG View 功能');
+    functions.add(new Option('功能',''));
+    functions.disabled=true;
     const action=document.createElement('button');
     action.type='button';action.className='ocr-ag-extra-action';action.hidden=true;
     const toggleLabel=document.createElement('label');
@@ -754,7 +759,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     const toggle=document.createElement('input');toggle.type='checkbox';
     const toggleText=document.createElement('span');
     toggleLabel.append(toggle,toggleText);
-    bar.append(allPages,label,picker,action,toggleLabel);element.append(bar);
+    bar.append(allPages,label,picker,functions,action,toggleLabel);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
     owned=()=>mountEmptyGrid(grid);
@@ -956,6 +961,24 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
   return Object.freeze({setSplit,
+    setAgFunctions(items=[]){
+      const select=container.querySelector('.ocr-outline-pane .ocr-ag-function-select');
+      if(!select)return false;
+      if(!Array.isArray(items)||items.some(item=>!item||typeof item.id!=='string'||
+        !item.id||typeof item.label!=='string'||typeof item.onClick!=='function'))
+        throw Error('AG 功能菜单定义无效');
+      select.replaceChildren(new Option('功能',''));
+      select.options[0].disabled=true;
+      for(const item of items)select.add(new Option(item.label,item.id));
+      select.disabled=items.length===0;select.value='';
+      select.onchange=()=>{
+        const selected=select.value;select.value='';
+        const action=items.find(item=>item.id===selected);
+        if(action)try{Promise.resolve(action.onClick()).catch(()=>{});}
+        catch{} // An action owns status-bar failures; do not break AG picker.
+      };
+      return items.length>0;
+    },
     setAgToggle({label,checked=false,onChange}={}){
       const control=container.querySelector('.ocr-outline-pane .ocr-ag-review-toggle');
       if(!control)return false;

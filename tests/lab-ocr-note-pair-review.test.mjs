@@ -14,6 +14,16 @@ assert.equal(references.length,2);
 assert.deepEqual(NOTE_REVIEW_DECISIONS,['待定','待转换','忽略']);
 const fresh=projectReviewedNoteRows(projection,new Map(),md);
 assert(fresh.every(row=>row.review==='待定'));
+assert(fresh.every(row=>row.match_state==='已匹配'));
+const waiting=projectReviewedNoteRows(projection,new Map([[
+  references[0].candidate_id,{
+    ref_id:references[0].candidate_id,decision:'待核实',revision:'r0',valid:true,
+    ref_line_id:references[0].line_id,ref_block_id:references[0].block_id,
+    ref_from:references[0].from,ref_to:references[0].to,ref_raw:references[0].raw,
+    ref_source_text:md[0].text,
+  }]]),md,{showIgnored:true});
+assert.equal(waiting.filter(r=>r.review==='待核实').length,2);
+assert(waiting.filter(r=>r.review==='待核实').every(r=>r.match_state==='待核实'));
 const ignored={ref_id:references[0].candidate_id,decision:'忽略',
   revision:'r1',valid:true,ref_line_id:references[0].line_id,
   ref_block_id:references[0].block_id,ref_from:references[0].from,
@@ -25,6 +35,7 @@ assert.equal(hidden.length,2,'One ignored citation hides only its two paired row
 const shown=projectReviewedNoteRows(projection,notes,md,{showIgnored:true});
 assert.equal(shown.length,4);
 assert.equal(shown.filter(x=>x.review==='忽略').length,2);
+assert(shown.filter(x=>x.review==='忽略').every(x=>x.match_state==='忽略'));
 assert.equal(shown.find(x=>x.reference_id===ignored.ref_id).status,'已忽略');
 const confirmed={...ignored,ref_id:references[1].candidate_id,
   decision:'待转换',ref_line_id:references[1].line_id,

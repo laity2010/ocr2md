@@ -125,3 +125,16 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - `node tests/lab-ocr-note-pair-conversion.test.mjs`：多注引语法、内置注文语法、同一注文共享多注引、既有 Markdown 注文不重复改写、强校验拒绝原文/编号冲突、跨行缩进边界。
 - `python3 tests/lab-ocr-note-pair-conversion.test.py -v`：隔离临时书籍、准备回执只写 review 表、CAS/原文无变化/冲突、MD 完全落盘后才报告已转换，部分落盘不报告已转换，Undo/Redo 恢复原/后态，真实 HTTP Cookie/Origin/方法隔离。
 - `node tests/lab-ocr-note-pair-conversion.browser.test.mjs`：Chromium 与 iPad WebKit 通过真实 Lab Frame + CM6 + 合成 SQL 后端；先人工确认，再执行单次 CM6 改两端、SQL CAS 落盘、Undo 一次还原全文、Redo 恢复，第二个注引共享已转换注文时不重复写注文，重新开 View 仍识别 `已转换`；LineID/BlockID 保持、Block 保存次数为 0。
+
+## WCP43 · 统一 AG 功能菜单及三态「匹配状态」列（2026-11-17）
+
+- **唯一操作入口**：公共 Frame 在 AG View 选择框的**紧邻右侧**增加 `功能` 下拉，公开 `frame.setAgFunctions([{id,label,onClick}, ...])`。菜单由当前 View 提供，切换 View 时自动替换，其他无操作的 View 下拉禁用；每次执行后选择框返回 `功能`。不为每个 AG View 增建独立工具栏。注释匹配 View 注册 `转换匹配`、`识别规则` 两项；旧版「识别规则」独立按钮和「显示已忽略」单独复选框不再显示。
+- **匹配状态三项**：注释匹配 AG 只保留一列可审阅的 **`匹配状态`**，原生 `<select>` 精确为 `已匹配 / 待核实 / 忽略`，不再出现平行的「审阅」列；原有内容/注号/PBS/行号/判断依据、过滤器和四窗定位照旧。自动强证据配对投影为 `已匹配`；弱证据/缺一端/人工待核实投影为 `待核实`；人工忽略为 `忽略`。疑似缺号行保持只读并在「判断依据」说明缺号，不产生虚构端点。转换已经完成时仍显示 `已匹配`，辅以只读 ✓ 标记，回退必须使用 CM6 Undo/Redo。
+- 状态下拉是**修改**而非仅列值过滤：三项可切换；`待核实`、`忽略`均可在书籍的 `note_pair_review` SQLite CAS 中持久化；选择 `已匹配` 时，必须存在对应注文候选，唯一则直接保存明确配对为既有 `待转换` 内部状态，多个候选则弹出定位在当前行附近的二级「选择注文」下拉，不猜测最近的正文。已经存在的 `待转换`、`已转换` 回执继续有效。人工忽略行**留在 AG 表内**，可以按「匹配状态」列筛选及恢复，不再自动从表中消失。
+- **兼容既有书籍审阅**：旧 SQL `note_pair_review` 的 `CHECK` 只允许 `忽略/待转换`。首次出现人工 `待核实` 决定时，在 SQLite `BEGIN IMMEDIATE` 内创建新临时同结构表并复制所有已有审阅/转换证据，原子替换为支持三态的 schema。失败整体 rollback，不改 MD/Block/用户原始 MinerU 数据；GET 继续只读，不能因打开 View 触发迁移。
+- **`功能 → 转换匹配`**：这是用户的显式执行操作，选择当前书籍匹配状态为 `已匹配` 的注引候选（不限当前 AG 页/筛选）。自动强证据已匹配也允许在用户触发此功能时执行；后台首先借助原 WP3.1 CAS 记录明确的一对一候选，再通过 WP3.2 转换准备回执 → **一对脚注一组 CM6 事务** → 原 MD SQLite CAS 保存。多个引用共享同一注文时，转换第二个引用不重复写订单正文。无法找到唯一注文、来源过期、全文注号冲突、无安全规则或同一源行多个标记等**保守跳过**，状态栏报告已转换和跳过数量；若发生未保存的 MD 保存冲突则立即停止，不覆盖已有正文。每对可独立 Undo/Redo，不谎称整批共用一个历史步。
+- 旧的注释匹配 `review` 字段保留为非显示的派生证据，作为已转换/过期/Undo 判断，不再与 `match_state` 并排呈现。「匹配状态」是唯一可编辑分类，不把 SQLite 的技术状态码 `待转换/已确认/需复核` 混入用户选择项。
+
+验收：`tests/lab-ocr-note-match-view.browser.test.mjs` 逐项验证状态三值、跨 View 菜单、忽略仍可见/可恢复、多个同号注文必须二次选择、识别规则仍可用、MD/Block 不写；`tests/lab-ocr-note-pair-conversion.browser.test.mjs` 验证统一转换入口对多个已匹配引用共享一个注文执行安全转换、MD CAS、Undo/Redo、重开 View 和物理行身份；`tests/lab-ocr-note-pair-review.test.py` 验证旧表原子迁移、三态 CAS 且源文本不变。
+
+补充公共 API 直接测试：`node tests/lab-frame-layout.direct.browser.test.mjs` 在 Chromium/iPad WebKit 中实际调用 `frame.setAgFunctions`，核验菜单选项列表、两个回调、执行后复位、无功能禁用和非法定义拒绝；不依靠注释 View 的端到端测试冒充 Frame API 直接覆盖。

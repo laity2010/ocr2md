@@ -57,6 +57,29 @@ class NoteReview(unittest.TestCase):
    self.assertEqual(read_note_pair_reviews(book)['reviews'],[])
    self.assertEqual(before,read_md(book),'Only review extension table can be written')
 
+ def test_three_status_choices_persist_on_legacy_sqlite(self):
+  from v6_lab_ocr_note_pair_review import SCHEMA
+  with tempfile.TemporaryDirectory() as tmp:
+   book=Path(tmp);ref,body=setup(book)
+   original=read_md(book)
+   old=SCHEMA.replace("('忽略','待核实','待转换')", "('忽略','待转换')")
+   old=old.replace("decision IN ('忽略','待核实')", "decision='忽略'")
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:db.execute(old)
+   ignored=set_note_pair_review(book,ref,None,'忽略',None)
+   self.assertEqual(ignored['decision'],'忽略')
+   waiting=set_note_pair_review(book,ref,None,'待核实',ignored['revision'])
+   self.assertEqual(waiting['decision'],'待核实')
+   self.assertTrue(read_note_pair_reviews(book)['reviews'][0]['valid'])
+   with sqlite3.connect(book/'ocr2md.sqlite') as db:
+    schema=db.execute("SELECT sql FROM sqlite_master WHERE name='note_pair_review'").fetchone()[0]
+    self.assertIn('待核实',schema)
+    self.assertEqual(db.execute('SELECT COUNT(*) FROM note_pair_review').fetchone()[0],1)
+   matched=set_note_pair_review(book,ref,body,'待转换',waiting['revision'])
+   self.assertEqual(matched['decision'],'待转换')
+   waiting2=set_note_pair_review(book,ref,None,'待核实',matched['revision'])
+   self.assertEqual(waiting2['decision'],'待核实')
+   self.assertEqual(read_md(book),original)
+
  def test_stale_text_and_invalid_body_source_not_applied(self):
   with tempfile.TemporaryDirectory() as tmp:
    book=Path(tmp);ref,body=setup(book)

@@ -15,7 +15,7 @@ import {planBlockBreakMerge,emptyMdChildBlockIds} from './block-break-merge.js';
 import {projectNoteMatchRows,resolveNoteMatchFocus,compareNoteNumbers} from './note-match-view.js';
 import {projectReviewedNoteRows} from './note-pair-review.js';
 import {planNotePairConversion} from './note-pair-conversion.js';
-import {createNotePairReviewCell} from './note-pair-review-cell.js';
+import {createNoteMatchStatusCell} from './note-pair-review-cell.js';
 import {DEFAULT_NOTE_MATCH_CONFIG,validateNoteMatchConfig} from './note-match-index.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
@@ -123,14 +123,8 @@ const MD_NOTE_COLUMNS=Object.freeze([
       node.title='点击这一行定位该端点，原文不会修改';
       return node;
     }},
-  {field:'review',headerName:'审阅',width:148,minWidth:134,sortable:true,
+  {field:'match_state',headerName:'匹配状态',width:132,minWidth:112,sortable:true,
     pinned:'right',lockPinned:true,lockPosition:'right'},
-  {field:'status',headerName:'匹配状态',width:102,sortable:true,
-    cellRenderer:params=>{
-      const node=document.createElement('span');
-      node.className='ocr-note-match-status';node.dataset.status=params.value??'';
-      node.textContent=params.value??'';return node;
-    }},
   {field:'pbs',headerName:'PBS',width:125,sortable:true,comparator:comparePBS},
   {field:'line_no',headerName:'源码行',width:92,sortable:true},
   {field:'evidence',headerName:'识别规则',minWidth:135,sortable:true},
@@ -177,8 +171,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let breakReviews=new Map(),recentlyMerged=new Map(),breakReviewEpoch=0;
   let noteConfig=DEFAULT_NOTE_MATCH_CONFIG,noteConfigRevision=null,noteConfigBook=null;
   let noteDialog=null,lastNoteProjection=null;
-  let noteReviews=new Map(),noteReviewEpoch=0,showIgnoredNotes=false;
+  let noteReviews=new Map(),noteReviewEpoch=0;
   const noteReviewBusy=new Set();
+  let noteBatchBusy=false;
   const breakReviewBusy=new Set();
   let pdfPage=1;
   function mergedBreakRow(saved){
@@ -226,7 +221,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const source=md()?.rows??[],blocks=cm()?.rows??[];
     lastNoteProjection=projectNoteMatchRows(source,blocks,noteConfig);
     return projectReviewedNoteRows(lastNoteProjection,noteReviews,source,
-      {showIgnored:showIgnoredNotes,dirty:Boolean(md()?.dirty)});
+      {showIgnored:true,dirty:Boolean(md()?.dirty)});
   }
   const projectedMdRows=()=>activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
@@ -355,7 +350,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(md()?.dirty||cm()?.queue?.length)return false;
     const lines=new Map((md()?.rows??[]).map(row=>[row.line_id,row.text]));
     noteReviews=new Map((result.reviews??[]).filter(item=>
-      typeof item.ref_id==='string'&&['忽略','待转换'].includes(item.decision)).map(item=>{
+      typeof item.ref_id==='string'&&['忽略','待核实','待转换'].includes(item.decision)).map(item=>{
       const convertedLineTexts=Object.fromEntries((item.converted?
         item.conversion?.updates??[]:[]).map(change=>
         [change.line_id,lines.get(change.line_id)]));
@@ -419,11 +414,83 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         frame.patchNoteRows(projectedMdRows());
       onStatus(`✓ 注释 ${plan.number} 已转换为 Obsidian 脚注 · `+
         `${plan.updates.length} 行原子修改、已保存 · CM6 Undo/Redo 可恢复`,'ok');
+      return true;
     }catch(error){
       // No arbitrary compensation writes; on CAS failure the authoritative
       // CM6 history remains available for a deliberate Undo.
       onStatus('脚注转换未完成：'+error.message+'；请检查源码及 Undo','error');
     }finally{noteReviewBusy.delete(id);}
+    return false;
+  }
+  async function convertMatchedNotes(){
+    if(activeAgView!=='note-match'||currentSqlTable!=='md'||!md())return false;
+    if(noteBatchBusy){
+      onStatus('注释匹配 · 转换操作正在进行，拒绝重复执行','warning');return false;
+    }
+    if(md().dirty||cm()?.queue?.length){
+      onStatus('批量转换前请先保存 MD 与 Block 改动','warning');return false;
+    }
+    const book=workspace,op=operation;
+    // Explicit user command converts the currently matched and safely
+    // resolvable candidates, not merely the visible AG filter/page subset.
+    const planned=projectNoteReviewRows().filter(row=>row.kind==='注引'&&
+      row.match_state==='已匹配'&&row.review!=='已转换'&&
+      row.review!=='转换待保存').sort((a,b)=>
+      b.line_no-a.line_no||b.from-a.from);
+    if(!planned.length){
+      onStatus('注释匹配 · 当前没有可转换的已匹配注引','info');return false;
+    }
+    noteBatchBusy=true;
+    try{
+      let converted=0,skipped=0;
+      const touchedReferenceLines=new Set();
+      // Use the previously tested single-pair CM6 + SQL CAS pipeline for
+      // each safe pair. A failure never overwrites any saved or unsaved MD.
+      for(const original of planned){
+        if(book!==workspace||op!==operation||md()?.dirty||cm()?.queue?.length)break;
+        // A second marker on an already converted source line changes the
+        // first receipt's whole-line SHA. Fail closed for that case until
+        // WP3.3 can group those markers into one transaction and receipt.
+        if(touchedReferenceLines.has(original.line_id)){skipped++;continue;}
+        touchedReferenceLines.add(original.line_id);
+        const rows=projectNoteReviewRows();
+        const current=rows.find(row=>row.kind==='注引'&&
+          row.reference_id===original.reference_id);
+        if(!current||current.match_state!=='已匹配'||
+           ['已转换','转换待保存'].includes(current.review)){
+          skipped++;continue;
+        }
+        const options=current.body_choices??[];
+        const bodyId=current.selected_body_id??
+          (options.length===1?options[0].id:null);
+        if(!bodyId){skipped++;continue;}
+        let prepared=current;
+        if(prepared.review!=='待转换'||
+           noteReviews.get(prepared.reference_id)?.body_id!==bodyId){
+          if(!await chooseNoteReview(prepared,'待转换',bodyId)){
+            skipped++;continue;
+          }
+          prepared=projectNoteReviewRows().find(row=>row.kind==='注引'&&
+            row.reference_id===current.reference_id);
+        }
+        if(!prepared||prepared.review!=='待转换'){
+          skipped++;continue;
+        }
+        if(await convertConfirmedNote(prepared))converted++;
+        else{
+          skipped++;
+          if(md()?.dirty)break;
+        }
+      }
+      if(book!==workspace||op!==operation)return false;
+      const unprocessed=planned.length-converted-skipped;
+      onStatus(`注释匹配 · 已转换 ${converted} 个，跳过 ${skipped} 个`+
+        (unprocessed?`，尚未执行 ${unprocessed} 个`:'')+
+        (md()?.dirty?'；存在未保存的 CM6 修改，已停止其余转换':'')+
+        ' · 仅使用已匹配状态及安全的注文候选',
+        skipped||unprocessed||md()?.dirty?'warning':'ok');
+      return converted>0;
+    }finally{noteBatchBusy=false;}
   }
   async function chooseNoteReview(row,decision,bodyId=null){
     if(decision==='转换')return convertConfirmedNote(row);
@@ -440,7 +507,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         pair?.candidate_body_ids.includes(item.candidate_id)):null;
     const reference=noteEndpoint(ref),selected=body?noteEndpoint(body):null;
     if(!reference||(decision==='待转换'&&!selected)||
-       !['待定','忽略','待转换'].includes(decision)){
+       !['待定','忽略','待核实','待转换'].includes(decision)){
       onStatus('注释审阅对象已变化或缺少确定注文，请刷新后重新选择','warning');return;
     }
     const prior=noteReviews.get(id),version=md().version;
@@ -467,8 +534,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       if(version!==md()?.version){
         onStatus('注释审阅已保存，但原文同时发生修改；请检查证据是否过期','warning');return;
       }
-      onStatus(`注释 ${ref.number} · ${decision==='待转换'?'确认配对（等待 WP3.2 转换）':decision}`+
-        ` · 审阅决定已保存，Markdown 未修改`,'ok');
+      onStatus(`注释 ${ref.number} · ${decision==='待转换'?'已匹配（待转换）':decision}`+
+        ` · 匹配状态已保存，Markdown 未修改`,'ok');
+      return true;
     }catch(error){
       if(/审阅状态已有其他修改/.test(error.message)){
         try{
@@ -480,8 +548,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         }catch(err){onStatus('注释审阅同步失败：'+err.message,'error');}
       }else onStatus('注释审阅保存失败：'+error.message,'error');
     }finally{noteReviewBusy.delete(id);}
+    return false;
   }
-  const noteReviewCell=createNotePairReviewCell(chooseNoteReview);
+  const noteStatusCell=createNoteMatchStatusCell(chooseNoteReview);
   const reviewCell=createBlockBreakReviewCell(chooseBreakReview);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
@@ -1006,7 +1075,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       throw Error('CM Block/MD 尚有待持久操作，必须先保存，拒绝切换/重建');
     breakReviews.clear();recentlyMerged.clear();++breakReviewEpoch;breakReviewBusy.clear();
     noteDialog?.dispose();noteDialog=null;
-    noteReviews.clear();++noteReviewEpoch;noteReviewBusy.clear();showIgnoredNotes=false;
+    noteReviews.clear();++noteReviewEpoch;noteReviewBusy.clear();
     noteConfig=DEFAULT_NOTE_MATCH_CONFIG;noteConfigRevision=null;noteConfigBook=null;lastNoteProjection=null;
     persistence?.dispose();persistence=null;loadingRuntime=null;
     mdPersistence?.dispose();mdPersistence=null;mdLoading=null;
@@ -1089,7 +1158,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     frame.showSqlRows(rows,columns.map(column=>({
       ...column,
       ...(broken&&column.field==='review'?{cellRenderer:reviewCell}:{}),
-      ...(notes&&column.field==='review'?{cellRenderer:noteReviewCell}:{}),
+      ...(notes&&column.field==='match_state'?{cellRenderer:noteStatusCell}:{}),
       ...(column.field==='text'&&!latex&&!broken&&!notes?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
@@ -1139,13 +1208,13 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       },
     });
     frame.setAgView(activeAgView);
-    frame.setAgAction(notes?{label:'识别规则',onClick:()=>void openNoteRulesDialog()}:{});
-    frame.setAgToggle(notes?{label:'显示已忽略',checked:showIgnoredNotes,
-      onChange:value=>{
-        showIgnoredNotes=value;
-        if(activeAgView==='note-match'&&currentSqlTable==='md')
-          frame.patchNoteRows(projectedMdRows());
-      }}:{});
+    frame.setAgFunctions(notes?[
+      {id:'convert',label:'转换匹配',onClick:()=>convertMatchedNotes().catch(error=>
+        onStatus('转换匹配失败：'+error.message,'error'))},
+      {id:'rules',label:'识别规则',onClick:()=>openNoteRulesDialog().catch(error=>
+        onStatus('识别规则打开失败：'+error.message,'error'))},
+    ]:[]);
+    frame.setAgAction({});frame.setAgToggle({});
     frame.setLatexHighlights(latex?rows:[]);
     frame.setMdEditHistory();
     return rows.length;
@@ -1164,7 +1233,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       catch(error){onStatus('断块审阅记录读取失败：'+error.message,'warning');return false;}
     if(token!==agViewRequest||currentSqlTable!=='md'||!md())return false;
     activeAgView=view;
-    if(view==='note-match')showIgnoredNotes=false;
     frame.setReviewPair(null);
     frame.clearMdNoteRange();
     frame.setAgView(view);
@@ -1178,7 +1246,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         `${lastNoteProjection?.index.stats.matched??0} 已匹配、`+
         `${lastNoteProjection?.index.stats.need_review??0} 待核实、`+
         `${lastNoteProjection?.missing_note_numbers.length??0} 个疑似缺号 · `+
-        `支持人工忽略/确认配对（不改 MD）`:
+        `匹配状态可审阅 · 功能 → 转换匹配`:
       `AG ${view==='title'?'标题':view==='block-break'?'断块':'MD 行'}视图 · ${count} 条${view==='block-break'?'疑似断块 · 审阅结果可保存':'投影'} · 不自动修改 MD`,'ok');
     return true;
   }
@@ -1210,7 +1278,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(!tableReady||!workspace||(table==='span'&&!spanReady)||(table==='block'&&!blockReady)){onStatus('请先绑定工作区并完成对应 SQLite 表生成','warning');return false;}
     if(!['minerujson','span','block'].includes(table))throw Error('未知的 SQLite 表');
     frame.setReviewPair(null);
-    frame.clearMdNoteRange();frame.setAgAction({});frame.setAgToggle({});
+    frame.clearMdNoteRange();frame.setAgFunctions([]);frame.setAgAction({});frame.setAgToggle({});
     const id=++loaded;
     onStatus(table==='block'&&cm()?.workspace===workspace?
       '正在从 CM6 内存态投影 Block 表…':`正在从 SQLite 加载 ${table} 表并交给 CM6…`,'info');
@@ -1283,7 +1351,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     ++loaded;
     breakReviews.clear();recentlyMerged.clear();++breakReviewEpoch;breakReviewBusy.clear();
     noteDialog?.dispose();noteDialog=null;
-    noteReviews.clear();++noteReviewEpoch;noteReviewBusy.clear();showIgnoredNotes=false;
+    noteReviews.clear();++noteReviewEpoch;noteReviewBusy.clear();
     noteConfig=DEFAULT_NOTE_MATCH_CONFIG;noteConfigRevision=null;noteConfigBook=null;lastNoteProjection=null;
     persistence?.dispose();persistence=null;loadingRuntime=null;
     frame.replaceStructuredRuntime(null);
@@ -1314,5 +1382,5 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
     flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation,
     setAgView,dispose(){noteDialog?.dispose();unsubscribeLocation();
-      frame.setAgAction({});frame.setAgToggle({});frame.setMdPreviewNavigation(null);}});
+      frame.setAgFunctions([]);frame.setAgAction({});frame.setAgToggle({});frame.setMdPreviewNavigation(null);}});
 }

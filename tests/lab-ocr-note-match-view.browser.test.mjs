@@ -138,11 +138,11 @@ try{
      Number(number)>=Number(defaultOrder[i-1])),
      'Displayed numeric order must be nondecreasing: '+defaultOrder);
    const gap=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id:'gap:book:4',focusColumn:'status'}));
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id:'gap:book:4',focusColumn:'match_state'}));
    assert.equal(gap?.status,'疑似缺号');
    assert.equal(gap?.line_id,null);
    assert.equal(gap?.pbs,'');
-   await page.locator('.ocr-outline-grid .ag-row-selected .ag-cell[col-id="status"]').click();
+   await page.locator('.ocr-outline-grid .ag-row-selected .ag-cell[col-id="match_state"]').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent
      ?.includes('注号 4 疑似缺失'),null,{timeout:12000});
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
@@ -167,7 +167,7 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="line_no"]')
      ?.getAttribute('aria-sort')==='ascending');
    const orphan=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'line_id',id:'note-md-6',focusColumn:'status'}));
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'note-md-6',focusColumn:'match_state'}));
    assert.equal(orphan?.status,'缺注引');
    // The apparent (2) occurs inside a Notes section in this fixture and
    // correctly cannot be treated as a正文引用. A separate direct test covers weak candidates.
@@ -217,22 +217,27 @@ try{
    const weakId='pair:ref:note-md-1:'+sourceLines[0].indexOf('(2)')+
      ':ref.parenthesis:ref';
    const weak=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'status'}),weakId);
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'match_state'}),weakId);
    assert.equal(weak?.status,'待核实');
    const warning=await page.evaluate(()=>{
-     const cell=document.querySelector('.ag-row-selected .ocr-note-match-status[data-status="待核实"]');
+     const cell=document.querySelector('.ag-row-selected .ocr-note-match-status-select[data-status="待核实"]');
      const style=cell?getComputedStyle(cell):null;
-     return {text:style?.color,border:style?.borderTopWidth,background:style?.backgroundColor};
+     return {text:style?.color,border:style?.borderTopWidth,background:style?.backgroundColor,
+       choices:cell?[...cell.options].map(o=>o.textContent):[]};
    });
    assert.equal(warning.text,'rgb(255, 155, 98)');
    assert.equal(warning.border,'1px');
    assert.notEqual(warning.text,colors.text);
-   // Ignore a weak reference -> immediately leave the current candidate
-   // queue, but remain recoverable through the AG-owned 'show ignored' toggle.
-   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-review-trigger').click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="忽略"]').click();
-   await page.waitForFunction(id=>!document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
-     ?.selectById({field:'note_row_id',id,focusColumn:'status',preserveFilters:true}),
+   assert.deepEqual(warning.choices,['已匹配','待核实','忽略']);
+   // The ignored candidate stays in the AG grid and can be restored in the
+   // SAME status column. No redundant review column/toggle is allowed.
+   assert(!await page.locator('.ocr-outline-pane .ocr-ag-review-toggle').isVisible());
+   assert(!await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields().includes('review')));
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-match-status-select').first()
+     .selectOption('忽略');
+   await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id,focusColumn:'match_state'})?.match_state==='忽略',
      weakId,{timeout:12000});
    assert.equal(reviewSaves,1);
    await picker.selectOption('md');
@@ -240,45 +245,45 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
    assert.equal(reviewGets,2,'Ignored decision must be reloaded from book SQLite');
-   assert.equal(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,preserveFilters:true}),weakId),null,
-     'Ignored candidate stays outside pending queue after reopening the View');
-   const showIgnored=page.locator('.ocr-outline-pane .ocr-ag-review-toggle input');
-   assert.equal(await showIgnored.isChecked(),false);
-   await showIgnored.check();
    const ignored=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),weakId);
-   assert.equal(ignored?.review,'忽略');assert.equal(ignored?.status,'已忽略');
-   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-review-trigger').click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="待定"]').click();
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'match_state'}),weakId);
+   assert.equal(ignored?.match_state,'忽略');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-match-status-select').first()
+     .selectOption('待核实');
    await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
-     ?.selectById({field:'note_row_id',id,focusColumn:'review'})?.review==='待定',
+     ?.selectById({field:'note_row_id',id,focusColumn:'match_state'})?.review==='待核实',
      weakId,{timeout:12000});
    assert.equal(reviewSaves,2);
-   await showIgnored.uncheck();
    // Reopening the view intentionally resets to number order. This explicit
    // subsequent user click then verifies rule-save does NOT reset it.
    await header('line_no').click();
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="line_no"]')
      ?.getAttribute('aria-sort')==='ascending');
-   // Confirm a unique body without editing or converting Markdown.
+   // A strong automatic match is already shown as 已匹配. Changing it to
+   // 待核实 persists an explicit override; restoring 已匹配 selects its only
+   // body and persists the legacy '待转换' review decision.
    const firstId='pair:ref:note-md-1:'+sourceLines[0].indexOf('<sup>1</sup>')+
      ':ref.html-sup:ref';
    const first=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),firstId);
-   assert.equal(first?.review,'待定');
-   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-review-trigger').click();
-   await page.locator('.ocr-note-review-menu .ocr-note-review-option[data-review="待转换"]').first().click();
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'match_state'}),firstId);
+   assert.equal(first?.match_state,'已匹配');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-match-status-select').first()
+     .selectOption('待核实');
    await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
-     ?.selectById({field:'note_row_id',id,focusColumn:'review'})?.review==='待转换',
-     firstId,{timeout:12000});
+     ?.selectById({field:'note_row_id',id,focusColumn:'match_state'})?.match_state==='待核实',firstId);
    assert.equal(reviewSaves,3);
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-match-status-select').first()
+     .selectOption('已匹配');
+   await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id,focusColumn:'match_state'})?.review==='待转换',firstId);
+   assert.equal(reviewSaves,4);
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
-     ?.ocrCmTable?.mdDocument()),original,'Confirmation must not convert source in WP3.1');
-   // One AG toolbar action controls the rules modal; no additional grid.
-   const button=page.locator('.ocr-outline-pane .ocr-ag-extra-action');
-   assert.equal(await button.textContent(),'识别规则');
-   await button.click();
+     ?.ocrCmTable?.mdDocument()),original,'Status change must not convert source');
+   const functions=page.locator('.ocr-outline-pane .ocr-ag-function-select');
+   assert.deepEqual(await functions.locator('option').allTextContents(),
+     ['功能','转换匹配','识别规则']);
+   assert(!await functions.isDisabled());
+   await functions.selectOption('rules');
    const dialog=page.locator('.ocr-note-match-rules-dialog');
    await dialog.waitFor({state:'visible'});
    const scope=dialog.locator('select').first();
@@ -299,7 +304,7 @@ try{
    await picker.selectOption('md');
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('text'));
-   assert.equal(await button.isVisible(),false);
+   assert(await functions.isDisabled());
    await picker.selectOption('note-match');
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
@@ -313,13 +318,40 @@ try{
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'review'}),firstId);
    assert.equal(confirmedReload?.review,'待转换',
      'Confirmed pairing is persisted on the book even across AG view reloading');
+   // The top-level status selector has only three choices even if there are
+   // multiple same-number bodies. A second-stage, body-specific selector is
+   // explicitly required; no closest-row heuristic is allowed.
+   const chooserEvidence=await page.evaluate(async()=>{
+     const {createNoteMatchStatusCell,NOTE_MATCH_STATUS_OPTIONS}=await import(
+       './note-pair-review-cell.js');
+     const calls=[];
+     const cell=createNoteMatchStatusCell((row,choice,bodyId)=>{
+       calls.push([choice,bodyId]);return true;
+     })({data:{reference_id:'ref:fake',number:'5',match_state:'待核实',
+       body_choices:[{id:'body-a',pbs:'p2b1',line_no:10},
+         {id:'body-b',pbs:'p3b2',line_no:17}]}});
+     document.body.append(cell);
+     const select=cell.querySelector('select');
+     const options=[...select.options].map(option=>option.value);
+     select.value='已匹配';select.dispatchEvent(new Event('change',{bubbles:true}));
+     const secondary=document.querySelector('body>.ocr-note-body-choice');
+     const visible=Boolean(secondary&&getComputedStyle(secondary).position==='fixed');
+     secondary.value='body-b';secondary.dispatchEvent(new Event('change'));
+     await Promise.resolve();await Promise.resolve();
+     const result={options,defined:NOTE_MATCH_STATUS_OPTIONS,visible,calls};
+     cell.remove();return result;
+   });
+   assert.deepEqual(chooserEvidence.options,['已匹配','待核实','忽略']);
+   assert.deepEqual(chooserEvidence.defined,['已匹配','待核实','忽略']);
+   assert.equal(chooserEvidence.visible,true);
+   assert.deepEqual(chooserEvidence.calls,[['待转换','body-b']]);
    assert.equal(mdLoads,1);
    assert.equal(mdSaves,0);assert.equal(blockSaves,0);
-   assert.equal(reviewSaves,3);
+   assert.equal(reviewSaves,4);
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument()),original);
    assert.deepEqual(errors,[]);
-   console.log('LAB_OCR_NOTE_MATCH_WP3_1_BROWSER_PASS',name,{ruleLoads,ruleSaves,reviewGets,reviewSaves,
+   console.log('LAB_OCR_NOTE_MATCH_STATUS_FUNCTION_BROWSER_PASS',name,{ruleLoads,ruleSaves,reviewGets,reviewSaves,
      mdLoads,mdSaves,blockSaves});
   }finally{await browser.close();}
  }

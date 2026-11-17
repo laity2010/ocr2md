@@ -34,10 +34,28 @@ try{
         nav.value='settings';nav.dispatchEvent(new Event('change',{bubbles:true}));
         view.setSplit(false);const three=count();
         view.setSplit(true);const four=count();
+        const functions=host.querySelector('.ocr-ag-function-select');
+        const initiallyDisabled=functions?.disabled;
+        const calls=[];
+        view.setAgFunctions([{id:'first',label:'转换匹配',onClick:()=>calls.push('first')},
+          {id:'second',label:'识别规则',onClick:()=>calls.push('second')}]);
+        const options=[...functions.options].map(item=>item.text);
+        functions.value='first';functions.dispatchEvent(new Event('change',{bubbles:true}));
+        const resetAfterRun=functions.value==='';
+        functions.value='second';functions.dispatchEvent(new Event('change',{bubbles:true}));
+        view.setAgFunctions([]);
+        const disabledAfterClear=functions.disabled;
+        let rejectsInvalid=false;
+        try{view.setAgFunctions([{id:'',label:'bad',onClick:()=>{}}]);}
+        catch{rejectsInvalid=true;}
         view.dispose();host.remove();
-        return {initial,three,four,events};
+        return {initial,three,four,events,menu:{initiallyDisabled,options,calls,
+          resetAfterRun,disabledAfterClear,rejectsInvalid}};
       });
-      assert.deepEqual(result,{initial:4,three:3,four:4,events:['settings']});
+      assert.deepEqual(result,{initial:4,three:3,four:4,events:['settings'],menu:{
+        initiallyDisabled:true,options:['功能','转换匹配','识别规则'],
+        calls:['first','second'],resetAfterRun:true,
+        disabledAfterClear:true,rejectsInvalid:true}});
       const directNavigation=await page.evaluate(async url=>{
         const {enhanceNavigationSelect}=await import(url);
         const select=document.createElement('select');

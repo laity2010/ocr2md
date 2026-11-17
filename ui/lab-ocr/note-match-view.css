@@ -79,3 +79,18 @@
   border-color:#5589a2;background:#293f49}
 #workspace .ocr-note-match-status[data-status="已转换"]{color:#92d3e7;
   font-weight:700}
+
+/* Three-choice match status inside AG, native-select for iPad/WebKit. */
+#workspace .ocr-note-match-status-select{height:28px;max-width:100%;min-width:92px;
+  padding:3px 4px;background:#324147;border:1px solid #7b8e90;
+  border-radius:5px;color:#e0e7df;font:12px/1.3 "OCR2MD Sarasa",monospace}
+#workspace .ocr-note-match-status-select[data-status="已匹配"]{
+  color:#a7d69a;border-color:#719774}
+#workspace .ocr-note-match-status-select[data-status="待核实"]{
+  color:#ff9b62;border-color:#d77d58;background:#51372f}
+#workspace .ocr-note-match-status-select[data-status="忽略"]{
+  color:#aeb3b8;border-color:#667079}
+#workspace .ocr-note-match-status-select:disabled{opacity:.75}
+#workspace .ocr-note-body-choice{max-width:136px;height:28px;
+  color:#b7d5f1;background:#263844;border:1px solid #648eb2;border-radius:4px}
+#workspace .ocr-note-converted-marker{color:#9cd6dd;font-weight:bold;padding:0 3px}
