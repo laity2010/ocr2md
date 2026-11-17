@@ -51,7 +51,7 @@ try{
    const page=await browser.newPage({viewport:{width:1250,height:900},hasTouch:true});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    let mdLoads=0,mdSaves=0,blockSaves=0,reviewWrites=0,reviewLoads=0,mdRevision=0;
-   const savedReviews=new Map();
+   const savedReviews=new Map(),reviewRequestLog=[];
    await page.addInitScript(({book})=>localStorage.setItem(
      'ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
        'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',
@@ -90,9 +90,11 @@ try{
        const after=md.find(line=>line.line_id===body.afterLineId);
        if(!before||!after||before.text!==body.beforeText||after.text!==body.afterText)
          return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'证据失效'})});
+       reviewRequestLog.push({issue_id,expectedDecision:body.expectedDecision,
+         decision:body.decision});
        const prior=savedReviews.get(issue_id);
        if((prior?.decision??'待定')!==body.expectedDecision)
-         return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'并发状态冲突'})});
+         return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'审阅状态已有其他修改，须重新加载'})});
        if(body.decision==='待定')savedReviews.delete(issue_id);
        else {
          const split=body.beforeText.trimEnd().endsWith('-');
@@ -367,6 +369,32 @@ try{
    assert.equal(mdLoads,1,'Switching AG view never reopens MD SQL');
    assert.equal(mdSaves,0,'Read-only view never saves Markdown');
    assert.equal(blockSaves,0,'Read-only view never edits block structure');
+   // Regression from user's iPad: previously saved WP3 record-only merge
+   // (p16b4) and another "忽略" must survive the preceding p13b5 merge.
+   // The old mdContentChanged cleared all review caches, painting "待定"
+   // while the backend CAS still expected "断块合并" or "忽略".
+   const legacyJoined=raw[3][5]+' '+raw[4][5];
+   savedReviews.set('block-break:439:440',{
+     issue_id:'block-break:439:440',before_line_id:'break-md-6',
+     after_line_id:'break-md-7',decision:'断块合并',
+     joinedText:legacyJoined,split_offset:raw[3][5].length,merge_glue:' ',
+   });
+   savedReviews.set('block-break:441:442',{
+     issue_id:'block-break:441:442',before_line_id:'break-md-9',
+     after_line_id:'break-md-10',decision:'忽略',
+   });
+   await picker.selectOption('md');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields()?.includes('text'));
+   await picker.selectOption('block-break');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields()?.includes('review'));
+   const preLegacy=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-7',focusColumn:'review'}));
+   assert.equal(preLegacy.review,'待定','Legacy record-only merge is not yet applied');
+   const preIgnored=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-10',focusColumn:'review'}));
+   assert.equal(preIgnored.review,'忽略','Preexisting ignore state is read from SQLite');
    // WCP43 actual merge: one CM6 change joins A+B and leaves B's stable
    // LineID/BlockID on a blank physical row. Preview and PDF derive from it.
    await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
@@ -426,6 +454,56 @@ try{
      return runtime?.rows.find(row=>row.line_id==='break-md-2')?.text===''&&
        !!document.querySelector('.lab-ocr-pdf-pbs-tag[data-block-id="437"][data-md-empty="true"]');
    });
+   // After merging the first pair, a second pre-reviewed pair must still
+   // carry its authoritative CAS decision. This failed with the prior global
+   // breakReviews.clear() and caused the user's "须重新加载" red banner.
+   const nextPending=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-7',focusColumn:'review'}));
+   assert.equal(nextPending?.review,'待定','Existing WP3 marker stays visibly pending');
+   const nextIgnored=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-10',focusColumn:'review'}));
+   assert.equal(nextIgnored?.review,'忽略','Unrelated ignored pair survives the first merge');
+   await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-7',focusColumn:'review'}));
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger').click();
+   await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="断块合并"]').click();
+   await page.waitForFunction(()=>{
+     const rows=document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime()?.rows;
+     return rows?.find(row=>row.line_id==='break-md-6')?.text.endsWith('second example showing a split phrase.')&&
+       rows?.find(row=>row.line_id==='break-md-7')?.text==='';
+   },null,{timeout:13000});
+   await page.waitForFunction(()=>[...document.querySelectorAll('.lab-ocr-pdf-pbs-tag')]
+     .some(node=>node.dataset.blockId==='440'&&node.dataset.mdEmpty==='true'));
+   await page.waitForTimeout(450);
+   assert.equal(mdSaves,2,'Two actual merges each use their own MD CAS save');
+   assert.equal(blockSaves,0);
+   assert(reviewRequestLog.some(r=>r.issue_id==='block-break:439:440'&&
+     r.expectedDecision==='断块合并'&&r.decision==='断块合并'),
+     'Second merge must use the stored legacy decision, not the displayed pending label');
+   // Concurrent change after the list loaded: CAS should reject safely,
+   // refresh the authoritative review state and ask for another explicit tap.
+   savedReviews.set('block-break:441:442',{
+     ...savedReviews.get('block-break:441:442'),decision:'断块合并',
+   });
+   await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-10',focusColumn:'review'}));
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
+     ?.dataset.review==='忽略',null,{timeout:8000});
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger').click();
+   await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="待定"]').click();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes(
+     '断块审阅状态已从 SQLite 更新'),null,{timeout:7500}).catch(async error=>{
+       console.error('CAS_REFRESH_DIAG',name,JSON.stringify({
+         status:await page.locator('#status').textContent(),reviewRequestLog,
+         reviewLoads,reviewWrites,savedReviews:[...savedReviews.entries()],
+         errors,ag:await page.evaluate(()=>({
+           fields:document.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.columnFields(),
+           selected:document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')?.dataset.review,
+           dirty:document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdRuntime()?.dirty,
+         }))}));throw error;
+   });
+   assert.equal(savedReviews.get('block-break:441:442')?.decision,'断块合并');
+   assert.equal(mdSaves,2,'A conflicting review never mutates Markdown');
    assert.deepEqual(errors,[],'Browser runtime should have no errors');
    console.log('LAB_OCR_BLOCK_BREAK_BROWSER_PASS',name);
   }finally{await browser.close();}

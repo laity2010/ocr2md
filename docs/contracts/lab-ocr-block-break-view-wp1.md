@@ -94,3 +94,13 @@
 - `node tests/lab-ocr-block-break-merge.test.mjs` 直接覆盖纯计划与空块投影、13F/普通英文接续、连字符、身份不变与多行防丢失。
 - `python3 tests/lab-ocr-block-break-review.test.py` 合成书籍中模拟 MD CAS splice，验证 merged digest GET 识别、重开后字段、持久化 Undo 原文恢复、MinerU 原件不改动、旧记录兼容。
 - `node tests/lab-ocr-block-break-view.browser.test.mjs` Chromium/iPad WebKit 合并后 A 连贯、B 空行但 BlockID/LineID 相同、MD 预览已更新、原 PDF bbox/PBS 存在且虚线、单次 `md-save`、无 `block-edit-batch`、AG 仍列已合并、CM6 Undo/Redo 一次可恢复/重做。跨平台 PDF 原生第16页完整渲染另按既有回归独立验收。
+
+### WCP43 连续合并真实 Safari 反馈与修复（2026-11-17）
+
+- 用户 iPad Safari 断块 AG 截图：`p13b5` 已显示「断块合并 ✓」，`p16b4` 显示「待定」，全局状态栏却报 `断块审阅保存失败：审阅状态已有其他修改，须重新加载`。这是 AG 投影与 SQLite 审阅权威失去同步，不是 PDF 样式错误。
+- **根因一**：一次 CM6 合并触发 `mdContentChanged` 后，代码无差别 `breakReviews.clear()`，误删其他断块的内存审阅缓存；SQLite 仍保留人工决定，因此 UI `待定` 与后端原 CAS 期待值不一致。
+- **根因二**：CM6 合并使 `md().dirty=true` 时，AG 临时将审阅标为 `待定`；后台 `md-save` 回执只更新 CM6 StateField 的 `dirty=false`，不产生 `docChanged`，AG 未重新投影。因此即使未清掉缓存，独立候选也会残留错误的「待定」文字。
+- **修复原则**：加载 SQLite 审阅结果时，在 CM6 Runtime 中捕获该候选两端 LineID 和完整行文本快照；后续变更按候选单独验证端点身份与原文是否保持一致，不因无关块合并、普通 MD 编辑或无关 Block 关系变动而清空全部决定。仅对证据失效的候选显示「待定」，不修改或删除 SQLite 历史记录。**先前仅记录、未实际合并的旧 WP3 条目可以显示待定，但再次选择「断块合并」必须以其真实 SQLite 决定作为 CAS `expectedDecision`。**
+- `md-save` 的持久化 ACK 将 `dirty` 复原后，仅重新投影当前断块 AG 行，不触发 MD 重载、全表重建或 PDF 重绘。已合并条目也必须比较 A/B 当前正文是否等于保存时的合并证据，避免修改源文后仍假称已合并。
+- 真正并发修改仍由后端 CAS 拒绝，前端只读重新加载有效审阅决定、局部刷新 AG、状态栏警告用户复核后再操作，**绝不自动覆盖其他写入者的决定**。
+- 新浏览器回归严格重演「先合并一条 → 第二条存在历史 WP3 仅记录 '断块合并' → 第二条再次合并成功（CAS 仍发送实际旧决定）→ 独立的 '忽略' 维持不变」，并模拟真实并发冲突，验证只刷新、不写 MD/Block、无 console error。Chromium 与 iPad WebKit 均执行；Lab-OCR PDF 22 页第16页非白画布继续作为完整 WebKit 检查门槛。

@@ -149,6 +149,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const bb=cm()?.rows.find(row=>row.block_id===b?.block_id);
     const offset=saved.split_offset,glue=saved.merge_glue;
     if(!a||!b||!ba||!bb||b.text!==''||
+       (typeof saved.before_text==='string'&&saved.before_text!==a.text)||
+       (typeof saved.after_text==='string'&&saved.after_text!==b.text)||
+       (typeof saved.joinedText==='string'&&saved.joinedText!==a.text)||
        typeof offset!=='number'||offset<1||offset>=a.text.length||
        !['',' '].includes(glue)||a.text.slice(offset,offset+glue.length)!==glue)return null;
     const left=a.text.slice(0,offset),right=a.text.slice(offset+glue.length);
@@ -184,23 +187,41 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
     activeAgView==='block-break'?projectBreakReviewRows():
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
-  function breakReviewDecision(row){
+  // One candidate's CM6 edit does not invalidate decisions for independent
+  // candidates. Compare their two exact source lines and stable identities
+  // against the snapshot validated by the last read-only SQLite GET. An
+  // unrelated merged candidate must not turn an existing reviewed pair into
+  // misleading "待定" and trigger a false CAS conflict on its next edit.
+  function matchingBreakReview(row){
     const saved=breakReviews.get(row.issue_id);
-    return !md()?.dirty&&!cm()?.queue?.length&&
-      saved?.before_line_id===row.before_line_id&&
-      saved?.after_line_id===row.after_line_id&&
-      !(saved.decision==='断块合并'&&!saved.merged)?saved.decision:'待定';
+    const a=md()?.rows.find(item=>item.line_id===row.before_line_id);
+    const b=md()?.rows.find(item=>item.line_id===row.after_line_id);
+    if(!saved||saved.before_line_id!==row.before_line_id||
+       saved.after_line_id!==row.after_line_id||
+       saved.before_text!==a?.text||saved.after_text!==b?.text)return null;
+    return saved;
+  }
+  function breakReviewDecision(row){
+    const saved=matchingBreakReview(row);
+    if(md()?.dirty||cm()?.queue?.length)return '待定';
+    return saved&&!(saved.decision==='断块合并'&&!saved.merged)&&
+      !saved.merged?saved.decision:'待定';
   }
   async function loadBreakReviews(){
     const epoch=++breakReviewEpoch,book=workspace,op=operation;
     // Local uncommitted CM6 source is newer than disk: never paint stored
     // decisions onto a divergent source before the user explicitly saves.
-    if(md()?.dirty||cm()?.queue?.length){breakReviews.clear();return false;}
+    if(md()?.dirty||cm()?.queue?.length)return false; // preserve snapshots; projection checks evidence
     const result=await request('block-break-reviews',{workspace:book});
     if(epoch!==breakReviewEpoch||book!==workspace||op!==operation)return false;
     breakReviews=new Map((result.reviews??[]).filter(item=>
       typeof item.issue_id==='string'&&
-      ['断块合并','忽略'].includes(item.decision)).map(item=>[item.issue_id,item]));
+      ['断块合并','忽略'].includes(item.decision)).map(item=>{
+        const before=md()?.rows.find(row=>row.line_id===item.before_line_id);
+        const after=md()?.rows.find(row=>row.line_id===item.after_line_id);
+        return [item.issue_id,{...item,
+          before_text:before?.text,after_text:after?.text}];
+      }));
     return true;
   }
   async function chooseBreakReview(row,decision){
@@ -214,9 +235,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const before=md().rows.find(item=>item.line_id===current.before_line_id);
     const after=md().rows.find(item=>item.line_id===current.after_line_id);
     if(!before||!after)return;
-    const recorded=breakReviews.get(issue);
-    const expected=recorded?.before_line_id===current.before_line_id&&
-      recorded?.after_line_id===current.after_line_id?recorded.decision:breakReviewDecision(current);
+    const recorded=matchingBreakReview(current);
+    // The displayed label may say "待定" for a legacy WP3 record-only
+    // merge. CAS must still use the real SQLite decision, never the label.
+    const expected=recorded?.decision??'待定';
     let plan=null;
     if(decision==='断块合并'){
       try{plan=planBlockBreakMerge(current,md().rows,cm().rows);}
@@ -247,18 +269,33 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         // reloads. This is still the existing CM6 md-save/CAS pipeline.
         await flushMdChanges();
         if(op!==operation||book!==workspace)return;
-        breakReviews.set(issue,{...recentlyMerged.get(issue)});
+        breakReviews.set(issue,{...recentlyMerged.get(issue),
+          before_text:plan.joinedText,after_text:''});
         onStatus(`✓ 已合并 ${current.before_pbs} → ${current.after_pbs} · 后块保留空行和虚线 PDF 框 · CM6 可撤销`,'ok');
         return;
       }
       if(decision==='待定')breakReviews.delete(issue);
-      else breakReviews.set(issue,{issue_id:issue,decision,
-        before_line_id:before.line_id,after_line_id:after.line_id});
+      else breakReviews.set(issue,{issue_id:issue,decision,merged:false,
+        before_line_id:before.line_id,after_line_id:after.line_id,
+        before_text:before.text,after_text:after.text});
       if(activeAgView==='block-break'&&currentSqlTable==='md')
         frame.patchMdRows(projectedMdRows());
       onStatus(`断块审阅 · ${current.before_pbs} → ${current.after_pbs} · ${decision} · 已保存（原文未变）`,'ok');
     }catch(error){
-      onStatus('断块审阅保存失败：'+error.message,'error');
+      if(/审阅状态已有其他修改|并发状态冲突/.test(error.message)){
+        // Real concurrent writes or a stale source snapshot are NOT an
+        // instruction to overwrite somebody else's review. Refresh the
+        // authoritative state and require an explicit second selection.
+        try{
+          const reloaded=await loadBreakReviews();
+          if(reloaded&&activeAgView==='block-break'&&currentSqlTable==='md')
+            frame.patchMdRows(projectedMdRows());
+          onStatus(reloaded?'断块审阅状态已从 SQLite 更新；请核对并重新选择':
+            '审阅状态冲突且源码正在修改；请先保存再重新加载候选','warning');
+        }catch(refreshError){
+          onStatus('断块审阅冲突且同步失败：'+refreshError.message,'error');
+        }
+      }else onStatus('断块审阅保存失败：'+error.message,'error');
     }finally{breakReviewBusy.delete(issue);}
   }
   const reviewCell=createBlockBreakReviewCell(chooseBreakReview);
@@ -363,7 +400,10 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return persistence;
   }
   function mdContentChanged(next){
-    breakReviews.clear();++breakReviewEpoch; // decisions require saved text evidence
+    // Keep independent decisions. matchingBreakReview checks the old
+    // snapshot for each pair and hides only changed evidence; a transient
+    // edit/Undo may restore the same pair without discarding its CAS state.
+    ++breakReviewEpoch;
     for(const [id,item] of recentlyMerged){
       const before=next.rows.find(row=>row.line_id===item.before_line_id);
       const after=next.rows.find(row=>row.line_id===item.after_line_id);
@@ -396,6 +436,13 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       read:md,
       ack:(rows,revision)=>{
         frame.replaceMdRuntime(acknowledgeMdRuntime(md(),rows,revision));
+        // mdContentChanged briefly shows pending while CM6 has unsaved
+        // edits. Acknowledging the SQL CAS changes dirty -> false without
+        // a docChanged event, so explicitly reproject just this AG view.
+        // Otherwise every independent reviewed row stays visually "待定"
+        // even after it becomes valid again, despite correct local cache.
+        if(currentSqlTable==='md'&&activeAgView==='block-break')
+          frame.patchMdRows(projectedMdRows());
       },
       post:async batch=>{
         if(cm()?.queue.length)await flushBlockChanges();
@@ -525,7 +572,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   function reflectCmBlockChange(result,selectedId){
     if(!result.changed)return;
     frame.setEmptyMdBlocks(emptyMdChildBlockIds(md()?.rows??[],result.state?.rows??cm()?.rows??[]));
-    breakReviews.clear();++breakReviewEpoch; // source parentage changed; invalidate prior review projection
+    ++breakReviewEpoch; // retain unaffected decisions; candidates and text snapshots validate identity
     frame.setReviewPair(null); // Block relationships may have moved
     if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
     if(md()){
