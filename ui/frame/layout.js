@@ -965,6 +965,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       agViewOptions,onAgViewChange)});
   let previewToken=0,previewTimer=null;
   let previewClickCallback=null,previewSelectedLine=null,previewSync=null,previewClickArea=null;
+  let previewMediaResolver=null;
   let footnoteReturn=null;
   const mdArea=()=>pdfSlot.preview?.mdArea??null;
   const noteReturnButton=()=>pdfSlot.preview?.returnNote??null;
@@ -1172,6 +1173,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       pdfSlot.current?.setReviewPair?.(pdfSlot.reviewPair);
       return Boolean(pair);
     },
+    setMdPreviewMediaResolver(callback){
+      if(callback!==null&&typeof callback!=='function')
+        throw Error('MD 预览媒体地址解析器无效');
+      previewMediaResolver=callback;
+      return true;
+    },
     setMdPreviewNavigation(callback){
       if(callback!==null&&typeof callback!=='function')throw Error('MD 预览定位回调无效');
       previewClickCallback=callback;bindPreviewClick();
@@ -1205,6 +1212,15 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
           pdfSlot.noteReader?.close();clearFootnoteReturn();
           documentChanged();
           pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source,{nativeInlineMath});
+          // The Frame owns this read-only projection; a Lab can provide an
+          // explicit image URL adapter without forking Main's Markdown parser.
+          // Only the rendered src is rewritten, never the CM6 MD source.
+          if(previewMediaResolver){
+            for(const img of pdfSlot.preview.mdArea.querySelectorAll('img[src]')){
+              const uri=previewMediaResolver(img.getAttribute('src'));
+              if(typeof uri==='string'&&uri)img.setAttribute('src',uri);
+            }
+          }
           sync?.afterRender(preserved);
           highlightPreviewLine(previewSelectedLine);
         }).catch(error=>onStatus('MD 预览渲染失败：'+error.message,'warning'));

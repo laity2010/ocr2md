@@ -882,6 +882,12 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       resolveBlockBreakFocus({issueId:target.blockBreakId,
         lineId:target.lineId,blockId:target.blockId},md().rows,cm()?.rows??[]):null);
   });
+  // Book-specific rendered image URL, never Main /media/ or a second Markdown
+  // document. The server rechecks the Main-granted Lab book directory.
+  frame.setMdPreviewMediaResolver(raw=>
+    workspace&&/^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/.test(raw||'')?
+      '/labs/lab-ocr/api/ocr/media-file?workspace='+encodeURIComponent(workspace)+
+        '&path='+encodeURIComponent(raw):null);
   frame.setMdPreviewNavigation(lineNo=>locateReview({origin:'preview',lineNo}));
   function refreshBlockUndoRedo(){
     const state=status();
@@ -1628,5 +1634,6 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     sqlReady,blockReady:readyBlock,mdReady:()=>mdReady,
     flushBlockChanges,flushAllChanges,refreshNavigation:revealNavigation,
     setAgView,dispose(){mediaView?.dispose();noteDialog?.dispose();unsubscribeLocation();
+      frame.setMdPreviewMediaResolver(null);
       frame.setAgFunctions([]);frame.setAgAction({});frame.setAgToggle({});frame.setMdPreviewNavigation(null);}});
 }

@@ -92,6 +92,10 @@ try{
       await page.goto(url,{waitUntil:'domcontentloaded'});
       await page.waitForFunction(()=>document.querySelector('#workspace select.ocr-source-file-select')
         ?.value==='sql:md',null,{timeout:26000});
+      // Even before Media AG is selected, the normal Markdown preview must
+      // render the current Lab book's local image, never Main's /media path.
+      await page.waitForFunction(book=>[...document.querySelectorAll('.ocr-preview-md-scroll img')]
+        .some(img=>img.getAttribute('src')?.includes('media-file?workspace='+encodeURIComponent(book))),book,{timeout:12000});
       const picker=page.locator('.ocr-outline-pane .ocr-ag-module-select');
       await picker.selectOption('media');
       await page.waitForFunction(()=>document.querySelectorAll('.ocr-lab-media-preview').length>=4,
@@ -103,6 +107,9 @@ try{
       await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable
         ?.mdRuntime()?.rows[0]?.text.includes('media/'),null,{timeout:12000});
       const modified=await page.evaluate(()=>document.querySelector('.ocr-cm-source').ocrCmTable.mdRuntime().rows);
+      await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-preview-md-scroll img')]
+        .filter(img=>img.getAttribute('src')?.includes('media-file?')).length>=3,
+        null,{timeout:12000});
       assert.equal((modified[0].text.match(/media\//g)||[]).length,2,
         'one download replaces both references');
       assert.deepEqual(modified.map(x=>x.line_id),initial.map(x=>x.line_id));

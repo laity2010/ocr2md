@@ -13,6 +13,7 @@
 - `ui/lab-ocr/media-view.js` 的公开接口：
   - `projectLabMedia({source, mdRows, blocks, inventory, states, running})`（M01）：从 Main `findMedia` 解析器及文件清单产生只读行，包含未引用文件。不触碰编辑器、SQL 或网络。
   - `createLabOcrMediaView({request,read,replace,onChanged,onStatus})`（M02）：唯一 UI 适配器 façade，公开 `rows/scan/downloadOne/downloadAll/previewCell/actionCell/setActive/dispose`。不创建新的 Grid 或持久化文本，依赖 Workflow 提供的单一编辑端口。
+- Frame 新增 `setMdPreviewMediaResolver(fn)`，只转换 Markdown 预览**渲染出的**本地图片地址为当前 Lab 书籍的 `media-file` 授权 URL，不改原文、不访问 Main `/media`，仍复用原 Markdown 渲染器与阅读定位。
 - Frame 公共新增端口 `replaceMdMediaReferences(edits)`：在同一 CM6 事务验证原文、范围、路径，保留物理行数和稳定 LineID。`patchMediaRows(rows)` 只差量更新已有 AG 表，不反复重建 Grid 或缩略图。
 - Lab 后端：`GET media-inventory`、`GET media-status`、`GET media-file`、`POST media-chunk`；均带工作区，复用现有 Cookie/root/Origin、HTTP Range 和本地内容类型检查，不直连公网任意主机。图片范围与 Main 保持一致：MinerU CDN HTTPS（测试为 loopback）、JPEG/PNG/GIF/WebP；音频、视频及任意来源尚未支持，不伪报覆盖。
 
