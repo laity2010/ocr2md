@@ -3,6 +3,7 @@ import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateField,StateEffect,Compartment,Transaction} from '@codemirror/state';
 import {EditorView,Decoration} from '@codemirror/view';
 import {documentChanged} from '../view-store.js';
+import {createFootnotePopover} from '../footnote-popover.js';
 import {basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
@@ -806,9 +807,20 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     checkbox.setAttribute('aria-label','切分 Markdown PDF 预览');
     checkbox.addEventListener('change',()=>onSplit?.(checkbox.checked));
     split.append(checkbox,document.createTextNode('切分'));
+    // Main's existing read-only footnote reader exposes the same
+    // '定位注文' and '↩ 返回注引' workflow in the Lab preview.
+    const mdTools=document.createElement('div');mdTools.className='ocr-preview-mode-tools';
+    mdTools.dataset.mode='md';
+    const returnNote=document.createElement('button');returnNote.type='button';
+    returnNote.className='ocr-preview-return-note';
+    returnNote.textContent='↩ 返回注引';
+    returnNote.title='返回打开注文前的 Markdown 阅读位置';
+    returnNote.hidden=true;
+    returnNote.addEventListener('click',()=>pdfSlot.returnToNote?.());
+    mdTools.append(returnNote);
     const pdfTools=document.createElement('div');pdfTools.className='ocr-preview-mode-tools';
     pdfTools.dataset.mode='pdf';pdfTools.hidden=true;
-    bar.append(mode,split,pdfTools);element.append(bar);
+    bar.append(mode,split,mdTools,pdfTools);element.append(bar);
     const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';
     const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
     surface.dataset.pdfTheme='dark';
@@ -821,6 +833,8 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
       }
       if(next!=='md'&&next!=='pdf')return false;
       element.dataset.previewMode=next;mode.value=next;
+      mdTools.hidden=next!=='md';
+      if(next!=='md')pdfSlot.noteReader?.close();
       pdfTools.hidden=next!=='pdf';
       surface.setAttribute('aria-hidden',String(next!=='pdf'&&!pdfSlot.detached));
       pdfSlot.current?.relayout?.();
@@ -829,7 +843,7 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
     mode.addEventListener('change',()=>setMode(mode.value));
     owned=()=>{
       pdfSlot.preview=Object.freeze({surface,tools:pdfTools,
-        mdArea:area,
+        mdArea:area,returnNote,
         setMode,setSplit(enabled){
           pdfOption.disabled=Boolean(enabled)||!pdfPaneMount;
           if(enabled){
@@ -900,13 +914,42 @@ function addPanel(dockview,id,component,title,position){
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{},
   onAgViewChange=()=>{},agViewOptions=[],moduleLabel='空白框架',defaultPreview='split'}={}){
   let split=false;
-  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,formulaHighlights:[],reviewPair:null,emptyMdBlocks:[]};
+  const pdfSlot={current:null,source:null,overlays:null,preview:null,detached:null,
+    formulaHighlights:[],reviewPair:null,emptyMdBlocks:[],
+    noteReader:null,returnToNote:null};
   const dockview=createDockview(container,{theme:themeAbyss,
     createComponent:({name})=>blankPane(name,setSplit,onModuleChange,moduleLabel,pdfSlot,onStatus,
       agViewOptions,onAgViewChange)});
   let previewToken=0,previewTimer=null;
   let previewClickCallback=null,previewSelectedLine=null,previewSync=null,previewClickArea=null;
+  let footnoteReturn=null;
   const mdArea=()=>pdfSlot.preview?.mdArea??null;
+  const noteReturnButton=()=>pdfSlot.preview?.returnNote??null;
+  function clearFootnoteReturn(){
+    footnoteReturn=null;
+    const button=noteReturnButton();if(button)button.hidden=true;
+  }
+  function navigateToFootnote({sourceLine,noteId,referenceLine,referenceScrollTop,reference}){
+    const root=mdArea();
+    const note=root?.querySelector('li.footnote-item[id="'+noteId+'"]');
+    if(!note||!Number.isInteger(sourceLine)||sourceLine<1)return;
+    footnoteReturn={referenceLine,referenceScrollTop,reference};
+    const button=noteReturnButton();if(button)button.hidden=false;
+    // Frame's existing semantic navigation port handles CM6, AG and PDF.
+    // Lab-OCR subscribes to it with stable LineID/BlockID lookup.
+    previewClickCallback?.(sourceLine);
+    root.scrollTop+=note.getBoundingClientRect().top-
+      root.getBoundingClientRect().top-18;
+  }
+  function returnToFootnoteReference(){
+    const saved=footnoteReturn;clearFootnoteReturn();
+    if(!saved)return;
+    if(Number.isInteger(saved.referenceLine)&&saved.referenceLine>=1)
+      previewClickCallback?.(saved.referenceLine);
+    const root=mdArea();if(root)root.scrollTop=saved.referenceScrollTop;
+    if(saved.reference?.isConnected)saved.reference.focus({preventScroll:true});
+  }
+  pdfSlot.returnToNote=returnToFootnoteReference;
   const previewAnchors=()=>[...mdArea()?.querySelectorAll('[data-source-start][data-source-end]')??[]];
   function highlightPreviewLine(lineNo,{reveal=false}={}){
     previewSelectedLine=lineNo;
@@ -927,8 +970,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     return Boolean(target);
   }
   function previewClick(event){
-    const node=event.target instanceof Element?
-      event.target.closest('[data-source-start][data-source-end]'):null;
+    if(pdfSlot.noteReader?.handleClick(event))return;
+    if(!(event.target instanceof Element)||event.target.closest('a[href]'))return;
+    const node=event.target.closest('[data-source-start][data-source-end]');
     if(!node||!mdArea()?.contains(node))return;
     const line=Number(node.dataset.sourceStart);
     if(Number.isSafeInteger(line)&&line>0)previewClickCallback?.(line);
@@ -953,6 +997,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
+  // Reuse Main's exact footnote-popover.js (same code and CSS), not a
+  // Lab-specific parser or card. The live Markdown renderer owns the DOM.
+  pdfSlot.noteReader=createFootnotePopover({root:mdArea(),onLocate:navigateToFootnote});
   function setSplit(enabled){
     if(Boolean(enabled)===split)return;
     if(enabled){pdfSlot.preview?.setMode('md');addPanel(dockview,'pdf','pdf','PDF 原文',{referencePanel:'preview',direction:'right'});split=true;}
@@ -1085,6 +1132,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     setMdPreviewNavigation(callback){
       if(callback!==null&&typeof callback!=='function')throw Error('MD 预览定位回调无效');
       previewClickCallback=callback;bindPreviewClick();
+      if(callback===null){pdfSlot.noteReader?.close();clearFootnoteReturn();}
     },
     highlightMdPreview(lineNo,{reveal=false}={}){
       return highlightPreviewLine(lineNo,{reveal});
@@ -1094,6 +1142,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     },
     setMarkdownPreview(source,{nativeInlineMath=false}={}){
       if(typeof source!=='string')throw Error('MD 预览源码必须是字符串');
+      // In Main a new document revision invalidates note coordinates at
+      // once; the Frame's render is delayed, so invalidate immediately.
+      pdfSlot.noteReader?.close();clearFootnoteReturn();
       bindPreviewClick();
       const token=++previewToken;
       if(previewTimer!==null)clearTimeout(previewTimer);
@@ -1106,6 +1157,9 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
           const sync=await ensurePreviewScrollSync();
           if(token!==previewToken||!pdfSlot.preview?.mdArea)return;
           const preserved=sync?.beforeRender();
+          // Main closes popovers before morphdom; Frame replaces its HTML
+          // wholesale, so a card or return target cannot outlive the DOM.
+          pdfSlot.noteReader?.close();clearFootnoteReturn();
           documentChanged();
           pdfSlot.preview.mdArea.innerHTML=module.renderMarkdown(source,{nativeInlineMath});
           sync?.afterRender(preserved);
@@ -1136,6 +1190,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clearMarkdown();
       ++previewToken;
       if(previewTimer!==null){clearTimeout(previewTimer);previewTimer=null;}
+      pdfSlot.noteReader?.close();clearFootnoteReturn();
       if(pdfSlot.preview?.mdArea)pdfSlot.preview.mdArea.textContent='';
       previewSelectedLine=null;pdfSlot.reviewPair=null;pdfSlot.emptyMdBlocks=[];
       pdfSlot.current?.setEmptyMdBlocks?.([]);
@@ -1338,6 +1393,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();
     },
     dispose(){closeFunctionMenu();++previewToken;
+      pdfSlot.noteReader?.dispose();pdfSlot.noteReader=null;
+      clearFootnoteReturn();pdfSlot.returnToNote=null;
       if(previewTimer!==null)clearTimeout(previewTimer);
       previewClickArea?.removeEventListener('click',previewClick);previewClickArea=null;
       previewSync?.dispose();previewSync=null;

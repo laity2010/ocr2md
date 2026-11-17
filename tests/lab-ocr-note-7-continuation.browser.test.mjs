@@ -176,6 +176,52 @@ try{
    assert.equal(mdSaves,1);assert.equal(armCount,1);
    assert.equal(reviewSetCount,1);assert.equal(blockSaves,0);
    assert.equal((await select(newId))?.match_state,'已转换');
+   // Exact Main footnote card in the real 4-pane Lab workspace, after
+   // conversion. The card is read-only and MUST NOT navigate on opening.
+   const mdPane=page.locator('.ocr-preview-pane .ocr-preview-md-scroll');
+   const cite=mdPane.locator('sup.footnote-ref a[href="#fn1"]').first();
+   await cite.waitFor({state:'visible',timeout:14000});
+   const definition=mdPane.locator('li.footnote-item[id="fn1"]');
+   assert.equal(await definition.getAttribute('data-source-start'),'3');
+   await cite.scrollIntoViewIfNeeded();
+   const originalReader=await mdPane.evaluate(el=>el.scrollTop);
+   const hashBefore=await page.evaluate(()=>location.hash);
+   await cite.click();
+   const card=page.locator('.ocr-footnote-popover');
+   await card.waitFor({state:'visible'});
+   assert.match(await card.textContent(),/We began by purchasing insurance/);
+   assert.equal(await page.evaluate(()=>location.hash),hashBefore,
+     'Open card must not navigate via #fn1');
+   assert.equal(await mdPane.evaluate(el=>el.scrollTop),originalReader,
+     'Card open must not jump to note definition');
+   assert(await card.getByRole('button',{name:'定位注文'}).isVisible());
+   await card.getByRole('button',{name:'定位注文'}).click();
+   await card.waitFor({state:'hidden'});
+   const back=page.locator('.ocr-preview-pane .ocr-preview-return-note');
+   assert(await back.isVisible(),'Locating note must offer Main return action');
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.editorView()?.state.doc.lineAt(
+       document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView()?.state.selection.main.head
+     ).number===3,null,{timeout:12000});
+   const noteArrival=await mdPane.evaluate(el=>{
+     const n=el.querySelector('li.footnote-item[id="fn1"]').getBoundingClientRect();
+     const p=el.getBoundingClientRect();
+     return {top:el.scrollTop,visible:n.top>=p.top-24&&n.top<p.bottom};
+   });
+   assert(noteArrival.visible,'Located note body must be in visible Markdown viewport');
+   // The synthetic four-line book often fits entirely in the pane; use the
+   // long-document Frame test to enforce a real scroll delta, not this one.
+   assert(Number.isFinite(noteArrival.top));
+   await back.click();
+   assert.equal(await back.isVisible(),false);
+   assert(Math.abs((await mdPane.evaluate(el=>el.scrollTop))-originalReader)<3,
+     'Return to note reference must restore previous preview scroll');
+   await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.editorView()?.state.doc.lineAt(
+       document.querySelector('.ocr-cm-source')?.ocrCmTable?.editorView()?.state.selection.main.head
+     ).number===1,null,{timeout:12000});
+   await cite.click();await card.waitFor({state:'visible'});
+   await page.keyboard.press('Escape');await card.waitFor({state:'hidden'});
    // One CM6 history entry covers source line, definition, continuation.
    assert(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.undoMarkdown()));

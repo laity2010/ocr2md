@@ -184,3 +184,11 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - 已存储的旧书籍可能是多种格式组合或自定义 Regex：在其首次打开新版规则弹窗时用一个 `当前书籍的原有多格式组合（保留不变）` 选项，**不自动更改**当前匹配；用户选择某个内置规则时仅替换该方向，另一方向未修改的内置规则和自定义配置保留。`scope/chapterLevel/continuation/weakAutoMatch` 等既有结构设置隐藏但原样透传，避免悄悄改变笔记章节、续行边界。
 - 保存成功立即更新 AG 候选，不更改 CM6 MD/Block，也不删除人工审阅与转换回执；重新打开规则界面能识别已保存的单个源格式，并可再次选择新格式。
 - 验收：`tests/lab-ocr-note-rule-presets.test.mjs` 检查全部 14 个内置样例与真实正则一致、单一选择与已转换 Markdown 共存；`tests/lab-ocr-note-match-view.browser.test.mjs` 在 Chromium 和 iPad WebKit 验证弹窗只有两个 `select`、没有 checkbox/textarea、自带样例与 Regex、当前多格式书籍不自动覆盖、选择源格式+注文格式保存后立即去掉未启用的原生候选且保留标准 Markdown、切回 View 后从书籍 SQL 规则读取且 `scope`/续行设置不变。现有 Python `note-match-rules` CAS 测试继续通过。
+
+## WCP43 · Markdown 注释阅读弹窗沿用 Main（2026-11-17）
+
+- **无需新模块/新解析器**：Main 与 Lab 均已有完全相同 SHA 的 `ui/footnote-popover.js`、`.css`，Markdown 渲染器也已使用同一份 markdown-it + markdown-it-footnote。Lab 的缺口仅在 `ui/frame/layout.js` 对这个已有组件的**装配、生命周期和导航**。
+- Frame 预览的 `mdArea` 原位作为 `createFootnotePopover({root,onLocate})` 的 Markdown root，原 Main 模块负责定位 `sup.footnote-ref a[href^="#fn"]`、读取 sanitizer 输出的 `li.footnote-item`、克隆正文、移除回链及动态 Floating UI 浮窗定位；鼠标悬停、点击、关闭及 Escape 都遵从 Main 模块的现有逻辑。没有复制模块或另建一份脚注正文数据。
+- 点击注引只显示原只读卡片，**不让浏览器跳 hash 或改变四窗焦点**。卡片里的「定位注文」触发 Frame 已有 `setMdPreviewNavigation` 语义回调，Lab-OCR 的 `locateReview({origin:'preview',lineNo})` 再负责 AG/CM6/PDF 的唯一定位消息；Frame 同时把 Markdown 预览的真实 `li` 带进可见范围。新增 `↩ 返回注引`（Main 现有样式）保持并恢复最初的引用行、预览精确 scrollTop 和键盘 focus；不对 Markdown/SQL/Block 持久化做任何写入。
+- `setMarkdownPreview`、`clearMdRuntime`、`setMdPreviewNavigation(null)`、Frame `dispose` 会关闭浮窗并清理返回状态；数据变更时先关闭再执行延迟的 Markdown 重绘，防止原注释坐标绑定到已经过期的 DOM。切换 PDF 模式时也按 Main 的现有方式关闭浮窗，不改动原 PDF 组件的加载与预热。
+- API 保持最小：只沿用 Frame 原有的 `setMdPreviewNavigation(lineNo)`/`setMarkdownPreview`，内部复用原 Main `createFootnotePopover`。独立的 `tests/lab-frame-footnote-popover.browser.test.mjs` 在 Chromium/iPad-WebKit 实际 Markdown 渲染上测试重复注引、浮窗不跳转、不更改 scrollTop、正文加粗/链接、显式定位及返回、长文滚动、Escape、重绘/销毁清理；`tests/lab-ocr-note-7-continuation.browser.test.mjs` 验证转换后的 `[^7]` 在 Lab 四窗中点击、定位注文、返回注引与 Undo/Redo。
