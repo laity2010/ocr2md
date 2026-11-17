@@ -747,11 +747,15 @@ function blankPane(name,onSplit,onModuleChange,moduleLabel='空白框架',pdfSlo
         onModuleChange?.(next);
       });
     }
-    const functions=document.createElement('select');
-    functions.className='ocr-ag-function-select';
+    // Function commands are ACTIONS, not persistent select values. iPad
+    // Safari can leave a native select stuck on the last value, so choosing
+    // the same action again fires no change event and silently does nothing.
+    const functions=document.createElement('button');
+    functions.type='button';functions.className='ocr-ag-function-select';
     functions.setAttribute('aria-label','当前 AG View 功能');
-    functions.add(new Option('功能',''));
-    functions.disabled=true;
+    functions.setAttribute('aria-haspopup','menu');
+    functions.setAttribute('aria-expanded','false');
+    functions.textContent='功能 ▾';functions.disabled=true;
     const action=document.createElement('button');
     action.type='button';action.className='ocr-ag-extra-action';action.hidden=true;
     const toggleLabel=document.createElement('label');
@@ -960,22 +964,63 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   }
   if(defaultPreview==='pdf'&&pdfPaneMount)pdfSlot.preview?.setMode('pdf');
   else setSplit(true);
+  let functionMenu=null;
+  const functionTrigger=()=>container.querySelector('.ocr-outline-pane .ocr-ag-function-select');
+  const closeFunctionMenu=()=>{
+    functionMenu?.remove();functionMenu=null;
+    document.removeEventListener('pointerdown',onFunctionOutside,true);
+    document.removeEventListener('keydown',onFunctionEscape,true);
+    functionTrigger()?.setAttribute('aria-expanded','false');
+  };
+  const onFunctionOutside=event=>{
+    if(functionMenu&&!functionMenu.contains(event.target)&&
+       event.target!==functionTrigger())closeFunctionMenu();
+  };
+  const onFunctionEscape=event=>{
+    if(event.key==='Escape'){closeFunctionMenu();functionTrigger()?.focus();}
+  };
   return Object.freeze({setSplit,
     setAgFunctions(items=[]){
-      const select=container.querySelector('.ocr-outline-pane .ocr-ag-function-select');
-      if(!select)return false;
+      const trigger=functionTrigger();
+      if(!trigger)return false;
       if(!Array.isArray(items)||items.some(item=>!item||typeof item.id!=='string'||
-        !item.id||typeof item.label!=='string'||typeof item.onClick!=='function'))
+        !item.id||typeof item.label!=='string'||typeof item.onClick!=='function')||
+        new Set(items.map(item=>item.id)).size!==items.length)
         throw Error('AG 功能菜单定义无效');
-      select.replaceChildren(new Option('功能',''));
-      select.options[0].disabled=true;
-      for(const item of items)select.add(new Option(item.label,item.id));
-      select.disabled=items.length===0;select.value='';
-      select.onchange=()=>{
-        const selected=select.value;select.value='';
-        const action=items.find(item=>item.id===selected);
-        if(action)try{Promise.resolve(action.onClick()).catch(()=>{});}
-        catch{} // An action owns status-bar failures; do not break AG picker.
+      closeFunctionMenu();
+      trigger.disabled=items.length===0;
+      trigger.textContent='功能 ▾'; // Never display an already executed command.
+      trigger.onclick=event=>{
+        event.stopPropagation();
+        if(trigger.disabled)return;
+        if(functionMenu){closeFunctionMenu();return;}
+        const menu=document.createElement('div');
+        menu.className='ocr-ag-function-menu';
+        menu.setAttribute('role','menu');
+        menu.setAttribute('aria-label','当前 AG View 功能');
+        for(const item of items){
+          const option=document.createElement('button');option.type='button';
+          option.className='ocr-ag-function-item';
+          option.setAttribute('role','menuitem');
+          option.dataset.action=item.id;option.textContent=item.label;
+          option.onclick=actionEvent=>{
+            actionEvent.stopPropagation();
+            closeFunctionMenu();
+            // Invoke the action from the actual tap event. Show failures in
+            // the common status bar rather than swallowing a rejected Promise.
+            try{Promise.resolve(item.onClick()).catch(error=>
+              onStatus(`AG 功能「${item.label}」失败：${error.message}`,'error'));}
+            catch(error){onStatus(`AG 功能「${item.label}」失败：${error.message}`,'error');}
+          };
+          menu.append(option);
+        }
+        const rect=trigger.getBoundingClientRect();
+        menu.style.left=Math.max(5,Math.min(rect.left,window.innerWidth-185))+'px';
+        menu.style.top=Math.max(5,Math.min(rect.bottom+3,window.innerHeight-85))+'px';
+        document.body.append(menu);functionMenu=menu;
+        trigger.setAttribute('aria-expanded','true');
+        document.addEventListener('pointerdown',onFunctionOutside,true);
+        document.addEventListener('keydown',onFunctionEscape,true);
       };
       return items.length>0;
     },
@@ -1292,7 +1337,8 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       container.querySelector('.ocr-cm-source')?.ocrCmTable?.clear();
       container.querySelector('.ocr-outline-grid')?.ocrSqlGrid?.clear();
     },
-    dispose(){++previewToken;if(previewTimer!==null)clearTimeout(previewTimer);
+    dispose(){closeFunctionMenu();++previewToken;
+      if(previewTimer!==null)clearTimeout(previewTimer);
       previewClickArea?.removeEventListener('click',previewClick);previewClickArea=null;
       previewSync?.dispose();previewSync=null;
       dockview.dispose();},get split(){return split;}});

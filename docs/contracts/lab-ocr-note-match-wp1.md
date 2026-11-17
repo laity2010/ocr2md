@@ -169,3 +169,10 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - 修复仅允许 **同一不可变 BlockID 内**的未缩进连续正文参与安全转换；相邻 `line_no` 必须精确递增、上一物理行非空、中间不得存在空白段落；既有扫描器仍负责判定候选所属的注号、章节/Notes 范围，转换规划不另猜订单关系。对于跨块、空白段落后、来源位置错乱的未缩进续行继续 fail closed。转换保留英文内容和全部 MD 行结构，注引/首行/续行用一次 CM6 事务修改；第342行只在开头添加四格缩进。BlockID、LineID、PBS、PDF 覆盖框不变，保存仍走原 MD CAS。
 - **「匹配状态」列** `sortable:false`：禁用列头触摸排序以避免误操作，但保留原先的 `EnumCheckboxFilter`，仍可按「已匹配 / 待核实 / 忽略 / 已转换 / 转换失败」筛选。默认按数字注号排序，PBS 和源码行仍可人工排序；已转换是只读派生状态，不能手动伪造。
 - 直接回归：`node tests/lab-ocr-note-pair-conversion.test.mjs` 验证同块未缩进续行通过、跨块拒绝和空行后拒绝；真实 Buffett SQLite 的 **只读** 调用 `planNotePairConversion` 确认第136、341、342行恰好三条改动；`tests/lab-ocr-note-7-continuation.browser.test.mjs` 通过 Chromium/iPad-WebKit 验证一次 CM6 事务、单次 MD CAS、Undo/Redo、重开仍为已转换、Block 保存 0；`tests/lab-ocr-note-match-view.browser.test.mjs` 点击匹配状态列头两次不会改变默认注号排序，匹配状态列的现有筛选按钮不消失。
+
+## WCP43 · Safari「转换匹配」选择后无动作（2026-11-17）
+
+- **用户实机线索**：iPad Safari 截图中注号 7 的 AG `匹配状态=已匹配`，而左上角的原生「功能」`<select>` **持续显示「转换匹配」而非复位为「功能」**；现有 `setAgFunctions` 仅监听 `change`，当 iPad 上的 native picker 继续保持上次选中值、再次选择同一项时，浏览器不会产生新 `change`，导致命令不执行且状态栏没有新反馈。不能把这个界面上的无动作误报为订单续行逻辑又失败。
+- 公共 Frame 维持**唯一 API `setAgFunctions([{id,label,onClick}])` 不变**，内部从 `<select>` 改成**触摸点击的菜单按钮 `功能 ▾` + `role=menu` 下的真正 `<button role=menuitem>`**。按钮每次点击都打开动作列表，动作项每次点击立即调用回调；执行后自动关闭并复位标签为「功能 ▾」，没有保留上次选中的 native option 状态。点击外部或 Escape 关闭、切换 AG View 或销毁 Frame 自动关闭、无功能时禁用。菜单渲染为独立的 document-layer popup，避免 iPad 窄栏的 AG/Dockview overflow 截断；异步动作异常进入现有全局状态栏，不被静默吞掉。
+- `功能 → 转换匹配` 的入口**收到实际点击后立即**发送全局状态 `已收到转换匹配命令，正在核对 N 个注引`；无 MD/View、未保存、无匹配、重复点击、异步失败均有明确全局状态。原转换计划、人工确认、SQL CAS 与 CM6 单事务不修改；实际真实书籍仍由用户点击后写入，本次测试不自动写用户书籍。
+- `tests/lab-frame-layout.direct.browser.test.mjs` 用 Chromium 和 WebKit 对同一个功能连点**两次**，验证两次都触发、菜单关闭与角色/复位正确、切 View 清理菜单。`tests/lab-ocr-note-7-continuation.browser.test.mjs` 用 iPad WebKit/Chromium 验证注号 7 成功转换、再次点击同一功能返回「没有可转换」而非静默，以及先有「转换失败」审阅记录、重新设为「已匹配」后执行转换的真实交互序列。旧注释 View、同一行 9/10、独立多注引等全部通过相同点击菜单回归。

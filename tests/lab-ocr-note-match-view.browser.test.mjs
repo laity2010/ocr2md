@@ -295,10 +295,13 @@ try{
    assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdDocument()),original,'Status change must not convert source');
    const functions=page.locator('.ocr-outline-pane .ocr-ag-function-select');
-   assert.deepEqual(await functions.locator('option').allTextContents(),
-     ['功能','转换匹配','识别规则']);
+   await functions.click();
+   assert.deepEqual(await page.locator('.ocr-ag-function-menu [role="menuitem"]')
+     .allTextContents(),['转换匹配','识别规则']);
+   await page.keyboard.press('Escape');
    assert(!await functions.isDisabled());
-   await functions.selectOption('rules');
+   await functions.click();
+   await page.locator('.ocr-ag-function-item[data-action="rules"]').click();
    const dialog=page.locator('.ocr-note-match-rules-dialog');
    await dialog.waitFor({state:'visible'});
    const scope=dialog.locator('select').first();

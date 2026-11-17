@@ -223,7 +223,8 @@ try{
    assert.equal((await select(old9))?.match_state,'已匹配');
    assert.equal((await select(old10))?.match_state,partialMode?'已转换':'已匹配');
    const functionPicker=page.locator('.ocr-outline-pane .ocr-ag-function-select');
-   await functionPicker.selectOption('convert');
+   await functionPicker.click();
+   await page.locator('.ocr-ag-function-item[data-action="convert"]').click();
    await page.waitForFunction(expected=>document.querySelector('#status')?.textContent
      ?.includes(expected),partialMode?'已转换 1 个':'已转换 2 个',{timeout:30000});
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
@@ -290,7 +291,7 @@ try{
    assert.equal((await select(new10))?.match_state,'已转换');
    // The read-only converted option is visible and filterable, not
    // manually forgeable by clicking a non-converted status dropdown.
-   const state=await page.locator('.ocr-outline-grid .ag-row-selected .ocr-note-match-status-select');
+   const state=page.locator('.ocr-outline-grid .ocr-note-match-status-select[aria-label="注号 10 匹配状态"]').first();
    assert.equal(await state.inputValue(),'已转换');
    assert(await state.isDisabled());
    const identity=await page.evaluate(()=>document.querySelector('.ocr-cm-source')

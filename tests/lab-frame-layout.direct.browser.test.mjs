@@ -39,22 +39,34 @@ try{
         const calls=[];
         view.setAgFunctions([{id:'first',label:'转换匹配',onClick:()=>calls.push('first')},
           {id:'second',label:'识别规则',onClick:()=>calls.push('second')}]);
-        const options=[...functions.options].map(item=>item.text);
-        functions.value='first';functions.dispatchEvent(new Event('change',{bubbles:true}));
-        const resetAfterRun=functions.value==='';
-        functions.value='second';functions.dispatchEvent(new Event('change',{bubbles:true}));
+        functions.click();
+        const options=[...document.querySelectorAll('.ocr-ag-function-menu [role="menuitem"]')]
+          .map(item=>item.textContent);
+        document.querySelector('.ocr-ag-function-item[data-action="first"]').click();
+        const resetAfterRun=functions.textContent==='功能 ▾'&&
+          functions.getAttribute('aria-expanded')==='false';
+        // The same command can be executed repeatedly on Safari.
+        functions.click();
+        document.querySelector('.ocr-ag-function-item[data-action="first"]').click();
+        functions.click();
+        document.querySelector('.ocr-ag-function-item[data-action="second"]').click();
+        functions.click();
+        const menuBeforeClear=Boolean(document.querySelector('.ocr-ag-function-menu'));
         view.setAgFunctions([]);
         const disabledAfterClear=functions.disabled;
+        const menuAfterClear=Boolean(document.querySelector('.ocr-ag-function-menu'));
         let rejectsInvalid=false;
         try{view.setAgFunctions([{id:'',label:'bad',onClick:()=>{}}]);}
         catch{rejectsInvalid=true;}
         view.dispose();host.remove();
         return {initial,three,four,events,menu:{initiallyDisabled,options,calls,
-          resetAfterRun,disabledAfterClear,rejectsInvalid}};
+          resetAfterRun,menuBeforeClear,menuAfterClear,
+          disabledAfterClear,rejectsInvalid}};
       });
       assert.deepEqual(result,{initial:4,three:3,four:4,events:['settings'],menu:{
-        initiallyDisabled:true,options:['功能','转换匹配','识别规则'],
-        calls:['first','second'],resetAfterRun:true,
+        initiallyDisabled:true,options:['转换匹配','识别规则'],
+        calls:['first','first','second'],resetAfterRun:true,
+        menuBeforeClear:true,menuAfterClear:false,
         disabledAfterClear:true,rejectsInvalid:true}});
       const directNavigation=await page.evaluate(async url=>{
         const {enhanceNavigationSelect}=await import(url);

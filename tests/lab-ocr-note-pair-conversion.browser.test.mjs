@@ -138,8 +138,10 @@ try{
    const select=async id=>page.evaluate(value=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id:value,focusColumn:'match_state'}),id);
    const func=page.locator('.ocr-outline-pane .ocr-ag-function-select');
-   assert.deepEqual(await func.locator('option').allTextContents(),
-     ['功能','转换匹配','识别规则']);
+   await func.click();
+   assert.deepEqual(await page.locator('.ocr-ag-function-menu [role="menuitem"]')
+     .allTextContents(),['转换匹配','识别规则']);
+   await page.keyboard.press('Escape');
    assert(!await func.isDisabled());
    const oldFirst=`pair:ref:convert-line-0:${firstFrom}:ref.html-sup:ref`;
    const oldSecond=`pair:ref:convert-line-1:${secondFrom}:ref.html-sup:ref`;
@@ -147,7 +149,8 @@ try{
    assert.equal((await select(oldSecond))?.match_state,'已匹配');
    // One command processes both safely matched citations. The second
    // citation reuses the now-normalized body, never copying the definition.
-   await func.selectOption('convert');
+   await func.click();
+   await page.locator('.ocr-ag-function-item[data-action="convert"]').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent
      ?.includes('已转换 2 个'),null,{timeout:30000});
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')

@@ -554,7 +554,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     }finally{locked.forEach(id=>noteReviewBusy.delete(id));}
   }
   async function convertMatchedNotes(){
-    if(activeAgView!=='note-match'||currentSqlTable!=='md'||!md())return false;
+    if(activeAgView!=='note-match'||currentSqlTable!=='md'||!md()){
+      onStatus('转换匹配尚未就绪，请先打开含 MD 的注释匹配 View','warning');return false;
+    }
     if(noteBatchBusy){onStatus('注释匹配 · 转换进行中，拒绝重复执行','warning');
       return false;}
     if(md().dirty||cm()?.queue?.length){
@@ -566,6 +568,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       .sort((a,b)=>b.line_no-a.line_no||b.from-a.from);
     if(!planned.length){onStatus('注释匹配 · 当前没有可转换的已匹配注引','info');
       return false;}
+    onStatus(`注释匹配 · 已收到「转换匹配」命令，正在核对 ${planned.length} 个注引`,'info');
     const groups=new Map();
     for(const row of planned){
       const list=groups.get(row.line_id)??[];list.push(row);

@@ -6,7 +6,8 @@ import {spawn} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 import {makeLabOcrPdf} from './helpers/lab-ocr-pdf-fixture.mjs';
-const port=5462,book='/isolated/note-conversion-book';
+const hadFailure=process.env.NOTE_7_PREVIOUS_FAILURE==='1';
+const port=hadFailure?5463:5462,book='/isolated/note-conversion-book';
 const url=`http://127.0.0.1:${port}/labs/lab-ocr/`;
 const vite=spawn('node',['node_modules/vite/bin/vite.js','--config',
   'labs/lab-ocr/vite.config.mjs','--host','127.0.0.1',
@@ -39,6 +40,19 @@ try{
    let md=initialRows.map(row=>({...row})),mdRevision=0,mdSaves=0,reviewGets=0;
    let armCount=0,reviewSetCount=0,blockSaves=0;
    const decisions=new Map();
+   if(hadFailure){
+     const marker='<sup>7</sup>',from=source[0].indexOf(marker);
+     const id=`ref:convert-line-0:${from}:ref.html-sup`;
+     const body=source[2];
+     decisions.set(id,{ref_id:id,ref_line_id:'convert-line-0',
+       ref_block_id:201,ref_from:from,ref_to:from+marker.length,
+       ref_raw:marker,ref_source_text:source[0],
+       body_id:'body:convert-line-2:0:body.number-dot',
+       body_line_id:'convert-line-2',body_block_id:203,
+       body_from:0,body_to:body.length,body_raw:body,
+       body_source_text:body,decision:'待转换',revision:'a'.repeat(32),
+       issue:{code:'unsafe-layout',reason:'注文续行没有明确缩进，需人工审阅后再转换'}});
+   }
    await page.addInitScript(({book})=>localStorage.setItem(
      'ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
        'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',
@@ -137,9 +151,19 @@ try{
    const newId=`pair:ref:convert-line-0:${from}:ref.md-footnote:ref`;
    const select=async id=>page.evaluate(value=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id:value,focusColumn:'match_state'}),id);
-   assert.equal((await select(oldId))?.match_state,'已匹配');
+   assert.equal((await select(oldId))?.match_state,hadFailure?'转换失败':'已匹配');
+   if(hadFailure){
+     // Physical user flow after WP3.2 rejected unindented note 7:
+     // restore explicitly to 已匹配 then tap 功能 → 转换匹配.
+     await page.locator('.ocr-outline-grid .ocr-note-match-status-select[aria-label="注号 7 匹配状态"]')
+       .first().selectOption('已匹配');
+     await page.waitForFunction(id=>document.querySelector('.ocr-outline-grid')
+       ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'match_state'})
+       ?.match_state==='已匹配',oldId,{timeout:13000});
+   }
    const funcs=page.locator('.ocr-outline-pane .ocr-ag-function-select');
-   await funcs.selectOption('convert');
+   await funcs.click();
+   await page.locator('.ocr-ag-function-item[data-action="convert"]').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent
      ?.includes('已转换 1 个'),null,{timeout:30000});
    await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')
@@ -167,6 +191,18 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('match_state'));
    assert.equal((await select(newId))?.match_state,'已转换');
+   // User's iPad issue: a second tap on an already selected '转换匹配'
+   // option was previously a NO-OP. Every new menu tap must invoke a command,
+   // and the trigger itself must never retain the action label/value.
+   assert.equal(await funcs.textContent(),'功能 ▾');
+   await funcs.tap();
+   assert.equal(await funcs.getAttribute('aria-expanded'),'true');
+   await page.locator('.ocr-ag-function-item[data-action="convert"]').tap();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent
+     ?.includes('当前没有可转换的已匹配注引'),null,{timeout:10000});
+   assert.equal(await funcs.textContent(),'功能 ▾');
+   assert.equal(await funcs.getAttribute('aria-expanded'),'false');
+   assert.equal(mdSaves,1,'Repeat action with no candidates must never write MD');
    const identity=await page.evaluate(()=>document.querySelector('.ocr-cm-source')
      ?.ocrCmTable?.mdRuntime().rows.map(x=>({lineId:x.line_id,blockId:x.block_id})));
    assert.deepEqual(identity,initialRows.map(x=>({lineId:x.line_id,blockId:x.block_id})));
