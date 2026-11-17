@@ -183,3 +183,33 @@
 #workspace .ocr-outline-grid .ocr-block-break-ag-before-context,
 #workspace .ocr-outline-grid .ocr-block-break-ag-after-context {color:#c4c9bb;}
 #workspace .ocr-outline-grid .ocr-block-break-ag-join-space {white-space:pre;}
+
+/* WCP43 WP3: colored review options live in one AG cell. The listbox is
+ * fixed to document.body so AG Grid's row virtualizer cannot clip it. */
+#workspace .ocr-break-review-cell {display:flex;align-items:center;height:100%;}
+#workspace .ocr-break-review-trigger {
+  width:100%;min-width:0;border:1px solid #6c7671;border-radius:6px;
+  color:#e4dbca;background:#364148;padding:6px 5px;min-height:34px;
+  font:inherit;cursor:pointer;white-space:nowrap;
+}
+#workspace .ocr-break-review-trigger[data-review="断块合并"],
+.ocr-break-review-option[data-review="断块合并"] {
+  color:#f5d690;background:#594a2e;border-color:#c39b55;
+}
+#workspace .ocr-break-review-trigger[data-review="忽略"],
+.ocr-break-review-option[data-review="忽略"] {
+  color:#97d7c9;background:#2b514c;border-color:#75ad9e;
+}
+.ocr-break-review-menu {
+  position:fixed;z-index:100000;width:190px;box-sizing:border-box;
+  border:1px solid #718279;border-radius:8px;padding:5px;
+  background:#273339;box-shadow:0 6px 24px #111b20bb;
+  display:flex;flex-direction:column;gap:4px;
+}
+.ocr-break-review-option {
+  min-height:38px;border:1px solid transparent;border-radius:5px;
+  padding:6px 10px;text-align:left;font:14px "OCR2MD Sarasa",sans-serif;
+  cursor:pointer;background:#39434b;color:#cdd5c9;
+}
+.ocr-break-review-option[aria-selected="true"]{outline:2px solid #a7c080;}
+.ocr-break-review-option:focus-visible{outline:2px solid #eec45b;}

@@ -50,7 +50,8 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1250,height:900},hasTouch:true});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   let mdLoads=0,mdSaves=0,blockSaves=0;
+   let mdLoads=0,mdSaves=0,blockSaves=0,reviewWrites=0,reviewLoads=0;
+   const savedReviews=new Map();
    await page.addInitScript(({book})=>localStorage.setItem(
      'ocr2md.lab-ocr.settings.json.v1',JSON.stringify({settings:{
        'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',
@@ -71,6 +72,26 @@ try{
        canUndo:false,canRedo:false});
      if(op==='md-state'){mdLoads++;return json({status:'ready',revision:0,
        rows:md,total:md.length});}
+     if(op==='block-break-reviews'){
+       reviewLoads++;return json({status:'ready',reviews:[...savedReviews.values()]});
+     }
+     if(op==='block-break-review-set'){
+       reviewWrites++;
+       const body=req.postDataJSON();
+       const issue_id=`block-break:${body.beforeBlockId}:${body.afterBlockId}`;
+       const before=md.find(line=>line.line_id===body.beforeLineId);
+       const after=md.find(line=>line.line_id===body.afterLineId);
+       if(!before||!after||before.text!==body.beforeText||after.text!==body.afterText)
+         return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'证据失效'})});
+       const prior=savedReviews.get(issue_id);
+       if((prior?.decision??'待定')!==body.expectedDecision)
+         return route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({error:'并发状态冲突'})});
+       if(body.decision==='待定')savedReviews.delete(issue_id);
+       else savedReviews.set(issue_id,{issue_id,
+         before_line_id:body.beforeLineId,after_line_id:body.afterLineId,
+         decision:body.decision});
+       return json({status:'saved',issue_id,decision:body.decision});
+     }
      if(op==='md-save'){mdSaves++;return json({status:'blocked'});}
      if(op==='block-edit-batch'){blockSaves++;return json({status:'blocked'});}
      if(op==='overlays'){
@@ -100,14 +121,16 @@ try{
    });
    const cols=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields());
-   assert.deepEqual(cols.slice(0,6),
-     ['pbs','join_preview','before_pbs','after_pbs','before_line_no','line_no']);
+   assert.deepEqual(cols.slice(0,3),['pbs','join_preview','before_pbs']);
+   assert(cols.includes('review'),'The pinned-right review column exists even outside horizontal scroll');
    assert(cols.includes('join_preview')&&cols.includes('reason'));
+   assert.equal(reviewLoads,1,'Open break View reads review state once');
    assert.equal(await page.locator('.ocr-ag-all-pages input').isChecked(),true);
    const count=()=>page.locator('.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').count();
    await page.waitForFunction(()=>document.querySelectorAll(
      '.ocr-outline-grid .ag-row:not(.ag-opacity-zero)').length===3);
    assert.equal(await count(),3,'Three within-parent seams include latest / 13F');
+   assert.equal(await page.locator('.ocr-outline-grid .ocr-break-review-trigger').count(),3);
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-grid .ag-row .ocr-block-break-ag-join').length===3);
    // Reuse AG page checkbox (no second view filter implementation).
    await page.locator('.ocr-ag-all-pages input').uncheck();
@@ -163,12 +186,57 @@ try{
    })),[1,2],'Cross-page pair uses physical PDF pages without mutating logical PBS');
    assert(marks.agJoined.includes('steady source'));
    assert.equal(marks.source,original);
+   // WP3: color-coded custom dropdown must work in iPad WebKit as well as
+   // Chromium; native HTML select option colors are unreliable on Safari.
+   let trigger=page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger');
+   assert.equal(await trigger.getAttribute('data-review'),'待定');
+   await trigger.click();
+   const choices=page.locator('body > .ocr-break-review-menu .ocr-break-review-option');
+   await choices.first().waitFor();
+   assert.deepEqual(await choices.allTextContents(),['待定','断块合并（仅记录）','忽略']);
+   const palette=await choices.evaluateAll(nodes=>nodes.map(node=>({
+     choice:node.dataset.review,bg:getComputedStyle(node).backgroundColor,
+     color:getComputedStyle(node).color})));
+   assert.equal(new Set(palette.map(item=>item.bg)).size,3,
+     'All three review candidates have a distinct background color');
+   await choices.nth(1).click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
+     ?.dataset.review==='断块合并',null,{timeout:10000});
+   assert.equal(reviewWrites,1,'Review choice was saved once through independent API');
+   assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable?.mdDocument()),original);
+   trigger=page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger');
+   await trigger.click();await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="忽略"]').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
+     ?.dataset.review==='忽略',null,{timeout:10000});
+   assert.equal(reviewWrites,2);
+   assert.equal(savedReviews.get('block-break:436:437')?.decision,'忽略');
+   // Revisiting AG must reload persisted state without reopening MD SQL.
+   await picker.selectOption('md');
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-header-cell[col-id="text"]'));
+   await picker.selectOption('block-break');
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.columnFields()?.includes('review'));
+   const ignored=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-2',focusColumn:'review'}));
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
+     ?.dataset.review==='忽略');
+   assert.equal(reviewLoads,2);
+   assert.equal(ignored?.review,'忽略');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger').click();
+   await page.locator('body > .ocr-break-review-menu .ocr-break-review-option[data-review="待定"]').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-row-selected .ocr-break-review-trigger')
+     ?.dataset.review==='待定');
+   assert.equal(reviewWrites,3);
+   assert.equal(savedReviews.size,0);
+   assert.equal(mdSaves,0,'Review-only choices do not save or merge MD');
+   assert.equal(blockSaves,0,'Review-only choices do not edit Block relations');
+
    assert.equal((await page.locator('#status').textContent()).includes('断块'),true);
 
    // A second candidate on the next PDF page must replace, not stack,
    // A/B marks; the shared PDF.js viewer retains page-scoped geometry.
    const second=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
-     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-7',focusColumn:'pbs'}));
+     ?.ocrSqlGrid?.selectById({field:'line_id',id:'break-md-7',focusColumn:'join_preview'}));
    assert(second&&second.issue_id==='block-break:439:440');
    await page.locator('.ocr-outline-grid .ag-row-selected .ag-cell[col-id="pbs"]').click();
    await page.waitForFunction(()=>

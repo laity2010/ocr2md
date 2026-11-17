@@ -56,3 +56,25 @@
 - `projectBlockBreakRows` 在原小写词规则之外，仅扩展 `[1-9][0-9]{0,3}[A-Z]{1,5}` 这类 **数字+大写字母代码**；它属于待人工审阅候选，不意味着独立数字、年份、标题或已经完整终句可以合并。保留公式/非正文屏障和结构排除。`resolveBlockBreakFocus` 继续根据现行 MD+Block 状态复核稳定 ID。
 - 必须同步调整 CM6 `mdReviewPairField` 接受 `13F` 作为 `after_token`，否则 AG 可以列出而源码第二端仍无法精确标记。AG 第二列继续 `textContent` 安全渲染，`latest` 暖金、`13F` 青绿，MD 预览不插入任何接续卡片。
 - **实际快照结果**：修复后由 3 条增至 4 条：`p9b3→p9b3s0 latest/13F`、`p13b5→p13b5s0 systematic/portfolio`、`p16b4→p16b4s0 steady/source`、`p16b9→p16b9s0 investors/might`。被公式隔开的 `p19b2→p19b2s1` 仍不报告。直接测试包含 `13F`、`13`、`2024`、完整句末、标题与 LaTeX，浏览器专项夹具包含 `p9b3→p9b3s0` 的 AG/CM6/PDF 三端选中。
+
+## WCP43 · WP3/3：AG 彩色审阅列与独立 SQL 决定（2026-11-17）
+
+### AG 与交互契约
+
+- 「断块」AG View：`逻辑块 PBS` 左固定、`接续预览 A / B` 保持暖金/青绿分色、**审阅**右固定（iPad 窄屏必须可触达），其后保留前块、后块、行号、检测依据列及原 AG 的列值筛选。
+- 新公开 DOM API：`createBlockBreakReviewCell(onChoose)` 位于 `ui/lab-ocr/block-break-review-cell.js`。AG `cellRenderer` 只画一个按钮；点击打开**固定定位**、拥有彩色背景的自定义 listbox，依次提供 `待定`（中性灰）、`断块合并`（暖金）、`忽略`（青绿）。不使用 Safari 无法可靠着色的原生 `<option>`；菜单挂到 `document.body` 避免被 AG Grid 虚拟化行和横向滚动剪裁，点击后关闭，Esc 或外部点击也可关闭。
+- `待定` 是默认无审阅记录；`断块合并` **仅表示人工认定 A/B 应接续，不执行合并**；`忽略` 表示人工认可现有块边界。选择后只更新对应 AG 行的 `review` 值，沿用 `frame.patchMdRows`，不重建 CM6、AG、PDF 或重载 SQLite。后台成功后才更改 UI，失败反馈到全局状态栏。
+- 手动修改了 MD、Block 关系但尚未保存时，审阅操作必须拒绝，并提醒先保存。CM6 源码变化或 Block 结构变化会清除当前内存旧决定；切 View 重新向 SQL 读取有效记录。AG 仍是纯派生视图，审阅状态不嵌入 Markdown CMD 注释。
+
+### SQL 唯一权威与端点
+
+- **`scripts/v6_lab_ocr_block_break_review.py`**：公开 `read_block_break_reviews(book)`（只读）、`set_block_break_review(book,before_block_id,after_block_id,before_line_id,after_line_id,before_text,after_text,decision,expected_decision)`（CAS 事务写入）。`scripts/v6_lab_ocr_serve.py` 分别路由为 `GET block-break-reviews` 和 `POST block-break-review-set`，继续复用 Main 编辑授权、Origin、路径和 POST 大小限制。**无第二套服务器与 Tunnel**。
+- 首个非待定决定才在当前书籍 SQLite 创建 `block_break_review` 表，主键是 `(before_block_id, after_block_id)`；仅保存稳定 LineID、文本的 `SHA-256` 证据指纹、决定及时间戳。GET 不创建表/修改数据，也不保存原文副本。
+- POST 须同时验证 source fingerprint、两个 BlockID 的有效 para `text/paragraph` 类型和直接父子或同父兄弟邻接、两条 LineID 是所属 Block 的首末非空 MD 行、当前 SQLite MD 全文本与请求证据完全相同，再依据旧决定 CAS 检查并插入/修改。改回待定删除该主键记录。若证据或父子关系改变，GET 隐藏过期决定，POST 拒绝旧快照写入；历史记录在库内不自动重写来源数据。
+- `scripts/v6_lab_ocr_store.py` 的已知扩展表检查允许 `block_break_review`；来源不同的 MinerU 导入及 Block 重建禁止静默覆盖它。用户文档 Markdown、BlockID、PDF 坐标、CM6 Undo/Redo 和原 `md_line` **均未被这个审阅动作修改**。实际将两行文本合并需独立的、用户明确执行的 CM6 编辑事务，不以选择下拉作为隐式批准。
+
+### 测试
+
+- `python3 tests/lab-ocr-block-break-review.test.py`：独立合成书籍、本地 SQL、GET 不建表、持久化/重载、CAS 冲突、MD 文本过期、父子关系变动、原始文件与 MD 内容保全、真实 loopback HTTP Origin 与 Main Cookie 权限。
+- `node tests/lab-ocr-block-break-review-cell.test.mjs`：不依赖 AG/DOM 浏览器的菜单公开 API 测试，覆盖三候选、颜色标记数据、关闭行为、相同决定不重复发送。
+- `node tests/lab-ocr-block-break-view.browser.test.mjs`：Chromium/iPad WebKit 验证彩色菜单三个选项、记录→忽略→切 View 重载→待定、AG 局部刷新、未保存 MD/Block、现有四窗双端定位及 PDF 第16/22页非空白绘制。`lab-ocr-latex-view.browser.test.mjs`、`lab-ocr-overlay-filter.browser.test.mjs` 做跨模块回归。

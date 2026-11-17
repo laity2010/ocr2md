@@ -217,6 +217,8 @@ def initialize_block_projection(book:Path)->dict:
             conn.execute('PRAGMA foreign_keys=OFF')
             conn.execute('BEGIN IMMEDIATE')
             tables={name for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+            if 'block_break_review' in tables:
+                raise OCRImportError('已有断块人工审阅结果，禁止静默重建 Block')
             if 'md_line' in tables:
                 raise OCRImportError('MD 行表已有人工正文；禁止直接重建 Block 编号。须先独立备份并规划映射迁移')
             allowed={'minerujson','block','span','block_review','block_edit_meta',

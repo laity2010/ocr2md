@@ -10,6 +10,7 @@ import {projectMdAgRows,mdLineKind} from './md-ag-projection.js';
 import {projectLiveMdRows,projectTitleMdRows,renderTitleMdCell} from './title-view.js';
 import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
 import {projectBlockBreakRows,resolveBlockBreakFocus,renderBlockBreakJoinCell} from './block-break-view.js';
+import {createBlockBreakReviewCell} from './block-break-review-cell.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
 /** Lab OCR workflow port: saved workspace -> authorized import -> SQL navigation.
@@ -91,6 +92,8 @@ const MD_BREAK_COLUMNS=Object.freeze([
     pinned:'left',lockPinned:true,lockPosition:'left'},
   {field:'join_preview',headerName:'接续预览 A / B',width:310,minWidth:205,
     cellRenderer:renderBlockBreakJoinCell,cellClass:'ocr-ag-block-break-preview',sortable:false},
+  {field:'review',headerName:'审阅',width:121,minWidth:112,sortable:true,
+    pinned:'right',lockPinned:true,lockPosition:'right'},
   {field:'before_pbs',headerName:'前块',width:120,sortable:true,comparator:comparePBS},
   {field:'after_pbs',headerName:'后块',width:120,sortable:true,comparator:comparePBS},
   {field:'before_line_no',headerName:'前行',width:78,sortable:true},
@@ -134,12 +137,65 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let currentSqlTable=null;
   let activeAgView='md'; // AG presentation only; CM6 and SQLite are unchanged.
   let latexPresentation=null,agViewRequest=0,lastRenderedLatexSummary=null;
+  let breakReviews=new Map(),breakReviewEpoch=0;
+  const breakReviewBusy=new Set();
   let pdfPage=1;
   const projectedMdRows=()=>activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
-    activeAgView==='block-break'?projectBlockBreakRows(md()?.rows??[],cm()?.rows??[]):
+    activeAgView==='block-break'?projectBlockBreakRows(md()?.rows??[],cm()?.rows??[]).map(
+      row=>({...row,review:breakReviewDecision(row)})):
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
+  function breakReviewDecision(row){
+    const saved=breakReviews.get(row.issue_id);
+    return !md()?.dirty&&!cm()?.queue?.length&&
+      saved?.before_line_id===row.before_line_id&&
+      saved?.after_line_id===row.after_line_id?saved.decision:'待定';
+  }
+  async function loadBreakReviews(){
+    const epoch=++breakReviewEpoch,book=workspace,op=operation;
+    // Local uncommitted CM6 source is newer than disk: never paint stored
+    // decisions onto a divergent source before the user explicitly saves.
+    if(md()?.dirty||cm()?.queue?.length){breakReviews.clear();return false;}
+    const result=await request('block-break-reviews',{workspace:book});
+    if(epoch!==breakReviewEpoch||book!==workspace||op!==operation)return false;
+    breakReviews=new Map((result.reviews??[]).filter(item=>
+      typeof item.issue_id==='string'&&
+      ['断块合并','忽略'].includes(item.decision)).map(item=>[item.issue_id,item]));
+    return true;
+  }
+  async function chooseBreakReview(row,decision){
+    const book=workspace,op=operation,issue=row?.issue_id;
+    if(breakReviewBusy.has(issue))return;
+    const current=projectBlockBreakRows(md()?.rows??[],cm()?.rows??[]).find(
+      item=>item.issue_id===issue&&item.after_line_id===row?.after_line_id);
+    if(!current||md()?.dirty||cm()?.queue?.length){
+      onStatus('请先保存 Block/MD 修改，再审阅最新断块候选','warning');return;
+    }
+    const before=md().rows.find(item=>item.line_id===current.before_line_id);
+    const after=md().rows.find(item=>item.line_id===current.after_line_id);
+    if(!before||!after)return;
+    const expected=breakReviewDecision(current);
+    breakReviewBusy.add(issue);
+    try{
+      const saved=await request('block-break-review-set',{workspace:book,
+        beforeBlockId:current.before_block_id,afterBlockId:current.after_block_id,
+        beforeLineId:current.before_line_id,afterLineId:current.after_line_id,
+        beforeText:before.text,afterText:after.text,
+        decision,expectedDecision:expected},true);
+      if(op!==operation||book!==workspace)return;
+      if(saved.issue_id!==issue||saved.decision!==decision)throw Error('审阅回执与候选不一致');
+      if(decision==='待定')breakReviews.delete(issue);
+      else breakReviews.set(issue,{issue_id:issue,decision,
+        before_line_id:before.line_id,after_line_id:after.line_id});
+      if(activeAgView==='block-break'&&currentSqlTable==='md')
+        frame.patchMdRows(projectedMdRows());
+      onStatus(`断块审阅 · ${current.before_pbs} → ${current.after_pbs} · ${decision} · 已保存到 SQLite（MD 未改）`,'ok');
+    }catch(error){
+      onStatus('断块审阅保存失败：'+error.message,'error');
+    }finally{breakReviewBusy.delete(issue);}
+  }
+  const reviewCell=createBlockBreakReviewCell(chooseBreakReview);
   let persistence=null,loadingRuntime=null,lastEditedId=null;
   let mdPersistence=null,mdLoading=null;
   const sqlReady=()=>tableReady;
@@ -241,6 +297,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return persistence;
   }
   function mdContentChanged(next){
+    breakReviews.clear();++breakReviewEpoch; // decisions require saved text evidence
     frame.setReviewPair(null,{skipSource:true}); // CM6 docChanged already clears its own decorations
     if(currentSqlTable==='md'){
       if(activeAgView==='latex'){
@@ -394,6 +451,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   function reflectCmBlockChange(result,selectedId){
     if(!result.changed)return;
+    breakReviews.clear();++breakReviewEpoch; // source parentage changed; invalidate prior review projection
     frame.setReviewPair(null); // Block relationships may have moved
     if(currentSqlTable==='block')frame.patchSqlBlockRows(result.changedRows);
     if(md()){
@@ -590,6 +648,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const epoch=++operation;
     if(cm()?.queue.length||md()?.dirty)
       throw Error('CM Block/MD 尚有待持久操作，必须先保存，拒绝切换/重建');
+    breakReviews.clear();++breakReviewEpoch;breakReviewBusy.clear();
     persistence?.dispose();persistence=null;loadingRuntime=null;
     mdPersistence?.dispose();mdPersistence=null;mdLoading=null;
     frame.replaceStructuredRuntime(null);
@@ -669,6 +728,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       title?MD_TITLE_COLUMNS:broken?MD_BREAK_COLUMNS:MD_COLUMNS;
     frame.showSqlRows(rows,columns.map(column=>({
       ...column,
+      ...(broken&&column.field==='review'?{cellRenderer:reviewCell}:{}),
       ...(column.field==='text'&&!latex&&!broken?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
@@ -699,7 +759,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
             formulaBBox:row.pdf_bbox,
             formulaKind:row.kind==='行内'?'inline':row.kind==='独立'?'display':null}:{}),
         });
-        onStatus(broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · 只读候选`:
+        onStatus(broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · 审阅 ${row.review??'待定'}`:
           latex?
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+
             (target?.lineNo?`MD ${target.lineNo}`:'仅 PDF / OCR'):
@@ -717,6 +777,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const token=++agViewRequest;
     if(view==='latex'&&!latexPresentation)
       latexPresentation=await import('./latex-view.js');
+    if(view==='block-break')try{await loadBreakReviews();}
+      catch(error){onStatus('断块审阅记录读取失败：'+error.message,'warning');return false;}
     if(token!==agViewRequest||currentSqlTable!=='md'||!md())return false;
     activeAgView=view;
     frame.setReviewPair(null);
@@ -726,7 +788,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     onStatus(view==='latex'?`AG LaTeX · ${summary.total} 条，原始 ${summary.original}，`+
       `精确匹配 ${summary.matched}，仅 OCR ${summary.ocrOnly}，仅 MD ${summary.mdOnly}，`+
       `有歧义 ${summary.ambiguous}，原图 ${summary.images} · 只读`:
-      `AG ${view==='title'?'标题':view==='block-break'?'断块':'MD 行'}视图 · ${count} 条${view==='block-break'?'疑似断块':'投影'} · 不修改 MD/SQLite`,'ok');
+      `AG ${view==='title'?'标题':view==='block-break'?'断块':'MD 行'}视图 · ${count} 条${view==='block-break'?'疑似断块 · 审阅结果可保存':'投影'} · 不自动修改 MD`,'ok');
     return true;
   }
   async function openSql(table='minerujson',{selectedId=null}={}){
@@ -737,6 +799,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       }
       try{
         await ensureMdRuntime();
+        if(activeAgView==='block-break')await loadBreakReviews();
         const rows=md().rows;
         renderMdAg();
         currentSqlTable='md';
@@ -822,6 +885,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     const result=await request('initialize-sql',{workspace:active,confirmReset:true},true);
     if(workspace!==active)throw Error('书籍已切换，必须重新检查初始化结果');
     ++loaded;
+    breakReviews.clear();++breakReviewEpoch;breakReviewBusy.clear();
     persistence?.dispose();persistence=null;loadingRuntime=null;
     frame.replaceStructuredRuntime(null);
     frame.setSqlEditHistory();
