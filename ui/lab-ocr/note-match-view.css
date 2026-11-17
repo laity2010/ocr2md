@@ -94,3 +94,10 @@
 #workspace .ocr-note-body-choice{max-width:136px;height:28px;
   color:#b7d5f1;background:#263844;border:1px solid #648eb2;border-radius:4px}
 #workspace .ocr-note-converted-marker{color:#9cd6dd;font-weight:bold;padding:0 3px}
+
+#workspace .ocr-note-match-status-select[data-status="已转换"]{
+  color:#8bd8dd;border-color:#4b949e;background:#28474b;font-weight:700}
+#workspace .ocr-note-match-status-select[data-status="转换失败"]{
+  color:#ffb778;border:1px solid #e47a48;background:#593328;font-weight:700}
+#workspace .ocr-note-match-status[data-status="转换失败"]{color:#ffb778;font-weight:700}
+#workspace .ocr-note-match-status[data-status="已转换"]{color:#8bd8dd}

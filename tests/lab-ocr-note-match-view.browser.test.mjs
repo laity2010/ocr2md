@@ -228,7 +228,7 @@ try{
    assert.equal(warning.text,'rgb(255, 155, 98)');
    assert.equal(warning.border,'1px');
    assert.notEqual(warning.text,colors.text);
-   assert.deepEqual(warning.choices,['已匹配','待核实','忽略']);
+   assert.deepEqual(warning.choices,['已匹配','待核实','忽略','已转换','转换失败']);
    // The ignored candidate stays in the AG grid and can be restored in the
    // SAME status column. No redundant review column/toggle is allowed.
    assert(!await page.locator('.ocr-outline-pane .ocr-ag-review-toggle').isVisible());
@@ -341,8 +341,8 @@ try{
      const result={options,defined:NOTE_MATCH_STATUS_OPTIONS,visible,calls};
      cell.remove();return result;
    });
-   assert.deepEqual(chooserEvidence.options,['已匹配','待核实','忽略']);
-   assert.deepEqual(chooserEvidence.defined,['已匹配','待核实','忽略']);
+   assert.deepEqual(chooserEvidence.options,['已匹配','待核实','忽略','已转换','转换失败']);
+   assert.deepEqual(chooserEvidence.defined,['已匹配','待核实','忽略','已转换','转换失败']);
    assert.equal(chooserEvidence.visible,true);
    assert.deepEqual(chooserEvidence.calls,[['待转换','body-b']]);
    assert.equal(mdLoads,1);

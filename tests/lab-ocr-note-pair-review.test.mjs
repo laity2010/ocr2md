@@ -77,4 +77,26 @@ const manual=new Map([[pairRow.reference_id,{
 const resolved=projectReviewedNoteRows(ambiguous,manual,conflictedMd,{showIgnored:true});
 assert(resolved.some(x=>x.review==='待转换'&&x.selected_body_id===chosen.candidate_id));
 assert.equal(JSON.stringify(md),original);
+const failedIssue={...ignored,ref_id:references[0].candidate_id,
+  decision:'待核实',issue:{code:'unsafe-layout',reason:'同一行脚注位置发生冲突'}};
+const errored=projectReviewedNoteRows(projection,
+  new Map([[failedIssue.ref_id,failedIssue]]),md,{showIgnored:true});
+assert.equal(errored.filter(row=>row.match_state==='转换失败').length,2);
+assert(errored.filter(row=>row.match_state==='转换失败').every(row=>
+  row.conversion_error.includes('同一行脚注位置')));
+const successMd=[{line_no:1,line_id:'success-ref',block_id:60,text:'See[^9] here.'},
+  {line_no:2,line_id:'head',block_id:61,text:'## Notes'},
+  {line_no:3,line_id:'success-body',block_id:62,text:'[^9]: Taxes apply.'}];
+const successIndex=projectNoteMatchRows(successMd,[]);
+const successId=successIndex.index.references[0].candidate_id;
+const successBody=successIndex.index.bodies[0].candidate_id;
+const receipt={ref_id:'ref:success-ref:3:ref.html-sup',decision:'待转换',
+  conversion:{converted_ref_id:successId,converted_body_id:successBody,
+    updates:[{line_id:'success-ref'},{line_id:'success-body'}]},
+  convertedLineTexts:{'success-ref':successMd[0].text,
+    'success-body':successMd[2].text},valid:false};
+const good=projectReviewedNoteRows(successIndex,
+  new Map([[receipt.ref_id,receipt]]),successMd);
+assert.equal(good.filter(x=>x.match_state==='已转换').length,2);
+assert(good.every(x=>x.conversion_error===''));
 console.log('LAB_OCR_NOTE_PAIR_REVIEW_PROJECTION_DIRECT_PASS');

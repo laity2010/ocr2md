@@ -1,8 +1,8 @@
-/** AG Note Match status cell: exactly three editable values.
+/** AG Note Match status cell: three editable values and two derived states.
  * Only explicit user action persists an override. In ambiguous cases the
  * second-stage body choice is mandatory, never silently pick one.
  */
-export const NOTE_MATCH_STATUS_OPTIONS=Object.freeze(['已匹配','待核实','忽略']);
+export const NOTE_MATCH_STATUS_OPTIONS=Object.freeze(['已匹配','待核实','忽略','已转换','转换失败']);
 
 export function createNoteMatchStatusCell(onChoose){
   if(typeof onChoose!=='function')throw TypeError('注释状态操作回调无效');
@@ -19,11 +19,15 @@ export function createNoteMatchStatusCell(onChoose){
     select.className='ocr-note-match-status-select';
     select.dataset.status=status;
     select.setAttribute('aria-label',`注号 ${row.number} 匹配状态`);
-    for(const item of NOTE_MATCH_STATUS_OPTIONS)select.add(new Option(item,item));
+    for(const item of NOTE_MATCH_STATUS_OPTIONS){
+      const option=new Option(item,item);
+      if(['已转换','转换失败'].includes(item))option.disabled=true;
+      select.add(option);
+    }
     select.value=NOTE_MATCH_STATUS_OPTIONS.includes(status)?status:'待核实';
     const converted=row.review==='已转换'||row.review==='转换待保存';
     select.disabled=converted;
-    select.title=converted?'转换后的源码由 CM6 Undo/Redo 恢复，不在此覆盖审阅证据':
+    select.title=converted?'已转换由 CM6 Undo/Redo 恢复，不能手动伪造状态':
       '修改匹配状态后立即保存人工决定；转换统一使用 AG 功能菜单';
     for(const type of ['pointerdown','click','mousedown'])
       select.addEventListener(type,event=>event.stopPropagation());
@@ -43,6 +47,7 @@ export function createNoteMatchStatusCell(onChoose){
       // Selecting the already displayed status does not create redundant
       // SQL writes; converting is intentionally a separate function.
       if(next===previous)return;
+      if(['已转换','转换失败'].includes(next)){select.value=previous;return;}
       const commit=(choice,bodyId=null)=>{
         Promise.resolve().then(()=>onChoose(row,choice,bodyId)).then(success=>{
           if(!success)select.value=previous;

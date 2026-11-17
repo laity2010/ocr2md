@@ -97,3 +97,93 @@ export function planNotePairConversion({mdRows,blockRows=[],configuration,
     continuationLineIds:Object.freeze([...body.body_line_ids.slice(1)]),
   });
 }
+
+/** Combine every safe reference in one physical MD line BEFORE modifying it.
+ * The referenced notes' bodies may live on different lines (including a
+ * shared body). One immutable plan, one CM6 transaction, one shared SQL CAS
+ * receipt per reference. Converted offsets account for preceding replacements.
+ */
+export function planNotePairGroupConversion({mdRows,blockRows=[],configuration,
+  pairs,anchors=[]}={}){
+  if(!Array.isArray(pairs)||!Array.isArray(anchors)||pairs.length<1||
+     pairs.length>32||pairs.length+anchors.length<2||
+     pairs.length+anchors.length>32)
+    fail('同一行分组要求至少 2 个注引（含已有转换）');
+  const index=projectNoteMatchIndex(mdRows,blockRows,configuration);
+  const refs=new Map(index.references.map(item=>[item.candidate_id,item]));
+  const lines=new Map(mdRows.map(row=>[row.line_id,row]));
+  const originals=[],members=[],seen=new Set(),bodyUpdates=new Map();
+  for(const item of pairs){
+    if(seen.has(item?.referenceId))fail('同一注引不得重复列入转换组');
+    seen.add(item.referenceId);
+    const ref=refs.get(item.referenceId);
+    if(!ref)fail('分组内注引已变化');
+    originals.push(ref);
+    const plan=planNotePairConversion({mdRows,blockRows,configuration,...item});
+    members.push({referenceId:item.referenceId,bodyId:item.bodyId,
+      expectedRevision:item.review.revision,number:plan.number,
+      convertedBodyId:plan.convertedBodyId});
+    for(const update of plan.updates){
+      if(update.lineId===ref.line_id)continue;
+      const prior=bodyUpdates.get(update.lineId);
+      if(prior&&JSON.stringify(prior)!==JSON.stringify(update))
+        fail('多个注文同时修改同一源码行但结果不一致');
+      bodyUpdates.set(update.lineId,update);
+    }
+  }
+  const sourceLineId=originals[0].line_id;
+  const preserved=[];
+  for(const anchor of anchors){
+    const saved=anchor?.saved;
+    const ref=refs.get(saved?.conversion?.converted_ref_id);
+    if(!ref||ref.evidence.rule_id!=='ref.md-footnote'||
+       ref.line_id!==sourceLineId||saved.ref_id!==anchor.referenceId||
+       !saved.revision||!saved.conversion?.updates?.length||
+       saved.convertedLineTexts?.[ref.line_id]!==lines.get(ref.line_id)?.text||
+       seen.has(anchor.referenceId))
+      fail('已有转换注引的回执与当前原文不一致');
+    seen.add(anchor.referenceId);
+    preserved.push({referenceId:anchor.referenceId,ref,
+      expectedRevision:saved.revision});
+  }
+  if(originals.some(ref=>ref.line_id!==sourceLineId))
+    fail('分组注引必须处于同一物理源码行');
+  if(bodyUpdates.has(sourceLineId))fail('同一源码行既是注引又是注文');
+  const source=lines.get(sourceLineId);
+  if(!source)fail('注引源码行已经消失');
+  const sorted=originals.slice().sort((a,b)=>a.from-b.from);
+  let end=-1,after='',cursor=0,delta=0;
+  for(const ref of sorted){
+    if(ref.from<end||ref.from<0||ref.to>source.text.length||
+      source.text.slice(ref.from,ref.to)!==ref.raw)
+      fail('同一行注引存在重叠或证据已过期');
+    after+=source.text.slice(cursor,ref.from);
+    const replacement=`[^${ref.number}]`;
+    const replacementFrom=ref.from+delta;
+    const member=members.find(item=>item.referenceId===ref.candidate_id);
+    member.convertedReferenceId=`ref:${ref.line_id}:${replacementFrom}:ref.md-footnote`;
+    after+=replacement;cursor=ref.to;end=ref.to;
+    delta+=replacement.length-(ref.to-ref.from);
+  }
+  after+=source.text.slice(cursor);
+  const anchorMembers=preserved.map(anchor=>{
+    const shift=sorted.filter(ref=>ref.from<anchor.ref.from)
+      .reduce((sum,ref)=>sum+`[^${ref.number}]`.length-(ref.to-ref.from),0);
+    return {referenceId:anchor.referenceId,
+      expectedRevision:anchor.expectedRevision,
+      convertedReferenceId:`ref:${sourceLineId}:${anchor.ref.from+shift}:ref.md-footnote`};
+  });
+  if(after===source.text&&bodyUpdates.size===0)fail('没有需要转换的原文');
+  const lineChanges=[];
+  if(after!==source.text)lineChanges.push({lineId:source.line_id,
+    lineNo:source.line_no,blockId:source.block_id,
+    beforeText:source.text,afterText:after});
+  lineChanges.push(...bodyUpdates.values());
+  lineChanges.sort((a,b)=>a.lineNo-b.lineNo);
+  if(new Set(lineChanges.map(x=>x.lineId)).size!==lineChanges.length)
+    fail('转换分组出现重复物理行');
+  return Object.freeze({number:members.map(x=>x.number).join('、'),
+    sourceLineId,updates:Object.freeze(lineChanges.map(x=>Object.freeze(x))),
+    members:Object.freeze(members.map(x=>Object.freeze(x))),
+    anchors:Object.freeze(anchorMembers.map(x=>Object.freeze(x)))});
+}

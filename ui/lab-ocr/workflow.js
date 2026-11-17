@@ -14,7 +14,7 @@ import {createBlockBreakReviewCell} from './block-break-review-cell.js';
 import {planBlockBreakMerge,emptyMdChildBlockIds} from './block-break-merge.js';
 import {projectNoteMatchRows,resolveNoteMatchFocus,compareNoteNumbers} from './note-match-view.js';
 import {projectReviewedNoteRows} from './note-pair-review.js';
-import {planNotePairConversion} from './note-pair-conversion.js';
+import {planNotePairConversion,planNotePairGroupConversion} from './note-pair-conversion.js';
 import {createNoteMatchStatusCell} from './note-pair-review-cell.js';
 import {DEFAULT_NOTE_MATCH_CONFIG,validateNoteMatchConfig} from './note-match-index.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
@@ -130,6 +130,8 @@ const MD_NOTE_COLUMNS=Object.freeze([
   {field:'evidence',headerName:'识别规则',minWidth:135,sortable:true},
   {field:'strength',headerName:'证据级别',width:96,sortable:true},
   {field:'reason',headerName:'判断依据',minWidth:210,flex:1,sortable:false},
+  {field:'conversion_error',headerName:'转换失败原因',minWidth:180,width:240,
+    sortable:true},
   {field:'scope',headerName:'范围',minWidth:115,sortable:true},
   {field:'candidate_count',headerName:'可选注文',width:96,sortable:true},
   {field:'note_row_id',headerName:'候选ID',hide:true},
@@ -174,6 +176,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let noteReviews=new Map(),noteReviewEpoch=0;
   const noteReviewBusy=new Set();
   let noteBatchBusy=false;
+  const noteLastConvertIssue=new Map();
   const breakReviewBusy=new Set();
   let pdfPage=1;
   function mergedBreakRow(saved){
@@ -354,7 +357,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       const convertedLineTexts=Object.fromEntries((item.converted?
         item.conversion?.updates??[]:[]).map(change=>
         [change.line_id,lines.get(change.line_id)]));
-      return [item.ref_id,{...item,convertedLineTexts,
+      const old=noteReviews.get(item.ref_id);
+      const history=old?.revision===item.revision?old.convertedSnapshots??[]:[];
+      const current=item.converted&&item.conversion?.updates?.length?
+        [{conversion:item.conversion,texts:convertedLineTexts}]:[];
+      const convertedSnapshots=[...current,...history]
+        .filter((snapshot,index,all)=>all.findIndex(other=>
+          other.conversion?.converted_ref_id===snapshot.conversion?.converted_ref_id&&
+          JSON.stringify(other.texts)===JSON.stringify(snapshot.texts))===index)
+        .slice(0,12);
+      return [item.ref_id,{...item,convertedLineTexts,convertedSnapshots,
         ref_source_text:item.valid?lines.get(item.ref_line_id):null,
         body_source_text:item.valid&&item.body_line_id?lines.get(item.body_line_id):null}];
     }));
@@ -370,6 +382,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   }
   async function convertConfirmedNote(row){
     const book=workspace,op=operation,id=row?.reference_id;
+    noteLastConvertIssue.delete(id);
     if(!id||noteReviewBusy.has(id))return;
     if(md()?.dirty||cm()?.queue?.length){
       onStatus('请先保存源码和 Block 改动，再转换已确认的脚注','warning');return;
@@ -381,7 +394,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     let plan;
     try{plan=planNotePairConversion({mdRows:md().rows,blockRows:cm().rows,
       configuration:noteConfig,referenceId:id,bodyId:prior.body_id,review:prior});}
-    catch(error){onStatus(error.message,'warning');return;}
+    catch(error){noteLastConvertIssue.set(id,error.message);
+      onStatus(error.message,'warning');return;}
     const version=md().version;
     noteReviewBusy.add(id);
     try{
@@ -418,76 +432,247 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     }catch(error){
       // No arbitrary compensation writes; on CAS failure the authoritative
       // CM6 history remains available for a deliberate Undo.
+      noteLastConvertIssue.set(id,error.message);
       onStatus('脚注转换未完成：'+error.message+'；请检查源码及 Undo','error');
     }finally{noteReviewBusy.delete(id);}
     return false;
   }
+  const conversionIssueCode=reason=>{
+    if(/缺少|没有.*注文|没有可选/.test(reason))return 'missing-body';
+    if(/歧义|多个.*注文|不唯一/.test(reason))return 'ambiguous-body';
+    if(/重复|同名|相同注号/.test(reason))return 'duplicate-number';
+    if(/自定义.*规则|暂不转换/.test(reason))return 'unsupported-rule';
+    if(/布局|续行|重叠|同一物理行/.test(reason))return 'unsafe-layout';
+    if(/版本|CAS|保存/.test(reason))return 'save-conflict';
+    if(/过期|已变化|证据/.test(reason))return 'source-conflict';
+    return 'prepare-rejected';
+  };
+  async function reportNoteFailures(issues){
+    if(!issues.length||md()?.dirty||cm()?.queue?.length)return false;
+    const book=workspace,op=operation;
+    const refs=new Map(projectNoteMatchRows(md()?.rows??[],cm()?.rows??[],noteConfig)
+      .index.references.map(item=>[item.candidate_id,item]));
+    const items=[];
+    for(const issue of issues){
+      const ref=refs.get(issue.row.reference_id),endpoint=noteEndpoint(ref);
+      if(!endpoint)continue;
+      items.push({reference:endpoint,
+        expectedRevision:noteReviews.get(issue.row.reference_id)?.revision??null,
+        code:issue.code??conversionIssueCode(issue.reason),
+        reason:String(issue.reason).slice(0,230)});
+    }
+    if(!items.length)return false;
+    try{
+      const response=await request('note-pair-convert-issues',{workspace:book,items},true);
+      if(book!==workspace||op!==operation)return false;
+      for(const item of response.issues??[]){
+        const endpoint=items.find(source=>source.reference.candidateId===item.ref_id)?.reference;
+        if(!endpoint)continue;
+        const previous=noteReviews.get(item.ref_id);
+        noteReviews.set(item.ref_id,{
+          ...(previous??{}),ref_id:item.ref_id,
+          ref_line_id:endpoint.lineId,ref_block_id:endpoint.blockId,
+          ref_from:endpoint.from,ref_to:endpoint.to,ref_raw:endpoint.raw,
+          ref_source_text:endpoint.sourceText,valid:true,
+          decision:previous?.decision??'待核实',revision:item.revision,issue:item.issue});
+      }
+      if(currentSqlTable==='md'&&activeAgView==='note-match')
+        frame.patchNoteRows(projectedMdRows());
+      return true;
+    }catch(error){
+      onStatus('转换失败记录未能持久化：'+error.message,'error');
+      return false;
+    }
+  }
+  async function convertConfirmedGroup(rows,anchors=[]){
+    const book=workspace,op=operation,version=md()?.version;
+    if(!md()||md().dirty||cm()?.queue?.length)return false;
+    let plan;
+    try{
+      const pairs=rows.map(row=>{
+        const review=noteReviews.get(row.reference_id);
+        if(!review||review.decision!=='待转换'||!review.revision)
+          throw Error('分组配对尚未经人工确认');
+        return {referenceId:row.reference_id,bodyId:review.body_id,review};
+      });
+      plan=planNotePairGroupConversion({mdRows:md().rows,blockRows:cm().rows,
+        configuration:noteConfig,pairs,anchors});
+    }catch(error){
+      for(const row of rows)noteLastConvertIssue.set(row.reference_id,error.message);
+      onStatus(error.message,'warning');return false;
+    }
+    const locked=[...rows.map(row=>row.reference_id),...anchors.map(a=>a.referenceId)];
+    if(locked.some(id=>noteReviewBusy.has(id)))return false;
+    locked.forEach(id=>noteReviewBusy.add(id));
+    try{
+      const prepared=await request('note-pair-group-prepare',{workspace:book,
+        members:plan.members.map(member=>({referenceId:member.referenceId,
+          expectedRevision:member.expectedRevision,number:member.number,
+          convertedReferenceId:member.convertedReferenceId,
+          convertedBodyId:member.convertedBodyId})),
+        anchors:plan.anchors,
+        updates:plan.updates.map(item=>({lineId:item.lineId,
+          blockId:item.blockId,beforeText:item.beforeText,
+          afterText:item.afterText}))},true);
+      if(book!==workspace||op!==operation)return false;
+      if(md()?.version!==version||md()?.dirty||cm()?.queue?.length){
+        onStatus('分组准备期间源码发生改动，未执行 CM6 转换','warning');return false;
+      }
+      const afterLines=Object.fromEntries(plan.updates.map(item=>
+        [item.lineId,item.afterText]));
+      for(const member of prepared.members??[]){
+        const previous=noteReviews.get(member.ref_id);
+        if(!previous||!member.conversion||!member.revision)
+          throw Error('分组审阅回执缺失，未执行 CM6 写入');
+        const previousText=Object.fromEntries((previous.conversion?.updates??[])
+          .map(change=>[change.line_id,md()?.rows.find(row=>
+            row.line_id===change.line_id)?.text]));
+        const history=previous.convertedSnapshots??
+          (previous.conversion?[{conversion:previous.conversion,
+            texts:previous.convertedLineTexts??previousText}]:[]);
+        noteReviews.set(member.ref_id,{...previous,
+          revision:member.revision,conversion:member.conversion,converted:false,
+          convertedLineTexts:{...previous.convertedLineTexts,...afterLines},
+          convertedSnapshots:[
+            {conversion:member.conversion,texts:{...previousText,...afterLines}},
+            ...history].slice(0,12),issue:null});
+      }
+      frame.convertMdNotePair(plan); // all notes on this line, ONE history step
+      await flushMdChanges();        // existing SQL MD CAS
+      if(book!==workspace||op!==operation)return false;
+      if(md()?.dirty){onStatus('注释分组已编辑，但 MD 未保存，请检查保存状态','warning');
+        return false;}
+      if(currentSqlTable==='md'&&activeAgView==='note-match')
+        frame.patchNoteRows(projectedMdRows());
+      onStatus(`✓ 同行注号 ${plan.number} · ${rows.length} 个注引一次 CM6 转换，`+
+        `${plan.updates.length} 行已保存 · 可单次 Undo`,'ok');
+      return true;
+    }catch(error){
+      for(const row of rows)noteLastConvertIssue.set(row.reference_id,error.message);
+      onStatus('同行转换未完成：'+error.message,'error');
+      return false;
+    }finally{locked.forEach(id=>noteReviewBusy.delete(id));}
+  }
   async function convertMatchedNotes(){
     if(activeAgView!=='note-match'||currentSqlTable!=='md'||!md())return false;
-    if(noteBatchBusy){
-      onStatus('注释匹配 · 转换操作正在进行，拒绝重复执行','warning');return false;
-    }
+    if(noteBatchBusy){onStatus('注释匹配 · 转换进行中，拒绝重复执行','warning');
+      return false;}
     if(md().dirty||cm()?.queue?.length){
       onStatus('批量转换前请先保存 MD 与 Block 改动','warning');return false;
     }
     const book=workspace,op=operation;
-    // Explicit user command converts the currently matched and safely
-    // resolvable candidates, not merely the visible AG filter/page subset.
     const planned=projectNoteReviewRows().filter(row=>row.kind==='注引'&&
-      row.match_state==='已匹配'&&row.review!=='已转换'&&
-      row.review!=='转换待保存').sort((a,b)=>
-      b.line_no-a.line_no||b.from-a.from);
-    if(!planned.length){
-      onStatus('注释匹配 · 当前没有可转换的已匹配注引','info');return false;
+      row.match_state==='已匹配'&&row.review!=='转换待保存')
+      .sort((a,b)=>b.line_no-a.line_no||b.from-a.from);
+    if(!planned.length){onStatus('注释匹配 · 当前没有可转换的已匹配注引','info');
+      return false;}
+    const groups=new Map();
+    for(const row of planned){
+      const list=groups.get(row.line_id)??[];list.push(row);
+      groups.set(row.line_id,list);
     }
     noteBatchBusy=true;
+    let converted=0,skipped=0,unprocessed=planned.length;
+    const failures=[];
     try{
-      let converted=0,skipped=0;
-      const touchedReferenceLines=new Set();
-      // Use the previously tested single-pair CM6 + SQL CAS pipeline for
-      // each safe pair. A failure never overwrites any saved or unsaved MD.
-      for(const original of planned){
+      for(const [lineId,originals] of groups){
         if(book!==workspace||op!==operation||md()?.dirty||cm()?.queue?.length)break;
-        // A second marker on an already converted source line changes the
-        // first receipt's whole-line SHA. Fail closed for that case until
-        // WP3.3 can group those markers into one transaction and receipt.
-        if(touchedReferenceLines.has(original.line_id)){skipped++;continue;}
-        touchedReferenceLines.add(original.line_id);
-        const rows=projectNoteReviewRows();
-        const current=rows.find(row=>row.kind==='注引'&&
-          row.reference_id===original.reference_id);
-        if(!current||current.match_state!=='已匹配'||
-           ['已转换','转换待保存'].includes(current.review)){
-          skipped++;continue;
-        }
-        const options=current.body_choices??[];
-        const bodyId=current.selected_body_id??
-          (options.length===1?options[0].id:null);
-        if(!bodyId){skipped++;continue;}
-        let prepared=current;
-        if(prepared.review!=='待转换'||
-           noteReviews.get(prepared.reference_id)?.body_id!==bodyId){
-          if(!await chooseNoteReview(prepared,'待转换',bodyId)){
-            skipped++;continue;
+        const candidates=projectNoteReviewRows();
+        const lineRows=originals.map(row=>candidates.find(item=>
+          item.kind==='注引'&&item.reference_id===row.reference_id));
+        const problems=[];const selected=[];
+        for(let i=0;i<originals.length;i++){
+          const row=lineRows[i];
+          if(!row||row.match_state!=='已匹配'){
+            problems.push({row:originals[i],reason:'注引在转换过程中发生变化'});
+            continue;
           }
-          prepared=projectNoteReviewRows().find(row=>row.kind==='注引'&&
-            row.reference_id===current.reference_id);
+          const options=row.body_choices??[];
+          const bodyId=row.selected_body_id??
+            (options.length===1?options[0].id:null);
+          if(!bodyId){problems.push({row,
+            code:options.length?'ambiguous-body':'missing-body',
+            reason:options.length?'存在多个注文，请在匹配状态中人工指定':'未找到可用注文'});
+            continue;
+          }
+          selected.push({row,bodyId});
         }
-        if(!prepared||prepared.review!=='待转换'){
-          skipped++;continue;
+        if(problems.length){
+          // Never partly rewrite a line when another matched citation on it
+          // is unresolved: every snapshot on this line must stay consistent.
+          for(const item of selected)problems.push({row:item.row,
+            code:'unsafe-layout',reason:'同行存在未解决注引，整行转换被保护性跳过'});
+          failures.push(...problems);skipped+=originals.length;unprocessed-=originals.length;
+          await reportNoteFailures(problems);continue;
         }
-        if(await convertConfirmedNote(prepared))converted++;
+        const anchors=candidates.filter(row=>row.kind==='注引'&&
+          row.line_id===lineId&&row.match_state==='已转换').map(row=>{
+          const old=[...noteReviews.values()].find(saved=>
+            saved.conversion?.converted_ref_id===row.reference_id||
+            saved.convertedSnapshots?.some(snapshot=>
+              snapshot.conversion?.converted_ref_id===row.reference_id));
+          if(!old)return null;
+          const snapshot=old.convertedSnapshots?.find(entry=>
+            entry.conversion?.converted_ref_id===row.reference_id)??
+            {conversion:old.conversion,texts:old.convertedLineTexts};
+          return {referenceId:old.ref_id,saved:{...old,
+            conversion:snapshot.conversion,convertedLineTexts:snapshot.texts}};
+        });
+        if(anchors.some(item=>!item)){
+          const fail=originals.map(row=>({row,code:'source-conflict',
+            reason:'同行已有转换注引，但找不到完整旧回执，拒绝覆盖'}));
+          failures.push(...fail);skipped+=originals.length;unprocessed-=originals.length;
+          await reportNoteFailures(fail);continue;
+        }
+        let prepared=[];
+        for(const {row,bodyId} of selected){
+          let current=row;
+          if(current.review!=='待转换'||noteReviews.get(row.reference_id)?.body_id!==bodyId){
+            if(!await chooseNoteReview(row,'待转换',bodyId)){
+              problems.push({row,code:'source-conflict',reason:'人工配对保存失败或原文已经变化'});
+              break;
+            }
+            current=projectNoteReviewRows().find(candidate=>
+              candidate.kind==='注引'&&candidate.reference_id===row.reference_id);
+          }
+          if(!current||current.review!=='待转换'){
+            problems.push({row,code:'source-conflict',reason:'配对记录无法重新验证'});
+            break;
+          }
+          prepared.push(current);
+        }
+        if(problems.length){
+          const fails=originals.map(row=>({row,code:'source-conflict',
+            reason:problems.find(p=>p.row.reference_id===row.reference_id)?.reason??
+              '同行配对准备失败，整行拒绝转换'}));
+          failures.push(...fails);skipped+=originals.length;unprocessed-=originals.length;
+          await reportNoteFailures(fails);continue;
+        }
+        let ok;
+        if(prepared.length+anchors.length>=2)
+          ok=await convertConfirmedGroup(prepared,anchors);
+        else ok=await convertConfirmedNote(prepared[0]);
+        unprocessed-=originals.length;
+        if(ok)converted+=originals.length;
         else{
-          skipped++;
+          skipped+=originals.length;
+          const failed=originals.map(row=>({row,
+            reason:noteLastConvertIssue.get(row.reference_id)??'转换事务未完成，未确认写入'}));
+          failures.push(...failed);
+          if(!md()?.dirty&&book===workspace&&op===operation)
+            await reportNoteFailures(failed);
           if(md()?.dirty)break;
         }
       }
       if(book!==workspace||op!==operation)return false;
-      const unprocessed=planned.length-converted-skipped;
-      onStatus(`注释匹配 · 已转换 ${converted} 个，跳过 ${skipped} 个`+
-        (unprocessed?`，尚未执行 ${unprocessed} 个`:'')+
-        (md()?.dirty?'；存在未保存的 CM6 修改，已停止其余转换':'')+
-        ' · 仅使用已匹配状态及安全的注文候选',
+      const summary=failures.slice(0,8).map(item=>
+        `${item.row.number}：${item.reason}`).join('；');
+      onStatus(`注释匹配 · 已转换 ${converted} 个，转换失败/跳过 ${skipped} 个`+
+        (unprocessed?`，未执行 ${unprocessed} 个`:'')+
+        (summary?` · ${summary}`:'')+
+        (failures.length>8?' · 更多原因请筛选「转换失败」':'')+
+        (md()?.dirty?' · MD 有未保存修改，已停止':'')+
+        ' · 可在匹配状态筛选「已转换/转换失败」',
         skipped||unprocessed||md()?.dirty?'warning':'ok');
       return converted>0;
     }finally{noteBatchBusy=false;}
@@ -744,8 +929,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         // even after it becomes valid again, despite correct local cache.
         if(currentSqlTable==='md'&&activeAgView==='block-break')
           frame.patchMdRows(projectedMdRows());
-        if(currentSqlTable==='md'&&activeAgView==='note-match')
+        if(currentSqlTable==='md'&&activeAgView==='note-match'){
           frame.patchNoteRows(projectedMdRows());
+          // A saved Undo may match an earlier batch receipt variant. Reload
+          // the read-only SQL receipt after the CAS acknowledgement, never
+          // overwrite an unsaved CM6 edit with a stale database snapshot.
+          if(noteReviews.size)void loadNoteReviews().then(loaded=>{
+            if(loaded&&currentSqlTable==='md'&&activeAgView==='note-match')
+              frame.patchNoteRows(projectedMdRows());
+          }).catch(error=>onStatus('注释转换回执同步失败：'+error.message,'warning'));
+        }
       },
       post:async batch=>{
         if(cm()?.queue.length)await flushBlockChanges();

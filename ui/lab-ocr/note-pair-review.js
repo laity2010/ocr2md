@@ -10,19 +10,26 @@ export function projectReviewedNoteRows(projection,reviews,mdRows,{showIgnored=f
   const lines=new Map(mdRows.map(item=>[item.line_id,item]));
   const convertedById=new Map();
   for(const saved of reviews.values()){
-    const id=saved?.conversion?.converted_ref_id;
-    if(id)convertedById.set(id,saved);
+    const snapshots=saved?.convertedSnapshots??
+      (saved?.conversion?[{conversion:saved.conversion,
+        texts:saved.convertedLineTexts}]:[]);
+    for(const snapshot of snapshots){
+      const conversion=snapshot?.conversion;
+      if(!conversion?.converted_ref_id||!conversion?.updates?.length||
+         !conversion.updates.every(item=>
+           snapshot.texts?.[item.line_id]===lines.get(item.line_id)?.text))continue;
+      convertedById.set(conversion.converted_ref_id,{saved,conversion});
+    }
   }
   const decorated=projection.rows.map(row=>{
     if(!row.reference_id)return Object.freeze({...row,review:'—',
       match_state:'待核实',review_revision:null});
     const ref=references.get(row.reference_id);
-    const saved=reviews.get(row.reference_id)??convertedById.get(row.reference_id);
-    const conversion=saved?.conversion;
-    const converted=Boolean(conversion?.converted_ref_id===row.reference_id&&
-      row.candidate_body_ids?.includes(conversion.converted_body_id)&&
-      conversion.updates?.length&&conversion.updates.every(item=>
-        saved.convertedLineTexts?.[item.line_id]===lines.get(item.line_id)?.text));
+    const selected=convertedById.get(row.reference_id);
+    const saved=reviews.get(row.reference_id)??selected?.saved;
+    const conversion=selected?.conversion??saved?.conversion;
+    const converted=Boolean(selected&&
+      row.candidate_body_ids?.includes(conversion.converted_body_id));
     let valid=Boolean(saved?.valid&&saved.ref_source_text===lines.get(ref?.line_id)?.text&&
       saved.ref_line_id===ref?.line_id&&saved.ref_block_id===ref?.block_id&&
       saved.ref_from===ref?.from&&saved.ref_to===ref?.to&&saved.ref_raw===ref?.raw);
@@ -33,19 +40,26 @@ export function projectReviewedNoteRows(projection,reviews,mdRows,{showIgnored=f
         saved.body_line_id===body.line_id&&saved.body_block_id===body.block_id&&
         saved.body_from===body.from&&saved.body_to===body.to&&saved.body_raw===body.raw);
     }
+    const failed=Boolean(!converted&&saved?.issue?.reason&&valid);
     const review=converted?(dirty?'转换待保存':'已转换'):
+      failed?'转换失败':
       saved?(valid?saved.decision:'需复核'):'待定';
     const status=review==='忽略'?'已忽略':review==='待转换'?'已确认':
-      review==='需复核'?'待核实':review==='已转换'||review==='转换待保存'?review:row.status;
+      review==='需复核'?'待核实':
+      ['已转换','转换待保存','转换失败'].includes(review)?review:row.status;
     const match_state=review==='忽略'?'忽略':
+      review==='已转换'?'已转换':review==='转换失败'?'转换失败':
+      review==='转换待保存'?'待核实':
       ['待核实','需复核'].includes(review)?'待核实':
-      ['待转换','已转换','转换待保存'].includes(review)||row.status==='已匹配'?
-        '已匹配':'待核实';
+      review==='待转换'||row.status==='已匹配'?'已匹配':'待核实';
     return Object.freeze({...row,review,status,match_state,
+      conversion_error:failed?saved.issue.reason:'',
+      reason:failed?`${row.reason} · 转换失败：${saved.issue.reason}`:row.reason,
       review_revision:saved?.revision??null,
       selected_body_id:converted?conversion.converted_body_id:
         valid?saved?.body_id??null:null,
-      review_note:review==='已转换'?'已在 CM6 转换且 MD 已保存；Undo 可恢复':
+      review_note:review==='转换失败'?saved.issue.reason:
+        review==='已转换'?'已在 CM6 转换且 MD 已保存；Undo 可恢复':
         review==='转换待保存'?'CM6 已转换，正在通过原 MD CAS 保存':
         review==='待转换'?'已人工确定配对，尚未转换 Markdown':
         review==='需复核'?'原文或候选关系已变化，需重新审阅':

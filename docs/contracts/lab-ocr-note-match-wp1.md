@@ -132,9 +132,32 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - **匹配状态三项**：注释匹配 AG 只保留一列可审阅的 **`匹配状态`**，原生 `<select>` 精确为 `已匹配 / 待核实 / 忽略`，不再出现平行的「审阅」列；原有内容/注号/PBS/行号/判断依据、过滤器和四窗定位照旧。自动强证据配对投影为 `已匹配`；弱证据/缺一端/人工待核实投影为 `待核实`；人工忽略为 `忽略`。疑似缺号行保持只读并在「判断依据」说明缺号，不产生虚构端点。转换已经完成时仍显示 `已匹配`，辅以只读 ✓ 标记，回退必须使用 CM6 Undo/Redo。
 - 状态下拉是**修改**而非仅列值过滤：三项可切换；`待核实`、`忽略`均可在书籍的 `note_pair_review` SQLite CAS 中持久化；选择 `已匹配` 时，必须存在对应注文候选，唯一则直接保存明确配对为既有 `待转换` 内部状态，多个候选则弹出定位在当前行附近的二级「选择注文」下拉，不猜测最近的正文。已经存在的 `待转换`、`已转换` 回执继续有效。人工忽略行**留在 AG 表内**，可以按「匹配状态」列筛选及恢复，不再自动从表中消失。
 - **兼容既有书籍审阅**：旧 SQL `note_pair_review` 的 `CHECK` 只允许 `忽略/待转换`。首次出现人工 `待核实` 决定时，在 SQLite `BEGIN IMMEDIATE` 内创建新临时同结构表并复制所有已有审阅/转换证据，原子替换为支持三态的 schema。失败整体 rollback，不改 MD/Block/用户原始 MinerU 数据；GET 继续只读，不能因打开 View 触发迁移。
-- **`功能 → 转换匹配`**：这是用户的显式执行操作，选择当前书籍匹配状态为 `已匹配` 的注引候选（不限当前 AG 页/筛选）。自动强证据已匹配也允许在用户触发此功能时执行；后台首先借助原 WP3.1 CAS 记录明确的一对一候选，再通过 WP3.2 转换准备回执 → **一对脚注一组 CM6 事务** → 原 MD SQLite CAS 保存。多个引用共享同一注文时，转换第二个引用不重复写订单正文。无法找到唯一注文、来源过期、全文注号冲突、无安全规则或同一源行多个标记等**保守跳过**，状态栏报告已转换和跳过数量；若发生未保存的 MD 保存冲突则立即停止，不覆盖已有正文。每对可独立 Undo/Redo，不谎称整批共用一个历史步。
+- **`功能 → 转换匹配`**：这是用户的显式执行操作，选择当前书籍匹配状态为 `已匹配` 的注引候选（不限当前 AG 页/筛选）。自动强证据已匹配也允许在用户触发此功能时执行；后台首先借助原 WP3.1 CAS 记录明确的一对一候选，再通过 WP3.2 转换准备回执 → **一对脚注一组 CM6 事务** → 原 MD SQLite CAS 保存。多个引用共享同一注文时，转换第二个引用不重复写订单正文。无法找到唯一注文、来源过期、全文注号冲突或无安全规则的候选**保守跳过**；同一源码行多个可安全转换的注引使用后续同行分组事务，状态栏报告已转换和跳过数量；若发生未保存的 MD 保存冲突则立即停止，不覆盖已有正文。每对可独立 Undo/Redo，不谎称整批共用一个历史步。
 - 旧的注释匹配 `review` 字段保留为非显示的派生证据，作为已转换/过期/Undo 判断，不再与 `match_state` 并排呈现。「匹配状态」是唯一可编辑分类，不把 SQLite 的技术状态码 `待转换/已确认/需复核` 混入用户选择项。
 
 验收：`tests/lab-ocr-note-match-view.browser.test.mjs` 逐项验证状态三值、跨 View 菜单、忽略仍可见/可恢复、多个同号注文必须二次选择、识别规则仍可用、MD/Block 不写；`tests/lab-ocr-note-pair-conversion.browser.test.mjs` 验证统一转换入口对多个已匹配引用共享一个注文执行安全转换、MD CAS、Undo/Redo、重开 View 和物理行身份；`tests/lab-ocr-note-pair-review.test.py` 验证旧表原子迁移、三态 CAS 且源文本不变。
 
 补充公共 API 直接测试：`node tests/lab-frame-layout.direct.browser.test.mjs` 在 Chromium/iPad WebKit 中实际调用 `frame.setAgFunctions`，核验菜单选项列表、两个回调、执行后复位、无功能禁用和非法定义拒绝；不依靠注释 View 的端到端测试冒充 Frame API 直接覆盖。
+
+## WCP43 · 同行多注引合并转换 / 已转换及转换失败筛选（2026-11-17）
+
+### 原因与修复边界
+
+- 旧 `convertMatchedNotes` 将所有注引按 MD 行号逆序处理，以 `touchedReferenceLines` 强行跳过同一 LineID 的第二个注引。Buffett 可复核样本（不以动态 PBS 作稳定主键）实际 MD 第286行、BlockID 388 **同时包含 `<sup>9</sup>` 与 `<sup>10</sup>`**，注号 9、10 的注文位于 346、348 行。旧程序先改 10 后无理由跳过 9；并且后续单独改 9 会令 10 的整行 SHA 回执失效。新实现撤除该粗粒度跳过，按**稳定 LineID**分组、保守审阅、同时规划。
+- `ui/lab-ocr/note-pair-conversion.js` 新增唯一纯函数 `planNotePairGroupConversion({mdRows,blockRows,configuration,pairs,anchors})`：对**同一物理行**的多个已匹配注引先分别使用旧独立安全规划确认 ref/body 及正文证据，再把各 `<sup>N</sup>` 原始范围无重叠地拼成一条源行 afterText，其他注文行依原顺序加入（共享注文只一次）；多个新注引的新 `ref.md-footnote` CandidateID 必须根据所有前置改写后的 UTF-16 offset 重新计算。所有更新最终作为一个 `{updates}` 交由 `frame.convertMdNotePair`，**一个 CM6 Undo/Redo 事务 + 一次原 MD CAS 保存**，不生成或删除物理行，LineID/BlockID/PDF 框不动。
+- 若当前行已存在经过审阅并已转换的注引（例如此前 10 成功、9 被跳过），它作为 `anchors` **不被二次改写**；规划把该注引的已转换新坐标随前置改写修正，分组准备在一个 SQLite 原子事务中同时更新新 9 的回执、既有 10 的坐标及新的整行 SHA。原先的已转换回执作为限量 `alternates` 保留；`receipt_state` 根据 SQLite **全部行 SHA** 精确选择当前版本：执行新改写后 9/10 都已转换，而 Undo 恢复到仅 10 已转换的文本时，10 仍为「已转换」、9 回到待转换。旧被保存的读物并不要求用户先 Undo 再转换 9。
+- 后端新单一服务 API `POST note-pair-group-prepare` 接受精确成员、CAS revision、转换后 candidate id、旧 anchor 回执与共享行 changes；在 `BEGIN IMMEDIATE` 同时核对原文、身份、各注号的新 marker 坐标和所有候选修改行，失败全部 rollback，只保存不可编辑的转换 SHA 元数据，不触碰 MD/Block。旧单对 `note-pair-convert-prepare` 继续保留，适用于只有一个未转换注引且没有历史 anchor 的行。
+- 对一个物理行中的匹配候选，任何已匹配注引无法获得安全注文或证据不一致时，整行暂不执行修改，并把每条被跳过注引的 **注号及原因** 反馈状态栏。安全判断失败依 `missing-body/ambiguous-body/source-conflict/unsafe-layout/unsupported-rule/duplicate-number/prepare-rejected/save-conflict` 分类；用户下次检查后可重新手动标记 `已匹配` 再试。不允许为了扩大转换数而忽略源证据。
+
+### AG 匹配状态及审阅持久化
+
+- 可编辑的三态仍是 `已匹配 / 待核实 / 忽略`；**自动派生**两种只读、不能由下拉手工伪造的值：`已转换`（严格按现有 SQL MD 全部后态 SHA + 当前 CM6 行证据判定）和 `转换失败`（源证据仍有效且当前人工作业保留失败代码与具体说明）。所以「匹配状态」下拉显示五个值，但只有前三项可人工选择；后两项对应原有 AG `EnumCheckboxFilter`，点击列筛选即可得到仅成功行或仅失败行，包含对应注引和注文。
+- 新列 `转换失败原因` 只放逐条原因；`判断依据` 继续包含候选规则原始证据及失败提示。失败写入新 API `POST note-pair-convert-issues`，只修改**已有** `note_pair_review` 的可选 `conversion_issue` 字段，未审阅候选按来源证据创建 `待核实` 扩展记录；CAS revision、Main Cookie/Origin 和书籍隔离仍生效。GET 只读，旧书籍扩展表在首次写入时安全新增列；用户显式重设匹配状态时自动清除过时失败记录。失败理由与每个候选 LineID、BlockID、UTF-16 范围和整行原文 SHA 绑定，原文变动后不会继续显示旧失败为新事实。
+- 批量运行的最终状态栏报告已转换/失败跳过/未执行数量，并附前 8 条实际注号与原因，其余可在 AG 筛选「转换失败」。AG 筛选仅改可见投影，不删除 Markdown 或书籍人工审阅记录。不把技术状态当作“自动转换成功”的判断。
+
+### 直接及浏览器验收
+
+- `node tests/lab-ocr-note-pair-group.test.mjs`：独立同一行 9/10 的纯规划、正确 UTF-16 新偏移、两个订单正文不重复、旧 10 anchor + 新 9 组合、不允许重复/无效候选。
+- `python3 tests/lab-ocr-note-pair-group.test.py -v`：隔离合成书籍中整组两人审阅 CAS 原子准备、前态只读、后态两成员成功、Undo/Redo、先 10 成功再 9 加入及 Undo 后旧 10 仍成功、失败原因持久化和显式状态清除、实际单一 HTTP Cookie/Origin/405 方法边界。
+- `node tests/lab-ocr-note-pair-group.browser.test.mjs`，及通过 `NOTE_PARTIAL_MODE=1`、`NOTE_FAIL_MODE=1` 分别在 Chromium 与 iPad WebKit 运行：新 9/10 同行原子转换、先成功 10 后补转 9 的回执跟随、已转换五态下拉只读、模拟某个非同行脚注转换失败且在 AG `EnumCheckboxFilter` 勾选「转换失败」后仅剩失败行；CM6 Undo/Redo、原 MD CAS、重开 View、Block 保存次数 0。
+- 真实 Buffett 样本**只读**运行同组纯规划：第286行的 9、10 与第346、348行注文恰好生成三条行更新；测试阶段没有执行任何 `md-save` 或人工审阅 `POST` 写入真实书籍。

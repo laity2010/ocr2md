@@ -163,7 +163,7 @@ try{
    assert.equal(reviewSetCount,2,'Only the matching candidates get explicit CAS decisions');
    assert.equal((await select(firstId))?.review,'已转换');
    assert.equal((await select(secondId))?.review,'已转换');
-   assert.equal((await select(secondId))?.match_state,'已匹配');
+   assert.equal((await select(secondId))?.match_state,'已转换');
    // Each pair remains one CM6 Undo/Redo transaction, including its body
    // edit when applicable. No second Markdown writer is involved.
    assert(await page.evaluate(()=>document.querySelector('.ocr-cm-source')

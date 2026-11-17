@@ -7,6 +7,7 @@ is attached to an exact source snapshot and stable candidate identifiers.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sqlite3
 import uuid
@@ -34,6 +35,7 @@ SCHEMA='''CREATE TABLE IF NOT EXISTS note_pair_review(
  body_raw TEXT,
  body_source_sha256 TEXT,
  conversion_json TEXT,
+ conversion_issue TEXT,
  revision TEXT NOT NULL,
  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
  CHECK((decision IN ('忽略','待核实') AND body_id IS NULL) OR
@@ -142,7 +144,8 @@ def read_note_pair_reviews(book:Path):
               'body_raw':item['body_raw'],'revision':item['revision'],
               'valid':_valid_record(db,item),
               'converted':state['converted'],
-              'conversion':state['conversion']})
+              'conversion':state['conversion'],
+              'issue':json.loads(item['conversion_issue']) if item.get('conversion_issue') else None})
         return {'status':'ready','reviews':items}
 
 
@@ -182,6 +185,8 @@ def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
                 db.execute(SCHEMA)
                 if 'conversion_json' not in {r[1] for r in db.execute('PRAGMA table_info(note_pair_review)')}:
                     db.execute('ALTER TABLE note_pair_review ADD COLUMN conversion_json TEXT')
+                if 'conversion_issue' not in {r[1] for r in db.execute('PRAGMA table_info(note_pair_review)')}:
+                    db.execute('ALTER TABLE note_pair_review ADD COLUMN conversion_issue TEXT')
                 revision=uuid.uuid4().hex
                 db.execute('''INSERT INTO note_pair_review(
                   ref_id,ref_line_id,ref_block_id,ref_from,ref_to,ref_raw,
@@ -197,7 +202,7 @@ def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
                   body_from=excluded.body_from,body_to=excluded.body_to,
                   body_raw=excluded.body_raw,body_source_sha256=excluded.body_source_sha256,
                   revision=excluded.revision,
-                  conversion_json=NULL,
+                  conversion_json=NULL,conversion_issue=NULL,
                   updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')''',
                   (ref['candidateId'],ref['lineId'],ref['blockId'],ref['from'],ref['to'],
                    ref['raw'],_hash(ref_text),decision,
@@ -212,6 +217,71 @@ def set_note_pair_review(book:Path,reference,body,decision,expected_revision):
             return {'status':'saved','ref_id':ref['candidateId'],
                     'decision':decision,'body_id':selected['candidateId'] if selected else None,
                     'revision':revision}
+        except Exception:
+            db.rollback()
+            raise
+
+
+ISSUE_CODES=frozenset(('missing-body','ambiguous-body','source-conflict',
+    'unsafe-layout','unsupported-rule','duplicate-number','prepare-rejected',
+    'save-conflict','other'))
+
+
+def set_note_pair_conversion_issues(book:Path,items):
+    """Persist source-verified conversion failures; never touch MD or Block.
+
+    A prior matched review remains matched, and retains its selected body;
+    a previously unreviewed failure becomes a `待核实` review carrying a
+    failure issue, so AG can show `转换失败` until explicitly resolved.
+    """
+    if not isinstance(items,list) or not 1<=len(items)<=128:
+        raise OCRImportError('注释失败报告数量无效')
+    checked=[];ids=set()
+    for item in items:
+        if not isinstance(item,dict) or set(item)!={'reference','expectedRevision','code','reason'}:
+            raise OCRImportError('注释失败报告字段无效')
+        ref=_parse_endpoint(item['reference'],'ref')
+        code=item['code'];reason=item['reason'];revision=item['expectedRevision']
+        if ref['candidateId'] in ids or code not in ISSUE_CODES or \
+           type(reason) is not str or not 1<=len(reason)<=230 or \
+           any(ord(ch)<32 for ch in reason) or \
+           revision is not None and (type(revision) is not str or
+               not re.fullmatch(r'[0-9a-f]{32}',revision)):
+            raise OCRImportError('注释失败报告内容无效')
+        ids.add(ref['candidateId']);checked.append((ref,code,reason,revision))
+    with closing(sqlite3.connect(_db(book),timeout=20)) as db:
+        try:
+            db.execute('BEGIN IMMEDIATE')
+            _check_signature(db,book)
+            _ensure_review_schema(db,'待核实')
+            db.execute(SCHEMA)
+            if 'conversion_issue' not in {r[1] for r in db.execute('PRAGMA table_info(note_pair_review)')}:
+                db.execute('ALTER TABLE note_pair_review ADD COLUMN conversion_issue TEXT')
+            result=[]
+            for ref,code,reason,expected in checked:
+                text=_read_line(db,ref['lineId'],ref['blockId'],ref['from'],ref['to'],
+                                ref['raw'],ref['sourceText'])
+                old=db.execute('SELECT revision FROM note_pair_review WHERE ref_id=?',
+                               (ref['candidateId'],)).fetchone()
+                if (old[0] if old else None)!=expected:
+                    raise OCRImportError('注释失败报告已被其他操作修改，需重新读取')
+                revision=uuid.uuid4().hex
+                issue=json.dumps({'code':code,'reason':reason},ensure_ascii=False)
+                if old:
+                    db.execute('UPDATE note_pair_review SET conversion_issue=?,revision=?, '
+                        "updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE ref_id=?",
+                        (issue,revision,ref['candidateId']))
+                else:
+                    db.execute('''INSERT INTO note_pair_review
+                      (ref_id,ref_line_id,ref_block_id,ref_from,ref_to,ref_raw,
+                       ref_source_sha256,decision,revision,conversion_issue)
+                      VALUES(?,?,?,?,?,?,?,?,?,?)''',
+                       (ref['candidateId'],ref['lineId'],ref['blockId'],ref['from'],
+                        ref['to'],ref['raw'],_hash(text),'待核实',revision,issue))
+                result.append({'ref_id':ref['candidateId'],'revision':revision,
+                               'issue':{'code':code,'reason':reason}})
+            db.commit()
+            return {'status':'saved','issues':result}
         except Exception:
             db.rollback()
             raise
