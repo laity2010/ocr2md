@@ -4,6 +4,47 @@
  */
 import {projectNoteMatchIndex,DEFAULT_NOTE_MATCH_CONFIG} from './note-match-index.js';
 
+const SYMBOL_ORDER=new Map([['*',0],['†',1],['‡',2]]);
+/** Compare note labels as numbers, not ASCII strings (2 < 10). The letter
+ * and symbol groups have stable book-agnostic order after numeric labels.
+ */
+export function compareNoteNumbers(left,right){
+  const a=String(left??''),b=String(right??'');
+  const rank=value=>/^\d+$/.test(value)?0:
+    /^[a-z]$/i.test(value)?1:SYMBOL_ORDER.has(value)?2:3;
+  const ar=rank(a),br=rank(b);
+  if(ar!==br)return ar-br;
+  if(ar===0)return Number(a)-Number(b);
+  if(ar===2)return SYMBOL_ORDER.get(a)-SYMBOL_ORDER.get(b);
+  return a.localeCompare(b,'en',{numeric:true,sensitivity:'base'});
+}
+
+/** Only gaps BETWEEN observed numeric labels in the same configured scope.
+ * Unseen leading/trailing labels and reused numbers in another chapter are
+ * unknowable, not evidence. These are prompts to check OCR, not conclusions.
+ */
+export function findMissingNoteNumbers(index){
+  const scoped=new Map();
+  for(const candidate of [...index.references,...index.bodies]){
+    if(!/^[0-9]{1,3}$/.test(candidate.number))continue;
+    const scope=candidate.evidence.scope;
+    const values=scoped.get(scope)??new Set();
+    values.add(Number(candidate.number));scoped.set(scope,values);
+  }
+  const missing=[];
+  for(const [scope,values] of scoped){
+    const ordered=[...values].sort((a,b)=>a-b);
+    for(let i=1;i<ordered.length;i++){
+      for(let number=ordered[i-1]+1;number<ordered[i];number++){
+        missing.push(Object.freeze({number:String(number),scope,
+          preceding:String(ordered[i-1]),following:String(ordered[i])}));
+      }
+    }
+  }
+  return Object.freeze(missing.sort((a,b)=>compareNoteNumbers(a.number,b.number)||
+    a.scope.localeCompare(b.scope)));
+}
+
 export function projectNoteMatchRows(mdRows,blockRows,config=DEFAULT_NOTE_MATCH_CONFIG){
   const index=projectNoteMatchIndex(mdRows,blockRows,config);
   const refById=new Map(index.references.map(item=>[item.candidate_id,item]));
@@ -45,7 +86,37 @@ export function projectNoteMatchRows(mdRows,blockRows,config=DEFAULT_NOTE_MATCH_
       page:body.page,body_line_ids:body.body_line_ids,
       body_block_ids:body.body_block_ids}));
   }
-  return Object.freeze({index,rows:Object.freeze(rows)});
+  const missingNoteNumbers=findMissingNoteNumbers(index);
+  for(const candidate of missingNoteNumbers){
+    rows.push(Object.freeze({pair_id:`gap:${candidate.scope}:${candidate.number}`,
+      number:candidate.number,kind:'缺号',status:'疑似缺号',
+      reason:`在同一编号范围内发现 ${candidate.preceding}、${candidate.following}，`+
+        `未发现注号 ${candidate.number} 的注引或注文；请检查 OCR 与编号规则`,
+      scope:candidate.scope,candidate_count:0,
+      note_row_id:`gap:${candidate.scope}:${candidate.number}`,
+      line_id:null,line_no:null,block_id:null,pbs:'',
+      from:null,to:null,raw:'',text:'（未发现该注号的注引和注文）',
+      evidence:'',strength:'',page:null,
+    }));
+  }
+  // Initial physical order also groups all occurrences of one number and
+  // their corresponding bodies. AG applies the same numeric comparator as
+  // its default sort; user-selected PBS/line sorting is never overwritten.
+  const groups=new Map(),scopeOrder=new Map();
+  for(const item of [...index.references,...index.bodies]){
+    const scope=item.evidence.scope;
+    scopeOrder.set(scope,Math.min(scopeOrder.get(scope)??Infinity,item.line_no));
+  }
+  for(const [ordinal,row] of rows.entries()){
+    const groupKey=row.scope+'\u001f'+row.pair_id;
+    if(!groups.has(groupKey))groups.set(groupKey,ordinal);
+  }
+  rows.sort((a,b)=>compareNoteNumbers(a.number,b.number)||
+    (scopeOrder.get(a.scope)??Infinity)-(scopeOrder.get(b.scope)??Infinity)||
+    groups.get(a.scope+'\u001f'+a.pair_id)-groups.get(b.scope+'\u001f'+b.pair_id)||
+    (a.kind==='注引'?-1:1));
+  return Object.freeze({index,rows:Object.freeze(rows),
+    missing_note_numbers:missingNoteNumbers});
 }
 
 /** Explicitly resolve the clicked physical end, not the other end or block start. */

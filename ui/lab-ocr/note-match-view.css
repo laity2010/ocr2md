@@ -34,3 +34,8 @@
 .ocr-note-rule-actions button{padding:7px 12px;border:1px solid #678477;border-radius:5px;
   background:#34483f;color:#d3c6aa}
 .ocr-note-rule-feedback{color:#e9c46a;min-height:1.5em}
+
+/* A number gap is an inference, not a physical source block or a completed
+ * review. Keep the entire placeholder visibly distinct but fully filterable. */
+#workspace .ocr-note-match-status[data-status="疑似缺号"]{color:#efba60;font-weight:700}
+#workspace .ocr-note-match-text[data-kind="缺号"]{color:#e7ba71;font-style:italic}

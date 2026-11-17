@@ -12,7 +12,7 @@ import {projectLatexIndex,latexIndexSummary} from './latex-index.js';
 import {projectBlockBreakRows,resolveBlockBreakFocus,renderBlockBreakJoinCell} from './block-break-view.js';
 import {createBlockBreakReviewCell} from './block-break-review-cell.js';
 import {planBlockBreakMerge,emptyMdChildBlockIds} from './block-break-merge.js';
-import {projectNoteMatchRows,resolveNoteMatchFocus} from './note-match-view.js';
+import {projectNoteMatchRows,resolveNoteMatchFocus,compareNoteNumbers} from './note-match-view.js';
 import {DEFAULT_NOTE_MATCH_CONFIG,validateNoteMatchConfig} from './note-match-index.js';
 import {resolveReviewLocation,sourceBlockStartLine} from './four-pane-location.js';
 import {viewStore,publishLabFocus} from '../view-store.js';
@@ -108,7 +108,8 @@ const MD_BREAK_COLUMNS=Object.freeze([
   {field:'issue_id',headerName:'断块 ID',hide:true,sortable:false},
 ]);
 const MD_NOTE_COLUMNS=Object.freeze([
-  {field:'number',headerName:'注号',width:74,sortable:true,
+  {field:'number',headerName:'注号',width:74,sortable:true,sort:'asc',
+    comparator:compareNoteNumbers,
     pinned:'left',lockPinned:true,lockPosition:'left'},
   {field:'kind',headerName:'端点',width:72,sortable:true},
   {field:'text',headerName:'注引／注文 · 原文',minWidth:240,flex:1.8,sortable:false,
@@ -959,7 +960,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       onSelect:row=>{
         if(notes){
           const anchor=resolveNoteMatchFocus(row,md()?.rows??[],cm()?.rows??[]);
-          if(!anchor){onStatus('注释端点缺失或文本已变化，请刷新候选','warning');return;}
+          if(!anchor){onStatus(row.status==='疑似缺号'?`注号 ${row.number} 疑似缺失 · ${row.reason}`:
+            '注释端点缺失或文本已变化，请刷新候选','warning');return;}
           locateReview({origin:'ag',lineId:anchor.lineId,blockId:anchor.blockId,
             lineNo:anchor.lineNo,noteFrom:anchor.from,noteTo:anchor.to});
           onStatus(`注释 ${row.number} · ${row.kind} · ${anchor.pbs??'无 PBS'} · `+
@@ -1011,7 +1013,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       view==='note-match'?`AG 注释匹配 · ${lastNoteProjection?.index.stats.references??0} 注引、`+
         `${lastNoteProjection?.index.stats.bodies??0} 注文、`+
         `${lastNoteProjection?.index.stats.matched??0} 已匹配、`+
-        `${lastNoteProjection?.index.stats.need_review??0} 待核实 · 只读`:
+        `${lastNoteProjection?.index.stats.need_review??0} 待核实、`+
+        `${lastNoteProjection?.missing_note_numbers.length??0} 个疑似缺号 · 按注号排序 · 只读`:
       `AG ${view==='title'?'标题':view==='block-break'?'断块':'MD 行'}视图 · ${count} 条${view==='block-break'?'疑似断块 · 审阅结果可保存':'投影'} · 不自动修改 MD`,'ok');
     return true;
   }

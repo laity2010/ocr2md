@@ -539,6 +539,13 @@ function mountEmptyGrid(host){
     grid.applyColumnState({state:columns.filter(col=>col.field).map(col=>({
       colId:col.field,pinned:col.pinned??null,
     })),applyOrder:true});
+    if(columns.some(column=>column.field==='note_row_id')){
+      // A new Note Match view must not inherit the MD line or previous
+      // schema's sorting. Only when first opening the view: later AG header
+      // sorting by PBS/line remains the user's choice across row patches.
+      grid.applyColumnState({state:[{colId:'number',sort:'asc',sortIndex:0}],
+        defaultState:{sort:null,sortIndex:null}});
+    }
     grid.setGridOption('rowData',rows.filter(isVisible));
     // Apply the caller's startup selection through AG Grid's public filter
     // model before subscribing to changes; the real checkbox UI stays owner.

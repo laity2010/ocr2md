@@ -13,13 +13,14 @@ const vite=spawn('node',['node_modules/vite/bin/vite.js','--config',
   '--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
 let log='';vite.stdout.on('data',x=>log+=x);vite.stderr.on('data',x=>log+=x);
 const blocks=[
-  [101,'p1b0',0,'A study finds<sup>1</sup>, and it also cites[^1].'],
+  [101,'p1b0',0,'A study finds<sup>1</sup>, and it also cites[^1] and <sup>5</sup>.'],
   [102,'p2b1',1,'Further comparison<sup>2</sup>.'],
   [103,'p3b0',2,'## Notes'],
   [104,'p3b1',2,'1. One note applies to two citations.'],
   [105,'p3b2',2,'2. This is another note.'],
   [106,'p3b3',2,'3. Orphan source note.'],
   [107,'p2b2',1,'Another claim (2) was actually a numbered list.'],
+  [108,'p3b4',2,'5. Fifth body, after a missing fourth number.'],
 ].map(([block_id,pbs,global_page,text])=>({block_id,pbs,global_page,
   parent_block_id:null,sibling_order:block_id,block_type:'text',
   block_group:'para_blocks',absorbed_into_block_id:null,
@@ -102,12 +103,46 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
    await page.waitForFunction(()=>document.querySelectorAll('.ocr-outline-grid .ag-row').length>=2);
+   // The source mentions number 5 on line 1, before number 2 on line 2.
+   // AG must default to numeric number order (not source/PBS/lexical order).
+   await page.waitForFunction(()=>document.querySelector('.ag-header-cell[col-id="number"]')
+     ?.getAttribute('aria-sort')==='ascending',null,{timeout:12000});
+   const defaultOrder=await page.evaluate(()=>[...document.querySelectorAll('.ocr-outline-grid .ag-row')]
+     .sort((a,b)=>Number(a.getAttribute('row-index'))-Number(b.getAttribute('row-index')))
+     .map(row=>row.querySelector('.ag-cell[col-id="number"]')?.textContent).filter(Boolean));
+   assert.equal(defaultOrder[0],'1');
+   assert(defaultOrder.every((number,i)=>i===0||
+     Number(number)>=Number(defaultOrder[i-1])),
+     'Displayed numeric order must be nondecreasing: '+defaultOrder);
+   const gap=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
+     ?.ocrSqlGrid?.selectById({field:'note_row_id',id:'gap:book:4',focusColumn:'status'}));
+   assert.equal(gap?.status,'疑似缺号');
+   assert.equal(gap?.line_id,null);
+   assert.equal(gap?.pbs,'');
+   await page.locator('.ocr-outline-grid .ag-row-selected .ag-cell[col-id="status"]').click();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent
+     ?.includes('注号 4 疑似缺失'),null,{timeout:12000});
+   assert.equal(await page.evaluate(()=>document.querySelector('.ocr-cm-source')
+     ?.ocrCmTable?.mdDocument()),original,'Missing-number hint must never mutate the MD');
    const mdFootnoteId='pair:ref:note-md-1:'+sourceLines[0].indexOf('[^1]')+
      ':ref.md-footnote:ref';
    assert(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
      ?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId),
      'A second citation in the same LineID must have its own AG row ID');
    assert.equal(ruleLoads,1);
+   // Both existing alternative orders remain user-selectable, and neither
+   // changes the source or creates any fictitious coordinates for the gap.
+   const header=field=>page.locator(`.ocr-outline-grid .ag-header-cell[col-id="${field}"]`);
+   await page.evaluate(()=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id:'gap:book:4',focusColumn:'pbs'}));
+   await header('pbs').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="pbs"]')
+     ?.getAttribute('aria-sort')==='ascending');
+   await page.evaluate(()=>document.querySelector('.ocr-outline-grid')?.ocrSqlGrid
+     ?.selectById({field:'note_row_id',id:'gap:book:4',focusColumn:'line_no'}));
+   await header('line_no').click();
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="line_no"]')
+     ?.getAttribute('aria-sort')==='ascending');
    const orphan=await page.evaluate(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'line_id',id:'note-md-6',focusColumn:'status'}));
    assert.equal(orphan?.status,'缺注引');
@@ -163,6 +198,9 @@ try{
    await dialog.waitFor({state:'hidden'});
    assert.equal(ruleSaves,1);assert.equal(savedRules.scope,'chapter');
    assert(!savedRules.referenceRules.includes('ref.md-footnote'));
+   // Updating the note rows must preserve the manual line sort: only a
+   // fresh View activation installs the numeric default again.
+   assert.equal(await header('line_no').getAttribute('aria-sort'),'ascending');
    const removed=await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId);
    assert.equal(removed,null,'Saving book rules must remove now-disabled candidates without reloading CM6');
@@ -174,6 +212,8 @@ try{
    await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.columnFields()?.includes('note_row_id'));
    assert.equal(ruleLoads,2);
+   await page.waitForFunction(()=>document.querySelector('.ocr-outline-grid .ag-header-cell[col-id="number"]')
+     ?.getAttribute('aria-sort')==='ascending');
    assert.equal(await page.evaluate(id=>document.querySelector('.ocr-outline-grid')
      ?.ocrSqlGrid?.selectById({field:'note_row_id',id,focusColumn:'kind'}),mdFootnoteId),null,
      'Switching AG Views must read saved per-book configuration');

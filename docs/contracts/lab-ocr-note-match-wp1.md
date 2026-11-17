@@ -71,3 +71,11 @@ node tests/lab-ocr-note-match-index.browser.test.mjs
 - `python3 tests/lab-ocr-note-match-rules.test.py`（合成书籍独立规则、读只读、CAS 冲突、非法规则、symlink、真实 HTTP Cookie/Origin/方法边界，不需要建 SQLite）。
 - `node tests/lab-ocr-note-match-view.browser.test.mjs`：Chromium 与 iPad WebKit，原生 Lab Frame + 合成 API，AG 5 View 正确、两端独立源码/PDF/MD 预览定位、按书籍修改规则后候选增删、切换 View 重载配置、没有 MD/Block 保存请求。
 - 回归：标题/LaTeX/断块的 AG 选项列表新增 `注释匹配` 是预期的接口扩展，不得删除旧 View 或改变旧列身份；同时验证 PDF 原覆盖框、LaTeX 异步渲染和断块的 CM6 Undo/Redo。
+
+### WCP43 注释匹配排序与缺号提示（2026-11-17）
+
+- **默认排序改为注号升序，不再默认按源码/PBS 顺序。** `compareNoteNumbers(left,right)` 对数字注号使用数值自然比较（`2` 在 `10` 前），字母注号与 `* / † / ‡` 符号注号位于数值注号之后，按稳定顺序排列；`projectNoteMatchRows` 先按注号、配置范围及候选组组织行，同一引用-注文对保持连续，多处注引可引用同一注文定义。
+- 现有 AG Grid `number` 列声明默认 `sort:'asc'` 和数值比较器；`ui/frame/layout.js` 仅在**进入注释匹配 View** 时通过 Grid 官方 `applyColumnState` 清理前一个 View 的旧排序并设定注号升序。PBS 仍用已验证的 `comparePBS`，`line_no` 仍是数值列；用户点击对应表头可以改用 PBS 或行号排序，后续规则保存和增量更新**不重置手动排序**。再次切入此 View 恢复默认注号顺序。既有 MD/标题/LaTeX/断块视图不受此默认规则改变。
+- `findMissingNoteNumbers(index)` 在**同一配置范围**内取注引和注文已发现数字注号的并集，只提示两端**已观测**编号之间的空缺：发现 `1、2、4` 会增加 `3 · 疑似缺号` 提示行。每条提示行的 `LineID/BlockID/源码行号` 为 `null`、PBS 为空，绝不造出不存在的原文或 PDF 框；点击时仅由全局状态栏提示“请检查 OCR 与编号规则”。已有注引没有注文、或反过来，沿用已有 `缺注文 / 缺注引` 状态，不重复虚报整号缺失。章节重启编号时使用 `scope:'chapter'` 分范围统计，防止把两个独立序列混合认定为断档；缺少足够证据时**不猜测第一个已见编号之前或最后一个之后**是否缺号。
+- `疑似缺号` 不是 WP3 的人工裁决，也不自动补号或转换 MD。真实 Buffett 示例注号 1–10 连续，因此缺号提示为 0；但原来位于 7 之后的正文枚举 `(1)`、`(2)` 将按数字排到注号 1、2 的匹配行附近，仍保持“待核实”。
+- `tests/lab-ocr-note-match-view.test.mjs` 直接覆盖数字 2/10、字母/符号、1/2/10 中间缺号、无虚假 LineID/PBS、按章节独立、未观测开头不猜测；`tests/lab-ocr-note-match-view.browser.test.mjs` 通过 Chromium/iPad WebKit 验证第5 AG 默认注号升序、虚线无关的缺号行与筛选、手动 PBS/行号排序、规则更新不重置手动排序、重新切换恢复注号顺序，以及 MD/Block 保存次数为0。
