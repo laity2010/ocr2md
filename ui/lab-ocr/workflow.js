@@ -137,6 +137,19 @@ const MD_NOTE_COLUMNS=Object.freeze([
   {field:'note_row_id',headerName:'候选ID',hide:true},
   {field:'line_id',headerName:'LineID',hide:true},
 ]);
+const MD_TABLE_COLUMNS=Object.freeze([
+  {field:'pbs',headerName:'PBS',width:125,sortable:true,sort:'asc',
+    comparator:comparePBS,pinned:'left',lockPinned:true,lockPosition:'left'},
+  {field:'block_type',headerName:'Block Type',width:139,sortable:true},
+  {field:'content_preview',headerName:'摘要',minWidth:210,flex:1,sortable:false},
+  {field:'line_no',headerName:'源码行',width:91,sortable:true},
+  {field:'global_page',headerName:'PDF 页（0起）',width:110,sortable:true},
+  {field:'block_id',headerName:'BlockID',width:102,sortable:true},
+  {field:'parent_block_id',headerName:'ParentID',width:115,sortable:true},
+  {field:'merged_into_block_id',headerName:'已合并至 BlockID',width:137,sortable:true},
+  {field:'block_bbox_json',headerName:'Block BBox',width:150,sortable:false},
+  {field:'line_id',headerName:'LineID',hide:true,sortable:false},
+]);
 const MD_MEDIA_COLUMNS=Object.freeze([
   {field:'preview_path',headerName:'预览',width:104,sortable:false},
   {field:'line_no',headerName:'源码行',width:88,sortable:true,sort:'asc',
@@ -191,7 +204,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   let noteReviews=new Map(),noteReviewEpoch=0;
   const noteReviewBusy=new Set();
   let noteBatchBusy=false;
-  let mediaView=null;
+  let mediaView=null,tableProjection=null,lastTableLocationSignature='';
   const noteLastConvertIssue=new Map();
   const breakReviewBusy=new Set();
   let pdfPage=1;
@@ -242,13 +255,25 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return projectReviewedNoteRows(lastNoteProjection,noteReviews,source,
       {showIgnored:true,dirty:Boolean(md()?.dirty)});
   }
-  const projectedMdRows=()=>activeAgView==='media'?mediaView?.rows()??[]:
+  const projectedMdRows=()=>activeAgView==='table'?
+    tableProjection.projectTableBlockRows(md()?.rows??[],cm()?.rows??[]):
+    activeAgView==='media'?mediaView?.rows()??[]:
     activeAgView==='latex'?
     latexPresentation.decorateLatexRows(projectLatexIndex(md()?.rows??[],cm()?.rows??[])):
     activeAgView==='title'?projectTitleMdRows(md()?.rows??[],cm()?.rows??[]):
     activeAgView==='block-break'?projectBreakReviewRows():
     activeAgView==='note-match'?projectNoteReviewRows():
     projectLiveMdRows(md()?.rows??[],cm()?.rows??[]);
+  const tableLocationSignature=rows=>JSON.stringify(rows.map(row=>[
+    row.block_id,row.block_type,row.pbs,row.parent_block_id,row.merged_into_block_id,
+    row.global_page,row.line_id,row.line_no]));
+  function refreshTableLocations(){
+    if(currentSqlTable!=='md'||activeAgView!=='table'||!tableProjection)return;
+    // Read-only Block rows do not change with ordinary keystrokes. Only a
+    // reflow/new LineID or real structural change requires refreshing AG.
+    const signature=tableLocationSignature(projectedMdRows());
+    if(signature!==lastTableLocationSignature)renderMdAg();
+  }
   // One candidate's CM6 edit does not invalidate decisions for independent
   // candidates. Compare their two exact source lines and stable identities
   // against the snapshot validated by the last read-only SQLite GET. An
@@ -923,7 +948,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     frame.setEmptyMdBlocks(emptyMdChildBlockIds(next.rows,cm()?.rows??[]));
     frame.setReviewPair(null,{skipSource:true}); // CM6 docChanged already clears its own decorations
     if(currentSqlTable==='md'){
-      if(activeAgView==='media')frame.patchMediaRows(projectedMdRows());
+      if(activeAgView==='table')refreshTableLocations();
+      else if(activeAgView==='media')frame.patchMediaRows(projectedMdRows());
       else if(activeAgView==='note-match')frame.patchNoteRows(projectedMdRows());
       else if(activeAgView==='latex'){
         const rows=projectedMdRows();
@@ -1108,7 +1134,8 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         mdContentChanged(updated);
       }else if(currentSqlTable==='md'){
         // A Block's PBS may change without changing its MD text/order.
-        if(activeAgView==='media')frame.patchMediaRows(projectedMdRows());
+        if(activeAgView==='table')refreshTableLocations();
+        else if(activeAgView==='media')frame.patchMediaRows(projectedMdRows());
         else if(activeAgView==='note-match')frame.patchNoteRows(projectedMdRows());
         else if(activeAgView==='latex'){
           const rows=projectedMdRows();
@@ -1369,12 +1396,13 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
   // AG view switching is a re-projection of the resident CM6 Markdown.
   // It never reopens SQLite or replaces the MD editor StateField.
   function renderMdAg(){
-    const media=activeAgView==='media',
+    const table=activeAgView==='table',media=activeAgView==='media',
       title=activeAgView==='title',latex=activeAgView==='latex',
       broken=activeAgView==='block-break',notes=activeAgView==='note-match';
     const rows=projectedMdRows();
+    if(table)lastTableLocationSignature=tableLocationSignature(rows);
     lastRenderedLatexSummary=latex?latexIndexSummary(rows):null;
-    const columns=media?MD_MEDIA_COLUMNS:latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
+    const columns=table?MD_TABLE_COLUMNS:media?MD_MEDIA_COLUMNS:latex?latexPresentation.latexColumns({filter:EnumCheckboxFilter,pbsPageKey,
         getPdfFormulaCrop:target=>frame.getPdfFormulaCrop(target)}):
       title?MD_TITLE_COLUMNS:broken?MD_BREAK_COLUMNS:notes?MD_NOTE_COLUMNS:MD_COLUMNS;
     frame.showSqlRows(rows,columns.map(column=>({
@@ -1383,7 +1411,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
       ...(notes&&column.field==='match_state'?{cellRenderer:noteStatusCell}:{}),
       ...(media&&column.field==='preview_path'?{cellRenderer:mediaView.previewCell}:{}),
       ...(media&&column.field==='action'?{cellRenderer:mediaView.actionCell}:{}),
-      ...(column.field==='text'&&!media&&!latex&&!broken&&!notes?{editable:true,valueSetter:params=>{
+      ...(column.field==='text'&&!table&&!media&&!latex&&!broken&&!notes?{editable:true,valueSetter:params=>{
         if(typeof params.newValue!=='string'||/[\r\n]/.test(params.newValue)){
           onStatus('AG MD 一行只能编辑一行文本；拆分请在源码窗使用 Enter','warning');
           return false;
@@ -1393,16 +1421,16 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
         return false;
       }}:{}),
       filter:column.filter??EnumCheckboxFilter,
-      filterValueGetter:column.filterValueGetter??(params=>column.field==='line_no'&&!media?
+      filterValueGetter:column.filterValueGetter??(params=>column.field==='line_no'&&!media&&!table?
         mdLineKind(params.data?.text):column.field==='pbs'?
           pbsPageKey(params.data?.pbs):params.data?.[column.field]??''),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     })),{
       pageScope:{page:pdfPage},
-      allPagesInitially:title||latex||broken||notes||media,
-      expandPageOnCategory:title||media?null:latex||broken||notes?'kind':'block_type',
-      initialFilterModel:latex||broken||notes||media?null:{line_no:{values:['非空行']}},
-      rowHeight:latex?134:broken?92:notes?66:media?78:35,
+      allPagesInitially:title||latex||broken||notes||media||table,
+      expandPageOnCategory:title||media||table?null:latex||broken||notes?'kind':'block_type',
+      initialFilterModel:latex||broken||notes||media||table?null:{line_no:{values:['非空行']}},
+      rowHeight:latex?134:broken?92:notes?66:media?78:table?58:35,
       onSelect:row=>{
         if(media){
           if(row.line_id){locateReview({origin:'ag',lineId:row.line_id,
@@ -1430,7 +1458,9 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
             formulaBBox:row.pdf_bbox,
             formulaKind:row.kind==='行内'?'inline':row.kind==='独立'?'display':null}:{}),
         });
-        onStatus(broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · ${row.merged?'已合并，后块空白、PDF 虚线':'审阅 '+(row.review??'待定')}`:
+        onStatus(table?`表格 · ${row.block_type} · ${row.pbs} · `+
+          (target?.lineNo?`源码行 ${target.lineNo}`:'仅 PDF 块（无直接 MD 行）'):
+          broken?`断块 · ${row.before_pbs} → ${row.after_pbs} · ${row.boundary} · ${row.merged?'已合并，后块空白、PDF 虚线':'审阅 '+(row.review??'待定')}`:
           latex?
           `LaTeX · ${row.pbs} · ${row.match_status} · ${row.render_status} · `+
             (target?.lineNo?`MD ${target.lineNo}`:'仅 PDF / OCR'):
@@ -1454,10 +1484,12 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     return rows.length;
   }
   async function setAgView(view){
-    if(!['md','title','latex','block-break','note-match','media'].includes(view))throw Error('未知 AG 过滤视图');
+    if(!['md','title','latex','block-break','note-match','media','table'].includes(view))throw Error('未知 AG 过滤视图');
     const token=++agViewRequest;
     if(view==='latex'&&!latexPresentation)
       latexPresentation=await import('./latex-view.js');
+    if(view==='table'&&!tableProjection)
+      tableProjection=await import('./table-view.js');
     if(view==='media'&&!mediaView){
       const {createLabOcrMediaView}=await import('./media-view.js');
       mediaView=createLabOcrMediaView({request,
@@ -1487,7 +1519,7 @@ export function createLabOcrWorkflow({io,frame,navigation,settingsRoot,onStatus,
     if(view==='media')void mediaView.scan().catch(error=>
       onStatus('媒体清单刷新失败：'+error.message,'warning'));
     const summary=lastRenderedLatexSummary;
-    onStatus(view==='media'?`AG 媒体 · ${count} 条 · 点击操作下载/续传，功能菜单可批量本地化 · 不新增 SQL 媒体表`:
+    onStatus(view==='table'?`AG 表格 · ${count} 个 Block · 所有 Block Type 包含 table 的块 · 只读`:view==='media'?`AG 媒体 · ${count} 条 · 点击操作下载/续传，功能菜单可批量本地化 · 不新增 SQL 媒体表`:
       view==='latex'?`AG LaTeX · ${summary.total} 条，原始 ${summary.original}，`+
       `精确匹配 ${summary.matched}，仅 OCR ${summary.ocrOnly}，仅 MD ${summary.mdOnly}，`+
       `有歧义 ${summary.ambiguous}，原图 ${summary.images} · 只读`:
