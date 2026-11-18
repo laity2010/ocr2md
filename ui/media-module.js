@@ -13,9 +13,6 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 // Include sized Markdown links and Obsidian wiki image links in adoption.
 // Capture only the image path; leave the |width suffix intact on edits.
 const imageRe=/!\[[^\]\n]*\]\((https?:\/\/[^\s)|]+|media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))(?:\|[1-9]\d{0,3}(?:x[1-9]\d{0,3})?)?\)/g;
-// MinerU's Markdown uses an angle-enclosed destination: ![image](<https://...jpg>).
-// Capture only the URL, not the < > wrapper, so replacements preserve syntax.
-const angleImageRe=/!\[[^\]\n]*\]\(<(https?:\/\/[^<>\s]+|media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))>\)/g;
 const wikiImageRe=/!\[\[(media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))(?:\|[1-9]\d{0,3}(?:x[1-9]\d{0,3})?)?\]\]/g;
 const theme=themeQuartz.withParams({
   accentColor:'#569d79',backgroundColor:'#2f383e',foregroundColor:'#d3c6aa',
@@ -32,8 +29,7 @@ export function findMedia(source){
   // Do not inspect data within the original immutable MinerU evidence blobs.
   const evidence=[...source.matchAll(/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g)]
     .map(m=>[m.index,m.index+m[0].length]);
-  const found=[...source.matchAll(imageRe),...source.matchAll(angleImageRe),
-    ...source.matchAll(wikiImageRe)]
+  const found=[...source.matchAll(imageRe),...source.matchAll(wikiImageRe)]
     .map(match=>({url:match[1],from:match.index+match[0].lastIndexOf(match[1])}))
     .sort((a,b)=>a.from-b.from);
   for(const {url,from} of found){

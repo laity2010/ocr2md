@@ -12,7 +12,7 @@ const remote='https://cdn-mineru.openxlab.org.cn/demo.png';
 const local='media/'+'c'.repeat(24)+'.png';
 const orphan='media/'+'d'.repeat(24)+'.png';
 const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/eZ8AAAAASUVORK5CYII=','base64');
-const lines=[`Images ![one](<${remote}>) and ![two](${remote}).`,
+const lines=[`Images ![one](${remote}) and ![two](${remote}).`,
   `Local ![present](${local}).`,
   'Plain paragraph with no media'];
 const blocks=lines.map((text,i)=>({block_id:400+i,pbs:`p${i+1}b0`,global_page:i,

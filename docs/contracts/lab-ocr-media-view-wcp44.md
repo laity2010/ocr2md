@@ -26,9 +26,3 @@
 ## 待扩展
 
 - 支持非 MinerU 图片源或其他媒体类型前，另立 URL/文件类型/重定向/大小/MIME/SVG XSS 和失败回退的安全契约与测试，不放宽当前服务端 allowlist。
-
-## WCP44 空表回归（2026-11-17）
-
-- 2026-11-16 Buffett 书籍的隔离 SQLite 只读样本 `md_line` 中，11 处图片均为 MinerU 标准 Markdown **尖括号包裹目标** `![image](<https://...jpg>)`；Main 旧 `findMedia` 只读无尖括号的 `![image](https://...)`，导致 Lab 媒体 AG 空表。此数据检查未修改书籍。
-- `findMedia` 现补充 `angleImageRe`，与原 Markdown / Obsidian 扫描并列，只返回 URL 精确区间（不包含 `<`/`>`），排除原始证据注释、不修改元数据或处理流程。已存在的正则仍沿用，保持 Main Media 直接契约有效。
-- 浏览器测试同时覆盖有尖括号和无尖括号图片，验证同一远端 URL 去重、替换后保留 Markdown 的尖括号包裹、CM6 Undo/Redo、原有 MD CAS 保存；补充 Main 三个公开入口的角括号扫描直接断言。

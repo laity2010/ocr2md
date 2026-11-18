@@ -10,47 +10,13 @@
       <span id="build-version" class="build-badge frame-version" aria-label="构建版本">00000000-0000</span>
       <span id="status" class="status" role="status" aria-live="polite">正在初始化 OCR 审阅工作台</span>
     </div>
-    <div class="source-actions"><button id="boot-retry" type="button" hidden style="display:none">重新加载</button><button id="global-save" class="primary" type="button">保存</button></div>
+    <div class="source-actions"><button id="global-save" class="primary" type="button">保存</button></div>
   </header>
   <main>
     <div id="workspace" aria-label="OCR 审阅 AG、Markdown 源码、Markdown 预览和 PDF 四窗"></div>
     <div id="settings-workspace" hidden aria-label="独立全局设置三窗"></div>
   </main>
 </div>
-<script>
-// Independent classic watchdog: even a missing or rejected ES module must
-// produce a visible status, not an eternal empty Frame. No document writes.
-(function(){
-  var badge=document.getElementById('build-version');
-  var status=document.getElementById('status');
-  var retry=document.getElementById('boot-retry');
-  function showRetry(){retry.hidden=false;retry.style.display='inline-block';}
-  retry.addEventListener('click',function(){
-    var url=new URL(window.location.href);
-    url.searchParams.set('boot-retry',String(Date.now()));
-    window.location.replace(url.href);
-  });
-  window.addEventListener('error',function(event){
-    var target=event.target;
-    if(!target||target.tagName!=='SCRIPT')return;
-    if(badge.textContent==='00000000-0000'){
-      status.textContent='Lab-OCR 启动脚本请求失败（BOOT_SCRIPT_ERROR），请点击「重新加载」。';
-      status.dataset.kind='error';showRetry();
-      var uri=new URL(window.location.href);
-      if(!uri.searchParams.has('boot-retry')){
-        uri.searchParams.set('boot-retry','1');
-        status.textContent+=' 正在自动重试一次…';
-        setTimeout(function(){window.location.replace(uri.href);},1200);
-      }
-    }
-  },true);
-  window.setTimeout(function(){
-    if(badge.textContent!=='00000000-0000')return;
-    status.textContent='Lab-OCR 启动脚本未执行（BOOT_ENTRY_TIMEOUT）。请点击「重新加载」。';
-    status.dataset.kind='error';showRetry();
-  },18000);
-})();
-</script>
 <script type="module" src="./entry.js"></script>
 </body>
 </html>
