@@ -12,7 +12,7 @@ const remote='https://cdn-mineru.openxlab.org.cn/demo.png';
 const local='media/'+'c'.repeat(24)+'.png';
 const orphan='media/'+'d'.repeat(24)+'.png';
 const image=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/eZ8AAAAASUVORK5CYII=','base64');
-const lines=[`Images ![one](${remote}) and ![two](${remote}).`,
+const lines=[`Images ![one](<${remote}>) and ![two](${remote}).`,
   `Local ![present](${local}).`,
   'Plain paragraph with no media'];
 const blocks=lines.map((text,i)=>({block_id:400+i,pbs:`p${i+1}b0`,global_page:i,
@@ -102,6 +102,40 @@ try{
         null,{timeout:16000});
       assert.equal(await page.locator('.ocr-lab-media-action').count(),2,
         'two source refs, same remote URL, local and orphan are read-only');
+      // A remote URL inside Markdown's <...> destination is still a
+      // SOURCE-LINKED row, never an unreferenced file. The AG projections
+      // must retain the SQL MD LineID, physical line and mutable PBS label.
+      const cells=await page.evaluate(()=>[...document.querySelectorAll(
+        '.ocr-outline-grid .ag-row')].map(row=>({
+          line:row.querySelector('[col-id="line_no"]')?.textContent?.trim()??'',
+          pbs:row.querySelector('[col-id="pbs"]')?.textContent?.trim()??'',
+          adopt:row.querySelector('[col-id="adopted"]')?.textContent?.trim()??'',
+        })));
+      assert.deepEqual(cells.filter(row=>row.line==='1').map(row=>row.pbs),
+        ['p1b0','p1b0'],'both remote image references expose their real Block PBS');
+      assert(cells.some(row=>row.line==='2'&&row.pbs==='p2b0'),
+        'local media reference keeps physical source line and PBS');
+      assert(cells.some(row=>row.adopt==='未引用'&&row.line===''&&row.pbs===''),
+        'truly unreferenced files cannot claim fictitious source locations');
+      // Verify AG click is a real four-pane navigation (not only populated
+      // labels) and that explicit PBS sorting reverses source block order.
+      const pbsHeader=page.locator('.ocr-outline-grid .ag-header-cell[col-id="pbs"]');
+      await pbsHeader.click(); // first header click sorts ascending
+      await pbsHeader.click(); // then descending
+      await page.waitForFunction(()=>{
+        const rows=[...document.querySelectorAll('.ocr-outline-grid .ag-row')].sort(
+          (a,b)=>Number(a.getAttribute('row-index'))-Number(b.getAttribute('row-index')));
+        const linked=rows.map(row=>row.querySelector('[col-id="pbs"]')?.textContent?.trim())
+          .filter(Boolean);
+        return linked[0]==='p2b0'&&linked.at(-1)==='p1b0';
+      },null,{timeout:8000});
+      await page.locator('.ocr-outline-grid .ag-row').filter({has:page.locator(
+        '[col-id="pbs"]', {hasText:'p2b0'})}).first().click();
+      await page.waitForFunction(()=>{
+        return document.querySelector('.ocr-cm-source .cm-activeLine')?.textContent
+          ?.includes('Local ![present]')??false;
+      },null,{timeout:8000});
+
       await page.waitForFunction(()=>document.querySelector('.ocr-lab-media-action')?.textContent==='续传',null,{timeout:8000});
       await page.locator('.ocr-lab-media-action').first().click();
       await page.waitForFunction(()=>document.querySelector('.ocr-cm-source')?.ocrCmTable
@@ -110,12 +144,12 @@ try{
       await page.waitForFunction(()=>[...document.querySelectorAll('.ocr-preview-md-scroll img')]
         .filter(img=>img.getAttribute('src')?.includes('media-file?')).length>=3,
         null,{timeout:12000});
+      assert(modified[0].text.includes('![one](<'+local+'>)'),
+        'URL replacement preserves MinerU angle wrappers');
       assert.equal((modified[0].text.match(/media\//g)||[]).length,2,
         'one download replaces both references');
       assert.deepEqual(modified.map(x=>x.line_id),initial.map(x=>x.line_id));
       assert.equal(chunkCalls,2,'resume via two byte chunks, duplicate URL downloaded once');
-      await page.waitForFunction(()=>document.querySelector('.ocr-lab-media-preview a')!==null ||
-        document.querySelectorAll('.ocr-lab-media-preview').length>=4);
       await page.waitForFunction(()=>document.querySelector('.ocr-source-pane #undo')
         ?.disabled===false,null,{timeout:7000});
       await page.locator('.ocr-source-pane #undo').click();

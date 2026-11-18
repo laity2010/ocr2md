@@ -10,12 +10,40 @@ const approvedPath=value=>typeof value==='string'&&LOCAL.test(value);
 const percent=(bytes,total)=>Number.isFinite(total)&&total>0?
   `${Math.floor(bytes/total*100)}%`:`${bytes||0} B`;
 
+// Lab-only MinerU image adapter. Main's Media scanner deliberately remains
+// unchanged after the confirmed-good d813e4c rollback. Markdown images in
+// this book use ![image](<https://...jpg>); the angle characters belong to
+// Markdown syntax, not the URL replacement span.
+const MINERU_IMAGE=/!\[[^\]\n]*\]\(<(https?:\/\/[^<>\s)]+|media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp))>\)/g;
+/** Public M00: shared Main scan plus Lab MinerU angle destinations, read-only. */
+export function findLabMedia(source){
+  if(typeof source!=='string')throw Error('媒体扫描需要 Markdown 字符串');
+  const refs=findMedia(source);
+  const evidence=[...source.matchAll(/<!--\s*minerujson:(?!block:v1:)[\s\S]*?-->/g)]
+    .map(item=>[item.index,item.index+item[0].length]);
+  const additional=[...source.matchAll(MINERU_IMAGE)].map(match=>{
+    const url=match[1];
+    // Match directly to the URL captured inside < >, never include wrappers.
+    const from=match.index+match[0].lastIndexOf(url),to=from+url.length;
+    return {id:String(from),from,to,url,local:url.startsWith('media/'),
+      status:url.startsWith('media/')?'本地':'待下载',bytes:0,total:null};
+  }).filter(ref=>!evidence.some(([start,end])=>ref.from<end&&ref.to>start));
+  const ordered=[...refs,...additional].sort((a,b)=>a.from-b.from);
+  let currentLine=1,last=0;
+  for(const ref of ordered){
+    for(let position=last;position<ref.from;position++)
+      if(source.charCodeAt(position)===10)currentLine++;
+    ref.line=currentLine;last=ref.from;
+  }
+  return ordered;
+}
+
 /** Public M01: pure, read-only media AG projection from live Markdown + disk inventory. */
 export function projectLabMedia({source,mdRows,blocks=[],inventory=[],states=new Map(),running=new Set()}={}){
   if(typeof source!=='string'||!Array.isArray(mdRows))throw Error('媒体视图缺少 CM6 Markdown');
   const byBlock=new Map(blocks.map(row=>[row.block_id,row]));
   const linked=new Set();
-  const refs=findMedia(source).map(ref=>{
+  const refs=findLabMedia(source).map(ref=>{
     const row=mdRows[ref.line-1];
     if(!row||row.line_no!==ref.line)throw Error('媒体链接行号与 CM6 不一致');
     const state=states.get(ref.url)??{};
@@ -104,7 +132,7 @@ export function createLabOcrMediaView({request,read,replace,onChanged,onStatus=(
     const ctx=context();
     if(!ctx?.mdRows)return 0;
     // Re-scan AFTER network I/O; offsets may have changed while downloading.
-    const edits=findMedia(ctx.source).filter(item=>!item.local&&completed.has(item.url))
+    const edits=findLabMedia(ctx.source).filter(item=>!item.local&&completed.has(item.url))
       .map(item=>({from:item.from,to:item.to,expected:item.url,insert:completed.get(item.url)}));
     if(!edits.length)return 0;
     const result=replace(edits); // one guarded CM6 history transaction, no SQL writes here
@@ -115,7 +143,7 @@ export function createLabOcrMediaView({request,read,replace,onChanged,onStatus=(
     const ctx=context();if(!ctx?.workspace||!ctx.mdRows)return [];
     const snapshot=ctx.workspace,seq=++epoch;
     notify();
-    const urls=[...new Set(findMedia(ctx.source).filter(x=>!x.local).map(x=>x.url))];
+    const urls=[...new Set(findLabMedia(ctx.source).filter(x=>!x.local).map(x=>x.url))];
     const [files,...progress]=await Promise.allSettled([
       request('media-inventory',{workspace:snapshot}),
       ...urls.map(url=>request('media-status',{workspace:snapshot,url}))]);
@@ -136,7 +164,7 @@ export function createLabOcrMediaView({request,read,replace,onChanged,onStatus=(
     const ctx=context(),scope=expectedBook??ctx?.workspace;
     if(!scope||scope!==ctx?.workspace)throw Error('书籍已切换');
     if(running.has(url))return false;
-    if(!findMedia(ctx.source).some(item=>item.url===url&&!item.local))return false;
+    if(!findLabMedia(ctx.source).some(item=>item.url===url&&!item.local))return false;
     paused.delete(url);running.add(url);notify();
     try{
       for(;;){
@@ -172,7 +200,7 @@ export function createLabOcrMediaView({request,read,replace,onChanged,onStatus=(
     const ctx=context();if(!ctx?.mdRows)return;
     bulk=true;const scope=ctx.workspace;
     try{
-      const urls=[...new Set(findMedia(ctx.source).filter(r=>!r.local).map(r=>r.url))];
+      const urls=[...new Set(findLabMedia(ctx.source).filter(r=>!r.local).map(r=>r.url))];
       const completed=new Map();
       for(const url of urls){
         if(disposed||context()?.workspace!==scope)break;
