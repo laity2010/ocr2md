@@ -52,6 +52,16 @@ class WorkspacePortTest(unittest.TestCase):
         self.assertEqual(result['sha256'],port.sha(b'new'))
         self.assertEqual(base64.b64decode(port.read_file(self.book,'sub/test.bin')['contentBase64']),b'new')
 
+    def test_multimegabyte_mineru_sized_source_is_readable(self):
+        # Real 22-page MinerU JSON is about 2.2 MiB; the public API must not
+        # claim file read access yet fail at the old 1 MiB limit.
+        content=b'{\"source\":\"MinerU\"}'*(140000)
+        self.assertGreater(len(content),2*1024*1024)
+        (self.book/'large-source.json').write_bytes(content)
+        result=port.read_file(self.book,'large-source.json')
+        self.assertEqual(result['sha256'],port.sha(content))
+        self.assertEqual(base64.b64decode(result['contentBase64']),content)
+
     def test_scope_and_symlinks_are_not_followed(self):
         with self.assertRaisesRegex(port.WorkspaceIOError,'授权范围'):
             port.checked_workspace(str(self.book),[self.other])

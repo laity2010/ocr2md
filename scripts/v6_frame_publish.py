@@ -55,6 +55,10 @@ def fingerprints(folder):
     files={};total=0
     for p in sorted(folder.rglob('*')):
         if p.is_file():
+            # Finder metadata is not a released asset. Other Labs already
+            # have harmless .DS_Store files, never listed in the manifest.
+            # A symlink .DS_Store remains forbidden rather than being skipped.
+            if p.name=='.DS_Store' and not p.is_symlink():continue
             if p.is_symlink():raise RuntimeError('Symlink file forbidden in release')
             data=p.read_bytes();files[p.relative_to(folder).as_posix()]=sha(data);total+=len(data)
     return files,total

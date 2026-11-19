@@ -13,6 +13,7 @@
 - Main 的 `/api/workspace/roots` 是唯一目录授权源，必须凭 Main 编辑 Cookie 查询；写入还需要 V1 的完整同源 `OCR2MD_LAN_ORIGIN`（例如 iPad HTTPS `:4443` 端口）。仅允许已授权目录内、拒绝符号链接和路径越界。
 - `probe` 只使用随机临时隐藏文件并自动清理；`list`/`read` 为只读，`create` 采用 O_EXCL 拒绝覆盖，`replace` 要求传入原文件 SHA-256，先比较版本后同目录原子替换；不提供通用删除接口或隐藏自动保存。
 - 第一版 JSON/Base64 小文件端口上限 **8 MiB**；更大的 JSON、PDF 或媒体将另行设计流式读写接口，**目前不宣称大文件直接通过这五个 API 可全量读写**。服务端模块不存储书籍状态，目录选择仍以 Frame 原有 `settings.json` 为权威。
+- 发布指纹只忽略 macOS Finder 的普通 `.DS_Store` 元数据；其他未登记文件、篡改资源或符号链接仍必须阻断发布。
 - macOS 部署必须让共享 Gateway 使用与 Main 相同的获 iCloud 授权 Python，并从 V1 复用精确的 LAN Origin（含端口）。`scripts/v6_frame_publish.py` 在发布前检查这两个条件；不允许通过更改用户文件权限或复制书籍原件规避失败。
 
 直接测试：`python3 tests/lab-frame-workspace-io.test.py`、`node --test tests/lab-frame-workspace-io-client.test.mjs`、`node tests/lab-frame-workspace-io.browser.test.mjs`、`python3 tests/lab-frame-runtime-guard.test.py`。真实 LaunchAgent/iCloud 临时探针和公网浏览器另做跨环境验收。所有变更限定在 Lab-Frame 的空壳公共 I/O、发布门禁及共享网关的单一路由；其它 Lab 按需以正式 API 集成，不暗中继承新路由。
