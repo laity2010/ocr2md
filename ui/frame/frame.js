@@ -6,6 +6,7 @@ import {createFrameWorkspace} from './layout.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
+import {frameWorkspaceIO} from './workspace-io.js';
 import {createFrameStatus} from './global-status.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
@@ -26,6 +27,33 @@ const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChan
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
 let settings=null,loadingSettings=null,currentModule='frame';
+// Only one I/O probe may publish status; switching Settings cancels older
+// announcements without touching the shared status or Save component.
+let probeGeneration=0;
+async function verifyWorkspaceIO({afterSave=false}={}){
+  const generation=++probeGeneration;
+  let selected='';
+  try{
+    const snapshot=await io.readSnapshot();
+    selected=JSON.parse(snapshot.text)?.settings?.['workspace.dataDirectory']?.value||'';
+  }catch(error){
+    if(generation===probeGeneration)topStatus('工作区目录设置读取失败：'+error.message,'error');
+    return;
+  }
+  if(!selected){
+    if(afterSave&&generation===probeGeneration)topStatus('✓ 全局设置已保存 · 尚未绑定工作目录','warning');
+    return;
+  }
+  if(generation===probeGeneration)topStatus((afterSave?'✓ 全局设置已保存 · ':'')+'正在验证工作区文件读写…');
+  try{
+    await frameWorkspaceIO.probe(selected);
+    if(generation===probeGeneration)
+      topStatus((afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写','ok');
+  }catch(error){
+    if(generation===probeGeneration)
+      topStatus((afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
+  }
+}
 function refreshSettingsHistory(){
   const root=$('settings-workspace');
   const history=settings?.history||{undo:0,redo:0};
@@ -111,6 +139,7 @@ async function showModule(name){
   $('settings-workspace').hidden=!inSettings;
   $('global-save').disabled=false;
   if(inSettings){
+    ++probeGeneration;
     topStatus('正在打开全局设置…');
     try{const module=await getSettings();
       if(currentModule==='settings'){module.activate();topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');}}
@@ -122,12 +151,15 @@ async function showModule(name){
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
     topStatus('空白四窗框架已就绪 · 可由源码导航进入 settings.json');
+    void verifyWorkspaceIO();
   }
 }
 $('global-save').addEventListener('click',async()=>{
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
   if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
-  try{const saved=await settings.save();topStatus(saved?'✓ 全局设置已保存':'● 保存期间设置有新修改',saved?'ok':'warning');}
+  try{const saved=await settings.save();
+    if(saved)void verifyWorkspaceIO({afterSave:true});
+    else topStatus('● 保存期间设置有新修改','warning');}
   catch(error){topStatus('保存失败：'+error.message,'error');}
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.

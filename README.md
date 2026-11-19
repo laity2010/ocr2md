@@ -1,3 +1,24 @@
+# Lab-Frame · F02 工作区文件 I/O（当前公开能力）
+
+本工作树是 `labs/lab-frame`，独立于下方保留的历史 V6/Main 技术资料。**当前 Lab-Frame 仍是空白四窗：不加载 OCR、PDF、MinerU 转换、SQL 或用户正文**；只在 V1 Main 现有文件目录授权之上提供可复用的文件读写端口，所有用户书籍原件不被自动修改。
+
+## 绑定目录后的实际行为
+
+打开 `https://ocr2md.laity.bid/labs/lab-frame/`，在全局设置中选择 **工作区 → 目录 → 资料目录**，点击已有的全局「保存」按钮。Frame 不新增设置组件或第二份工作目录。只有经过**当前真实网关在该目录下创建临时隐藏文件 → 写入 → 读回校验 → 删除**，顶部全局状态栏才以绿色显示 **「✓ 工作区文件可读写」**。未绑定、失去 Main 编辑授权、macOS/iCloud 目录读写被拒绝或探针清理失败时，不得发布成功状态；错误在同一状态栏红色显示。返回四窗和刷新后会重新验证已保存目录，不重新选目录、不自动执行任何业务数据导入。
+
+## 公开最小 F02 API（版本 1）
+
+独立模块 `ui/frame/workspace-io.js` 暴露 `createFrameWorkspaceIO()` 与 `frameWorkspaceIO`，提供 `probe(workspace)`、`listFiles(workspace,path='')`、`readFile(workspace,path)`、`createFile(workspace,path,contentBase64)`、`replaceFile(workspace,path,contentBase64,expectedSha256)`。服务端由 `scripts/frame_workspace_io.py` 实现，通过**现有**统一网关 `/labs/lab-frame/api/workspace-io/{probe,list,read,create,replace}` 访问；不会另起端口或 Tunnel，不复制 V1 的登录 Cookie 或设置状态。
+
+- Main 的 `/api/workspace/roots` 是唯一目录授权源，必须凭 Main 编辑 Cookie 查询；写入还需要 V1 的完整同源 `OCR2MD_LAN_ORIGIN`（例如 iPad HTTPS `:4443` 端口）。仅允许已授权目录内、拒绝符号链接和路径越界。
+- `probe` 只使用随机临时隐藏文件并自动清理；`list`/`read` 为只读，`create` 采用 O_EXCL 拒绝覆盖，`replace` 要求传入原文件 SHA-256，先比较版本后同目录原子替换；不提供通用删除接口或隐藏自动保存。
+- 第一版 JSON/Base64 小文件端口上限 **8 MiB**；更大的 JSON、PDF 或媒体将另行设计流式读写接口，**目前不宣称大文件直接通过这五个 API 可全量读写**。服务端模块不存储书籍状态，目录选择仍以 Frame 原有 `settings.json` 为权威。
+- macOS 部署必须让共享 Gateway 使用与 Main 相同的获 iCloud 授权 Python，并从 V1 复用精确的 LAN Origin（含端口）。`scripts/v6_frame_publish.py` 在发布前检查这两个条件；不允许通过更改用户文件权限或复制书籍原件规避失败。
+
+直接测试：`python3 tests/lab-frame-workspace-io.test.py`、`node --test tests/lab-frame-workspace-io-client.test.mjs`、`node tests/lab-frame-workspace-io.browser.test.mjs`、`python3 tests/lab-frame-runtime-guard.test.py`。真实 LaunchAgent/iCloud 临时探针和公网浏览器另做跨环境验收。所有变更限定在 Lab-Frame 的空壳公共 I/O、发布门禁及共享网关的单一路由；其它 Lab 按需以正式 API 集成，不暗中继承新路由。
+
+---
+
 > 独立审计与 Grok/Muse 交接的唯一入口：[AUDIT.md](AUDIT.md)。先确认审计者自身 ACK，不以 GitHub Issue 代替实际派单。
 
 # OCR2MD V6 · 技术手册

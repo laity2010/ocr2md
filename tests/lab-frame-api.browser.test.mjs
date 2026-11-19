@@ -65,7 +65,9 @@ try{
       assert.equal(await page.locator('#settings-workspace .ocr-navigation-files.ts-wrapper').isVisible(),true);
       assert.equal(await page.locator('#settings-workspace #settings-undo').isVisible(),true);
       assert.equal(await page.locator('#settings-workspace #settings-redo').isVisible(),true);
-      assert.equal(await page.locator('#settings-workspace .ag-row').count(),2);
+      // Current Frame registers four settings: Sarasa, size, read-only
+      // runtime workDirectory, and the authorized workspace dataDirectory.
+      assert.equal(await page.locator('#settings-workspace .ag-row').count(),4);
       assert.match(await page.locator('#settings-workspace .cm-content').innerText(),/Sarasa/);
       const readonly=page.locator('#settings-workspace .ocr-settings-readonly-value');
       assert.equal(await readonly.inputValue(),'Sarasa');
