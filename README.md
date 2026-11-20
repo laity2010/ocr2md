@@ -1,6 +1,6 @@
 # OCR2MD · V2 · 两表最新状态 · WP01～WP03（Lab-Frame）
 
-本项目是从已验收 Lab-Frame SHA `bf03bfd13db9be9951776f7e4a393f9052221676` 建立的**隔离框架型 V2**。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
+本项目是从已验收 Lab-Frame SHA `bf03bfd13db9be9951776f7e4a393f9052221676` 建立的**隔离框架型 V2**。 当前已通过正常 Git merge 继承公共 Lab-Frame SHA `eab8ff8337db0a4bdd611d36f7788c4096f28cb3` 的 Main 编辑授权入口恢复，Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
 
 ## 单一权威与不可触碰范围
 
