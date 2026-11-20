@@ -43,6 +43,9 @@ try{
    await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
    async function choose(path){
     await page.getByRole('button',{name:'打开目录树'}).click();
+    const root=page.locator('wa-tree-item[data-path="/test/root"]');
+    if(!(await root.evaluate(item=>item.expanded)))
+      await root.locator('[part="expand-button"]').first().click();
     await page.locator('wa-tree-item[data-path="'+path+'"] [part="item"]').first().click();
     await page.getByRole('button',{name:'采用选中目录'}).click();
     await page.waitForFunction(v=>document.querySelector('[aria-label="当前资料目录"]')?.value===v,path,{timeout:12000});

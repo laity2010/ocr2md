@@ -115,12 +115,14 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
     if(rootsChanged)tree.replaceChildren(...roots);
     let changed=rootsChanged;
     if(!roots.length)onStatus('服务器没有可浏览的授权目录','warning');
-    // An initially collapsed single root resembles an empty chooser on iPad.
+    // Refresh must NEVER expand a branch on behalf of the user. The old
+    // `if (!root.expanded) root.expanded=true` ran every five seconds and
+    // reopened roots the user had deliberately collapsed (including iPad).
+    // Collapsed branches fetch their children only on the next manual expand.
     for(const root of roots){
       await root.updateComplete;
-      if(!root.isConnected)continue;
-      if(!root.expanded)root.expanded=true;
-      else if(!root.lazy)changed=(await updateChildren(root))||changed;
+      if(root.isConnected&&root.expanded&&!root.lazy)
+        changed=(await updateChildren(root))||changed;
     }
     if(!selectionStillExists(selectedBefore))onSelect('');
     if(changed)onStatus('Mac 目录内容已更新','ok');
@@ -148,6 +150,7 @@ export function createWorkspaceDirectoryTree(host,port,{onSelect=()=>{},onStatus
   }
   return Object.freeze({
     loadRoots:()=>refresh({reloadRoots:true}),refresh,startAutoRefresh,stopAutoRefresh,
+    selectedPath,
     dispose(){disposed=true;stopAutoRefresh();tree.remove();}
   });
 }

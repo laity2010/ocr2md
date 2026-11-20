@@ -11,7 +11,7 @@ export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
   // must not draw private success/warning/error messages.
   const status=(message,level='info')=>onStatus(message,level);
   // Generic directory selection is not tied to OCR files or the book catalogue.
-  function renderTreeControl(pane,item,record,{set}){
+  function renderTreeControl(pane,item,record,{get,set}){
     const label=document.createElement('label');label.textContent='资料目录';
     const field=document.createElement('input');field.type='text';field.readOnly=true;
     field.value=String(record.value||'');field.placeholder='尚未绑定目录';
@@ -65,6 +65,11 @@ export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
           });
         }
         await mounted.loadRoots();
+        // Reopening the chooser must preserve its existing WA-tree selection.
+        // Clicking an already-selected row does not fire a new selection event;
+        // previously the disabled Adopt button could never be re-enabled.
+        selection=mounted.selectedPath?.()||selection;
+        chooser.disabled=!selection;
         if(!picker.hidden)mounted.startAutoRefresh();
         if(!selection)status('目录已加载 · 选择后点击「采用选中目录」','ok');
       }catch(error){status('无法浏览目录：'+error.message,'error');}
@@ -75,10 +80,23 @@ export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
       try{
         const result=await directoryPort.browse(selection);
         if(result?.path!==selection)throw Error('目录验证失败');
+        const unchanged=get(item.key)===selection;
         set(item.key,selection);
         field.value=selection;
         dismiss();
-        status('资料目录已加入待保存设置，请点击全局顶栏保存','warning');
+        // A same-path adoption is a real user request to RECHECK access,
+        // even though Settings correctly emits no `settings.changed` event.
+        // Dispatch on the stable document: `set()` may recreate the preview
+        // pane, disconnecting this control before the event can bubble.
+        const adopted=new CustomEvent('workspace-directory-adopted',{
+          detail:Object.freeze({key:item.key,path:selection,unchanged}),
+          cancelable:true,
+        });
+        pane.ownerDocument.dispatchEvent(adopted);
+        // The frame owns I/O status. Never let this generic picker message
+        // overwrite a pending or failed read/write verification.
+        if(!adopted.defaultPrevented)
+          status('资料目录已加入待保存设置，请点击全局顶栏保存','warning');
       }catch(error){status('目录无法绑定：'+error.message,'error');}
     });
     pane.append(label,field,open,help,picker);

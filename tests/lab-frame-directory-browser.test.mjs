@@ -34,6 +34,7 @@ try{
   await page.getByRole('button',{name:'打开目录树'}).click();
   const root=page.locator('wa-tree-item[data-path="/demo/docs"]');
   await root.waitFor({state:'visible',timeout:20000});
+  await root.locator('[part="expand-button"]').first().click(); // explicit user expand
   await page.locator('wa-tree-item[data-path="/demo/docs/paper"]').waitFor({state:'visible',timeout:12000});
   const treeRect=await page.locator('.ocr-settings-directory-tree-host').boundingBox();
   assert.ok(treeRect.height>=180,'directory pane must be large enough to browse on iPad');
@@ -79,6 +80,9 @@ try{
   await invalid.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await invalid.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
   await invalid.getByRole('button',{name:'打开目录树'}).click();
+  // With intentionally collapsed roots, a failed browse is only attempted
+  // after the user explicitly expands that root.
+  await invalid.locator('wa-tree-item[data-path="/demo/moved"] [part="expand-button"]').first().click();
   await invalid.waitForFunction(()=>document.querySelector('#status')?.textContent
     ?.includes('目录不存在；请核对完整路径'),null,{timeout:14000});
   assert.equal(await invalid.locator('#status').getAttribute('data-kind'),'error');

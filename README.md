@@ -13,6 +13,13 @@
 - **每次在设置中采用或改动 `workspace.dataDirectory` 路径，立即执行真实 F02 `probe`**，不等点击顶栏保存；顶部全局状态栏显示检查中、成功「✓ 工作区文件可读写 · 目录设置尚未保存」或失败原因。检测不自动保存、不修改用户原件；保存仍通过 Main Settings 的全局保存动作，成功后重新探针，启动载入已保存路径时也重新探针。
 - 目录多次切换时只有**最近一次**读写检测结果允许发布状态；旧请求即使随后返回也不能覆盖新目录状态。未绑定则提示，实际读写未成功时不得显示可读写。
 
+## 目录采用状态与树交互回归（2026-11-20）
+
+- 目录树默认**全部保持收起**，仅用户明确点击箭头才展开。后台每 5 秒自动刷新仅同步已经展开的目录，**绝不能强制 `root.expanded=true`**；手动折叠后仍保持折叠，不重查隐藏子目录。
+- 从目录选择器点击「采用选中目录」时，Shell 必须保持「正在验证工作区文件读写…」直到 F02 实际结果返回；目录插件不得再发布普通「待保存」提示覆盖此状态。成功显示「✓ 工作区文件可读写 · 目录设置尚未保存」，拒绝/故障显示红色失败理由；测试本身不保存目录。
+- 再次打开选择器时恢复树中仍有效的已选目录，允许重新采用同一路径；即使 Settings 未变更也必须**重新探针**，修复旧代码的「同路径无 `settings.changed` 事件，不触发检测」和按钮始终 disabled 两处遗漏。
+- Chromium 与 iPad-WebKit 固定回归：`node tests/lab-frame-directory-adoption-collapse.browser.test.mjs`，手动收起后跨自动刷新不被重开、同路径三次采用分别得到读写成功/失败状态；现有目录刷新、嵌套、状态栏和竞态测试必须同时通过。
+
 ## 公开最小 F02 API（版本 1）
 
 独立模块 `ui/frame/workspace-io.js` 暴露 `createFrameWorkspaceIO()` 与 `frameWorkspaceIO`，提供 `probe(workspace)`、`listFiles(workspace,path='')`、`readFile(workspace,path)`、`createFile(workspace,path,contentBase64)`、`replaceFile(workspace,path,contentBase64,expectedSha256)`。服务端由 `scripts/frame_workspace_io.py` 实现，通过**现有**统一网关 `/labs/lab-frame/api/workspace-io/{probe,list,read,create,replace}` 访问；不会另起端口或 Tunnel，不复制 V1 的登录 Cookie 或设置状态。

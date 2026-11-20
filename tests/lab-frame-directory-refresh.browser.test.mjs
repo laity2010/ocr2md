@@ -45,6 +45,7 @@ try{
           await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
       await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
       await page.getByRole('button',{name:'打开目录树'}).click();
+      await page.locator('wa-tree-item[data-path="'+root+'"] [part="expand-button"]').first().click();
       const item=path=>page.locator('wa-tree-item').filter({visible:true})
         .and(page.locator('wa-tree-item[data-path="'+path+'"]'));
       const first=item(join(root,'first'));

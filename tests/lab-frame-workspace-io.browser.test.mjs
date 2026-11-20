@@ -36,6 +36,7 @@ try{
       await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible',timeout:25000});
       await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
       await page.getByRole('button',{name:'打开目录树'}).click();
+      await page.locator('wa-tree-item[data-path="/demo/docs"] [part="expand-button"]').first().click();
       await page.locator('wa-tree-item[data-path="/demo/docs/book"]').waitFor({state:'visible',timeout:22000});
       await page.locator('wa-tree-item[data-path="/demo/docs/book"] [part="item"]').first().click();
       await page.getByRole('button',{name:'采用选中目录'}).click();

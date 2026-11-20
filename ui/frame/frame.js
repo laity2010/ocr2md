@@ -47,6 +47,20 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
       (afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
   }
 }
+// The chooser reports every explicit adoption, including an unchanged path.
+// Changed paths already trigger the Settings-owned `settings.changed` port.
+// Re-adopting the same path must still verify filesystem access, not just
+// replay the generic warning from the directory widget.
+document.addEventListener('workspace-directory-adopted',event=>{
+  const {key,path,unchanged}=event.detail||{};
+  if(currentModule!=='settings'||key!=='workspace.dataDirectory')return;
+  event.preventDefault();
+  if(unchanged)void verifyWorkspaceIO(path,{uncommitted:settings?.hasUnsaved()||false});
+  else topStatus('正在验证工作区文件读写…');
+  // Settings may emit its generic unsaved/loaded message AFTER the change
+  // listener starts the probe. Reassert the progress state after the chooser
+  // finishes, without starting a second filesystem request.
+});
 function refreshSettingsHistory(){
   const root=$('settings-workspace');
   const history=settings?.history||{undo:0,redo:0};

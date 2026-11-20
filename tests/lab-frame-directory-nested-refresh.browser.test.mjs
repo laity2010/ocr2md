@@ -42,6 +42,7 @@ try{
    const alpha=page.locator('wa-tree-item[data-path="/demo/docs/alpha"]');
    const nested=page.locator('wa-tree-item[data-path="/demo/docs/alpha/nested"]');
    await root.waitFor({state:'attached',timeout:15000});
+   await root.locator('[part="expand-button"]').first().click();
    await alpha.waitFor({state:'attached',timeout:15000});
    await alpha.evaluate(item=>{item.expanded=true;});
    await nested.waitFor({state:'attached',timeout:15000});
