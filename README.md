@@ -1,27 +1,37 @@
-# OCR2MD · V2 · Lab-Frame 空框架基线
+# OCR2MD · V2 · MinerU 无损基础表（Lab-Frame）
 
-本项目是**从已验收 Lab-Frame** `bf03bfd13db9be9951776f7e4a393f9052221676` 创建的全新、隔离框架型 V2，取代已失败的 MinerU/SQL/三窗业务 V2。每次实施先读共用 `AGENTS.md`，再读本 README；禁止根据旧 V2 的 README 或构建产物恢复业务代码。
+本项目是从已验收 Lab-Frame SHA `bf03bfd13db9be9951776f7e4a393f9052221676` 建立的**隔离框架型 V2**。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
 
-## 唯一源码、发布与数据权威
+## 单一权威与不可触碰范围
 
-- Git 工作树 `labs/lab-ocr-v2`，分支 `experiment/lab-ocr-v2`，唯一发布 URL `https://ocr2md.laity.bid/labs/lab-ocr-v2/`。
-- UI 源码完全继承当前 Lab-Frame 的 `ui/frame/` 和依赖组件，采用其已验收的四窗空壳与全局设置：**启动直接进入 `settings.json`，AG 模块下拉禁用，源码导航没有返回按钮。**
-- 资料目录仅在原 Settings `workspace.dataDirectory` 中绑定；采用目录立即通过**已验收 F02 公开 API** 创建、写入、读回、删除临时探针文件，状态栏公布实际成功或失败，未保存设置不得假称已保存。目录树不自动展开；用户可手动展开和收起。
-- 独立本地设置命名空间：`ocr2md.lab-ocr-v2-frame.settings.json.v1`，**不继承**旧 V2（包括 `lab-ocr-v2-fresh`）或 Lab-Frame 的浏览器资料目录；只有全局保存后才持久化。
-- 公开工作区文件接口 **复用** `ui/frame/workspace-io.js` 的 F02 API，服务器直接使用现有 `/labs/lab-frame/api/workspace-io/{probe,list,read,create,replace}`。这是已验收、正式公开的公共端口；V2 **不建立平行文件 API**、Main 编辑 Cookie、权限检查、网关进程、隧道或独立 TCP 端口。F02 的授权唯一来源仍为 Main `/api/workspace/roots`。
-- 当前 **没有 V2 SQLite、MinerU 转换、OCR、Markdown 正文、AG 业务表、CM6 业务编辑或 PDF 内容。** 四窗仅是 Lab-Frame 的原空布局。用户现有 PDF/JSON/SQLite 完全不属于本项目运行数据，均不删除、不导入、不覆盖；旧 V2 `api/v2/` 已废止且必须 HTTP 404。
+- 源码：`labs/lab-ocr-v2`，分支 `experiment/lab-ocr-v2`；统一门户固定 URL `https://ocr2md.laity.bid/labs/lab-ocr-v2/`。
+- 框架：复用 Lab-Frame 的四窗、全局设置、资料目录、Sarasa、状态栏、导航 Tom Select、AG Grid；`ui/frame/*` 和共享 `ui/frame/workspace-io.js` / `scripts/frame_workspace_io.py` 必须与已验收 Lab-Frame **逐字节一致**。仅在 V2 的 Vite 配置内声明精确适配点，适配漂移立即构建失败。V2 不建立新的全局设置、导航实例、AG 实例、权限状态管理器。
+- 授权：资料目录只由原全局设置 `workspace.dataDirectory` 保存。复用公共 **F02** `/labs/lab-frame/api/workspace-io/probe` 实测创建→写→读→验证→清理。只有**已保存目录且 F02 读写验证成功**才能触发 MinerU 初始化；未保存的选择不能写入 SQLite。
+- 原始数据：书籍目录的 MinerU JSON 是不可修改输入。基础表完整原样保留**每个 JSON 源文件的全部原始字节和 SHA256**，任何块级抽取只作为索引与展示；不改原始 JSON、PDF、旧数据库、Main 或其他 Lab 的数据。
+- SQL：仅在所选目录不存在 `ocr2md.v2.sqlite` 时以临时文件建库并通过独占链接发布；已存在一律**不覆盖、不自动迁移**。若已有的同名库不是当前 Schema，显示冲突而不写任何数据。
 
-## 构建和发布约定
+## 2 表 N View · 当前数据结构（已实现部分）
 
-- `labs/lab-ocr-v2/vite.config.mjs` 是从 Frame 标准 Vite 构建配置派生的极薄**构建时**适配：仅 V2 名称、URL、版本、独立 Settings 存储前缀、自动更新身份。禁止改写 `ui/frame/*.js`、`ui/frame/*.css`、`ui/frame/index.html` 和 Frame 共用依赖，相关源码应当与 Lab-Frame 验收 SHA **逐字节相同**。
-- `scripts/v2_frame_publish.py` 复用 `scripts/v6_frame_publish.py` 的统一发布器与真实网关运行时门禁，只更新统一 `lab-ocr-v2` 发布槽和首页的 V2 卡片；发布时验证其他六个 Lab 的清单及源文件哈希不变。不能发布旧的双表三窗描述。
-- 旧 V2 业务历史只保留在 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`（旧提交 `0470d9f`），不再作为工作区、构建输入或运行 API。旧工作树已被**删除后重新从 Frame SHA 建立**，而不是在旧 V2 上修补。
+选定书籍目录创建 `ocr2md.v2.sqlite`，用户自选书籍的实际目录由授权决定；**不使用仓库目录、Main 工作区或旧 Lab SQL**。
 
-## 验收门禁
+| 物理表 | 用途 | 当前状态 |
+|---|---|---|
+| `mineru_base` | MinerU 原始块无损基础表，BlockID 为 1、2、3…的**全局整数索引**；附独立 `blockid=0` 原始源文件档案记录，不作为业务块展示 | 只写一次，禁止覆写 |
+| `logical_block` | V2 最新逻辑状态，未来由 CM6 驱动 | 当前空表，未实现编辑 |
 
-1. 当前 V2 HEAD 以 `bf03bfd13db9be9951776f7e4a393f9052221676` 为祖先，Frame UI/设置/目录树源码逐字节一致；V2 不包含旧 `scripts/v2_book.py`、`scripts/v2_http.py`、`ui/v2/`、`vite.v2-three-windows.config.mjs` 等文件。
-2. Chromium 和 iPad-WebKit：真实 V2 构建直接打开设置、AG 下拉禁用、无返回按钮；目录树仅手动展开，同一路径重新采用仍触发 F02 临时文件验证，状态栏展示正在检测、结果与未保存区分，刷新/更新正常。
-3. F02 安全：真实共享网关继承 V1 的 macOS iCloud 访问授权、LAN Origin（含 `:4443`）及 Main Cookie；无授权写入 HTTP 403；旧 V2 `api/v2/` 必须 404。不要以模拟请求通过冒充实际 iPad 会话已完成工作区绑定。
-4. 统一发布：7 个 Lab 的资源与 manifest SHA256 核验，除 V2 的发布内容与首页 V2 卡片外其他六个 Lab 不变；原 V2 URL HTTP 200，产物包含精确 Git SHA。用户书籍目录中的已有 PDF/JSON/SQLite SHA 不变。
+**不得新增第 3 张应用物理表，不以 SQL 表保存操作历史。** CM 将来负责撤销/重做和历史（本阶段尚未接入）。基础表不保存归一化造成的信息损失：`block_json` 保留每个块的完整 JSON 对象，包括额外未知字段与内嵌子块；`source_json_path` 指向输入页与三类原始块组 `preproc_blocks`、`discarded_blocks`、`para_blocks`；`original_bytes` 仅在 `blockid=0` 的档案记录按 Base64 保存源文件的逐字节内容。因此，原始 JSON 文件本身可按字节还原，BlockID>0 的索引不会改变源数据结构。源文件校验 SHA、路径、页索引、页块组、bbox、原始 lines/blocks 等列均可在 AG 基础表中查阅。
 
-**未实现、不可提前承诺：** 两表 N View 架构及 V1 所有窗口、拖拽、纠错、翻译等业务功能，须在下一阶段独立规划、构建和验收。
+## 业务 API 与窗口
+
+- **单独的 V2 MinerU 业务 API** `/labs/lab-ocr-v2/api/mineru-base/{state,import}`：GET state 支持按 120 行分页；POST import 仅在目录已授权、Origin 合法、带 `confirm=import-mineru-base`、真实 F02 probe 成功、目标 SQLite 尚不存在时写入；重复相同输入只读返回现有计数。复用 F02 服务端 `authorized_roots`、`checked_workspace`、`probe`；**不是第二套 Workspace 文件读写 API**，无新监听端口、进程、Tunnel、授权或 Cookie。旧 `/api/v2/` 仍必须 404。
+- V2 模块 `ui/v2-mineru-entry.js` **订阅 Frame F02 已验证事件**，仅对已保存目录检查 SQLite。未存在则无损导入，存在则按现有 Schema 加载。返回主工作区不依赖复制另一个 Settings/Navigation。
+- 原生导航下拉在验证导入后，自动添加 `SQL` 组与唯一条目 `基础表 · mineru_base`；从全局设置里点击该条目进入主四窗，AG 采用同一个现有 AG Grid 实例展示基础表的 **18 个 SQLite 列**。BlockID 固定为首列，按整数排序，每页 120 行；顶栏按前/后页切换。
+- 当前仅验收**基础表导航和 AG 字段**；CM6 源码窗、Markdown 预览、PDF 窗仍为 Frame 空壳，未实现 V1 的编辑/预览/同步、逻辑表展示、转换 Markdown。不得把本阶段宣称为完整 V2 或 V1 等价实现。
+
+## 验收与发布
+
+1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、重复导入及源变化拒绝覆盖。
+2. `node tests/v2-mineru-base.browser.test.mjs`：Chromium/WebKit、Settings 保存权限、自动导入、SQL 原生下拉和 AG 18 列/分页。
+3. `node tests/v2-clean-frame-isolation.test.mjs`：逐字节共享 Frame 基线不变；旧 V2 组件不复活。
+4. 原 Frame 公共 F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
+5. Git 提交完成后 `npm exec vite build -- --config labs/lab-ocr-v2/vite.config.mjs`，使用 `python3 scripts/v2_frame_publish.py --release-root /Users/daisor/AgentDock/ocr2md/release` 发布，核对 `sourceCommit`、所有资源 SHA、其余六 Lab 不变和公网入口 200。

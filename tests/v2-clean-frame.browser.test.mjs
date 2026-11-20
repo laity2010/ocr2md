@@ -1,4 +1,4 @@
-/** New V2 is exactly Lab-Frame UX, and uses Frame's shared F02 public API. */
+/** Regress Frame directory adoption + old setting isolation after V2 business import. */
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
@@ -17,7 +17,7 @@ try{
   const browser=await engine.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1200,height:850},hasTouch:true});
-   const errors=[],probes=[],oldApi=[];
+   const errors=[],probes=[],oldApi=[];let imported=false,posts=0;
    page.on('pageerror',error=>errors.push(error.message));
    page.on('request',req=>{if(req.url().includes('/api/v2/'))oldApi.push(req.url());});
    await page.addInitScript(()=>{
@@ -39,6 +39,17 @@ try{
     await sleep(200);
     return route.fulfill({status:200,contentType:'application/json',
      body:JSON.stringify({verified:true,readable:true,writable:true})});
+   });
+   await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
+     const op=new URL(route.request().url()).pathname.split('/').at(-1);
+     if(op==='import'){
+       posts++;imported=true;
+       assert.equal(route.request().postDataJSON().confirm,'import-mineru-base');
+       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true})});
+     }
+     if(op==='state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(imported?
+       {exists:true,blockCount:1,sourceCount:1,offset:0,columns:['blockid'],rows:[{blockid:1}]}:{exists:false})});
+     return route.abort();
    });
    const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
    await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible',timeout:24000});
@@ -69,11 +80,13 @@ try{
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:17000});
    assert.match(await page.locator('#status').textContent(),/目录设置尚未保存/);
    assert.deepEqual(probes,['/demo/books/my-book']);
+   assert.equal(posts,0,'Uncommitted workspace must never initialize SQL');
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-ocr-v2-frame.settings.json.v1')),null,
     'reading/probing a directory does not implicitly Save');
    await page.locator('#global-save').click();
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('全局设置已保存')&&
-     document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:19000});
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 基础表就绪'),null,{timeout:26000});
+   assert.equal(posts,1);
+   assert.equal(await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option').count(),1);
    assert.deepEqual(probes,['/demo/books/my-book','/demo/books/my-book']);
    const saved=await page.evaluate(()=>({
     latest:localStorage.getItem('ocr2md.lab-ocr-v2-frame.settings.json.v1'),
@@ -83,7 +96,8 @@ try{
    assert.equal(JSON.parse(saved.latest).settings['workspace.dataDirectory'].value,'/demo/books/my-book');
    assert(saved.old.includes('/old-v2/book'));assert(saved.frame.includes('/old-frame/book'));
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:20000});
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 基础表就绪'),null,{timeout:24000});
+   assert.equal(posts,1,'reloading existing SQLite must not reimport');
    assert.equal(probes.length,3,'saved V2 Settings re-probes on reload');
    assert.equal(await page.locator('#workspace').isVisible(),false);
    assert.deepEqual(oldApi,[]);

@@ -1,5 +1,5 @@
 /** New Lab-OCR V2: exact Lab-Frame UI, with build-time URL/identity scoping.
- * No old V2 business entry, MinerU parsing, SQLite or parallel I/O.
+ * No old V2 business; exposes only narrow, build-time base import UI ports.
  */
 import {defineConfig} from 'vite';
 import {fileURLToPath} from 'node:url';
@@ -22,16 +22,28 @@ export default defineConfig({
   define:{__FRAME_BUILD_VERSION__:JSON.stringify(version),__FRAME_SOURCE_COMMIT__:JSON.stringify(commit)},
   build:{outDir,emptyOutDir:true},
   plugins:[{
-    name:'v2-clean-frame-build-scoping-only',enforce:'pre',
+    name:'v2-frame-base-import-adapter',enforce:'pre',
     transformIndexHtml:{order:'pre',handler(html){
       html=exact(html,'<title>OCR2MD V6 · Lab Frame</title>',
-        '<title>OCR2MD · V2 · Lab-Frame 空框架</title>','document title');
-      return exact(html,'OCR2MD lab-frame</a>','OCR2MD lab-ocr-v2</a>','brand');
+        '<title>OCR2MD · V2 · MinerU 无损基础表</title>','document title');
+      html=exact(html,'OCR2MD lab-frame</a>','OCR2MD lab-ocr-v2</a>','brand');
+      return html;
     }},
     transform(code,id){
       if(id.endsWith('/ui/frame/frame.js')){
-        return exact(code,"createFrameSettingsIO(localStorage,'lab-frame'",
+        code=exact(code,"createFrameSettingsIO(localStorage,'lab-frame'",
           "createFrameSettingsIO(localStorage,'lab-ocr-v2-frame'",'isolated Settings storage');
+        code=exact(code,'await frameWorkspaceIO.probe(selected);',
+          "await frameWorkspaceIO.probe(selected);document.dispatchEvent(new CustomEvent('v2-workspace-verified',{detail:{path:selected,afterSave,uncommitted}}));",
+          'verified F02 workspace event');
+        return "import '../v2-mineru-entry.js';\n"+exact(code,'startFrameAutoUpdate({version:build,report:topStatus});',
+          "document.addEventListener('v2-show-frame',()=>void showModule('frame'));startFrameAutoUpdate({version:build,report:topStatus});",
+          'Frame module switch event');
+      }
+      if(id.endsWith('/ui/frame/layout.js')){
+        return exact(code,'return {dispose(){grid.destroy();},layout:()=>{}};',
+          "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs()});return {dispose(){grid.destroy();},layout:()=>{}};",
+          'AG view data port');
       }
       if(id.endsWith('/ui/frame/refresh.js')){
         return exact(code,"remote?.name==='lab-frame'","remote?.name==='lab-ocr-v2'",'auto-update identity');
@@ -40,7 +52,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'clean-lab-frame-no-business',
+        stage:'mineru-base-two-tables',
       })+'\n'});
     },
   }],

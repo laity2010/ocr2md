@@ -1,0 +1,5 @@
+/* V2-specific controls only; the Frame layout, typography, Settings and nav are unchanged. */
+#workspace .v2-base-paging{margin-left:auto;display:flex;gap:5px;align-items:center;white-space:nowrap;min-width:0}
+#workspace .v2-base-paging button{border:1px solid #60766b;background:#293b3c;color:#d3c6aa;border-radius:4px;height:25px;min-width:25px;cursor:pointer}
+#workspace .v2-base-paging button:disabled{opacity:.4;cursor:default}
+#workspace .v2-base-count{font-size:calc(11px * var(--ocr-frame-scale));white-space:nowrap}
