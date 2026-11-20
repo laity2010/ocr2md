@@ -1,6 +1,6 @@
 # OCR2MD · V2 · MinerU 无损基础表（Lab-Frame）
 
-本 WP00 是在已验收的 Lab-Frame SHA `58ccd5c2c573ca8fdb9207118c74197a34672a94` 之上重建的独立框架型 V2，保留 Frame 独立授权与 F02 文件读写能力；WP01～WP03 业务代码已可追溯撤销。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
+本 WP00 是在已验收的 Lab-Frame SHA `2da79064a83e0e91b82b4bff93fd42c19363d7b9` 之上重建的独立框架型 V2，保留 Frame 独立授权与 F02 文件读写能力；WP01～WP03 业务代码已可追溯撤销。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
 
 ## 单一权威与不可触碰范围
 

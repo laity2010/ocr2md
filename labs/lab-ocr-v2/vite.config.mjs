@@ -8,7 +8,7 @@ const name='lab-ocr-v2';
 const root=fileURLToPath(new URL('../../ui/frame/',import.meta.url));
 const outDir=fileURLToPath(new URL('./dist/',import.meta.url));
 const commit=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
-const frameBaseline='58ccd5c2c573ca8fdb9207118c74197a34672a94';
+const frameBaseline='2da79064a83e0e91b82b4bff93fd42c19363d7b9';
 const format=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',
   day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date());
 const p=key=>format.find(x=>x.type===key).value;

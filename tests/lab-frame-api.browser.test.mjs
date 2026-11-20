@@ -118,9 +118,8 @@ try{
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
       assert.equal(await page.locator('#workspace').isVisible(),false);
       assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
-      assert(apis.length>=1);
-      assert(apis.every(uri=>uri.includes('/labs/lab-frame/api/workspace-io/session')),
-        'Frame may only query its own authorization status, never Main');
+      assert.deepEqual(apis,[],
+        'Opening Settings alone must not query auth; the Frame session belongs to the directory picker');
       assert.equal(fontRequests.some(url=>/sarasa-fixed-sc-(regular|bold)-[a-f0-9]{12}/.test(url)),false,
         'never request private 17MB Sarasa fonts');
       assert.deepEqual(errors,[]);
