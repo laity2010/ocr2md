@@ -52,7 +52,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'mineru-base-two-tables',
+        stage:'wp00-mineru-base-frame-f02',
       })+'\n'});
     },
   }],

@@ -90,6 +90,28 @@ class MineruBaseTest(unittest.TestCase):
         self.assertFalse(list(self.book.glob('.ocr2md-v2-*.tmp')))
         repeat=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
         self.assertEqual(repeat['created'],False);self.assertEqual(adapter.calls,1)
+    def test_populated_nine_column_logical_sqlite_rebuilds_as_wp00(self):
+        v.new_book(self.book)
+        db_path=self.book/v.DB_NAME
+        with closing(sqlite3.connect(db_path)) as db:
+            db.execute('DROP TABLE logical_block')
+            db.execute("""CREATE TABLE logical_block(
+                logical_id INTEGER PRIMARY KEY, parent_id INTEGER, sort_order INTEGER,
+                node_kind TEXT, block_type TEXT, markdown TEXT,
+                source_refs TEXT, attrs TEXT, revision INTEGER)""")
+            db.execute("INSERT INTO logical_block VALUES(1,NULL,1,'content','text','edited','[]','{}',7)")
+            db.commit()
+        with self.assertRaisesRegex(v.BaseError,'WP00'):
+            v.existing_state(self.book)
+        written=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
+        self.assertTrue(written['created']);self.assertTrue(written['replaced'])
+        with closing(sqlite3.connect(db_path)) as db:
+            columns=[r[1] for r in db.execute('PRAGMA table_info(logical_block)')]
+            self.assertEqual(columns,['logical_id','base_blockid','parent_id','logical_order','markdown_text'])
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0],539)
+        self.assertEqual(self.source.read_bytes(),self.original)
+
     def test_bad_source_keeps_incompatible_old_database(self):
         path=self.book/v.DB_NAME
         with closing(sqlite3.connect(path)) as db:
