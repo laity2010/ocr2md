@@ -1,4 +1,4 @@
-"""Direct API acceptance: exact source bytes, integer IDs, 2 tables, no overwrite."""
+"""Direct API acceptance: exact bytes, integer IDs, 2 tables and atomic old-db replace."""
 import base64
 import hashlib
 import io
@@ -57,18 +57,58 @@ class MineruBaseTest(unittest.TestCase):
         db.close()
         existing=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
         self.assertFalse(existing['created']);self.assertEqual(adapter.calls,1)
-    def test_source_modified_after_import_fails_closed(self):
+    def test_source_changed_rebuilds_only_v2_sqlite(self):
         v.new_book(self.book)
+        with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
+            oldsha=db.execute('SELECT source_sha256 FROM mineru_base WHERE blockid=1').fetchone()[0]
         self.source.write_bytes(self.original+b' ')
-        with self.assertRaisesRegex(v.BaseError,'不得覆盖'):
-            v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
-    def test_other_database_refused_without_migration(self):
+        result=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
+        self.assertTrue(result['created']);self.assertTrue(result['replaced'])
+        with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
+            newsha=db.execute('SELECT source_sha256 FROM mineru_base WHERE blockid=1').fetchone()[0]
+        self.assertNotEqual(newsha,oldsha)
+        self.assertEqual(newsha,hashlib.sha256(self.source.read_bytes()).hexdigest())
+        self.assertEqual(self.source.read_bytes(),self.original+b' ')
+        self.assertEqual(v.existing_state(self.book)['blockCount'],539)
+    def test_old_database_atomic_replace_after_verified_import(self):
         path=self.book/v.DB_NAME
-        with closing(sqlite3.connect(path)) as db:db.execute('CREATE TABLE unrelated(a INTEGER)');db.commit()
+        with closing(sqlite3.connect(path)) as db:
+            db.execute('CREATE TABLE unrelated(a INTEGER)');db.execute('INSERT INTO unrelated VALUES (12)');db.commit()
+        before=path.read_bytes()
         with self.assertRaisesRegex(v.BaseError,'两表结构'):
             v.existing_state(self.book)
-        with self.assertRaisesRegex(v.BaseError,'两表结构'):
+        adapter=StubF02()
+        replaced=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
+        self.assertEqual(adapter.calls,1)
+        self.assertTrue(replaced['created']);self.assertTrue(replaced['replaced'])
+        self.assertNotEqual(path.read_bytes(),before)
+        with closing(sqlite3.connect(path)) as db:
+            self.assertEqual({x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
+                {'mineru_base','logical_block'})
+        self.assertEqual(v.existing_state(self.book)['blockCount'],539)
+        self.assertEqual(self.source.read_bytes(),self.original)
+        self.assertFalse(list(self.book.glob('.ocr2md-v2-*.tmp')))
+        repeat=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
+        self.assertEqual(repeat['created'],False);self.assertEqual(adapter.calls,1)
+    def test_bad_source_keeps_incompatible_old_database(self):
+        path=self.book/v.DB_NAME
+        with closing(sqlite3.connect(path)) as db:
+            db.execute('CREATE TABLE old_schema(value TEXT)');db.execute('INSERT INTO old_schema VALUES ("retain")');db.commit()
+        old=path.read_bytes()
+        self.source.unlink()
+        with self.assertRaisesRegex(v.BaseError,'未找到'):
             v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
+        self.assertEqual(path.read_bytes(),old)
+        self.assertFalse(list(self.book.glob('.ocr2md-v2-*.tmp')))
+    def test_busy_sqlite_journal_refuses_unsafe_swap(self):
+        path=self.book/v.DB_NAME
+        with closing(sqlite3.connect(path)) as db:db.execute('CREATE TABLE old_schema(value TEXT)');db.commit()
+        marker=self.book/(v.DB_NAME+'-wal');marker.write_bytes(b'active')
+        old=path.read_bytes()
+        with self.assertRaisesRegex(v.BaseError,'日志文件'):
+            v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
+        self.assertEqual(path.read_bytes(),old)
+        self.assertEqual(marker.read_bytes(),b'active')
     def test_no_implicit_import_without_confirm(self):
         with self.assertRaisesRegex(v.BaseError,'确认'):
             v.dispatch('import','POST',self.book,{}, {},StubF02())

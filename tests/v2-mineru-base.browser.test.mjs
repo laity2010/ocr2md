@@ -17,7 +17,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1280,height:850}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists=false,postCount=0,probeCount=0;
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,probeCount=0;
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -40,6 +40,7 @@ try{
       exists=true;
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true,blockCount:539,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
     }
+    if(op==='state'&&exists==='retired-v2')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'现有 SQLite 不符合 V2 两表结构，拒绝覆盖'})});
     if(op==='state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
       {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,columns:cols,rows,
       offset:Number(new URL(request.url()).searchParams.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
@@ -66,7 +67,7 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
    assert.equal(postCount,1);
    assert.deepEqual(errors,[]);
-   console.log('V2_BASE_BROWSER_PASS',kind,JSON.stringify({headers:headers.length,postCount,probeCount}));
+   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({headers:headers.length,postCount,probeCount}));
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

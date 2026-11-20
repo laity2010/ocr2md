@@ -129,7 +129,7 @@ def prepare_rows(files):
                     next_id+=1
     return archive,rows
 
-def new_book(folder:Path):
+def new_book(folder:Path,*,overwrite=False):
     files=mineru_sources(folder)
     archive,rows=prepare_rows(files)
     archive_data=compact({'schema':SCHEMA,'sources':[{k:v for k,v in f.items() if k!='contentBase64'} for f in archive]})
@@ -139,7 +139,19 @@ def new_book(folder:Path):
     fd_parent=os.open(folder,os.O_RDONLY|getattr(os,'O_DIRECTORY',0)|getattr(os,'O_NOFOLLOW',0))
     stage='.ocr2md-v2-'+secrets.token_hex(12)+'.tmp'
     try:
-        if os.path.lexists(folder/DB_NAME):raise BaseError(409,'V2 SQLite 已存在，禁止隐式覆盖')
+        # Only the explicitly authorized V2 database may be replaced. Never
+        # rename, delete, or overwrite the MinerU/PDF inputs or other SQL files.
+        current=None
+        if os.path.lexists(folder/DB_NAME):
+            if not overwrite:raise BaseError(409,'V2 SQLite 已存在，拒绝未授权覆盖')
+            current=os.stat(DB_NAME,dir_fd=fd_parent,follow_symlinks=False)
+            if not stat.S_ISREG(current.st_mode) or current.st_nlink!=1:
+                raise BaseError(422,'V2 SQLite 不是独立普通文件，拒绝覆盖')
+            # Active WAL or rollback journal files cannot be left beside the
+            # replacement: they may apply historical transactions to new data.
+            for suffix in ('-wal','-shm','-journal'):
+                if os.path.lexists(folder/(DB_NAME+suffix)):
+                    raise BaseError(409,'SQLite 存在未结束的日志文件，请先关闭其他数据库连接')
         fd=os.open(stage,os.O_RDWR|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600,dir_fd=fd_parent)
         os.close(fd)
         try:
@@ -161,13 +173,20 @@ def new_book(folder:Path):
             # File-by-file SHA guard before publication; JSON files remain read-only.
             for rel,raw,_ in files:
                 if sha(require_regular(folder/rel))!=sha(raw):raise BaseError(409,'导入期间 MinerUJSON 被修改，已取消')
-            os.link(stage,DB_NAME,src_dir_fd=fd_parent,dst_dir_fd=fd_parent,follow_symlinks=False)
+            if current is None:
+                os.link(stage,DB_NAME,src_dir_fd=fd_parent,dst_dir_fd=fd_parent,follow_symlinks=False)
+            else:
+                # Ensure no other process replaced the file while importing.
+                now=os.stat(DB_NAME,dir_fd=fd_parent,follow_symlinks=False)
+                if (now.st_ino,now.st_mtime_ns,now.st_size)!=(current.st_ino,current.st_mtime_ns,current.st_size):
+                    raise BaseError(409,'转换期间数据库已变化，拒绝覆盖')
+                os.replace(stage,DB_NAME,src_dir_fd=fd_parent,dst_dir_fd=fd_parent)
             os.fsync(fd_parent)
         finally:
             try:os.unlink(stage,dir_fd=fd_parent)
             except FileNotFoundError:pass
     finally:os.close(fd_parent)
-    return {'created':True,'blockCount':len(rows),'sourceCount':len(files),'dbFile':DB_NAME}
+    return {'created':True,'replaced':current is not None,'blockCount':len(rows),'sourceCount':len(files),'dbFile':DB_NAME}
 
 def existing_state(folder:Path,offset=0):
     db_path=folder/DB_NAME
@@ -203,16 +222,25 @@ def dispatch(operation,method,folder,payload,query,common):
     if operation=='import':
         if method!='POST':raise BaseError(405,'导入操作仅可 POST')
         if payload.get('confirm')!='import-mineru-base':raise BaseError(422,'缺少明确导入确认')
-        if (folder/DB_NAME).exists():
-            result=existing_state(folder)
-            sources=mineru_sources(folder)
-            if [(v['path'],v['sha256']) for v in result['sources']]!=[(p,sha(b)) for p,b,_ in sources]:
-                raise BaseError(409,'已存在 SQLite，源文件已变化，不得覆盖')
-            return {'created':False,'blockCount':result['blockCount'],
-                'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
-        # Explicitly reuse F02's real write-read-delete probe on the very same workspace.
+        exists=os.path.lexists(folder/DB_NAME)
+        if exists:
+            # Compatible + identical input is stable across refreshes. The
+            # user's explicit V2 import approval also permits overwriting an
+            # incompatible old schema or a different-source V2 database.
+            try:
+                result=existing_state(folder)
+            except BaseError as error:
+                if error.status!=409:raise
+            except sqlite3.DatabaseError:
+                pass
+            else:
+                sources=mineru_sources(folder)
+                if [(v['path'],v['sha256']) for v in result['sources']]==[(p,sha(b)) for p,b,_ in sources]:
+                    return {'created':False,'replaced':False,'blockCount':result['blockCount'],
+                        'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
+        # Reuse the same F02 read/write/cleanup probe before atomic replacement.
         common.probe(folder)
-        return new_book(folder)
+        return new_book(folder,overwrite=exists)
     raise BaseError(404,'未知 V2 导入操作')
 
 def handle(handler,operation,parsed,common):

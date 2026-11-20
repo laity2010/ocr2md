@@ -27,7 +27,7 @@ async function request(operation,workspace,{method='GET',offset=0}={}){
     ...(method==='POST'?{headers:{'Content-Type':'application/json'},
       body:JSON.stringify({workspace,confirm:'import-mineru-base'})}:{})});
   let payload=null;try{payload=await response.json();}catch{}
-  if(!response.ok)throw Error(payload?.error||'HTTP '+response.status);
+  if(!response.ok){const error=Error(payload?.error||'HTTP '+response.status);error.status=response.status;throw error;}
   return payload;
 }
 function navs(){return [...document.querySelectorAll('.ocr-source-file-select')]
@@ -111,9 +111,16 @@ async function ensureBase(path){
   pending=path;
   try{
     report('已验证工作目录读写 · 正在核验 MinerUJSON 和 V2 基础表…');
-    let state=await request('state',path);
+    let state;
+    try{state=await request('state',path);}
+    catch(error){
+      // Existing V2 filename from a retired schema: user explicitly permits
+      // replacement of that one database after verified workspace access.
+      if(error.status!==409)throw error;
+      state={exists:false};
+    }
     if(!state.exists){
-      report('正在无损导入 MinerUJSON，原文件不会被修改…');
+      report('正在从 MinerUJSON 重建两表 V2 SQLite（仅覆盖同名数据库）…');
       await request('import',path,{method:'POST'});
       state=await request('state',path);
     }
