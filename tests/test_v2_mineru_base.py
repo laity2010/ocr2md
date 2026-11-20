@@ -15,6 +15,7 @@ import unittest
 sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 import v2_mineru_base as v
 import frame_workspace_io as f02
+import frame_access
 
 FIXTURE=Path(__file__).parents[1]/'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
 class StubF02:
@@ -135,7 +136,7 @@ class MineruBaseTest(unittest.TestCase):
         with self.assertRaisesRegex(v.BaseError,'确认'):
             v.dispatch('import','POST',self.book,{}, {},StubF02())
         self.assertFalse((self.book/v.DB_NAME).exists())
-    def test_http_requires_main_session_and_same_origin(self):
+    def test_http_requires_frame_session_and_same_origin(self):
         def req(method,op,origin,cookie,payload=None):
             data=json.dumps(payload or {}).encode('utf8')
             out=[]
@@ -158,6 +159,26 @@ class MineruBaseTest(unittest.TestCase):
             self.assertEqual(req('GET','state','', 'valid-session')[1]['blockCount'],539)
             self.assertEqual(self.source.read_bytes(),self.original)
             self.assertEqual(req('POST','import','https://ocr2md.laity.bid','valid-session',{'workspace':str(self.book),'confirm':'import-mineru-base'})[1]['created'],False)
+    def test_real_independent_frame_session_rejected_then_authorized(self):
+        config=self.book/'frame-private.json'
+        config.write_text(json.dumps({'schema':'ocr2md-frame-access/v1',
+            'code':'ABCD1234ABCD1234','secret':'a'*64,
+            'allowedRoots':[str(self.book)]}))
+        config.chmod(0o600)
+        query='workspace='+__import__('urllib.parse',fromlist=['quote']).quote(str(self.book),safe='')
+        def request(cookie):
+            responses=[]
+            handler=types.SimpleNamespace(command='GET',headers={'Cookie':cookie},
+                respond=lambda status,body,*args:responses.append((status,json.loads(body))))
+            v.handle(handler,'state',types.SimpleNamespace(query=query),f02)
+            return responses[0]
+        with patch.object(frame_access,'CONFIG',config):
+            self.assertEqual(request('')[0],403)
+            cookie=frame_access.unlock('ABCD1234ABCD1234').split(';')[0]
+            status,body=request(cookie)
+            self.assertEqual(status,200);self.assertFalse(body['exists'])
+        self.assertEqual(self.source.read_bytes(),self.original)
+
     def test_source_empty(self):
         self.source.unlink()
         with self.assertRaisesRegex(v.BaseError,'未找到'):

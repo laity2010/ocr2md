@@ -270,6 +270,7 @@ def handle(handler,operation,parsed,common):
         respond(200,dispatch(operation,handler.command,folder,payload,q,common))
     except BaseError as error:respond(error.status,{'error':str(error)})
     except common.WorkspaceIOError as error:respond(error.code,{'error':str(error)})
+    except common.AccessError as error:respond(error.code,{'error':str(error)})
     except FileExistsError:respond(409,{'error':'数据库已经存在，拒绝覆盖'})
     except PermissionError:respond(403,{'error':'目录权限不足，无法建立 SQLite'})
     except (OSError,sqlite3.Error) as error:respond(503,{'error':'本地 SQLite 操作失败：'+type(error).__name__})
