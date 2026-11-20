@@ -21,6 +21,12 @@
 
 **不得新增第 3 张应用物理表，不以 SQL 表保存操作历史。** CM 将来负责撤销/重做和历史（本阶段尚未接入）。基础表不保存归一化造成的信息损失：`block_json` 保留每个块的完整 JSON 对象，包括额外未知字段与内嵌子块；`source_json_path` 指向输入页与三类原始块组 `preproc_blocks`、`discarded_blocks`、`para_blocks`；`original_bytes` 仅在 `blockid=0` 的档案记录按 Base64 保存源文件的逐字节内容。因此，原始 JSON 文件本身可按字节还原，BlockID>0 的索引不会改变源数据结构。源文件校验 SHA、路径、页索引、页块组、bbox、原始 lines/blocks 等列均可在 AG 基础表中查阅。
 
+## Main 编辑会话缺失时的目录恢复（2026-11-20）
+
+- 目录根列表沿用 Main 的 `/api/workspace/roots` 编辑 Cookie 校验；在新域名、Safari 新标签页、局域网 IP 等情形可能是 **HTTP 403**。这是授权缺失，不是 MinerU 解析或文件权限错误。**不同站点的 Cookie 不可复用**（公网 `ocr2md.laity.bid` 与 `192.168.1.10:4443` 是两个站点）。
+- Lab-Frame 公共 Shell（V2 原样继承） `ui/frame/main-auth.js` 通过 Main **只读** `/api/session` 查询 `canSave`：未授权时顶栏「前往 Main 授权」同源 `/` 链接在新标签打开 Main，完成 Main 自带「保存→12 位编辑授权码」操作；返回当前 Lab 点击原目录树「刷新 Mac 目录」。获得授权后隐藏链接；丢失会话则再次显示。**不在 Frame 输入编辑码，不复制 Cookie，不自行签发 token，不降低服务器权限，不新建登录端口。**
+- Main API 无响应或报错时保留原状态与失败信息，不伪称已授权；授权前不应触发 F02 写入或书籍改动。此能力来自公共 Frame 组件，已通过正常 Git merge 纳入 V2；不建立 V2 专属登录或授权实现。
+
 ## WP01–WP03 · 逻辑表 Schema、初始化与可恢复性
 
 当前 `logical_block` 精确 **9 列**，没有额外业务表、行表或历史表：
