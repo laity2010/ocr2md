@@ -92,9 +92,17 @@ def publish(release):
           if files!=entry['files']:raise RuntimeError('Existing Lab module changed: '+name)
           otherHashes[name]=files
       html=currentHome.decode('utf-8')
-      if 'id="lab-frame"' not in html:
+      # Reuse this publisher for a NEW Frame-derived V2 while replacing the
+      # stale two-table/three-window home card. Never alter other Lab cards.
+      marker='      <article id="'+NAME+'">'
+      if marker not in html:
           if '</section>' not in html:raise RuntimeError('Home cards closing tag missing')
           html=html.replace('    </section>',CARD+'    </section>',1)
+      else:
+          if html.count(marker)!=1:raise RuntimeError('Duplicate target Lab home card')
+          start=html.index(marker)
+          end=html.index('</article>',start)+len('</article>')
+          html=html[:start]+CARD.rstrip('\n')+html[end:]
       homeBytes=html.encode('utf-8')
       sourceFiles,_=fingerprints(source)
       dest=release/NAME
