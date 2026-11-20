@@ -6,13 +6,13 @@
 
 - 服务端权限权威是本项目独立私有配置 `ocr2md/.ops/frame-access.json`，**不入 Git、不进入静态发布资源**。通过 `python3 scripts/frame_access_setup.py` 首次生成，默认仅纳入存在的 `~/Documents`、`~/Library/CloudStorage`、`~/Downloads`；可在首次执行时重复 `--root /实际目录` 指定更窄的白名单。不得以 `~` 或 `/` 作为全盘授权根；需额外目录时在 Mac 上运行 `python3 scripts/frame_access_setup.py --add-root /实际目录`，无需修改源码或访问码。
 - 每个私人配置保存随机 16 位访问码、独立 256 位签名密钥及允许的绝对目录，权限 `0600` 且所有者必须为当前服务用户；无配置、权限不安全、目录不存在时一律拒绝读写。访问码仅在 Mac 本机用 `python3 scripts/frame_access_setup.py --show-code` 查看，避免进入仓库、日志或 GitHub。
-- iPad Safari 打开 Frame 后右上「授权 Frame」直接输入该专属访问码，`POST /labs/lab-frame/api/workspace-io/unlock` 发放 **7 天、HttpOnly、Secure、SameSite=Lax、Path=/labs/** 的 HMAC 签名会话 Cookie；`GET .../session` 仅返回是否已授权。授权码尝试限流；未经授权的 `roots/browse/probe/list/read/create/replace` 均 403，不提供 CORS，也不借用 Main 登录。
+- iPad Safari 在「工作区 → 资料目录 → 浏览目录」的目录树上方，直接在同一工作区输入专属访问码并点击「授权 Frame」，`POST /labs/lab-frame/api/workspace-io/unlock` 发放 **7 天、HttpOnly、Secure、SameSite=Lax、Path=/labs/** 的 HMAC 签名会话 Cookie；`GET .../session` 仅返回是否已授权。授权码尝试限流；未经授权的 `roots/browse/probe/list/read/create/replace` 均 403，不提供 CORS，也不借用 Main 登录。
 - 公共目录发现为 `GET .../roots` 与 `GET .../browse?path=...`；目录范围由 Frame 白名单校验（含目录符号链接/路径穿越限制）；文件 I/O 一律在选定的 `workspace.dataDirectory` 下，通过独立凭据重复校验。V2 调用 F02 正式端口继承同一**Frame** 身份，不另建业务私有文件授权。
 
 ## 工作流与窗口
 
 1. 打开 `https://ocr2md.laity.bid/labs/lab-frame/` 默认显示原有全局设置 `settings.json`；四窗空白框架、导航 Tom Select、AG Grid、Sarasa、全局状态栏和顶栏保存保持原组件，绝不重造平行设置。
-2. 若未授权，点击「授权 Frame」并输入本项目访问码；选择「工作区 → 目录 → 资料目录」，目录树初始收起、仅用户点击才展开，可手动「刷新 Mac 目录」。
+2. 选择「工作区 → 目录 → 资料目录 → 浏览目录」；若未授权，目录选择区域的树状目录上方显示密码输入框和「授权 Frame」按钮（**不在全局顶栏、不弹窗**）。提交有效访问码并确认签名会话后，在同一区域自动加载目录树；已授权时隐藏输入框。目录树初始收起、仅用户点击才展开，可手动「刷新 Mac 目录」；授权过期刷新时清空旧目录并恢复输入框。
 3. 采用目录或更改路径立即执行真实 `probe`（随机临时文件写入、读回并删除）并在全局状态栏显示结果；采用不自动保存，顶栏「保存」仅提交现有设置。刷新后对已保存目录重新探针，不自动导入或改写用户文件。
 4. 同一目录重复采用仍重新检查；目录树的每 5 秒后台刷新仅更新已展开分支。无权限或 I/O 异常不得显示已验证成功；多轮请求只允许最新结果更新状态。
 
@@ -26,7 +26,7 @@
 
 - `python3 tests/lab-frame-standalone-access.test.py -v`：不调用 Main 的真实独立授权、Cookie、目录树和 F02 五操作、安全/跨目录/来源拒绝。
 - `python3 tests/lab-frame-workspace-io.test.py -v`、`node --test tests/lab-frame-workspace-io-client.test.mjs`、`python3 tests/lab-frame-runtime-guard.test.py -v`：I/O 直接测试、独立运行配置。
-- `node tests/lab-frame-access-auth.browser.test.mjs` 和目录采用/刷新/WebKit 测试：iPad Safari 同类浏览器、授权、目录树、F02 状态；不能把浏览器 mock 代替真实 Gateway 验证。
+- `node tests/lab-frame-access-auth.browser.test.mjs` 和目录采用/刷新/WebKit 测试：验证同一个资料目录树区域中的访问码与授权按钮、错误码拒绝、自动加载、失效清树、iPad Safari 同类浏览器和 F02 状态；不能把浏览器 mock 代替真实 Gateway 验证。
 - 在 Main 接口不可用的独立环境仍可授权、列目录、探针及执行安全 F02 操作；最后核查发布 SHA 和公网所有资源哈希。真实 iPad Safari 尚须以用户设备最终核验，未拿到设备反馈前不宣称实机 PASS。
 
 ---

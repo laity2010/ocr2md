@@ -19,6 +19,7 @@ try{
     const browser=await type.launch({headless:true});
     try{
       const page=await browser.newPage({viewport:{width:1032,height:642}});
+       await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
       await page.goto(URL,{waitUntil:'domcontentloaded'});
       await page.locator('#workspace .dv-content-container').first().waitFor({state:'attached'}); // Frame shell remains intentionally hidden when Settings opens by default
       const result=await page.evaluate(async()=>{

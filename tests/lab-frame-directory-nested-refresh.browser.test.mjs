@@ -34,6 +34,7 @@ try{
     const children=(values[path]||[]).map(name=>({name,path:path+'/'+name}));
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
    });
+    await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
    await page.goto(url,{waitUntil:'domcontentloaded'});
     await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().waitFor({timeout:20000});
    await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().click();

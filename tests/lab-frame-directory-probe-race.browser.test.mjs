@@ -39,6 +39,7 @@ try{
      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({verified:true,readable:true,writable:true})});
     }
    });
+    await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
    await page.goto(url,{waitUntil:'domcontentloaded'});
    await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
    async function choose(path){
