@@ -8,10 +8,18 @@ import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
 import {frameWorkspaceIO} from './workspace-io.js';
 import {createFrameStatus} from './global-status.js';
+import {mountFrameMainAuthorization} from './main-auth.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
 const globalStatus=createFrameStatus($('status'));
 const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
+// The existing Main owns editing authorization; the Frame only offers a
+// same-origin link when the Main session is missing, never a second login.
+mountFrameMainAuthorization({host:document.querySelector('.toolbar>.source-actions'),
+  onAuthorized:()=>{
+    if($('status').textContent.includes('编辑授权'))
+      topStatus('✓ Main 编辑授权已生效 · 请点击「刷新 Mac 目录」继续','ok');
+  }});
 const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.

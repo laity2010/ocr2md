@@ -20,6 +20,12 @@
 - 再次打开选择器时恢复树中仍有效的已选目录，允许重新采用同一路径；即使 Settings 未变更也必须**重新探针**，修复旧代码的「同路径无 `settings.changed` 事件，不触发检测」和按钮始终 disabled 两处遗漏。
 - Chromium 与 iPad-WebKit 固定回归：`node tests/lab-frame-directory-adoption-collapse.browser.test.mjs`，手动收起后跨自动刷新不被重开、同路径三次采用分别得到读写成功/失败状态；现有目录刷新、嵌套、状态栏和竞态测试必须同时通过。
 
+## Main 编辑会话缺失时的目录恢复（2026-11-20）
+
+- 目录根列表沿用 Main 的 `/api/workspace/roots` 编辑 Cookie 校验；在新域名、Safari 新标签页、局域网 IP 等情形可能是 **HTTP 403**。这是授权缺失，不是 MinerU 解析或文件权限错误。**不同站点的 Cookie 不可复用**（公网 `ocr2md.laity.bid` 与 `192.168.1.10:4443` 是两个站点）。
+- Lab-Frame 公共 Shell `ui/frame/main-auth.js` 通过 Main **只读** `/api/session` 查询 `canSave`：未授权时顶栏「前往 Main 授权」同源 `/` 链接在新标签打开 Main，完成 Main 自带「保存→12 位编辑授权码」操作；返回 Frame 点击原目录树「刷新 Mac 目录」。获得授权后隐藏链接；丢失会话则再次显示。**不在 Frame 输入编辑码，不复制 Cookie，不自行签发 token，不降低服务器权限，不新建登录端口。**
+- Main API 无响应或报错时保留原状态与失败信息，不伪称已授权；授权前不应触发 F02 写入或书籍改动。此能力来自 Frame 公共组件而不是 V2 专属补丁，可通过正常 Git merge 集成到活动 Lab。
+
 ## 公开最小 F02 API（版本 1）
 
 独立模块 `ui/frame/workspace-io.js` 暴露 `createFrameWorkspaceIO()` 与 `frameWorkspaceIO`，提供 `probe(workspace)`、`listFiles(workspace,path='')`、`readFile(workspace,path)`、`createFile(workspace,path,contentBase64)`、`replaceFile(workspace,path,contentBase64,expectedSha256)`。服务端由 `scripts/frame_workspace_io.py` 实现，通过**现有**统一网关 `/labs/lab-frame/api/workspace-io/{probe,list,read,create,replace}` 访问；不会另起端口或 Tunnel，不复制 V1 的登录 Cookie 或设置状态。
