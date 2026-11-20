@@ -22,9 +22,9 @@ try{
    const errors=[],calls=[];
    let shouldFail=false;
    page.on('pageerror',err=>errors.push(err.message));
-   await page.route('**/api/workspace/roots',route=>route.fulfill({status:200,
+   await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:200,
      contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo/books']})}));
-   await page.route('**/api/workspace/browse?*',route=>{
+   await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
      const path=new URL(route.request().url()).searchParams.get('path');
      const children=path==='/demo/books'?[{name:'book',path:'/demo/books/book'}]:[];
      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
@@ -33,7 +33,7 @@ try{
      calls.push(route.request().postDataJSON().workspace);
      await sleep(450);
      return route.fulfill({status:shouldFail?403:200,contentType:'application/json',
-       body:JSON.stringify(shouldFail?{error:'Main 编辑授权失效'}:{verified:true,readable:true,writable:true})});
+       body:JSON.stringify(shouldFail?{error:'Frame 独立授权失效'}:{verified:true,readable:true,writable:true})});
    });
    await page.goto(url,{waitUntil:'domcontentloaded'});
    await page.evaluate(()=>{window.__statusTrace=[];
@@ -96,7 +96,7 @@ try{
    await reAdoptAgain.click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('工作区文件读写验证失败'),null,{timeout:15000});
    assert.equal(await page.locator('#status').getAttribute('data-kind'),'error');
-   assert.match(await page.locator('#status').innerText(),/Main 编辑授权失效/);
+   assert.match(await page.locator('#status').innerText(),/Frame 独立授权失效/);
    await sleep(600);
    assert.match(await page.locator('#status').innerText(),/读写验证失败/);
    assert.deepEqual(calls,['/demo/books/book','/demo/books/book','/demo/books/book']);

@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""Publish Lab-Frame's business-empty shell and authorized Workspace I/O port.
-
-Still a standalone frame, not a Main mirror or book data migration; the
-shared gateway handles file I/O under V1 Main session authorization.
-"""
+"""Publish standalone Lab-Frame and verified Frame-owned access/I/O ports."""
 import argparse
 import datetime as dt
 import fcntl
@@ -24,31 +20,21 @@ CARD='''      <article id="lab-frame"><div class="kind">06 · Frame Lab</div><h2
 '''
 
 def require_workspace_io_runtime(home=Path.home(),platform=sys.platform):
-    """Prevent previous iCloud TCC and Safari LAN Origin launchd regressions."""
+    """Verify independent shared gateway runtime and private Frame authority."""
     if platform!='darwin':return
     agent=Path(home)/'Library'/'LaunchAgents'
-    files={
-        'gateway':agent/'com.laity.agentlink.ocr2md-labs-gateway.plist',
-        'main':agent/'bid.laity.ocr2md-v6-server.plist',
-        'v1':agent/'com.laity.ocr2md.lab-ocr-api.plist',
-    }
-    if not all(v.is_file() for v in files.values()):
-        raise RuntimeError('Frame I/O 发布缺少共享 Gateway、Main 或 V1 的 LaunchAgent 配置')
+    path=agent/'com.laity.agentlink.ocr2md-labs-gateway.plist'
+    if not path.is_file():raise RuntimeError('Frame 发布缺少统一 Lab Gateway 配置')
     try:
-        configs={}
-        for name,path in files.items():
-            with path.open('rb') as source:
-                configs[name]=plistlib.load(source)
-        gateway_python=Path(configs['gateway']['ProgramArguments'][0]).resolve(strict=True)
-        main_python=Path(configs['main']['ProgramArguments'][0]).resolve(strict=True)
-        gateway_origin=configs['gateway']['EnvironmentVariables']['OCR2MD_LAN_ORIGIN']
-        v1_origin=configs['v1']['EnvironmentVariables']['OCR2MD_LAN_ORIGIN']
-    except (KeyError,IndexError,OSError,ValueError) as error:
-        raise RuntimeError('Frame I/O 发布依赖的 LaunchAgent 设置不可读取') from error
-    if gateway_python!=main_python:
-        raise RuntimeError('Frame I/O 发布阻断：网关 Python 与 Main 不同，iCloud TCC 可能拒绝读写')
-    if not v1_origin.startswith('https://') or gateway_origin!=v1_origin:
-        raise RuntimeError('Frame I/O 发布阻断：网关与 V1 的 iPad 局域网来源不一致')
+        with path.open('rb') as src: config=plistlib.load(src)
+        python=Path(config['ProgramArguments'][0]).resolve(strict=True)
+        origin=config['EnvironmentVariables']['OCR2MD_LAN_ORIGIN']
+        if not python.is_file() or not origin.startswith('https://'):
+            raise RuntimeError('Frame Gateway 运行环境不完整')
+        from frame_access import settings
+        settings()
+    except (KeyError,IndexError,OSError,ValueError) as err:
+        raise RuntimeError('Frame 独立授权配置或 Gateway 不可用') from err
 
 def sha(data):return hashlib.sha256(data).hexdigest()
 def fingerprints(folder):

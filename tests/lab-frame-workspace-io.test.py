@@ -1,4 +1,4 @@
-"""Direct F02 contract tests: V1 auth, path scope, read/write/CAS/probe."""
+"""Direct F02 contract tests: Frame auth, path scope, read/write/CAS/probe."""
 import base64
 from contextlib import closing
 import io
@@ -103,16 +103,16 @@ class WorkspacePortTest(unittest.TestCase):
                 respond=lambda code,text,*args:responses.append((code,json.loads(text))))
             port.handle(handler,operation,types.SimpleNamespace(query=query))
             return responses[0]
-        with patch.object(port,'authorized_roots',side_effect=lambda c:[self.root] if c=='main-session' else (_ for _ in ()).throw(port.WorkspaceIOError(403,'需要 Main 的编辑授权'))):
+        with patch.object(port,'authorized_roots',side_effect=lambda c:[self.root] if c=='frame-session' else (_ for _ in ()).throw(port.WorkspaceIOError(403,'需要 Frame 独立授权'))):
             for origin in ('https://attacker.invalid','https://192.168.1.10','https://192.168.1.10:9999'):
-                self.assertEqual(request('POST','probe',origin,'main-session')[0],403)
+                self.assertEqual(request('POST','probe',origin,'frame-session')[0],403)
             with patch.object(port,'ALLOWED_ORIGINS',frozenset(('https://192.168.1.10:4443',))):
                 self.assertEqual(request('POST','probe','https://192.168.1.10:4443','bad')[0],403)
-                code,res=request('POST','probe','https://192.168.1.10:4443','main-session')
+                code,res=request('POST','probe','https://192.168.1.10:4443','frame-session')
                 self.assertEqual(code,200);self.assertTrue(res['verified'])
-                self.assertEqual(request('POST','read','https://192.168.1.10:4443','main-session')[0],405)
-                self.assertEqual(request('POST','destroy','https://192.168.1.10:4443','main-session')[0],404)
-                self.assertEqual(request('GET','list',cookie='main-session',query='workspace='+str(self.book))[0],200)
+                self.assertEqual(request('POST','read','https://192.168.1.10:4443','frame-session')[0],405)
+                self.assertEqual(request('POST','destroy','https://192.168.1.10:4443','frame-session')[0],404)
+                self.assertEqual(request('GET','list',cookie='frame-session',query='workspace='+str(self.book))[0],200)
         self.assertFalse(list(self.book.glob('.ocr2md-frame-io-*')))
 
 if __name__=='__main__':unittest.main()

@@ -24,6 +24,8 @@ try{
         if(req.url().endsWith('.woff2'))fontRequests.push(req.url());
       });
       page.on('pageerror',e=>errors.push(e.message));
+      await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({
+        status:200,contentType:'application/json',body:JSON.stringify({authorized:false})}));
       page.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url());});
       await page.goto(HOST,{waitUntil:'domcontentloaded'});
       await page.locator('#settings-workspace .ag-row').first().waitFor({timeout:16000});
@@ -116,11 +118,13 @@ try{
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
       assert.equal(await page.locator('#workspace').isVisible(),false);
       assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
-      assert.deepEqual(apis,[]);
+      assert(apis.length>=1);
+      assert(apis.every(uri=>uri.includes('/labs/lab-frame/api/workspace-io/session')),
+        'Frame may only query its own authorization status, never Main');
       assert.equal(fontRequests.some(url=>/sarasa-fixed-sc-(regular|bold)-[a-f0-9]{12}/.test(url)),false,
         'never request private 17MB Sarasa fonts');
       assert.deepEqual(errors,[]);
-      console.log('LAB_FRAME_MAIN_SETTINGS_BROWSER_PASS',label,JSON.stringify({fontRequests}));
+      console.log('LAB_FRAME_STANDALONE_SETTINGS_BROWSER_PASS',label,JSON.stringify({fontRequests}));
     }finally{await browser.close();}
   }
 }finally{proc.kill('SIGTERM');}
