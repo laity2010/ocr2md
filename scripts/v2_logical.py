@@ -15,8 +15,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sqlite3
 import subprocess
+import sys
 from urllib.parse import quote
 
 from v2_mineru_base import BaseError, DB_NAME, PAGE_SIZE, assert_schema, sha, compact
@@ -42,7 +44,26 @@ CONVERTER=Path(__file__).with_name('v2_logical_converter.mjs')
 CONVERTER_JS=Path(__file__).resolve().parents[1]/'packages/minerujson-md/dist/index.js'
 
 
+def node_runtime():
+    """Resolve Node from PATH or the *active Python package-manager prefix*.
+
+    macOS launchd uses a minimal PATH; never hardcode a personal filesystem
+    path or launch a second process without an actual runnable executable.
+    """
+    found=shutil.which('node')
+    if found:return found
+    # If Python and Node come from one package manager (e.g. Homebrew),
+    # walk its actual executable ancestors instead of embedding an OS path.
+    for binary in (Path(sys.executable),Path(sys.executable).resolve()):
+        for parent in binary.parents:
+            candidate=parent/'bin'/'node'
+            if candidate.is_file() and os.access(candidate,os.X_OK):
+                return str(candidate)
+    raise BaseError(503,'后台转换器缺少 Node 可执行文件，未修改 SQLite')
+
+
 def converter_ready():
+    node_runtime()
     if not CONVERTER_JS.is_file():
         raise BaseError(503,'公共 MinerU Markdown 转换器尚未构建，请运行 npm --prefix packages/minerujson-md ci && npm --prefix packages/minerujson-md run build')
     if not CONVERTER.is_file():raise BaseError(503,'V2 转换桥脚本缺失')
@@ -55,7 +76,7 @@ def markdown_from_source(raw:bytes):
     except UnicodeDecodeError:
         raise BaseError(422,'MinerUJSON 不是 UTF-8；转换器拒绝有损解码')
     try:
-        proc=subprocess.run(['node',str(CONVERTER)],input=text,text=True,
+        proc=subprocess.run([node_runtime(),str(CONVERTER)],input=text,text=True,
             capture_output=True,timeout=110,check=False)
     except (OSError,subprocess.TimeoutExpired):
         raise BaseError(503,'公开 MinerU 转换器执行失败或超时')

@@ -42,7 +42,7 @@
 - 新建书籍：先构建无损 `mineru_base` 和空白九列 `logical_block`；通过相同 F02 工作目录授权再执行一次 `initialize-logical`。
 - WP00 已初始化书籍：SQL 仍只有两表，原五字段 `logical_block` **只有在零行时**才能事务内改为九字段并填入转换结果，保留 `mineru_base` 原数据与 BlockID；发现任何旧逻辑数据或未知 Schema 则 409 停止，不覆盖。
 - 已初始化九列书籍：读取、刷新与重复初始化不修改逻辑块。**任何来源变更重新导入若将销毁现有逻辑行，一律拒绝**。后续 WP04/05 才加入 CM6 编辑写回及 Undo/Redo。
-- 转换器必须在此源码树内由 `npm --prefix packages/minerujson-md ci --offline --ignore-scripts --no-audit --no-fund` 与 `npm --prefix packages/minerujson-md run build` 提前构建；`dist/index.js` 是 gitignored 编译产物，发布脚本缺少该能力时 fail-closed，绝不退回独立手搓解析器。
+- 转换器必须在此源码树内由 `npm --prefix packages/minerujson-md ci --offline --ignore-scripts --no-audit --no-fund` 与 `npm --prefix packages/minerujson-md run build` 提前构建；`dist/index.js` 是 gitignored 编译产物，发布脚本缺少该能力时 fail-closed，绝不退回独立手搓解析器。后台 `launchd` PATH 可能不包含 Node，执行时先查 PATH，再从正在运行的 Python 包管理器前缀定位 `bin/node`（不写死用户机器路径）；该简化 PATH 已实际验证。
 
 ## 业务 API 与窗口
 
