@@ -30,28 +30,21 @@ let settings=null,loadingSettings=null,currentModule='frame';
 // Only one I/O probe may publish status; switching Settings cancels older
 // announcements without touching the shared status or Save component.
 let probeGeneration=0;
-async function verifyWorkspaceIO({afterSave=false}={}){
+async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}){
   const generation=++probeGeneration;
-  let selected='';
-  try{
-    const snapshot=await io.readSnapshot();
-    selected=JSON.parse(snapshot.text)?.settings?.['workspace.dataDirectory']?.value||'';
-  }catch(error){
-    if(generation===probeGeneration)topStatus('工作区目录设置读取失败：'+error.message,'error');
-    return;
-  }
   if(!selected){
-    if(afterSave&&generation===probeGeneration)topStatus('✓ 全局设置已保存 · 尚未绑定工作目录','warning');
+    if(generation===probeGeneration)topStatus(afterSave?'✓ 全局设置已保存 · 尚未绑定工作目录':
+      '尚未绑定工作区资料目录','warning');
     return;
   }
-  if(generation===probeGeneration)topStatus((afterSave?'✓ 全局设置已保存 · ':'')+'正在验证工作区文件读写…');
+  topStatus((afterSave?'✓ 全局设置已保存 · ':'')+'正在验证工作区文件读写…');
   try{
     await frameWorkspaceIO.probe(selected);
-    if(generation===probeGeneration)
-      topStatus((afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写','ok');
+    if(generation===probeGeneration)topStatus(
+      (afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':''),'ok');
   }catch(error){
-    if(generation===probeGeneration)
-      topStatus((afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
+    if(generation===probeGeneration)topStatus(
+      (afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
   }
 }
 function refreshSettingsHistory(){
@@ -98,6 +91,13 @@ async function getSettings(){
       label:'资料目录',comment:'通用资料目录绑定；不检查 OCR、MinerU 或 PDF',
       type:'path',control:'directory-tree',defaultValue:'',message:'settings.changed'});
     module.subscribe({module:'F',key:'globalUi.font.size'},({value})=>setSize(value));
+    // A directory-picker adoption (or a valid CM6 settings.json edit) is
+    // already a runtime change. Probe it immediately, BEFORE explicit Save,
+    // without storing it or changing Main's Settings document. Do not probe
+    // during initial load; the startup module switch verifies the saved path.
+    module.subscribe({module:'F',key:'workspace.dataDirectory'},({value,origin})=>{
+      if(origin==='cm6')void verifyWorkspaceIO(value,{uncommitted:true});
+    });
     await module.load();settings=module;mountSettingsNavigation();refreshSettingsHistory();return module;
   })().catch(error=>{loadingSettings=null;throw error;});
   return loadingSettings;
@@ -106,12 +106,7 @@ function mountSettingsNavigation(){
   const source=$('settings-workspace').querySelector('.ocr-settings-source');
   if(!source||source.querySelector('.ocr-source-file-toolbar'))return;
   const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
-  // The single file is not a navigation-back choice. Return is a separate
-  // workspace action so the dropdown still contains exactly one file group.
-  const back=document.createElement('button');back.type='button';
-  back.className='ocr-frame-back';back.textContent='←';
-  back.title='返回空白框架';back.setAttribute('aria-label','返回空白框架');
-  back.addEventListener('click',()=>void showModule('frame'));
+  // Navigation has one settings.json entry; no back button or second menu.
   const select=document.createElement('select');select.className='ocr-source-file-select';
   select.setAttribute('aria-label','源码文件导航');
   // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
@@ -128,7 +123,7 @@ function mountSettingsNavigation(){
     button.addEventListener('click',()=>{action();queueMicrotask(refreshSettingsHistory);});
     actions.append(button);
   }
-  bar.append(back,select,actions);source.prepend(bar);
+  bar.append(select,actions);source.prepend(bar);
   enhanceNavigationSelect(select,{search:true,kind:'files'});
   refreshSettingsHistory();
 }
@@ -142,7 +137,12 @@ async function showModule(name){
     ++probeGeneration;
     topStatus('正在打开全局设置…');
     try{const module=await getSettings();
-      if(currentModule==='settings'){module.activate();topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');}}
+      if(currentModule==='settings'){
+        module.activate();
+        topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');
+        // Initial entry and any reentry check the already-saved directory.
+        void verifyWorkspaceIO(module.get('workspace.dataDirectory'));
+      }}
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
   }else{
     // Leaving Settings does not add a second file to the single-file menu.
@@ -151,20 +151,20 @@ async function showModule(name){
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
     topStatus('空白四窗框架已就绪 · 可由源码导航进入 settings.json');
-    void verifyWorkspaceIO();
+
   }
 }
 $('global-save').addEventListener('click',async()=>{
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
   if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
   try{const saved=await settings.save();
-    if(saved)void verifyWorkspaceIO({afterSave:true});
+    if(saved)void verifyWorkspaceIO(settings.get('workspace.dataDirectory'),{afterSave:true});
     else topStatus('● 保存期间设置有新修改','warning');}
   catch(error){topStatus('保存失败：'+error.message,'error');}
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
 // No engineering dialog or dirty-state confirmation intercepts navigation.
 startFrameAutoUpdate({version:build,report:topStatus});
-showModule('frame');
+showModule('settings');
 // Reuse Main Settings / CM6 with frame-local IO. No beforeunload/dirty gate,
 // SQL, media or source-document writer. No implicit per-slider save.

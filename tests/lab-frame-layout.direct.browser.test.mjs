@@ -20,7 +20,7 @@ try{
     try{
       const page=await browser.newPage({viewport:{width:1032,height:642}});
       await page.goto(URL,{waitUntil:'domcontentloaded'});
-      await page.locator('#workspace .dv-content-container').first().waitFor();
+      await page.locator('#workspace .dv-content-container').first().waitFor({state:'attached'}); // Frame shell remains intentionally hidden when Settings opens by default
       const result=await page.evaluate(async()=>{
         const {createFrameWorkspace}=await import('./layout.js');
         const host=document.createElement('div');

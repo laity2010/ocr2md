@@ -35,8 +35,7 @@ try{
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
    });
    await page.goto(url,{waitUntil:'domcontentloaded'});
-   await page.locator('.ocr-ag-module-select').first().selectOption('settings');
-   await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().waitFor({timeout:20000});
+    await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().waitFor({timeout:20000});
    await page.locator('#settings-workspace .ag-row').filter({hasText:'dataDirectory'}).first().click();
    await page.getByRole('button',{name:'打开目录树'}).click();
    const root=page.locator('wa-tree-item[data-path="/demo/docs"]');

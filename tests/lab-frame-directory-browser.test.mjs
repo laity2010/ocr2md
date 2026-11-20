@@ -29,8 +29,7 @@ try{
       body:JSON.stringify({path,children})});
   });
   await page.goto(url,{waitUntil:'domcontentloaded'});
-  await page.locator('.ocr-ag-module-select').first().selectOption('settings');
-  await page.waitForFunction(()=>document.getElementById('status')?.textContent?.includes('全局设置已就绪'));
+  await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
   await page.getByRole('button',{name:'打开目录树'}).click();
   const root=page.locator('wa-tree-item[data-path="/demo/docs"]');
@@ -51,8 +50,7 @@ try{
   const saved=await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1'));
   assert.equal(JSON.parse(saved).settings['workspace.dataDirectory'].value,'/demo/docs');
   await page.reload({waitUntil:'domcontentloaded'});
-  await page.locator('.ocr-ag-module-select').first().selectOption('settings');
-  await page.waitForFunction(()=>document.getElementById('status')?.textContent?.includes('全局设置已就绪'));
+  await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
   assert.equal(await page.locator('[aria-label="当前资料目录"]').inputValue(),'/demo/docs');
   assert.deepEqual(errors,[]);
@@ -62,8 +60,7 @@ try{
   await denied.route('**/api/workspace/roots',route=>route.fulfill({status:403,
     body:'Editor authorization required'}));
   await denied.goto(url,{waitUntil:'domcontentloaded'});
-  await denied.locator('.ocr-ag-module-select').first().selectOption('settings');
-  await denied.waitForFunction(()=>document.getElementById('status')?.textContent?.includes('全局设置已就绪'));
+  await denied.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await denied.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
   await denied.getByRole('button',{name:'打开目录树'}).click();
   await denied.locator('#status').getByText('目录访问需要 Main 的编辑授权',{exact:false})
@@ -79,8 +76,7 @@ try{
   await invalid.route('**/api/workspace/browse?*',route=>route.fulfill({status:422,
     contentType:'text/plain',body:'目录不存在；请核对完整路径'}));
   await invalid.goto(url,{waitUntil:'domcontentloaded'});
-  await invalid.locator('.ocr-ag-module-select').first().selectOption('settings');
-  await invalid.waitForFunction(()=>document.getElementById('status')?.textContent?.includes('全局设置已就绪'));
+  await invalid.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await invalid.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
   await invalid.getByRole('button',{name:'打开目录树'}).click();
   await invalid.waitForFunction(()=>document.querySelector('#status')?.textContent

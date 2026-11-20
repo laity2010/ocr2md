@@ -42,8 +42,7 @@ try{
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
       });
       await page.goto(url,{waitUntil:'domcontentloaded'});
-      await page.locator('.ocr-ag-module-select').first().selectOption('settings');
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent?.includes('全局设置已就绪'));
+          await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
       await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
       await page.getByRole('button',{name:'打开目录树'}).click();
       const item=path=>page.locator('wa-tree-item').filter({visible:true})

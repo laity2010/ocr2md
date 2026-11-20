@@ -26,8 +26,12 @@ try{
       page.on('pageerror',e=>errors.push(e.message));
       page.on('response',r=>{if(r.status()>=400)errors.push(r.status()+' '+r.url());});
       await page.goto(HOST,{waitUntil:'domcontentloaded'});
-      await page.locator('#workspace .dv-content-container').first().waitFor();
+      await page.locator('#settings-workspace .ag-row').first().waitFor({timeout:16000});
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
+      assert.equal(await page.locator('#workspace').isVisible(),false);
+      assert.equal(await page.locator('#settings-workspace').isVisible(),true);
+      assert.equal(await page.locator('#workspace .ocr-ag-module-select').isDisabled(),true);
+      assert.equal(await page.locator('.ocr-frame-back').count(),0);
       assert.equal((await page.locator('#editor .cm-content').innerText()).trim(),'');
       assert.equal(await page.locator('#workspace .ag-row').count(),0);
       assert.equal(await page.locator('#global-save').isVisible(),true);
@@ -46,22 +50,16 @@ try{
         live:node.value,
       }));
       assert.deepEqual(structure,{groups:[{label:'全局设置',files:['settings.json']}],live:''});
-      assert.equal(await page.locator('#workspace .ocr-navigation-files.ts-wrapper').isVisible(),true);
+      assert.equal(await page.locator('#workspace .ocr-navigation-files.ts-wrapper').count(),1); // hidden shell remains mounted
       assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
       assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
-      await page.locator('#global-save').click();
-      assert.match(await page.locator('#status').innerText(),/无文档可保存/);
-      // Click the *visible* Main Tom Select, not its hidden native business port.
-      await page.locator('#workspace .ocr-navigation-files .ts-control').click();
-      const dropdown=page.locator('.ocr-navigation-popup-files:visible');
-      await dropdown.locator('.optgroup-header').waitFor({state:'visible'});
-      assert.equal(await dropdown.locator('.optgroup-header').count(),1);
-      assert.match(await dropdown.locator('.optgroup-header').innerText(),/全局设置/);
-      assert.equal(await dropdown.locator('.option').count(),1);
-      assert.match(await dropdown.locator('.option').innerText(),/settings.json/);
-      await dropdown.locator('.option').click();
-      await page.locator('#settings-workspace .dv-content-container').first().waitFor({timeout:16000});
       assert.equal(await page.locator('#settings-workspace .dv-content-container').count(),3);
+      // The only source navigation file remains settings.json, no back action.
+      const navStructure=await page.locator('#settings-workspace .ocr-source-file-select').evaluate(node=>({
+        groups:[...node.querySelectorAll('optgroup')].map(group=>group.label),
+        files:[...node.querySelectorAll('optgroup option')].map(option=>option.textContent),
+      }));
+      assert.deepEqual(navStructure,{groups:['全局设置'],files:['settings.json']});
       assert.equal(await page.locator('#settings-workspace .ocr-navigation-files.ts-wrapper').isVisible(),true);
       assert.equal(await page.locator('#settings-workspace #settings-undo').isVisible(),true);
       assert.equal(await page.locator('#settings-workspace #settings-redo').isVisible(),true);
@@ -97,9 +95,7 @@ try{
       await page.waitForFunction(()=>getComputedStyle(document.querySelector('#status')).fontSize==='20px');
       assert.equal(await page.locator('#settings-font-slider').inputValue(),'20');
       assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')),null);
-      // Global Save applies to dirty Settings even after returning to Frame.
-      await page.locator('#settings-workspace .ocr-frame-back').click();
-      assert.equal(await page.locator('#workspace').isVisible(),true);
+      // Global Save still applies directly in Settings; no return button.
       await page.locator('#global-save').click();
       await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')?.includes('"value": 20'));
       assert.match(await page.locator('#status').innerText(),/已保存/);
@@ -107,19 +103,18 @@ try{
       assert.equal(saved.settings['globalUi.font.family'].value,'Sarasa');
       assert.equal(saved.settings['globalUi.font.size'].value,20);
       await page.reload({waitUntil:'domcontentloaded'});
-      await page.locator('#workspace .dv-content-container').first().waitFor();
-      assert.equal(await page.evaluate(()=>document.documentElement.style.getPropertyValue('--ocr-frame-font-size')),'20px');
-      await page.locator('#workspace .ocr-navigation-files .ts-control').click();
-      await page.locator('.ocr-navigation-popup-files:visible .option').click();
+      await page.locator('#settings-workspace .ag-row').first().waitFor({timeout:16000});
+      assert.equal(await page.locator('#workspace').isVisible(),false);
+      assert.equal(await page.locator('#settings-workspace').isVisible(),true);
       await page.locator('#settings-workspace .ag-row').nth(1).click();
       assert.equal(await page.locator('#settings-font-slider').inputValue(),'20');
       const settingsNav=page.locator('#settings-workspace .ocr-source-file-select');
       assert.equal(await settingsNav.inputValue(),'settings');
       assert.equal(await settingsNav.evaluate(node=>node.querySelectorAll('optgroup').length),1);
       assert.equal(await settingsNav.evaluate(node=>node.querySelectorAll('optgroup option').length),1);
-      await page.locator('#settings-workspace .ocr-frame-back').click();
+      assert.equal(await page.locator('.ocr-frame-back').count(),0);
       assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
-      assert.equal(await page.locator('#workspace').isVisible(),true);
+      assert.equal(await page.locator('#workspace').isVisible(),false);
       assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
       assert.deepEqual(apis,[]);
       assert.equal(fontRequests.some(url=>/sarasa-fixed-sc-(regular|bold)-[a-f0-9]{12}/.test(url)),false,

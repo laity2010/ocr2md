@@ -33,36 +33,39 @@ try{
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({verified:true,readable:true,writable:true})});
       });
       await page.goto(url,{waitUntil:'domcontentloaded'});
-      await page.locator('.ocr-ag-module-select').first().selectOption('settings');
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('全局设置已就绪'),null,{timeout:25000});
+      await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible',timeout:25000});
       await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
       await page.getByRole('button',{name:'打开目录树'}).click();
       await page.locator('wa-tree-item[data-path="/demo/docs/book"]').waitFor({state:'visible',timeout:22000});
       await page.locator('wa-tree-item[data-path="/demo/docs/book"] [part="item"]').first().click();
       await page.getByRole('button',{name:'采用选中目录'}).click();
       await page.waitForFunction(()=>document.querySelector('[aria-label="当前资料目录"]')?.value==='/demo/docs/book',null,{timeout:12000});
-      assert.equal(probes.length,0,'choosing without Save must NOT call probe or claim write access');
-      await page.locator('#global-save').click();
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:20000});
+      assert.deepEqual(probes.map(x=>x.workspace),['/demo/docs/book'],
+        'adopting a directory must probe immediately, without Save');
+      assert.match(await page.locator('#status').innerText(),/目录设置尚未保存/);
+      assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1')),null,
+        'probing must not implicitly save settings');
+      await page.locator('#global-save').click();
+      await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('全局设置已保存')&&
+        document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:20000});
       assert.equal(await page.locator('#status').getAttribute('data-kind'),'ok');
-      assert.deepEqual(probes.map(x=>x.workspace),['/demo/docs/book']);
-      await page.locator('.ocr-frame-back').first().click();
-      await page.waitForFunction(()=>!document.querySelector('#workspace').hidden,null,{timeout:16000});
-      await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:16000});
-      assert.equal((await page.locator('#workspace .ocr-outline-pane, #workspace .ocr-source-pane, #workspace .ocr-preview-pane, #workspace .ocr-detached-pdf-pane').count()),4);
+      assert.deepEqual(probes.map(x=>x.workspace),['/demo/docs/book','/demo/docs/book']);
+      assert.equal(await page.locator('.ocr-frame-back').count(),0);
+      assert.equal(await page.locator('#workspace').isVisible(),false);
+      assert.equal(await page.locator('#workspace .ocr-outline-pane, #workspace .ocr-source-pane, #workspace .ocr-preview-pane, #workspace .ocr-detached-pdf-pane').count(),4);
       await page.reload({waitUntil:'domcontentloaded'});
       await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件可读写'),null,{timeout:20000});
-      assert.equal(probes.length,3,'saved directory must be re-probed on return and reload');
+      assert.equal(probes.length,3,'saved directory must be re-probed on startup');
       assert.deepEqual(errors,[]);
       console.log('FRAME_WORKSPACE_SUCCESS_STATUS_BROWSER_PASS',engineName,probes.length);
+      const savedSettings=await page.evaluate(()=>localStorage.getItem('ocr2md.lab-frame.settings.json.v1'));
       await page.close();
 
       const denied=await browser.newPage({viewport:{width:1024,height:800}});
-      await denied.addInitScript(()=>localStorage.setItem('ocr2md.lab-frame.settings.json.v1',JSON.stringify({settings:{
-        'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',value:'Sarasa',range:{kind:'readonly'}},
-        'globalUi.font.size':{key:'size',category1:'全局 UI',category2:'字体',value:16,range:{min:8,max:32,step:1}},
-        'workspace.dataDirectory':{key:'dataDirectory',category1:'工作区',category2:'目录',value:'/demo/docs/book',range:{kind:'server-directory'}},
-      }})));
+      // Reuse the real Settings component's persisted JSON (not a synthetic
+      // partial record that fails its own schema validation).
+      await denied.addInitScript(snapshot=>localStorage.setItem('ocr2md.lab-frame.settings.json.v1',snapshot),savedSettings);
       await denied.route('**/labs/lab-frame/api/workspace-io/probe',route=>route.fulfill({status:403,
         contentType:'application/json',body:JSON.stringify({error:'Main 编辑授权已失效'})}));
       await denied.goto(url,{waitUntil:'domcontentloaded'});

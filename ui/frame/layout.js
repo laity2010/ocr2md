@@ -45,12 +45,10 @@ function blankPane(name,onSplit,onModuleChange){
     picker.setAttribute('aria-label','选择模块');
     picker.add(new Option('空白框架','frame'));
     picker.add(new Option('全局设置','settings'));
-    const ownModule='frame';picker.value=ownModule;
-    picker.addEventListener('change',()=>{
-      const next=picker.value;
-      picker.value=ownModule; // Each pane retains its own correct module on return.
-      onModuleChange?.(next);
-    });
+    // Frame is intentionally a blank shell: AG does not navigate modules.
+    // The single settings.json remains in the independent source navigation.
+    picker.value='frame';picker.disabled=true;
+    picker.title='空白框架 AG 模块切换不可用';
     bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
