@@ -17,7 +17,7 @@ try{
   const browser=await engine.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1200,height:850},hasTouch:true});
-   const errors=[],probes=[],oldApi=[];let imported=false,posts=0;
+   const errors=[],probes=[],oldApi=[];let imported=false,posts=0,initialized=false,logicalPosts=0;
    page.on('pageerror',error=>errors.push(error.message));
    page.on('request',req=>{if(req.url().includes('/api/v2/'))oldApi.push(req.url());});
    await page.addInitScript(()=>{
@@ -42,6 +42,13 @@ try{
    });
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
      const op=new URL(route.request().url()).pathname.split('/').at(-1);
+     if(op==='initialize-logical'){
+       initialized=true;logicalPosts++;
+       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true,blockCount:1})});
+     }
+     if(op==='logical-state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(initialized?
+       {exists:true,initialized:true,blockCount:1,offset:0,columns:['logical_id'],rows:[{logical_id:1}]}:
+       {exists:true,initialized:false,needsInitialization:true,blockCount:0,columns:['logical_id'],rows:[]})});
      if(op==='import'){
        posts++;imported=true;
        assert.equal(route.request().postDataJSON().confirm,'import-mineru-base');
@@ -86,7 +93,8 @@ try{
    await page.locator('#global-save').click();
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 基础表就绪'),null,{timeout:26000});
    assert.equal(posts,1);
-   assert.equal(await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option').count(),1);
+   assert.equal(logicalPosts,1);
+   assert.equal(await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option').count(),2);
    assert.deepEqual(probes,['/demo/books/my-book','/demo/books/my-book']);
    const saved=await page.evaluate(()=>({
     latest:localStorage.getItem('ocr2md.lab-ocr-v2-frame.settings.json.v1'),
@@ -98,6 +106,7 @@ try{
    await page.reload({waitUntil:'domcontentloaded'});
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 基础表就绪'),null,{timeout:24000});
    assert.equal(posts,1,'reloading existing SQLite must not reimport');
+   assert.equal(logicalPosts,1,'existing logical rows must not reinitialize');
    assert.equal(probes.length,3,'saved V2 Settings re-probes on reload');
    assert.equal(await page.locator('#workspace').isVisible(),false);
    assert.deepEqual(oldApi,[]);

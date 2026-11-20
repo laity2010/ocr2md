@@ -96,12 +96,9 @@ def create_schema(db):
       block_json TEXT NOT NULL, record_kind TEXT NOT NULL,
       original_bytes BLOB
     );
-    CREATE TABLE logical_block(
-      logical_id INTEGER PRIMARY KEY, base_blockid INTEGER,
-      parent_id INTEGER, logical_order INTEGER, markdown_text TEXT,
-      FOREIGN KEY(base_blockid) REFERENCES mineru_base(blockid)
-    );
     ''')
+    from v2_logical import SCHEMA_DDL
+    db.execute(SCHEMA_DDL)
 
 def prepare_rows(files):
     archive=[];rows=[];next_id=1
@@ -219,6 +216,19 @@ def dispatch(operation,method,folder,payload,query,common):
         except (ValueError,TypeError):raise BaseError(422,'分页参数无效')
         if offset<0 or offset>10000000:raise BaseError(422,'分页参数超出范围')
         return existing_state(folder,offset)
+    if operation=='logical-state':
+        if method!='GET':raise BaseError(405,'逻辑表查询仅可 GET')
+        try:offset=int(query.get('offset',['0'])[0])
+        except (ValueError,TypeError):raise BaseError(422,'分页参数无效')
+        if offset<0 or offset>10000000:raise BaseError(422,'分页参数超出范围')
+        from v2_logical import logical_state
+        return logical_state(folder,offset)
+    if operation=='initialize-logical':
+        if method!='POST':raise BaseError(405,'逻辑表初始化仅可 POST')
+        if payload.get('confirm')!='initialize-logical':raise BaseError(422,'缺少逻辑表初始化确认')
+        common.probe(folder)
+        from v2_logical import initialize_logical
+        return initialize_logical(folder)
     if operation=='import':
         if method!='POST':raise BaseError(405,'导入操作仅可 POST')
         if payload.get('confirm')!='import-mineru-base':raise BaseError(422,'缺少明确导入确认')
@@ -238,7 +248,16 @@ def dispatch(operation,method,folder,payload,query,common):
                 if [(v['path'],v['sha256']) for v in result['sources']]==[(p,sha(b)) for p,b,_ in sources]:
                     return {'created':False,'replaced':False,'blockCount':result['blockCount'],
                         'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
-        # Reuse the same F02 read/write/cleanup probe before atomic replacement.
+        # A WP00 overwrite approval cannot silently erase later logical edits.
+        if exists:
+            try:
+                from v2_logical import db_connection
+                with closing(db_connection(folder)) as db:
+                    table=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='logical_block'").fetchone()
+                    if table and db.execute('SELECT count(*) FROM logical_block').fetchone()[0]>0:
+                        raise BaseError(409,'已有逻辑块最新状态；禁止重新导入覆盖，请先保全编辑数据')
+            except sqlite3.DatabaseError:
+                pass # Broken previous SQLite can be replaced with permission.
         common.probe(folder)
         return new_book(folder,overwrite=exists)
     raise BaseError(404,'未知 V2 导入操作')
