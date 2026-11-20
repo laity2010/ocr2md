@@ -1,19 +1,16 @@
-/** Lab-frame evaluation adapter for the pre-existing authorized server
- * Workspace discovery API. No filesystem access or OCR rules in the client.
- * This adapter may later be replaced with a dedicated generic service. */
+/** Frame-owned directory discovery; F02 session and allowlist are authoritative. */
+const BASE='/labs/lab-frame/api/workspace-io/';
 async function request(path){
-  const response=await fetch(path,{cache:'no-store',credentials:'same-origin'});
-  if(response.status===403)throw Error('目录访问需要 Main 的编辑授权');
-  if(response.status===404)throw Error('服务器目录服务尚未接通');
+  const response=await fetch(BASE+path,{cache:'no-store',credentials:'same-origin'});
+  if(response.status===403)throw Error('目录访问需要 Lab-Frame 独立授权');
+  if(response.status===404)throw Error('Frame 独立目录服务未接通');
   if(!response.ok){
-    // Main returns validation failures as plain text; preserve the reason.
     const reason=(await response.text()).trim().replace(/[\r\n\t]+/g,' ').slice(0,240);
-    const operation=path.includes('/roots')?'授权根目录':'目录访问';
-    throw Error(operation+'失败（HTTP '+response.status+'）'+(reason?'：'+reason:''));
+    throw Error('Frame 目录访问失败（HTTP '+response.status+'）'+(reason?'：'+reason:''));
   }
   return response.json();
 }
 export const frameDirectoryPort=Object.freeze({
-  roots:()=>request('/api/workspace/roots'),
-  browse:path=>request('/api/workspace/browse?path='+encodeURIComponent(path)),
+  roots:()=>request('roots'),
+  browse:path=>request('browse?path='+encodeURIComponent(path)),
 });

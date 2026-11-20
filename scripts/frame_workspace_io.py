@@ -1,24 +1,21 @@
-"""Lab-Frame public Workspace I/O adapter to V1 Main's existing editor/roots grant.
+"""Lab-Frame standalone Workspace I/O, directory discovery and access session.
 
-No OCR, SQL, or book heuristics. The host is the existing shared Lab gateway,
-using the same macOS-authorized Python and Origin as V1 Main/Lab OCR.
-Operations are scoped to a caller-provided selected workspace under Main's
-approved roots; an authenticated client is still responsible for choosing it.
+Runs inside the neutral shared Lab gateway; never calls Main or V1 endpoints.
+Session and allowed roots are owned by the Frame private runtime config.
 """
 from __future__ import annotations
 import base64
 import binascii
 from contextlib import contextmanager
 import hashlib
-import http.client
 import json
 import os
 from pathlib import Path
 import secrets
 import stat
 from urllib.parse import parse_qs
+from frame_access import AccessError, authorized_roots, session_status, unlock, settings
 
-MAIN_PORT=int(os.environ.get('OCR2MD_MAIN_PORT','4396'))
 LAN_ORIGIN=os.environ.get('OCR2MD_LAN_ORIGIN','')
 ALLOWED_ORIGINS=frozenset(v for v in ('https://ocr2md.laity.bid',
     'http://127.0.0.1:4414',LAN_ORIGIN) if v)
@@ -34,27 +31,6 @@ class WorkspaceIOError(Exception):
 
 def sha(data:bytes)->str:
     return hashlib.sha256(data).hexdigest()
-
-def authorized_roots(cookie:str)->list[Path]:
-    """Exactly V1's Main session + /api/workspace/roots authorization."""
-    if not isinstance(cookie,str) or not cookie or len(cookie)>8192:
-        raise WorkspaceIOError(403,'需要 Main 的编辑授权')
-    client=http.client.HTTPConnection('127.0.0.1',MAIN_PORT,timeout=6)
-    try:
-        client.request('GET','/api/workspace/roots',headers={
-            'Cookie':cookie,'Accept':'application/json'})
-        response=client.getresponse()
-        body=response.read(65537)
-        if response.status!=200:raise WorkspaceIOError(403,'需要 Main 的编辑授权')
-        if len(body)>65536:raise WorkspaceIOError(503,'Main 授权响应超限')
-        allowed=json.loads(body).get('allowedRoots')
-        if not isinstance(allowed,list) or not allowed:
-            raise WorkspaceIOError(403,'Main 未授权任何工作目录')
-        return [Path(v).resolve(strict=True) for v in allowed
-            if isinstance(v,str) and Path(v).is_dir()]
-    except (OSError,ValueError,TypeError) as error:
-        raise WorkspaceIOError(503,'Main 目录授权暂不可用') from error
-    finally:client.close()
 
 def checked_workspace(raw,roots:list[Path])->Path:
     if not isinstance(raw,str) or not raw.startswith('/') or len(raw)>2048 or '\0' in raw or '\n' in raw or '\r' in raw or '..' in Path(raw).parts:
@@ -73,7 +49,7 @@ def checked_workspace(raw,roots:list[Path])->Path:
                 cursor=cursor/part
                 if cursor.is_symlink():raise WorkspaceIOError(403,'工作目录含符号链接')
             return real
-    raise WorkspaceIOError(403,'工作目录不在 Main 授权范围内')
+    raise WorkspaceIOError(403,'工作目录不在 Frame 授权范围内')
 
 def relative_parts(raw,*,allow_empty=False):
     if allow_empty and raw in ('',None):return ()
@@ -217,10 +193,25 @@ def replace_file(workspace:Path,relative:str,content:bytes,expected_sha:str):
         finally:os.close(fd)
     return {'path':relative,'size':len(content),'sha256':sha(content),'replaced':True}
 
+def browse_directories(raw,roots):
+    folder=checked_workspace(raw,roots)
+    children=[]
+    with directory_fd(folder,()) as fd:
+        for name in sorted(os.listdir(fd)):
+            if name.startswith('.'):continue
+            try:info=os.stat(name,dir_fd=fd,follow_symlinks=False)
+            except OSError:continue
+            if not stat.S_ISDIR(info.st_mode):continue
+            children.append({'path':str(folder/name),'name':name})
+            if len(children)>=120:break
+    return {'path':str(folder),'children':children}
+
 def dispatch(method,operation,query,payload,roots):
-    verbs={'probe':'POST','list':'GET','read':'GET','create':'POST','replace':'POST'}
+    verbs={'probe':'POST','list':'GET','read':'GET','create':'POST','replace':'POST','roots':'GET','browse':'GET'}
     if operation not in verbs:raise WorkspaceIOError(404,'未知工作区 I/O 接口')
     if method!=verbs[operation]:raise WorkspaceIOError(405,'HTTP 请求方法不匹配')
+    if operation=='roots':return {'allowedRoots':[str(p) for p in roots]}
+    if operation=='browse':return browse_directories(query.get('path',[None])[0],roots)
     value=payload.get('workspace') if method=='POST' else query.get('workspace',[None])[0]
     folder=checked_workspace(value,roots)
     if operation=='probe':return probe(folder)
@@ -235,7 +226,7 @@ def handle(handler,operation,parsed):
     try:
         if handler.command=='POST':
             if handler.headers.get('Origin') not in ALLOWED_ORIGINS:
-                raise WorkspaceIOError(403,'拒绝非 V1 已授权来源的写入')
+                raise WorkspaceIOError(403,'拒绝非 Frame 允许来源的写入')
             if handler.headers.get('Transfer-Encoding'):
                 raise WorkspaceIOError(400,'不支持 chunked 请求')
             try:size=int(handler.headers.get('Content-Length','-1'))
@@ -248,9 +239,22 @@ def handle(handler,operation,parsed):
                 raise WorkspaceIOError(400,'请求 JSON 不合法') from error
             if not isinstance(payload,dict):raise WorkspaceIOError(422,'请求须为对象')
         else:payload={}
+        if operation=='session':
+            if handler.command!='GET':raise WorkspaceIOError(405,'会话查询仅允许 GET')
+            # A missing configuration is a hard error rather than fake success.
+            settings()
+            respond(200,{'authorized':session_status(handler.headers.get('Cookie',''))})
+            return
+        if operation=='unlock':
+            if handler.command!='POST':raise WorkspaceIOError(405,'访问码授权仅允许 POST')
+            cookie=unlock(payload.get('code'))
+            handler.respond(200,json.dumps({'authorized':True},ensure_ascii=False),
+                'application/json; charset=utf-8',[('Set-Cookie',cookie)])
+            return
         roots=authorized_roots(handler.headers.get('Cookie',''))
         response=dispatch(handler.command,operation,parse_qs(parsed.query),payload,roots)
         respond(200,response)
+    except AccessError as error:respond(error.code,{'error':str(error)})
     except WorkspaceIOError as error:respond(error.code,{'error':str(error)})
     except PermissionError:respond(403,{'error':'工作目录文件权限不足（macOS/iCloud），读写验证未通过'})
     except FileExistsError:respond(409,{'error':'文件已经存在，拒绝覆盖'})

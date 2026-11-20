@@ -26,9 +26,9 @@ try{
     localStorage.setItem('ocr2md.lab-frame.settings.json.v1',JSON.stringify({settings:{
       'workspace.dataDirectory':{value:'/old-frame/book'}}}));
    });
-   await page.route('**/api/workspace/roots',route=>route.fulfill({status:200,contentType:'application/json',
+   await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:200,contentType:'application/json',
     body:JSON.stringify({allowedRoots:['/demo/books']})}));
-   await page.route('**/api/workspace/browse?*',route=>{
+   await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
     const path=new URL(route.request().url()).searchParams.get('path');
     const children=path==='/demo/books'?[{name:'my-book',path:'/demo/books/my-book'}]:[];
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});

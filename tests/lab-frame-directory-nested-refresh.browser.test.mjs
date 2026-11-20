@@ -22,12 +22,12 @@ try{
    const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true});
    const errors=[];page.on('pageerror',error=>errors.push(error.message));
    let rootsCalls=0, browseCalls=0;
-   await page.route('**/api/workspace/roots',route=>{
+   await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>{
     rootsCalls++;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
       allowedRoots:['/demo/docs'],activeBook:'',selectionError:'Old book moved'})});
    });
-   await page.route('**/api/workspace/browse?*',route=>{
+   await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
     browseCalls++;
     const path=new URL(route.request().url()).searchParams.get('path');
     const values={'/demo/docs':['alpha'],'/demo/docs/alpha':['nested'],'/demo/docs/alpha/nested':[]};

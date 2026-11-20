@@ -18,10 +18,10 @@ try{
   browser=await chromium.launch({headless:true});
   const page=await browser.newPage({viewport:{width:1408,height:1056},hasTouch:true});
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.route('**/api/workspace/roots',route=>route.fulfill({
+  await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({
     status:200,contentType:'application/json',body:JSON.stringify({
       allowedRoots:['/demo/docs']})}));
-  await page.route('**/api/workspace/browse?*',route=>{
+  await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
     const path=new URL(route.request().url()).searchParams.get('path');
     const children=path==='/demo/docs'?[{name:'paper',path:'/demo/docs/paper'},
       {name:'notes',path:'/demo/docs/notes'}]:[];
@@ -58,13 +58,13 @@ try{
   console.log('FRAME_DIRECTORY_BIND_AND_RELOAD_PASS',saved.length);
   await page.close();
   const denied=await browser.newPage({viewport:{width:1032,height:642}});
-  await denied.route('**/api/workspace/roots',route=>route.fulfill({status:403,
+  await denied.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:403,
     body:'Editor authorization required'}));
   await denied.goto(url,{waitUntil:'domcontentloaded'});
   await denied.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await denied.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
   await denied.getByRole('button',{name:'打开目录树'}).click();
-  await denied.locator('#status').getByText('目录访问需要 Main 的编辑授权',{exact:false})
+  await denied.locator('#status').getByText('目录访问需要 Lab-Frame 独立授权',{exact:false})
     .waitFor({timeout:15000});
   assert.equal(await denied.locator('#status').getAttribute('data-kind'),'error');
   assert.equal(await denied.locator('wa-tree-item').count(),0);
@@ -72,9 +72,9 @@ try{
   await denied.close();
 
   const invalid=await browser.newPage({viewport:{width:1032,height:642}});
-  await invalid.route('**/api/workspace/roots',route=>route.fulfill({status:200,
+  await invalid.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:200,
     contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo/moved']})}));
-  await invalid.route('**/api/workspace/browse?*',route=>route.fulfill({status:422,
+  await invalid.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>route.fulfill({status:422,
     contentType:'text/plain',body:'目录不存在；请核对完整路径'}));
   await invalid.goto(url,{waitUntil:'domcontentloaded'});
   await invalid.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});

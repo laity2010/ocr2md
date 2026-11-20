@@ -20,9 +20,9 @@ try{
       const page=await browser.newPage({viewport:engineName==='WebKit'?{width:1024,height:800}:{width:1408,height:900},hasTouch:true});
       const errors=[],probes=[];
       page.on('pageerror',e=>errors.push(e.message));
-      await page.route('**/api/workspace/roots',route=>route.fulfill({status:200,
+      await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:200,
         contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo/docs']})}));
-      await page.route('**/api/workspace/browse?*',route=>{
+      await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
         const path=new URL(route.request().url()).searchParams.get('path');
         const children=path==='/demo/docs'?[{name:'book',path:'/demo/docs/book'}]:[];
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
@@ -68,7 +68,7 @@ try{
       // partial record that fails its own schema validation).
       await denied.addInitScript(snapshot=>localStorage.setItem('ocr2md.lab-frame.settings.json.v1',snapshot),savedSettings);
       await denied.route('**/labs/lab-frame/api/workspace-io/probe',route=>route.fulfill({status:403,
-        contentType:'application/json',body:JSON.stringify({error:'Main 编辑授权已失效'})}));
+        contentType:'application/json',body:JSON.stringify({error:'Frame 独立授权已失效'})}));
       await denied.goto(url,{waitUntil:'domcontentloaded'});
       await denied.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件读写验证失败'),null,{timeout:20000});
       assert.equal(await denied.locator('#status').getAttribute('data-kind'),'error');

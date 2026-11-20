@@ -30,11 +30,11 @@ try{
     try{
       const page=await browser.newPage({viewport:{width:1408,height:1056},hasTouch:true});
       const errors=[];page.on('pageerror',error=>errors.push(error.message));
-      await page.route('**/api/workspace/roots',route=>route.fulfill(denied?
+      await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill(denied?
         {status:403,body:'Editor authorization required'}:
         {status:200,contentType:'application/json',
           body:JSON.stringify({allowedRoots:[root]})}));
-      await page.route('**/api/workspace/browse?*',async route=>{
+      await page.route('**/labs/lab-frame/api/workspace-io/browse?*',async route=>{
         if(denied)return route.fulfill({status:403,body:'Editor authorization required'});
         const path=new URL(route.request().url()).searchParams.get('path');
         const children=(await readdir(path,{withFileTypes:true}))
@@ -85,7 +85,7 @@ try{
       denied=true;
       await page.getByRole('button',{name:'刷新 Mac 目录'}).click();
       await page.waitForFunction(()=>document.querySelectorAll('wa-tree-item').length===0);
-      await page.locator('#status').getByText('目录访问需要 Main 的编辑授权',{exact:false}).waitFor();
+      await page.locator('#status').getByText('目录访问需要 Lab-Frame 独立授权',{exact:false}).waitFor();
       assert.equal(await page.locator('#status').getAttribute('data-kind'),'error');
       assert.equal(await accept.isEnabled(),false);
       assert.deepEqual(errors,[]);

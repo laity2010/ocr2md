@@ -1,6 +1,6 @@
 # OCR2MD · V2 · MinerU 无损基础表（Lab-Frame）
 
-本 WP00 是在已验收的 Lab-Frame 最新 SHA `eab8ff8337db0a4bdd611d36f7788c4096f28cb3` 之上重建的独立框架型 V2，保留 Main 编辑授权与 F02 文件读写能力；WP01～WP03 业务代码已可追溯撤销。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
+本 WP00 是在已验收的 Lab-Frame 最新 SHA `9af8882d58a73dd969adb94d25953dbbac6a221a` 之上重建的独立框架型 V2，保留 Frame 独立授权与 F02 文件读写能力；WP01～WP03 业务代码已可追溯撤销。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
 
 ## 单一权威与不可触碰范围
 
@@ -21,11 +21,11 @@
 
 **不得新增第 3 张应用物理表，不以 SQL 表保存操作历史。** CM 将来负责撤销/重做和历史（本阶段尚未接入）。基础表不保存归一化造成的信息损失：`block_json` 保留每个块的完整 JSON 对象，包括额外未知字段与内嵌子块；`source_json_path` 指向输入页与三类原始块组 `preproc_blocks`、`discarded_blocks`、`para_blocks`；`original_bytes` 仅在 `blockid=0` 的档案记录按 Base64 保存源文件的逐字节内容。因此，原始 JSON 文件本身可按字节还原，BlockID>0 的索引不会改变源数据结构。源文件校验 SHA、路径、页索引、页块组、bbox、原始 lines/blocks 等列均可在 AG 基础表中查阅。
 
-## Main 编辑会话缺失时的目录恢复（2026-11-20）
+## 独立 Frame 授权与目录访问（2026-11-20）
 
-- 目录根列表沿用 Main 的 `/api/workspace/roots` 编辑 Cookie 校验；在新域名、Safari 新标签页、局域网 IP 等情形可能是 **HTTP 403**。这是授权缺失，不是 MinerU 解析或文件权限错误。**不同站点的 Cookie 不可复用**（公网 `ocr2md.laity.bid` 与 `192.168.1.10:4443` 是两个站点）。
-- Lab-Frame 公共 Shell（V2 原样继承） `ui/frame/main-auth.js` 通过 Main **只读** `/api/session` 查询 `canSave`：未授权时顶栏「前往 Main 授权」同源 `/` 链接在新标签打开 Main，完成 Main 自带「保存→12 位编辑授权码」操作；返回当前 Lab 点击原目录树「刷新 Mac 目录」。获得授权后隐藏链接；丢失会话则再次显示。**不在 Frame 输入编辑码，不复制 Cookie，不自行签发 token，不降低服务器权限，不新建登录端口。**
-- Main API 无响应或报错时保留原状态与失败信息，不伪称已授权；授权前不应触发 F02 写入或书籍改动。此能力来自公共 Frame 组件，已通过正常 Git merge 纳入 V2；不建立 V2 专属登录或授权实现。
+- 目录列表现在直接调用公共 Frame `GET /labs/lab-frame/api/workspace-io/{roots,browse}`；不调用 Main `/api/session`、`/api/workspace/roots` 或 Main 本地端口。Lab-Frame 的 `ui/frame/access-auth.js` 在未授权时显示「授权 Frame」，输入 Frame 独立访问码，通过其私有 F02 session/unlock 签发并校验 7 天 HttpOnly/Secure Cookie。
+- 权限由 Frame 私有 `ocr2md/.ops/frame-access.json` 的 `0600` 配置、允许的目录白名单和签名会话共同决定，绝不允许无认证读写、路径穿越或打开全盘目录。V2 仅调用 Frame F02 `authorized_roots`、`checked_workspace`、`probe` 公共能力，不另建登录页、权限状态或文件接口。
+- 在 Main 未启动或编辑授权不可用时，Frame 和 V2 的目录访问与读写不应受其影响；公网与 LAN 的 Cookie 仍分别属于各自站点。用户可以在 Mac 运行 `python3 scripts/frame_access_setup.py --show-code` 获取 Frame 自己的访问码。框架单测与浏览器模拟不代替真实 iPad Safari 验收。
 
 ## 业务 API 与窗口
 
@@ -39,5 +39,5 @@
 1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、重复导入幂等、旧 Schema、九列逻辑表和源变化可安全原子替换。
 2. `node tests/v2-mineru-base.browser.test.mjs`：Chromium/WebKit、Settings 保存权限、自动导入、SQL 原生下拉和 AG 18 列/分页。
 3. `node tests/v2-clean-frame-isolation.test.mjs`：逐字节共享 Frame 基线不变；旧 V2 组件不复活。
-4. 原 Frame 公共 F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
+4. Frame 独立授权、F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
 5. Git 提交完成后 `npm exec vite build -- --config labs/lab-ocr-v2/vite.config.mjs`，使用 `python3 scripts/v2_frame_publish.py --release-root /Users/daisor/AgentDock/ocr2md/release` 发布，核对 `sourceCommit`、所有资源 SHA、其余六 Lab 不变和公网入口 200。

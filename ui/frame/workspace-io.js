@@ -1,6 +1,6 @@
 /** Shared Lab-Frame public F02 Workspace I/O port.
- * Server delegates root authorization to the EXISTING V1 Main session and
- * exercises actual POSIX file I/O under the selected authorized directory.
+ * Server uses Frame-only signed sessions and scoped directory allowlists,
+ * exercising POSIX I/O under the selected Frame-authorized directory.
  * No front-end filesystem access, OCR rules, or parallel Settings state.
  */
 const DEFAULT_BASE='/labs/lab-frame/api/workspace-io/';

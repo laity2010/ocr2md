@@ -20,9 +20,9 @@ try{
    let releaseFirst,firstStarted=false;
    const firstGate=new Promise(resolve=>{releaseFirst=resolve});
    const requests=[];
-   await page.route('**/api/workspace/roots',route=>route.fulfill({status:200,contentType:'application/json',
+   await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:200,contentType:'application/json',
     body:JSON.stringify({allowedRoots:['/test/root']})}));
-   await page.route('**/api/workspace/browse?*',route=>{
+   await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
     const path=new URL(route.request().url()).searchParams.get('path');
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,
       children:path==='/test/root'?[{name:'a',path:'/test/root/a'},{name:'b',path:'/test/root/b'}]:[]})});
