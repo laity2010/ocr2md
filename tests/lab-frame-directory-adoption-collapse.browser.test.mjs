@@ -35,6 +35,7 @@ try{
      return route.fulfill({status:shouldFail?403:200,contentType:'application/json',
        body:JSON.stringify(shouldFail?{error:'Frame 独立授权失效'}:{verified:true,readable:true,writable:true})});
    });
+    await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
    await page.goto(url,{waitUntil:'domcontentloaded'});
    await page.evaluate(()=>{window.__statusTrace=[];
      new MutationObserver(()=>window.__statusTrace.push({text:document.querySelector('#status')?.textContent,

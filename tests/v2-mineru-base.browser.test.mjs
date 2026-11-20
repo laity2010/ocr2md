@@ -46,6 +46,8 @@ try{
       offset:Number(new URL(request.url()).searchParams.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
     return route.abort();
    });
+   await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({
+     status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
    await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
 
    await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:mineru-base"]')!==null,null,{timeout:12000});

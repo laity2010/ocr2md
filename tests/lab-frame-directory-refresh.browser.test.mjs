@@ -41,6 +41,7 @@ try{
           .filter(entry=>entry.isDirectory()).map(entry=>({name:entry.name,path:join(path,entry.name)}));
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({path,children})});
       });
+       await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
       await page.goto(url,{waitUntil:'domcontentloaded'});
           await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
       await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();

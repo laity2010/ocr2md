@@ -51,6 +51,8 @@ try{
        {exists:true,blockCount:1,sourceCount:1,offset:0,columns:['blockid'],rows:[{blockid:1}]}:{exists:false})});
      return route.abort();
    });
+   await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({
+     status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
    const res=await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
    await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible',timeout:24000});
    assert.equal(res.status(),200);

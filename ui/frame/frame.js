@@ -8,16 +8,10 @@ import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
 import {frameWorkspaceIO} from './workspace-io.js';
 import {createFrameStatus} from './global-status.js';
-import {mountFrameAuthorization} from './access-auth.js';
 import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
 const globalStatus=createFrameStatus($('status'));
 const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
-// Independent Frame authority, not Main. The shared File I/O public API
-// requires a signed scoped session, including from V2 workspaces.
-mountFrameAuthorization({host:document.querySelector('.toolbar>.source-actions'),
-  onAuthorized:()=>topStatus('✓ Frame 独立授权已生效 · 请点击「刷新 Mac 目录」继续','ok'),
-  onStatus:topStatus});
 const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.

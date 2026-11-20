@@ -1,6 +1,8 @@
 /** WCP Workspace directory component. Owns catalogue/book selection UI, never
  * imports Settings, CMD, Shell or filesystem. All edits use injected Settings
  * get/set API, all server discovery uses injected Workspace HTTP capability.
+ * The optional mountAuthorization UI adapter belongs to the injected directory
+ * port; this generic Settings component never holds credentials or sessions.
  */
 import './wcp-workspace-directory-module.css';
 
@@ -31,30 +33,32 @@ export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
     const close=document.createElement('button');close.type='button';close.textContent='关闭';
     close.setAttribute('aria-label','关闭目录选择器');
     heading.append(title,refreshButton,close);
+    const authHost=document.createElement('div');authHost.className='ocr-settings-directory-auth-host';
     const holder=document.createElement('div');holder.className='ocr-settings-directory-tree-host';
     const chooser=document.createElement('button');chooser.type='button';chooser.textContent='采用选中目录';chooser.disabled=true;
     chooser.setAttribute('aria-label','采用选中目录');
     const footer=document.createElement('div');footer.className='ocr-settings-directory-picker-footer';
     footer.append(chooser);
-    picker.append(heading,holder,footer);
+    picker.append(heading,authHost,holder,footer);
     let selection='',mounted=null;
-    function dismiss(){picker.hidden=true;mounted?.stopAutoRefresh();}
+    const authorization=typeof directoryPort.mountAuthorization==='function'
+      ?directoryPort.mountAuthorization(authHost,{
+        onAuthorized:()=>{if(!picker.hidden)void loadDirectoryRoots();},
+        onStatus:status,
+      }):null;
+    function dismiss(){picker.hidden=true;authorization?.clear();mounted?.stopAutoRefresh();}
     close.addEventListener('click',dismiss);
-    refreshButton.addEventListener('click',async()=>{
-      if(!mounted||picker.hidden)return;
-      refreshButton.disabled=true;
-      try{await mounted.refresh({announce:true});}
-      catch(error){status('目录刷新失败：'+error.message,'error');}
-      finally{refreshButton.disabled=false;}
-    });
-    open.addEventListener('click',async()=>{
-      if(!picker.hidden){dismiss();return;}
-      picker.hidden=false;status('正在读取服务器授权目录…','info');
-      chooser.disabled=true;selection='';
+    function resetUnauthorizedTree(){
+      mounted?.dispose();mounted=null;
+      holder.replaceChildren();selection='';chooser.disabled=true;
+    }
+    async function loadDirectoryRoots(){
+      if(picker.hidden)return;
+      chooser.disabled=true;
       try{
         if(!mounted){
           const {createWorkspaceDirectoryTree}=await import('./workspace-directory-tree.js');
-          if(!pane.isConnected)return;
+          if(!pane.isConnected||picker.hidden)return;
           mounted=createWorkspaceDirectoryTree(holder,directoryPort,{
             onSelect:path=>{
               selection=path;chooser.disabled=!path;
@@ -65,14 +69,42 @@ export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
           });
         }
         await mounted.loadRoots();
-        // Reopening the chooser must preserve its existing WA-tree selection.
-        // Clicking an already-selected row does not fire a new selection event;
-        // previously the disabled Adopt button could never be re-enabled.
+        if(picker.hidden)return;
         selection=mounted.selectedPath?.()||selection;
         chooser.disabled=!selection;
-        if(!picker.hidden)mounted.startAutoRefresh();
+        mounted.startAutoRefresh();
         if(!selection)status('目录已加载 · 选择后点击「采用选中目录」','ok');
       }catch(error){status('无法浏览目录：'+error.message,'error');}
+    }
+    refreshButton.addEventListener('click',async()=>{
+      if(picker.hidden)return;
+      refreshButton.disabled=true;
+      try{
+        const authorized=await authorization?.refresh();
+        if(authorization&&authorized!==true){
+          resetUnauthorizedTree();
+          status(authorized===false?'请先在目录树区域完成访问授权':
+            '目录授权状态不可用，请检查目录服务',authorized===false?'warning':'error');
+          return;
+        }
+        if(!mounted)await loadDirectoryRoots();
+        else await mounted.refresh({announce:true});
+      }catch(error){status('目录刷新失败：'+error.message,'error');}
+      finally{refreshButton.disabled=false;}
+    });
+    open.addEventListener('click',async()=>{
+      if(!picker.hidden){dismiss();return;}
+      picker.hidden=false;chooser.disabled=true;selection='';
+      status('正在检查工作区目录授权…','info');
+      const authorized=await authorization?.refresh();
+      if(picker.hidden)return;
+      if(authorization&&authorized!==true){
+        resetUnauthorizedTree();
+        status(authorized===false?'请先在目录树区域完成访问授权':
+          '目录授权状态不可用，请检查目录服务',authorized===false?'warning':'error');
+        return;
+      }
+      await loadDirectoryRoots();
     });
     chooser.addEventListener('click',async()=>{
       if(!selection)return;

@@ -1,4 +1,7 @@
-/** Frame-owned directory discovery; F02 session and allowlist are authoritative. */
+/** Frame-owned directory discovery; F02 session and allowlist are authoritative.
+ * Optional UI adapter is injected into the generic tree-picker module.
+ */
+import {mountFrameAuthorization} from './access-auth.js';
 const BASE='/labs/lab-frame/api/workspace-io/';
 async function request(path){
   const response=await fetch(BASE+path,{cache:'no-store',credentials:'same-origin'});
@@ -13,4 +16,5 @@ async function request(path){
 export const frameDirectoryPort=Object.freeze({
   roots:()=>request('roots'),
   browse:path=>request('browse?path='+encodeURIComponent(path)),
+  mountAuthorization:(host,options)=>mountFrameAuthorization({host,...options}),
 });

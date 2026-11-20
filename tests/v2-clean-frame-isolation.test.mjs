@@ -7,7 +7,7 @@ import {pathToFileURL} from 'node:url';
 const here=process.cwd();
 const frame=resolve(here,'../lab-frame');
 const sha=execFileSync('git',['-C',frame,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
-assert.equal(sha,'9af8882d58a73dd969adb94d25953dbbac6a221a');
+assert.equal(sha,'58ccd5c2c573ca8fdb9207118c74197a34672a94');
 const ours=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 assert.equal(execFileSync('git',['merge-base',ours,sha],{encoding:'utf8'}).trim(),sha);
 function walk(root,prefix=''){

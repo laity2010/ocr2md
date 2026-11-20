@@ -28,6 +28,7 @@ try{
     return route.fulfill({status:200,contentType:'application/json',
       body:JSON.stringify({path,children})});
   });
+   await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
   await page.goto(url,{waitUntil:'domcontentloaded'});
   await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
@@ -60,6 +61,7 @@ try{
   const denied=await browser.newPage({viewport:{width:1032,height:642}});
   await denied.route('**/labs/lab-frame/api/workspace-io/roots',route=>route.fulfill({status:403,
     body:'Editor authorization required'}));
+   await denied.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
   await denied.goto(url,{waitUntil:'domcontentloaded'});
   await denied.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await denied.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
@@ -76,6 +78,7 @@ try{
     contentType:'application/json',body:JSON.stringify({allowedRoots:['/demo/moved']})}));
   await invalid.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>route.fulfill({status:422,
     contentType:'text/plain',body:'目录不存在；请核对完整路径'}));
+   await invalid.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
   await invalid.goto(url,{waitUntil:'domcontentloaded'});
   await invalid.locator('#settings-workspace .ag-row').first().waitFor({state:'visible'});
   await invalid.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();

@@ -32,6 +32,7 @@ try{
         probes.push({workspace:data.workspace,origin:req.headers().origin});
         return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({verified:true,readable:true,writable:true})});
       });
+       await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
       await page.goto(url,{waitUntil:'domcontentloaded'});
       await page.locator('#settings-workspace .ag-row').first().waitFor({state:'visible',timeout:25000});
       await page.locator('#settings-workspace .ag-row',{hasText:'dataDirectory'}).click();
@@ -69,6 +70,7 @@ try{
       await denied.addInitScript(snapshot=>localStorage.setItem('ocr2md.lab-frame.settings.json.v1',snapshot),savedSettings);
       await denied.route('**/labs/lab-frame/api/workspace-io/probe',route=>route.fulfill({status:403,
         contentType:'application/json',body:JSON.stringify({error:'Frame 独立授权已失效'})}));
+       await denied.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({authorized:true})}));
       await denied.goto(url,{waitUntil:'domcontentloaded'});
       await denied.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('工作区文件读写验证失败'),null,{timeout:20000});
       assert.equal(await denied.locator('#status').getAttribute('data-kind'),'error');
