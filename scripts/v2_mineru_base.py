@@ -1,4 +1,4 @@
-"""V2 WP base import: immutable MinerUJSON archive + integer-ID raw blocks.
+"""V2 WP00–03: immutable MinerUJSON, latest logical rows and readonly Markdown.
 
 Business endpoint only; authorization and directory capability are reused from
 Lab-Frame's F02 Workspace I/O. No duplicate file-I/O port or extra listener.
@@ -15,6 +15,7 @@ import sqlite3
 import stat
 from urllib.parse import parse_qs
 from v2_logical_contract import initial_rows, validate_initial
+from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown
 
 DB_NAME='ocr2md.v2.sqlite'
 SCHEMA='ocr2md-v2-mineru-base/v1'
@@ -260,6 +261,33 @@ def existing_state(folder:Path,offset=0,table='mineru_base'):
             'rowCount':chosen['rowCount'],'columns':chosen['columns'],'rows':chosen['rows']}
 
 
+def existing_markdown(folder:Path):
+    """WP03 read-only Markdown and position manifest from current logical rows."""
+    db_path=folder/DB_NAME
+    if db_path.is_symlink():raise BaseError(403,'SQLite 不允许是符号链接')
+    try:fd=os.open(db_path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+    except FileNotFoundError:raise BaseError(409,'请先初始化 V2 SQLite')
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:
+            raise BaseError(422,'SQLite 文件类型不合法')
+    finally:os.close(fd)
+    with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
+        db.row_factory=sqlite3.Row
+        assert_schema(db)
+        rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text '
+                        'FROM logical_block ORDER BY logical_order').fetchall()
+        if not rows:raise BaseError(409,'请先点击「初始化逻辑表」')
+        try:
+            originals=from_sql_rows(rows)
+            result=to_markdown(originals)
+            if from_markdown(result)!=originals:
+                raise BaseError(409,'只读 Markdown 往返结果与逻辑表不一致')
+        except ValueError as error:
+            raise BaseError(409,'逻辑表无法无损重构：'+str(error)) from error
+        return result
+
+
 def initialize_logical(folder: Path, common):
     """WP02: explicit, idempotent initialization of the existing logic table.
 
@@ -308,6 +336,9 @@ def initialize_logical(folder: Path, common):
                 'dbFile':DB_NAME,'baseChanged':False}
 
 def dispatch(operation,method,folder,payload,query,common):
+    if operation=='markdown':
+        if method!='GET':raise BaseError(405,'Markdown 重构仅可 GET')
+        return existing_markdown(folder)
     if operation=='state':
         if method!='GET':raise BaseError(405,'基础表状态仅可 GET')
         try:offset=int(query.get('offset',['0'])[0])

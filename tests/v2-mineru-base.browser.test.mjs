@@ -17,7 +17,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1280,height:850}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalPostCount=0,logicalReady=false,probeCount=0;
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalPostCount=0,logicalReady=false,mdRequests=0,probeCount=0;
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -41,6 +41,13 @@ try{
       postCount++;assert.equal(request.postDataJSON().confirm,'import-mineru-base');
       exists=true;
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true,blockCount:539,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
+    }
+    if(op==='markdown'){
+      mdRequests++;assert(logicalReady,'Markdown should only be rendered from initialized logical rows');
+      assert.equal(request.method(),'GET');
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({schema:'v2-logical-md/v1',markdown:'## 只读 Markdown 🧪\n\nSome text',
+          rowCount:224,segments:[{logicalId:1},{logicalId:2}]})});
     }
     if(op==='logical-init'){
       logicalPostCount++;
@@ -101,6 +108,12 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('1–120 / 224'),null,{timeout:20000});
    assert.equal(logicalPostCount,1);
    assert.equal(await init.isVisible(),false,'Initialize button hides once logical data exists');
+   const mdButton=page.getByRole('button',{name:'查看重构 Markdown（只读）'});
+   assert.equal(await mdButton.isVisible(),true);
+   await mdButton.click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2ReadonlyMarkdownPort?.getMarkdown()==='## 只读 Markdown 🧪\n\nSome text',null,{timeout:12000});
+   assert.equal(mdRequests,1);
+   assert.equal(await page.locator('#workspace .cm-content').first().getAttribute('contenteditable'),'false');
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
      el=>el.v2BaseGridPort.getColumns().length),5);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
@@ -116,7 +129,7 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
    assert.equal(postCount,1);
    assert.deepEqual(errors,[]);
-   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,logicalPostCount,probeCount}));
+   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,logicalPostCount,mdRequests,probeCount}));
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

@@ -88,6 +88,21 @@ function pagingControls(){
     }catch(error){report('逻辑表初始化失败：'+error.message,'error');}
     finally{init.disabled=false;}
   });
+  const preview=document.createElement('button');preview.type='button';
+  preview.className='v2-md-readonly';preview.textContent='查看 Markdown';preview.hidden=true;
+  preview.setAttribute('aria-label','查看重构 Markdown（只读）');
+  preview.addEventListener('click',async()=>{
+    if(selectedTable!=='logical_block'||!bound)return;
+    preview.disabled=true;
+    try{
+      const result=await request('markdown',bound);
+      const port=$('#workspace #editor')?.v2ReadonlyMarkdownPort;
+      if(!port)throw Error('原有 CM6 只读源码接口未就绪');
+      port.setMarkdown(result.markdown);
+      report(`✓ 从逻辑表重构 Markdown · ${result.rowCount} 块 · CM6 只读展示`,'ok');
+    }catch(error){report('Markdown 重构失败：'+error.message,'error');}
+    finally{preview.disabled=false;}
+  });
   const prev=document.createElement('button');prev.type='button';prev.textContent='‹';
   prev.setAttribute('aria-label','SQL 表上一页');
   const label=document.createElement('span');label.className='v2-base-count';
@@ -95,7 +110,7 @@ function pagingControls(){
   next.setAttribute('aria-label','SQL 表下一页');
   prev.addEventListener('click',()=>{offset=Math.max(0,offset-120);void fetchPage();});
   next.addEventListener('click',()=>{offset+=120;void fetchPage();});
-  host.append(init,prev,label,next);bar.append(host);return host;
+  host.append(init,preview,prev,label,next);bar.append(host);return host;
 }
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
@@ -116,6 +131,7 @@ function renderGrid(state){
     paging.querySelector('.v2-base-count').textContent=`${tableLabel(state.tableName)} ${first}–${last} / ${count}`;
     const init=paging.querySelector('.v2-logical-init');
     init.hidden=!(state.tableName==='logical_block'&&count===0);
+    paging.querySelector('.v2-md-readonly').hidden=!(state.tableName==='logical_block'&&count>0);
     const prev=paging.querySelector('[aria-label="SQL 表上一页"]');
     const next=paging.querySelector('[aria-label="SQL 表下一页"]');
     prev.disabled=state.offset===0;
@@ -156,6 +172,7 @@ async function ensureBase(path){
       state=await request('state',path);
     }
     if(!state.exists)throw Error('SQLite 未建立');
+    if(bound && bound!==path)$('#workspace #editor')?.v2ReadonlyMarkdownPort?.setMarkdown('');
     bound=path;
     revealPhysicalTables(state.tables);
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 · SQL 导航已更新`,'ok');

@@ -6,3 +6,6 @@
 
 #workspace .v2-logical-init{padding:0 9px;min-width:unset;font-weight:600}
 #workspace .v2-logical-init[hidden]{display:none!important}
+
+#workspace .v2-md-readonly{padding:0 9px;min-width:unset}
+#workspace .v2-md-readonly[hidden]{display:none!important}

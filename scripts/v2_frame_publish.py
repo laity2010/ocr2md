@@ -10,7 +10,7 @@ import v6_frame_publish as base
 
 base.NAME='lab-ocr-v2'
 base.CARD='''      <article id="lab-ocr-v2"><div class="kind">09 · OCR V2 · 无损基础表</div><h2>lab-ocr-v2 · SQL 物理表</h2>
-        <p>复用 Lab-Frame 设置/读写验证，授权后无损导入 MinerUJSON，SQL 导航列出全部物理表，基础表无损保留 BlockID，空逻辑表也可查看五列结构。</p>
+        <p>复用 Lab-Frame 设置/读写验证，授权后无损导入 MinerUJSON，SQL 导航列出全部物理表，基础表无损保留 BlockID，逻辑表可显式初始化，之后可在原有 CM6 只读源码窗查看重构 Markdown。</p>
         <a class="open" href="/labs/lab-ocr-v2/">进入 V2 基础表</a></article>
 '''
 

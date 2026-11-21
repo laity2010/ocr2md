@@ -41,6 +41,9 @@ export default defineConfig({
           'Frame module switch event');
       }
       if(id.endsWith('/ui/frame/layout.js')){
+        code=exact(code,'return {dispose:()=>editor.destroy(),layout:()=>editor.requestMeasure()};',
+          "host.v2ReadonlyMarkdownPort=Object.freeze({setMarkdown:text=>editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:String(text)}}),getMarkdown:()=>editor.state.doc.toString()});return {dispose:()=>{delete host.v2ReadonlyMarkdownPort;editor.destroy();},layout:()=>editor.requestMeasure()};",
+          'existing CM6 readonly Markdown projection port');
         return exact(code,'return {dispose(){grid.destroy();},layout:()=>{}};',
           "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs()});return {dispose(){grid.destroy();},layout:()=>{}};",
           'AG view data port');
@@ -52,7 +55,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp00-mineru-base-frame-f02',
+        stage:'wp03-logical-markdown-readonly-f02',
       })+'\n'});
     },
   }],
