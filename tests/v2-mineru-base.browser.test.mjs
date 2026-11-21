@@ -18,7 +18,7 @@ try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
      hasTouch:true,...(kind==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalReady=false,mdRequests=0,probeCount=0;
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalReady=false,mdRequests=0,probeCount=0;const requestedPages=[];
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -78,6 +78,7 @@ try{
       const table=query.get('table')||'mineru_base';
       const logical=table==='logical_block';
       const pageOffset=Number(query.get('offset')||0);
+      requestedPages.push({table,pageOffset});
       assert(['mineru_base','logical_block'].includes(table));
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
         {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,
@@ -279,9 +280,33 @@ try{
    const headers=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.headerName));
    assert.equal(headers.length,18,JSON.stringify(headers));
    assert.equal(headers[0],'BlockID');
+   // After switching tables, the active four-pane CM6 focus may navigate AG
+   // to the currently selected logical block (e.g. its base row 121–240).
+   // Verify the real base-table count, then explicitly go to its first page
+   // before testing the manual next-page control. Do not disable focus sync.
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
+     ?.textContent.includes('/ 539'),null,{timeout:12000});
+   for(let attempt=0;attempt<5;attempt++){
+     const label=await page.locator('#workspace .v2-base-count').textContent();
+     if(label.includes('1–120 / 539'))break;
+     const previous=page.getByRole('button',{name:'SQL 表上一页'});
+     assert.equal(await previous.isDisabled(),false,'cannot navigate back to first base page from '+label);
+     await previous.click();
+     await page.waitForFunction(before=>document.querySelector('#workspace .v2-base-count')
+       ?.textContent!==before,label,{timeout:12000});
+   }
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/1–120 \/ 539/);
    await page.getByRole('button',{name:'SQL 表下一页'}).click();
-   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
+   try{
+     await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
+   }catch(error){
+     console.log('V2_SQL_PAGING_DIAG',kind,{requestedPages:requestedPages.slice(-18),
+       counter:await page.locator('#workspace .v2-base-count').textContent(),
+       selected:await page.locator('#workspace .ocr-source-file-select').inputValue(),
+       status:await page.locator('#status').textContent(),
+       focus:await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head)});
+     throw error;
+   }
    assert.equal(postCount,1);
    // Simulate a previously-created WP00 SQLite with an empty logical table:
    // the next verified reopen automatically backfills through the SAME import

@@ -1,3 +1,5 @@
+> **历史失效方案：与真正 V1 Lab-OCR 多轨不一致。以 WP04_V1_LABOCR_MULTILANE_SOURCE.md 为准。**
+
 # V2 WP04 · PBS 必须由 V1 原组件绘制和互动
 
 基线 996e56e。上一版错误地在 V2 重写 PDF 的 PBS 标签、覆盖框、SVG 引线及触摸命中。现在全部撤销，改由 ui/pdf-preview.js 的 V1 PdfPreview 原实例处理。

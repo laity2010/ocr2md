@@ -1,9 +1,10 @@
-/* Only adapting V1's existing toolbar to the Frame PDF tools slot.
- * PBS, covers, label rails, hit-testing, colors, drag UI all come entirely
- * from the original ui/pdf-preview.css and PdfPreview implementation.
+/* Only fit the copied V1 Lab-OCR PDF surface inside original Frame hosts.
+ * All PBS geometry, dynamic multi-lanes, SVG leaders, family highlights,
+ * text overlays, drag controls and other styling stay in V1 pdf-viewer.css.
  */
-#workspace .ocr-detached-pdf-tools>.ocr-pdf-tools{
-  position:static;top:auto;left:auto;right:auto;height:auto;
-  background:transparent;border:0;padding:0;overflow:visible;
+#workspace .ocr-preview-pdf-host.lab-ocr-pdf-surface{
+  width:100%;height:100%;min-width:0;min-height:0;
 }
-#workspace .ocr-preview-pdf-host .ocr-pdf-scroller{top:0}
+#workspace .ocr-detached-pdf-tools>.lab-ocr-pdf-controls{
+  position:static;min-width:0;
+}

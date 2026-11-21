@@ -1,3 +1,5 @@
+> **历史失效方案：与真正 V1 Lab-OCR 多轨不一致。以 WP04_V1_LABOCR_MULTILANE_SOURCE.md 为准。**
+
 # OCR2MD V2 · WP04 增补：V1 PDF 原文、逻辑 PBS、覆盖框与四窗同步
 
 基线 `65fcc2b`（AG/源码/Markdown 三窗已同步）。本任务继续在隔离 `experiment/lab-ocr-v2` 完成，不修改共享 Lab-Frame、Main、原始 MinerUJSON 或用户书籍数据；WP05 SQL 编辑持久化尚未开始。

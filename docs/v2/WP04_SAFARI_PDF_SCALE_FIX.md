@@ -1,3 +1,5 @@
+> **历史失效方案：与真正 V1 Lab-OCR 多轨不一致。以 WP04_V1_LABOCR_MULTILANE_SOURCE.md 为准。**
+
 # WP04 V2 · iPad Safari PDF.js −5% 缩放与第2页绘制失败修复
 
 ## 实机证据与确定原因

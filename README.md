@@ -52,11 +52,7 @@
 
 
 - **WP04 多窗同步修正**：直接复用 V1 `ui/view-store.js` 临时事件和 `ui/scroll-sync.js` 行级滚动器，AG↔CM6↔Markdown 当前三窗焦点、滚动和高亮联动，AG 通过 `logical_id/base_blockid` 精确映射并自动分页，所有 CM6 编辑/撤销更新位置映射，不写 SQL；**PDF 没有真实数据，尚不宣称四窗同步**。见 `docs/v2/WP04_V1_MULTI_PANE_SYNC.md`。
-- **WP04 PDF / PBS / 覆盖框增补**：在原 Frame PDF 分屏复用 V1 官方 `PDFViewer` 与真实 `pdfOverlayRect`、`layoutPDFEdgeRails`，由 `logical_id→base_blockid→mineru_base`、原始 MinerU 页尺寸生成**不落表的当前 PBS**及原始 bbox，使用已授权工作目录的唯一真实 PDF。PDF 标签/原文框↔AG/CM6/Markdown 按稳定逻辑 ID 双向聚焦，缩放/页码/覆盖框恢复；本阶段 PDF 和 AG 均只读，仍不进行 SQL 持久化。缺失/多份/页数或原始尺寸不符的 PDF 不强制绘制覆盖框。**V1 只读预览行为迁入不代表 V1 的 PDF 原文提取、结构编辑已迁入**。详见 `docs/v2/WP04_V1_PDF_PBS_SYNC.md`。
-- **WP04 V1 原 PBS 直接复用纠正**：V2 撤除自制标签、覆盖框、引线及触摸实现；现在直接实例化原 V1 PdfPreview，使用其 paintBlockCoverage、avoidBlockChipCollisions、selectPDFRegion、armBlockDrag 与原 CSS。V2 只有纯 SQL/CM6 位置信息适配和 F02 授权 PDF 装载，不再有第二套 PDF PBS 界面。结构变更仍未持久化。详见 docs/v2/WP04_V1_PBS_DIRECT_REUSE.md。\n- **WP04 Safari PDF 负缩放修复**：iPad Safari 截图暴露 PDF.js 在 Frame 尚未布局、容器宽 0 时 `page-width` 得到 **-5%** 并提示第 2 页绘制失败。V2 `ui/v2-pdf-viewer.js` 现在要求有效宽/高后才执行 `page-width`，隐藏期间保留正数临时比例和待适宽标记，Dockview `ResizeObserver` 首次实测尺寸时**重新指定 `currentScaleValue='page-width'`**，而非只调用 PDFViewer.update；手动放大后尺寸变化不强行重置缩放，Page error 上报真实错误详情。Chromium/WebKit 验收覆盖**初次隐藏加载**和**已加载时再次折叠→适宽→恢复**，禁止负比例及 PDF 绘制错误，不触及 SQL / Frame / Main。见 `docs/v2/WP04_SAFARI_PDF_SCALE_FIX.md`。
-
-
-
+- **WP04 真正 V1 Lab-OCR 动态多轨 PDF**：2026-11-21 用户实机纠正前两轮错误。此前误以 Main 的 ui/pdf-preview.js/layoutPDFEdgeRails 固定双轨是 V1，复刻不合格。现在逐文件复制 lab-ocr 已验证的 mountLabOcrPdf、layoutPbsLabels 与全部 PDF.js、标签样式/引线/触摸依赖。真正 V1 按标签 Y 碰撞分配多条外侧轨道，空闲立即退回内轨；V2 仅将两表当前逻辑 PBS、稳定 ID、原 bbox 经原组件 setOverlays/loadPage 注入；F02 授权 PDF 路径可选注入，不另造 UI。当前 WP04 PDF 只读，不改变 SQL。见 docs/v2/WP04_V1_LABOCR_MULTILANE_SOURCE.md。
 
 ## 验收与发布（WP00～WP04）
 
