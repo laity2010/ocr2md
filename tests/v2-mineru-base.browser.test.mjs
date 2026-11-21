@@ -17,7 +17,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1280,height:850}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,probeCount=0;
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalPostCount=0,logicalReady=false,probeCount=0;
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -42,6 +42,14 @@ try{
       exists=true;
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true,blockCount:539,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
     }
+    if(op==='logical-init'){
+      logicalPostCount++;
+      assert.equal(request.postDataJSON().confirm,'initialize-logical');
+      assert.equal(logicalReady,false,'logical initialization only once');
+      logicalReady=true;
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({created:true,preserved:false,logicalCount:224,baseChanged:false})});
+    }
     if(op==='state'&&exists==='retired-v2')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'现有 SQLite 不符合 V2 两表结构，拒绝覆盖'})});
     if(op==='state'){
       const query=new URL(request.url()).searchParams;
@@ -50,8 +58,10 @@ try{
       assert(['mineru_base','logical_block'].includes(table));
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
         {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,
-        tables,tableName:table,rowCount:logical?0:539,
-        columns:logical?logicalCols:cols,rows:logical?[]:rows,
+        tables,tableName:table,rowCount:logical?(logicalReady?224:0):539,
+        columns:logical?logicalCols:cols,rows:logical?(logicalReady?
+          Array.from({length:120},(_,i)=>({logical_id:i+1,base_blockid:i+1,parent_id:null,
+            logical_order:i+1,markdown_text:'reconstructed'})):[]):rows,
         offset:Number(query.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
     }
     return route.abort();
@@ -85,6 +95,14 @@ try{
    assert.deepEqual(logicalHeaders,logicalCols);
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 0–0 \/ 0/);
    assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),true);
+   const init=page.getByRole('button',{name:'初始化逻辑表'});
+   assert.equal(await init.isVisible(),true,'Initialize action appears ONLY for empty logical table');
+   await init.click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('1–120 / 224'),null,{timeout:20000});
+   assert.equal(logicalPostCount,1);
+   assert.equal(await init.isVisible(),false,'Initialize button hides once logical data exists');
+   assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
+     el=>el.v2BaseGridPort.getColumns().length),5);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:mineru-base';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
@@ -98,7 +116,7 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
    assert.equal(postCount,1);
    assert.deepEqual(errors,[]);
-   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,probeCount}));
+   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,logicalPostCount,probeCount}));
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

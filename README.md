@@ -35,6 +35,12 @@
 - 原生导航下拉在验证导入后自动添加 `SQL` 组：**始终展示当前 SQLite `sqlite_master` 中的所有用户物理表（不包括 SQLite 内部表及 View），不按行数或是否已启用业务功能隐藏表**，不再硬编码唯一「基础表」。WP00 当前两张物理表固定为 `基础表 · mineru_base`、`逻辑表 · logical_block`；后者即使是 0 行，仍能从导航点击并在**原有 AG Grid 实例**显示全部 5 个真实 SQL 字段。`mineru_base` 保持 **18 列**、BlockID 为首列和整数排序，原始归档 `blockid=0` 仅供无损保存不作为业务行展示；所有表均只读，按 120 行分页。导航和 API 通过 SQL 表结构元数据同步，不在导航中增加任何额外应用物理表。
 - 当前验收 SQL 物理表导航及**结构/行数据的只读展示**；空逻辑表只是五列零行，尚未进行 CM6 逻辑块生成或编辑。CM6 源码窗、Markdown 预览、PDF 窗仍为 Frame 空壳，未实现 V1 的编辑/预览/同步和转换 Markdown。不得把本阶段宣称为完整 V2 或 V1 等价实现。
 
+## WP01～WP02 · 初始逻辑层（2026-11-21）
+
+- **WP01**：已验证纯映射，详见 `docs/v2/WP01_LOGICAL_CONTRACT.md`。初始逻辑只从最终 `para_blocks` 构造（真实样本 224 条），排除前处理/丢弃重复内容；五列只足以表达未经人工确认的扁平状态，暂不自动猜测跨页或父子结构。
+- **WP02**：只通过 Frame F02 已授权且用户点击 AG 的「初始化逻辑表」按钮，才在现有两表 SQLite 中写入初始逻辑行。业务接口 `POST .../api/mineru-base/logical-init` + `confirm=initialize-logical`，遵守幂等、完整来源 SHA 校验、单 SQLite 事务、非空逻辑状态原样保留。自动加载仅查看，不触发初始化。详见 `docs/v2/WP02_LOGICAL_INITIALIZATION.md`。
+- 所有原始 MinerUJSON、PDF 和原始基础表仍然不可改；两张物理表与 Frame 共享组件保持不变。
+
 ## 验收与发布（WP00）
 
 1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、`sqlite_master` 枚举与空逻辑表 5 列展示、安全表名校验、重复导入幂等、旧 Schema、九列逻辑表和源变化可安全原子替换。

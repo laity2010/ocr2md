@@ -28,7 +28,7 @@ async function request(operation,workspace,{method='GET',offset=0,table='mineru_
   const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset),table})):'');
   const response=await fetch(url,{method,credentials:'same-origin',cache:'no-store',
     ...(method==='POST'?{headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({workspace,confirm:'import-mineru-base'})}:{})});
+      body:JSON.stringify({workspace,confirm:operation==='logical-init'?'initialize-logical':'import-mineru-base'})}:{})});
   let payload=null;try{payload=await response.json();}catch{}
   if(!response.ok){const error=Error(payload?.error||'HTTP '+response.status);error.status=response.status;throw error;}
   return payload;
@@ -74,6 +74,20 @@ function pagingControls(){
   let host=bar.querySelector('.v2-base-paging');
   if(host)return host;
   host=document.createElement('div');host.className='v2-base-paging';
+  const init=document.createElement('button');init.type='button';
+  init.className='v2-logical-init';init.textContent='初始化逻辑表';init.hidden=true;
+  init.setAttribute('aria-label','初始化逻辑表');
+  init.addEventListener('click',async()=>{
+    if(selectedTable!=='logical_block'||!bound)return;
+    init.disabled=true;
+    try{
+      const outcome=await request('logical-init',bound,{method:'POST'});
+      report(outcome.created?`✓ 逻辑表已初始化 · ${outcome.logicalCount} 块`:
+        `✓ 保留已有逻辑表 · ${outcome.logicalCount} 块`,'ok');
+      await fetchPage();
+    }catch(error){report('逻辑表初始化失败：'+error.message,'error');}
+    finally{init.disabled=false;}
+  });
   const prev=document.createElement('button');prev.type='button';prev.textContent='‹';
   prev.setAttribute('aria-label','SQL 表上一页');
   const label=document.createElement('span');label.className='v2-base-count';
@@ -81,7 +95,7 @@ function pagingControls(){
   next.setAttribute('aria-label','SQL 表下一页');
   prev.addEventListener('click',()=>{offset=Math.max(0,offset-120);void fetchPage();});
   next.addEventListener('click',()=>{offset+=120;void fetchPage();});
-  host.append(prev,label,next);bar.append(host);return host;
+  host.append(init,prev,label,next);bar.append(host);return host;
 }
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
@@ -100,9 +114,12 @@ function renderGrid(state){
     const first=count?state.offset+1:0;
     const last=Math.min(count,state.offset+state.rows.length);
     paging.querySelector('.v2-base-count').textContent=`${tableLabel(state.tableName)} ${first}–${last} / ${count}`;
-    const buttons=paging.querySelectorAll('button');
-    buttons[0].disabled=state.offset===0;
-    buttons[1].disabled=state.offset+state.rows.length>=count;
+    const init=paging.querySelector('.v2-logical-init');
+    init.hidden=!(state.tableName==='logical_block'&&count===0);
+    const prev=paging.querySelector('[aria-label="SQL 表上一页"]');
+    const next=paging.querySelector('[aria-label="SQL 表下一页"]');
+    prev.disabled=state.offset===0;
+    next.disabled=state.offset+state.rows.length>=count;
   }
   const label=tableLabel(state.tableName);
   report(`SQL ${label}已加载 · ${count} 行 · ${state.columns.length} 列${state.tableName==='mineru_base'?' · BlockID 为整数':''}`,'ok');

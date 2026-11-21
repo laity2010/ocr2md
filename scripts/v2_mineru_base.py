@@ -14,6 +14,7 @@ import secrets
 import sqlite3
 import stat
 from urllib.parse import parse_qs
+from v2_logical_contract import initial_rows, validate_initial
 
 DB_NAME='ocr2md.v2.sqlite'
 SCHEMA='ocr2md-v2-mineru-base/v1'
@@ -258,6 +259,54 @@ def existing_state(folder:Path,offset=0,table='mineru_base'):
             'tables':catalog,'tableName':chosen['name'],
             'rowCount':chosen['rowCount'],'columns':chosen['columns'],'rows':chosen['rows']}
 
+
+def initialize_logical(folder: Path, common):
+    """WP02: explicit, idempotent initialization of the existing logic table.
+
+    The immutable base is never updated. Any non-empty logical table is the
+    latest state: preserve it instead of guessing whether it was edited.
+    """
+    db_path=folder/DB_NAME
+    if db_path.is_symlink():raise BaseError(403,'SQLite 文件不允许是符号链接')
+    try:metadata=db_path.stat()
+    except FileNotFoundError:raise BaseError(409,'请先初始化 MinerU 基础表')
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink!=1:
+        raise BaseError(422,'SQLite 文件类型不合法')
+    # Only an authorized persisted workspace, never an unsaved choice.
+    common.probe(folder)
+    with closing(sqlite3.connect('file:'+str(db_path)+'?mode=rw',uri=True,timeout=3)) as db:
+        db.row_factory=sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        db.execute('BEGIN IMMEDIATE')
+        meta=assert_schema(db)
+        sources=mineru_sources(folder)
+        if [(p,sha(raw)) for p,raw,_ in sources]!=[
+            (src['path'],src['sha256']) for src in meta['sources']]:
+            raise BaseError(409,'MinerU 来源与已导入基础表不一致，禁止初始化逻辑层')
+        existing=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+        if existing:
+            # Nonempty logic is the unique latest state: never regenerate it.
+            db.commit()
+            return {'created':False,'preserved':True,'logicalCount':existing,
+                    'dbFile':DB_NAME,'baseChanged':False}
+        base=db.execute('SELECT blockid,block_group,block_json FROM mineru_base '
+                        'WHERE blockid>0 ORDER BY blockid').fetchall()
+        rows=initial_rows(base)
+        para_ids={row['blockid'] for row in base if row['block_group']=='para_blocks'}
+        validate_initial(rows,para_ids)
+        db.executemany('INSERT INTO logical_block('
+                       'logical_id,base_blockid,parent_id,logical_order,markdown_text) '
+                       'VALUES (?,?,?,?,?)',[
+                       (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text)
+                       for r in rows])
+        inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+        if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
+        if {r[0] for r in db.execute('PRAGMA foreign_key_check')}:
+            raise BaseError(500,'逻辑表存在失效基础块引用')
+        db.commit()
+        return {'created':True,'preserved':False,'logicalCount':inserted,
+                'dbFile':DB_NAME,'baseChanged':False}
+
 def dispatch(operation,method,folder,payload,query,common):
     if operation=='state':
         if method!='GET':raise BaseError(405,'基础表状态仅可 GET')
@@ -268,6 +317,11 @@ def dispatch(operation,method,folder,payload,query,common):
         if not isinstance(table,str) or not table or len(table)>128:
             raise BaseError(422,'SQL 物理表名称无效')
         return existing_state(folder,offset,table)
+    if operation=='logical-init':
+        if method!='POST':raise BaseError(405,'逻辑块初始化仅可 POST')
+        if payload.get('confirm')!='initialize-logical':
+            raise BaseError(422,'缺少明确逻辑初始化确认')
+        return initialize_logical(folder,common)
     if operation=='import':
         if method!='POST':raise BaseError(405,'导入操作仅可 POST')
         if payload.get('confirm')!='import-mineru-base':raise BaseError(422,'缺少明确导入确认')
@@ -287,6 +341,9 @@ def dispatch(operation,method,folder,payload,query,common):
                 if [(v['path'],v['sha256']) for v in result['sources']]==[(p,sha(b)) for p,b,_ in sources]:
                     return {'created':False,'replaced':False,'blockCount':result['blockCount'],
                         'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
+                with closing(sqlite3.connect('file:'+str(folder/DB_NAME)+'?mode=ro',uri=True)) as db:
+                    if db.execute('SELECT count(*) FROM logical_block').fetchone()[0]:
+                        raise BaseError(409,'逻辑表已有最新状态，禁止自动覆盖重建 V2 SQLite')
         # Reuse the same F02 read/write/cleanup probe before atomic replacement.
         common.probe(folder)
         return new_book(folder,overwrite=exists)
