@@ -8,7 +8,7 @@ from __future__ import annotations
 from hashlib import sha256
 from v2_logical_contract import LogicalRow
 
-FORMAT='v2-logical-md/v1'
+FORMAT='v2-logical-md/v2'
 MAX_MD_BYTES=8*1024*1024
 MAX_ROWS=100000
 SEP='\n\n'
@@ -33,7 +33,7 @@ def checked_rows(rows):
     linked={r.logical_id:r.parent_id for r in result}
     for row in result:
         if (not isinstance(row.base_blockid,int) or row.base_blockid<=0 or
-                not isinstance(row.markdown_text,str)):
+                not isinstance(row.markdown_text,str) or not isinstance(row.block_type,str)):
             raise ValueError('逻辑块来源或文本无效')
         if row.parent_id is not None and row.parent_id not in linked:
             raise ValueError('逻辑块父节点未定义')
@@ -50,7 +50,7 @@ def checked_rows(rows):
 def from_sql_rows(rows):
     """Public adapter for existing SQL five-column records (not an extra table)."""
     return checked_rows([LogicalRow(row['logical_id'],row['base_blockid'],
-                     row['parent_id'],row['logical_order'],row['markdown_text'])
+                     row['parent_id'],row['logical_order'],row['markdown_text'],row['block_type'])
                      for row in rows])
 
 
@@ -70,6 +70,7 @@ def to_markdown(rows):
         end_utf16=start_utf16+length_utf16(chunk)
         spans.append({'logicalId':row.logical_id,'baseBlockId':row.base_blockid,
                       'parentId':row.parent_id,'logicalOrder':row.logical_order,
+                      'blockType':row.block_type,
                       'startChar':start_char,'endChar':end_char,
                       'startUtf16':start_utf16,'endUtf16':end_utf16,
                       'fragmentSha256':digest(chunk)})
@@ -114,7 +115,7 @@ def from_markdown(snapshot):
                 item.get('fragmentSha256')!=digest(fragment)):
             raise ValueError('逻辑块位置或文本哈希不一致')
         rows.append(LogicalRow(item.get('logicalId'),item.get('baseBlockId'),
-                      item.get('parentId'),item.get('logicalOrder'),fragment))
+                      item.get('parentId'),item.get('logicalOrder'),fragment,item.get('blockType')))
         cursor=end;cursor16+=length_utf16(fragment)
     if cursor!=len(md) or cursor16!=length_utf16(md):
         raise ValueError('Markdown 结尾存在未映射内容')

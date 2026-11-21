@@ -4,12 +4,12 @@
 
 ## 映射与事务
 
-- WP00 的 `mineru_base` 始终不可变；读取 `WHERE blockid>0 ORDER BY blockid`，按 WP01 规则过滤 `para_blocks`，初始一对一写 `logical_block` 五字段。`logical_id=base_blockid`，`parent_id=NULL`，顺序为唯一的连续 1..N，`markdown_text` 为可读 Markdown 初始投影。样本：539 基础块+blockid=0 档案，224 逻辑块。
+- WP00 的 `mineru_base` 始终不可变；读取 `WHERE blockid>0 ORDER BY blockid`，按 WP01 规则过滤 `para_blocks`，初始一对一写 `logical_block` 六字段（原五列与 `block_type`）。`logical_id=base_blockid`，`parent_id=NULL`，顺序为唯一的连续 1..N，`markdown_text` 为可读 Markdown 初始投影，`block_type` 从基础表原始类型初始化但未来以逻辑表类型为准。样本：539 基础块+blockid=0 档案，224 逻辑块。
 - 先确认真实 SQLite 普通文件、双表 WP00 Schema、MinerU 来源 SHA 无变化、Frame F02 probe 有效。新库在未发布的**同一个私有 staging SQLite** 中先无损写入基础表，再构造逻辑表，检查两表数量、来源 SHA、原始归档字节与外键全部正确后提交，最后原子发布；任何失败不留下只含基础表的不完整正式库。旧版同源空逻辑表由同一 `POST import` 在已有 SQLite 的 `BEGIN IMMEDIATE` 事务内安全补全，不重新写基础表。绝不修改 PDF、MinerUJSON。
 - 当前 `logical_block` 非空时，不重写任何行：即便有人工编辑、不同父子/排序或未来 SQL 逻辑，也只复用已有数据。若原始 MinerU 来源改变，明确拒绝初始化；如果逻辑表已经有状态，`import` 亦不得因文件变化而自动覆盖 SQLite。用户以后想清空、重建须另订有保护的迁移契约，不能悄悄运行。
-- V2 AG 无「初始化逻辑表」按钮。第一次完成两表导入，或者已保存的旧空表经受控补全后，可从 SQL 导航直接选择「逻辑表 · logical_block」，沿用既有 AG Grid 展示 5 列/样本 224 行。若源确实无 `para_blocks`，0 行合法且无需反复补写。WP02 只初始化扁平结构，没有 CM6 编辑、撤销、跨页合并或父子归属。
+- V2 AG 无「初始化逻辑表」按钮。第一次完成两表导入，或者已保存的旧空表经受控补全后，可从 SQL 导航直接选择「逻辑表 · logical_block」，沿用既有 AG Grid 展示 6 列/样本 224 行。若源确实无 `para_blocks`，0 行合法且无需反复补写。WP02 只初始化扁平结构，没有 CM6 编辑、撤销、跨页合并或父子归属。
 
 ## 验收
 
-- 纯转换 WP01 3/3；WP00 12/12。WP02 direct API 测试：新建一次即完成 539 基础块 + 224 逻辑块，原始字节不变、表数恒为 2，初始化转换失败不得产生不完整 SQL；旧空表同源自动补全且基础表逐字段不变；重复打开和人工修改保护，变动来源拒绝覆盖，未授权/缺 confirm/错误 Origin 拒绝；Chromium+WebKit 验证不需要点击初始化，直接显示 5 列/224 行，旧空表刷新后补全。
+- 纯转换 WP01 3/3；WP00 12/12。WP02 direct API 测试：新建一次即完成 539 基础块 + 224 逻辑块，原始字节不变、表数恒为 2，初始化转换失败不得产生不完整 SQL；旧空表同源自动补全且基础表逐字段不变；重复打开和人工修改保护，变动来源拒绝覆盖，未授权/缺 confirm/错误 Origin 拒绝；Chromium+WebKit 验证不需要点击初始化，直接显示 6 列/224 行，旧空表刷新后补全。
 - 所有验证使用临时 MinerU 样本和 SQLite。真实工作目录只在用户**已经保存并授权读写**、打开 V2 且现有逻辑表为空时，自动补齐其 `ocr2md.v2.sqlite` 的**逻辑表**，不改基础表；尚未实际打开该目录前，发布代码不代表已经完成用户数据库升级。

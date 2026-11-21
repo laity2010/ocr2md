@@ -7,10 +7,10 @@
 `v2_markdown_roundtrip.to_markdown(rows)` 输入已校验、按 `logical_order` 1..N 升序的逻辑块，在内存中生成：
 
 1. **`markdown`**：只读原始 Markdown 字符串，以 `\n\n` 分隔相邻逻辑块；不加 CMD/HTML 标注或可见分隔框。空块仍占据逻辑顺序但未伪造文本。
-2. **`segments`**：随此次投影返回的独立内存映射清单，包含每个块的 `logicalId`、`baseBlockId`、`parentId`、`logicalOrder`、`startChar/endChar`（Python 字符下标）与 `startUtf16/endUtf16`（供未来 CM6 坐标映射使用）及片段 SHA-256。
+2. **`segments`**：随此次投影返回的独立内存映射清单，包含每个块的 `logicalId`、`baseBlockId`、`parentId`、`logicalOrder`、`blockType`、`startChar/endChar`（Python 字符下标）与 `startUtf16/endUtf16`（供未来 CM6 坐标映射使用）及片段 SHA-256。
 3. **`sha256`、`rowCount`、`lengthUtf16`、`schema`**：严格核验与防过时投影；位置清单只返回前端内存，不写入 SQLite/JSON/MD 文件。
 
-`from_markdown(snapshot)` 验证：全文/片段 SHA、块边界、分隔符、Unicode/UTF-16 坐标、连续逻辑顺序、稳定 ID、来源 ID、父节点存在和无循环，重新产生**与原 SQL 完全一致**的五字段逻辑行。导出 API 本身执行 `from_markdown(to_markdown(rows)) == rows` 后才返回。任何内容修改或无位置清单的裸 Markdown，一律**不能**冒充无损还原：WP03 不支持 Markdown 编辑/回写，后续 WP04/05 必须实现受控编辑和增量持久化后才允许写回。
+`from_markdown(snapshot)` 验证：全文/片段 SHA、块边界、分隔符、Unicode/UTF-16 坐标、连续逻辑顺序、稳定 ID、来源 ID、父节点存在和无循环，重新产生**与原 SQL 完全一致**的六字段逻辑行（包括当前 `block_type`）。导出 API 本身执行 `from_markdown(to_markdown(rows)) == rows` 后才返回。任何内容修改或无位置清单的裸 Markdown，一律**不能**冒充无损还原：WP03 不支持 Markdown 编辑/回写，后续 WP04/05 必须实现受控编辑和增量持久化后才允许写回。
 
 **重要区别：**“无损往返”仅指 `logical_block → Markdown + 外部定位清单 → 同一批 logical_block 行`，**不是** `Markdown → 原始 MinerUJSON 的全字段原样恢复`。后者唯一的权威始终是 `mineru_base.block_json` 和 `blockid=0` 的原始字节档案。初始投影内容来源于 WP01 的保守规则，尚不等价于 V1 的全部排版/表格跨页修补，也不自动推断块的父子关系或合并跨页。
 

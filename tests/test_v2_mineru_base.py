@@ -64,14 +64,14 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual([t['name'] for t in state['tables']],['mineru_base','logical_block'])
         self.assertEqual(state['tables'][0]['columns'],list(v.COLUMNS))
         self.assertEqual(state['tables'][1]['columns'],
-            ['logical_id','base_blockid','parent_id','logical_order','markdown_text'])
+            ['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'])
         self.assertEqual(state['tableName'],'mineru_base')
         self.assertEqual(state['rowCount'],539)
         logical=v.existing_state(self.book,table='logical_block')
         self.assertEqual(logical['tableName'],'logical_block')
         self.assertEqual(logical['rowCount'],224)
         self.assertEqual(len(logical['rows']),120)
-        self.assertEqual(len(logical['columns']),5)
+        self.assertEqual(len(logical['columns']),6)
         self.assertEqual(logical['tables'],state['tables'])
         self.assertEqual(logical['blockCount'],539)
         self.assertEqual(v.dispatch('state','GET',self.book,{},
@@ -147,13 +147,13 @@ class MineruBaseTest(unittest.TestCase):
                 source_refs TEXT, attrs TEXT, revision INTEGER)""")
             db.execute("INSERT INTO logical_block VALUES(1,NULL,1,'content','text','edited','[]','{}',7)")
             db.commit()
-        with self.assertRaisesRegex(v.BaseError,'WP00'):
+        with self.assertRaisesRegex(v.BaseError,'不兼容'):
             v.existing_state(self.book)
         written=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
         self.assertTrue(written['created']);self.assertTrue(written['replaced'])
         with closing(sqlite3.connect(db_path)) as db:
             columns=[r[1] for r in db.execute('PRAGMA table_info(logical_block)')]
-            self.assertEqual(columns,['logical_id','base_blockid','parent_id','logical_order','markdown_text'])
+            self.assertEqual(columns,['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'])
             self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
             self.assertEqual(db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0],539)
         self.assertEqual(self.source.read_bytes(),self.original)

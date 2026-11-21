@@ -22,6 +22,8 @@ SCHEMA='ocr2md-v2-mineru-base/v1'
 MAX_SOURCE_FILE=64*1024*1024
 MAX_SOURCE_TOTAL=128*1024*1024
 PAGE_SIZE=120
+LEGACY_LOGICAL_COLS=('logical_id','base_blockid','parent_id','logical_order','markdown_text')
+LOGICAL_COLS=LEGACY_LOGICAL_COLS+('block_type',)
 BLOCK_LISTS=('preproc_blocks','discarded_blocks','para_blocks')
 COLUMNS=('blockid','source_path','source_sha256','page_index','page_number',
     'block_group','page_block_index','source_json_path','block_type','mineru_index',
@@ -76,13 +78,13 @@ def typed(obj,key):
     value=obj.get(key)
     return compact(value) if value is not None else None
 
-def assert_schema(db):
+def assert_schema(db, *, allow_legacy=False):
     tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
     if tables!={'mineru_base','logical_block'}:raise BaseError(409,'现有 SQLite 不符合 V2 两表结构，拒绝覆盖')
-    # WP00 must not reuse a populated WP01~03 logical table from the retired implementation.
-    expected=('logical_id','base_blockid','parent_id','logical_order','markdown_text')
-    if tuple(row[1] for row in db.execute('PRAGMA table_info(logical_block)'))!=expected:
-        raise BaseError(409,'现有 SQLite 的逻辑表结构不是 WP00，需重建同名数据库')
+    # Only the verified WP03 five-column table may be migrated in place.
+    columns=tuple(row[1] for row in db.execute('PRAGMA table_info(logical_block)'))
+    if columns!=LOGICAL_COLS and not (allow_legacy and columns==LEGACY_LOGICAL_COLS):
+        raise BaseError(409,'现有 SQLite 逻辑表结构不兼容，禁止将其当作当前逻辑状态')
     record=db.execute('SELECT block_json,record_kind FROM mineru_base WHERE blockid=0').fetchone()
     if not record or record[1]!='source_archive':raise BaseError(409,'现有 SQLite 缺少不可变原始档案')
     try: meta=json.loads(record[0])
@@ -105,6 +107,7 @@ def create_schema(db):
     CREATE TABLE logical_block(
       logical_id INTEGER PRIMARY KEY, base_blockid INTEGER,
       parent_id INTEGER, logical_order INTEGER, markdown_text TEXT,
+      block_type TEXT NOT NULL DEFAULT '',
       FOREIGN KEY(base_blockid) REFERENCES mineru_base(blockid)
     );
     ''')
@@ -143,15 +146,15 @@ def write_initial_logical(db):
     """
     if db.execute('SELECT count(*) FROM logical_block').fetchone()[0]:
         raise BaseError(409,'逻辑表已有状态，禁止初始化覆盖')
-    source=db.execute('SELECT blockid,block_group,block_json FROM mineru_base '
+    source=db.execute('SELECT blockid,block_group,block_json,block_type FROM mineru_base '
                       'WHERE blockid>0 ORDER BY blockid').fetchall()
     rows=initial_rows(source)
     para_ids={row['blockid'] for row in source if row['block_group']=='para_blocks'}
     validate_initial(rows,para_ids)
     db.executemany('INSERT INTO logical_block('
-                   'logical_id,base_blockid,parent_id,logical_order,markdown_text) '
-                   'VALUES (?,?,?,?,?)',[
-                   (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text)
+                   'logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type) '
+                   'VALUES (?,?,?,?,?,?)',[
+                   (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text,r.block_type)
                    for r in rows])
     inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
     if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
@@ -306,7 +309,7 @@ def existing_markdown(folder:Path):
     with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
         assert_schema(db)
-        rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text '
+        rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type '
                         'FROM logical_block ORDER BY logical_order').fetchall()
         if not rows:raise BaseError(409,'逻辑表尚未初始化，请重新打开已保存的工作目录')
         try:
@@ -317,6 +320,69 @@ def existing_markdown(folder:Path):
         except ValueError as error:
             raise BaseError(409,'逻辑表无法无损重构：'+str(error)) from error
         return result
+
+
+def migrate_legacy_type_column(folder: Path, common):
+    """Migrate only our known 5-column WP03 logical table, without rebuilding.
+
+    Returns None if this isn't that exact old schema (other schema handling
+    stays with the existing import flow). A populated old logic table with a
+    changed MinerU source is never silently replaced.
+    """
+    path=folder/DB_NAME
+    if path.is_symlink():raise BaseError(403,'SQLite 文件不允许是符号链接')
+    fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:
+            raise BaseError(422,'SQLite 文件类型不合法')
+    finally:os.close(fd)
+    # Probe on the same Frame-authorized workspace before any write.
+    with closing(sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True)) as readonly:
+        columns=tuple(r[1] for r in readonly.execute('PRAGMA table_info(logical_block)'))
+        if columns!=LEGACY_LOGICAL_COLS:return None
+        archive=assert_schema(readonly,allow_legacy=True)
+        row_count=readonly.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+    # Validate source identity before converting even a one-column schema.
+    sources=mineru_sources(folder)
+    if [(p,sha(raw)) for p,raw,_ in sources] != [
+            (src['path'],src['sha256']) for src in archive['sources']]:
+        if row_count:
+            raise BaseError(409,'原始 MinerU 已改变，拒绝覆盖现有五列逻辑状态')
+        return None  # empty old logic may use the safe existing rebuild path
+    common.probe(folder)
+    with closing(sqlite3.connect('file:'+str(path)+'?mode=rw',uri=True,timeout=3)) as db:
+        db.row_factory=sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        db.execute('BEGIN IMMEDIATE')
+        now=tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)'))
+        if now==LOGICAL_COLS:
+            # Another request already migrated it; don't touch existing types.
+            count=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+            db.commit()
+            return {'created':False,'migrated':False,'replaced':False,
+                    'blockCount':db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0],
+                    'logicalCount':count,'sourceCount':len(archive['sources']),'dbFile':DB_NAME}
+        if now!=LEGACY_LOGICAL_COLS:
+            raise BaseError(409,'升级期间逻辑表结构已变化，拒绝覆盖')
+        assert_schema(db,allow_legacy=True)
+        db.execute("ALTER TABLE logical_block ADD COLUMN block_type TEXT NOT NULL DEFAULT ''")
+        db.execute('UPDATE logical_block SET block_type=COALESCE(('
+                   'SELECT b.block_type FROM mineru_base AS b '
+                   "WHERE b.blockid=logical_block.base_blockid),'')")
+        existing=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+        if not existing:
+            existing=write_initial_logical(db)
+        assert_schema(db)
+        if list(db.execute('PRAGMA foreign_key_check')):
+            raise BaseError(409,'升级后逻辑关系存在无效基础块引用')
+        if any(sha(require_regular(folder/rel))!=sha(raw) for rel,raw,_ in sources):
+            raise BaseError(409,'升级期间 MinerUJSON 已改变，拒绝提交迁移')
+        block_count=db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0]
+        db.commit()
+        return {'created':False,'migrated':True,'replaced':False,
+                'blockCount':block_count,'logicalCount':existing,
+                'sourceCount':len(archive['sources']),'dbFile':DB_NAME}
 
 
 def backfill_empty_logical(folder: Path, common):
@@ -376,6 +442,8 @@ def dispatch(operation,method,folder,payload,query,common):
                 result=existing_state(folder)
             except BaseError as error:
                 if error.status!=409:raise
+                upgraded=migrate_legacy_type_column(folder,common)
+                if upgraded is not None:return upgraded
             except sqlite3.DatabaseError:
                 pass
             else:

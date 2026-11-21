@@ -2,7 +2,7 @@
 
 One initial logical unit per FINAL MinerU para_block; never duplicate
 preproc or discarded evidence as edited text. No filesystem/DB writes.
-The five-column logical_block schema is enough for the *initial flat state*;
+The six-column logical_block schema includes the current authoritative block_type;
 future splits, joins and cross-page edits need separately audited contracts.
 """
 from __future__ import annotations
@@ -18,6 +18,7 @@ class LogicalRow:
     parent_id: int | None
     logical_order: int
     markdown_text: str
+    block_type: str = ''  # current logic; never infer from base after initialization
 
 
 def lines_text(block: dict) -> str:
@@ -89,7 +90,9 @@ def initial_rows(base_rows) -> list[LogicalRow]:
         seen.add(blockid)
         block=json.loads(record['block_json'])
         if not isinstance(block,dict):raise ValueError('基础块 JSON 必须为对象')
-        result.append(LogicalRow(blockid,blockid,None,len(result)+1,project_block(block)))
+        kind=record['block_type'] if 'block_type' in record.keys() else block.get('type')
+        block_type=kind if isinstance(kind,str) else ''
+        result.append(LogicalRow(blockid,blockid,None,len(result)+1,project_block(block),block_type))
     return result
 
 
@@ -101,5 +104,5 @@ def validate_initial(rows: list[LogicalRow], base_ids: set[int]) -> None:
     if [r.logical_order for r in rows]!=list(range(1,len(rows)+1)):
         raise ValueError('逻辑块顺序不连续')
     if any(r.logical_id!=r.base_blockid or r.parent_id is not None or
-           not isinstance(r.markdown_text,str) for r in rows):
+           not isinstance(r.markdown_text,str) or not isinstance(r.block_type,str) for r in rows):
         raise ValueError('初始逻辑状态必须一对一、扁平、文本明确')

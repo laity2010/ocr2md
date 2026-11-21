@@ -101,7 +101,8 @@ function pagingControls(){
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
   if(!port)throw Error('AG 公共数据显示接口尚未就绪');
-  const columns=state.columns.map((key,index)=>({field:key,headerName:sourceHeaders[key]||key,
+  const columns=state.columns.map((key,index)=>({field:key,
+    headerName:key==='block_type'&&state.tableName==='logical_block'?'Block Type（当前）':sourceHeaders[key]||key,
     headerTooltip:key,tooltipField:key,resizable:true,sortable:true,
     minWidth:key==='block_json'?380:key==='source_json_path'?275:key==='source_sha256'?220:105,
     width:key==='blockid'?100:key==='block_json'?440:key==='original_bytes'?155:undefined,

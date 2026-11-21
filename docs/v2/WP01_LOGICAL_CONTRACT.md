@@ -6,7 +6,7 @@
 
 - `mineru_base` 无损保存 MinerU 的三组基础记录 `preproc_blocks`、`discarded_blocks`、`para_blocks`，含 `blockid=0` 原始文件归档。**三组不是 539 个独立正文**：`preproc` 是前处理证据，`discarded` 含页眉页脚、页码等。不得直接拼成可编辑正文。
 - 初始逻辑块只取 `para_blocks`，每个最终 OCR 块生成一行逻辑记录；初始一对一，样本为 **224** 条逻辑记录，对应 22 页中已归档的 539 条基础记录。其余 315 条原始记录继续可从基础表/源 JSON 恢复，不删除、不伪装成正文。
-- 当前五列结构足以**表达初始扁平逻辑状态**：`logical_id = base_blockid`（稳定原始指针）、`base_blockid` 外键指向来源、`parent_id = NULL`（未经审阅不得推断父子）、`logical_order = 1..N`（PDF 页序 → `para_blocks` 页内顺序）、`markdown_text` 为从原始内容派生的可读 Markdown。跨页不按视觉猜测合并，表格原有 `blocks` 子树仍存在原始 JSON。
+- 当前六列结构足以**表达初始扁平逻辑状态**：`logical_id = base_blockid`（稳定原始指针）、`base_blockid` 外键指向来源、`parent_id = NULL`（未经审阅不得推断父子）、`logical_order = 1..N`（PDF 页序 → `para_blocks` 页内顺序）、`markdown_text` 为从原始内容派生的可读 Markdown、`block_type` 初始复制 OCR 判断但以后单独保存可修改的当前类型。跨页不按视觉猜测合并，表格原有 `blocks` 子树仍存在原始 JSON。
 - 块组、原始页码、bbox、OCR spans、score、媒体链接和未知键**只从** `mineru_base.block_json` 查找，不另建扩展物理表；逻辑表只存当前最新编辑状态，不写历史。后续拆分一条来源成多个逻辑块、跨来源归并、父子块、span 光标定位等尚**未验证**，必须在对应航点扩展契约和测试，不能冒充 WP01 完成。
 
 ## 文字投影限制

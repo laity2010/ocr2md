@@ -41,9 +41,9 @@ class LogicalInitTest(unittest.TestCase):
                 {'mineru_base','logical_block'})
             originals=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
             expected=initial_rows(originals)
-            actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text FROM logical_block ORDER BY logical_order')]
+            actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type FROM logical_block ORDER BY logical_order')]
             self.assertEqual(len(actual),224)
-            self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text) for r in expected])
+            self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text,r.block_type) for r in expected])
             self.assertFalse(list(db.execute('PRAGMA foreign_key_check')))
         self.assertEqual(self.source.read_bytes(),self.original)
         self.assertFalse(list(self.folder.glob('.ocr2md-v2-*.tmp')))
@@ -68,7 +68,7 @@ class LogicalInitTest(unittest.TestCase):
     def test_reopen_preserves_latest_user_edited_logic(self):
         self.import_book()
         with closing(sqlite3.connect(self.db_path)) as db:
-            db.execute("UPDATE logical_block SET markdown_text='hand edited' WHERE logical_order=1")
+            db.execute("UPDATE logical_block SET markdown_text='hand edited',block_type='title' WHERE logical_order=1")
             db.commit()
             before=list(db.execute('SELECT * FROM logical_block ORDER BY logical_order'))
         outcome=self.import_book()
@@ -123,6 +123,100 @@ class LogicalInitTest(unittest.TestCase):
         repeat=self.import_book()
         self.assertEqual(repeat['logicalCount'],0)
         self.assertFalse(repeat['replaced'])
+
+    def make_five_column_database(self, *,empty=False):
+        # Reproduce the exact WP03 five-column schema and all its existing rows.
+        self.import_book()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            db.execute('CREATE TABLE previous_logic('
+                       'logical_id INTEGER PRIMARY KEY, base_blockid INTEGER,'
+                       'parent_id INTEGER, logical_order INTEGER, markdown_text TEXT,'
+                       'FOREIGN KEY(base_blockid) REFERENCES mineru_base(blockid))')
+            if not empty:
+                db.execute('INSERT INTO previous_logic SELECT '
+                           'logical_id,base_blockid,parent_id,logical_order,markdown_text FROM logical_block')
+                db.execute("UPDATE previous_logic SET markdown_text='USER FIXED',"
+                           'parent_id=(SELECT logical_id FROM previous_logic WHERE logical_order=1) '
+                           'WHERE logical_order=2')
+            db.execute('DROP TABLE logical_block')
+            db.execute('ALTER TABLE previous_logic RENAME TO logical_block')
+            db.commit()
+            old=[tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')]
+            base=[tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')]
+        return old,base
+
+    def test_migrate_populated_five_columns_preserves_edits_and_original(self):
+        old,baseline=self.make_five_column_database()
+        self.assertEqual(len(old),224)
+        with self.assertRaisesRegex(base.BaseError,'不兼容'):
+            base.existing_state(self.folder)
+        adapter=StubF02()
+        upgraded=base.dispatch('import','POST',self.folder,
+                {'confirm':'import-mineru-base'},{},adapter)
+        self.assertEqual(adapter.probes,1)
+        self.assertTrue(upgraded['migrated'])
+        self.assertFalse(upgraded['created']);self.assertFalse(upgraded['replaced'])
+        self.assertEqual(upgraded['logicalCount'],224)
+        with closing(sqlite3.connect(self.db_path)) as db:
+            rows=[tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')]
+            self.assertEqual([row[:5] for row in rows],old)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
+            self.assertTrue(all(row[5]==db.execute('SELECT block_type FROM mineru_base WHERE blockid=?',
+                                      (row[1],)).fetchone()[0] for row in rows))
+            self.assertEqual(db.execute('SELECT markdown_text FROM logical_block WHERE logical_order=2').fetchone()[0], 'USER FIXED')
+            self.assertEqual(db.execute('SELECT parent_id FROM logical_block WHERE logical_order=2').fetchone()[0],old[0][0])
+            # Deliberately change the CURRENT type to the opposite of OCR.
+            original_type=db.execute('SELECT block_type FROM mineru_base WHERE blockid=?',(rows[0][1],)).fetchone()[0]
+            current_type='manually-reviewed-title' if original_type!='manually-reviewed-title' else 'manually-reviewed-text'
+            db.execute('UPDATE logical_block SET block_type=? WHERE logical_order=1',(current_type,))
+            db.commit()
+        state=base.existing_state(self.folder,table='logical_block')
+        self.assertEqual(state['columns'],list(base.LOGICAL_COLS))
+        self.assertEqual(state['rows'][0]['block_type'],current_type)
+        second=self.import_book()
+        self.assertEqual(second['logicalCount'],224)
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(db.execute('SELECT block_type FROM logical_block WHERE logical_order=1').fetchone()[0],current_type)
+            self.assertEqual(db.execute('SELECT block_type FROM mineru_base WHERE blockid=?',(rows[0][1],)).fetchone()[0],original_type)
+        from v2_markdown_roundtrip import from_markdown
+        md=base.existing_markdown(self.folder)
+        self.assertEqual(md['segments'][0]['blockType'],current_type)
+        self.assertEqual(from_markdown(md)[0].block_type,current_type)
+        self.assertEqual(self.source.read_bytes(),self.original)
+
+    def test_migrate_empty_five_columns_and_backfill(self):
+        old,baseline=self.make_five_column_database(empty=True)
+        self.assertEqual(len(old),0)
+        upgraded=self.import_book()
+        self.assertTrue(upgraded['migrated'])
+        self.assertEqual(upgraded['logicalCount'],224)
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)')),base.LOGICAL_COLS)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
+        self.assertEqual(self.source.read_bytes(),self.original)
+
+    def test_migrate_changed_source_fails_without_dropping_old_logic(self):
+        old,baseline=self.make_five_column_database()
+        self.source.write_bytes(self.original+b' ')
+        with self.assertRaisesRegex(base.BaseError,'拒绝覆盖'):
+            self.import_book()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)')),base.LEGACY_LOGICAL_COLS)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')],old)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
+
+    def test_failed_migration_rolls_back_ddl_and_preserves_logic(self):
+        old,baseline=self.make_five_column_database()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            db.execute('CREATE TRIGGER forbid_logical_update BEFORE UPDATE ON logical_block '
+                       "BEGIN SELECT RAISE(ABORT, 'injected migration failure'); END;")
+            db.commit()
+        with self.assertRaises(sqlite3.DatabaseError):
+            self.import_book()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)')),base.LEGACY_LOGICAL_COLS)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')],old)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
 
     def test_unauthorized_legacy_initializer_is_gone(self):
         self.assertFalse(self.db_path.exists())

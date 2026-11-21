@@ -32,7 +32,7 @@ try{
    const cols=['blockid','source_path','source_sha256','page_index','page_number','block_group',
      'page_block_index','source_json_path','block_type','mineru_index','bbox_json','angle','level',
      'lines_json','blocks_json','block_json','record_kind','original_bytes'];
-   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text'];
+   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'];
    const tables=[{name:'mineru_base',columns:cols},{name:'logical_block',columns:logicalCols}];
    const rows=Array.from({length:120},(_,i)=>Object.fromEntries(cols.map(k=>[k,k==='blockid'?i+1:k==='block_type'?'text':k==='block_json'?'{"type":"text"}':null])));
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
@@ -48,7 +48,7 @@ try{
       mdRequests++;assert(logicalReady,'Markdown should only be rendered from initialized logical rows');
       assert.equal(request.method(),'GET');
       return route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify({schema:'v2-logical-md/v1',markdown:'## 只读 Markdown 🧪\n\nSome text',
+        body:JSON.stringify({schema:'v2-logical-md/v2',markdown:'## 只读 Markdown 🧪\n\nSome text',
           rowCount:224,segments:[{logicalId:1},{logicalId:2}]})});
     }
     if(op==='logical-init')throw Error('Deprecated manual initialization must never be requested');
@@ -63,7 +63,7 @@ try{
         tables,tableName:table,paraBlockCount:224,logicalCount:logicalReady?224:0,rowCount:logical?(logicalReady?224:0):539,
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
           Array.from({length:120},(_,i)=>({logical_id:i+1,base_blockid:i+1,parent_id:null,
-            logical_order:i+1,markdown_text:'reconstructed'})):[]):rows,
+            logical_order:i+1,markdown_text:'reconstructed',block_type:'text'})):[]):rows,
         offset:Number(query.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
     }
     return route.abort();
@@ -90,11 +90,14 @@ try{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
    await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
-      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===5,
+      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===6,
       null,{timeout:30000});
    const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
      .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
    assert.deepEqual(logicalHeaders,logicalCols);
+   assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
+     el=>el.v2BaseGridPort.getColumns().find(column=>column.field==='block_type').headerName),
+     'Block Type（当前）');
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 1–120 \/ 224/);
    assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),false);
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
@@ -105,7 +108,7 @@ try{
    assert.equal(mdRequests,1);
    assert.equal(await page.locator('#workspace .cm-content').first().getAttribute('contenteditable'),'false');
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
-     el=>el.v2BaseGridPort.getColumns().length),5);
+     el=>el.v2BaseGridPort.getColumns().length),6);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:mineru-base';select.dispatchEvent(new Event('change',{bubbles:true}));
    });

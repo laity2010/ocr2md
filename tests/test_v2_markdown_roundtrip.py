@@ -33,8 +33,9 @@ class MarkdownRoundtripTest(unittest.TestCase):
             before=from_sql_rows(db.execute('SELECT * FROM logical_block ORDER BY logical_order'))
             base_before=[tuple(r) for r in db.execute('SELECT * FROM mineru_base ORDER BY blockid')]
         result=base.dispatch('markdown','GET',self.book,{}, {},StubF02())
-        self.assertEqual(result['schema'],'v2-logical-md/v1')
+        self.assertEqual(result['schema'],'v2-logical-md/v2')
         self.assertEqual(result['rowCount'],224)
+        self.assertTrue(all(isinstance(segment['blockType'],str) for segment in result['segments']))
         self.assertEqual(len(result['segments']),224)
         self.assertEqual(from_markdown(result),before)
         self.assertEqual(result,base.existing_markdown(self.book))
@@ -65,10 +66,11 @@ class MarkdownRoundtripTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'数量'):
             from_markdown(changed)
     def test_roundtrip_unicode_empty_and_ancestry(self):
-        rows=[LogicalRow(1,4,None,1,'## 标题🧪'),LogicalRow(2,7,1,2,''),
-              LogicalRow(9,8,1,3,'A\n\nB\r\n表格 😀')]
+        rows=[LogicalRow(1,4,None,1,'## 标题🧪','title'),LogicalRow(2,7,1,2,'','text'),
+              LogicalRow(9,8,1,3,'A\n\nB\r\n表格 😀','table')]
         snap=to_markdown(rows)
         self.assertEqual(from_markdown(snap),rows)
+        self.assertEqual([x['blockType'] for x in snap['segments']],['title','text','table'])
         self.assertEqual(snap['lengthUtf16'],length_utf16(snap['markdown']))
         self.assertNotEqual(snap['segments'][0]['endUtf16'],snap['segments'][0]['endChar'])
         self.assertEqual(snap['segments'][1]['startChar'],snap['segments'][1]['endChar'])
