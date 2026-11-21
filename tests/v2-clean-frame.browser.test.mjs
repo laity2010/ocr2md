@@ -48,7 +48,7 @@ try{
        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true})});
      }
      if(op==='state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(imported?
-       {exists:true,blockCount:1,sourceCount:1,offset:0,tableName:'mineru_base',rowCount:1,
+       {exists:true,blockCount:1,paraBlockCount:1,logicalCount:1,sourceCount:1,offset:0,tableName:'mineru_base',rowCount:1,
         tables:[{name:'mineru_base',columns:['blockid']},{name:'logical_block',columns:['logical_id','base_blockid','parent_id','logical_order','markdown_text']}],
         columns:['blockid'],rows:[{blockid:1}]}:{exists:false})});
      return route.abort();

@@ -28,7 +28,7 @@ async function request(operation,workspace,{method='GET',offset=0,table='mineru_
   const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset),table})):'');
   const response=await fetch(url,{method,credentials:'same-origin',cache:'no-store',
     ...(method==='POST'?{headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({workspace,confirm:operation==='logical-init'?'initialize-logical':'import-mineru-base'})}:{})});
+      body:JSON.stringify({workspace,confirm:'import-mineru-base'})}:{})});
   let payload=null;try{payload=await response.json();}catch{}
   if(!response.ok){const error=Error(payload?.error||'HTTP '+response.status);error.status=response.status;throw error;}
   return payload;
@@ -74,20 +74,6 @@ function pagingControls(){
   let host=bar.querySelector('.v2-base-paging');
   if(host)return host;
   host=document.createElement('div');host.className='v2-base-paging';
-  const init=document.createElement('button');init.type='button';
-  init.className='v2-logical-init';init.textContent='初始化逻辑表';init.hidden=true;
-  init.setAttribute('aria-label','初始化逻辑表');
-  init.addEventListener('click',async()=>{
-    if(selectedTable!=='logical_block'||!bound)return;
-    init.disabled=true;
-    try{
-      const outcome=await request('logical-init',bound,{method:'POST'});
-      report(outcome.created?`✓ 逻辑表已初始化 · ${outcome.logicalCount} 块`:
-        `✓ 保留已有逻辑表 · ${outcome.logicalCount} 块`,'ok');
-      await fetchPage();
-    }catch(error){report('逻辑表初始化失败：'+error.message,'error');}
-    finally{init.disabled=false;}
-  });
   const preview=document.createElement('button');preview.type='button';
   preview.className='v2-md-readonly';preview.textContent='查看 Markdown';preview.hidden=true;
   preview.setAttribute('aria-label','查看重构 Markdown（只读）');
@@ -110,7 +96,7 @@ function pagingControls(){
   next.setAttribute('aria-label','SQL 表下一页');
   prev.addEventListener('click',()=>{offset=Math.max(0,offset-120);void fetchPage();});
   next.addEventListener('click',()=>{offset+=120;void fetchPage();});
-  host.append(init,preview,prev,label,next);bar.append(host);return host;
+  host.append(preview,prev,label,next);bar.append(host);return host;
 }
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
@@ -129,8 +115,6 @@ function renderGrid(state){
     const first=count?state.offset+1:0;
     const last=Math.min(count,state.offset+state.rows.length);
     paging.querySelector('.v2-base-count').textContent=`${tableLabel(state.tableName)} ${first}–${last} / ${count}`;
-    const init=paging.querySelector('.v2-logical-init');
-    init.hidden=!(state.tableName==='logical_block'&&count===0);
     paging.querySelector('.v2-md-readonly').hidden=!(state.tableName==='logical_block'&&count>0);
     const prev=paging.querySelector('[aria-label="SQL 表上一页"]');
     const next=paging.querySelector('[aria-label="SQL 表下一页"]');
@@ -172,12 +156,21 @@ async function ensureBase(path){
       state=await request('state',path);
     }
     if(!state.exists)throw Error('SQLite 未建立');
+    if(state.logicalCount===0 && state.paraBlockCount>0){
+      // An older WP00/WP02 database may have a valid immutable base but an
+      // empty logical table. Complete it through the same confirmed import
+      // endpoint and Frame F02 check, never by overwriting the original base.
+      report('检测到旧空逻辑表 · 正在自动补全逻辑块…');
+      await request('import',path,{method:'POST'});
+      state=await request('state',path);
+      if(state.logicalCount===0)throw Error('逻辑表自动初始化未完成');
+    }
     if(bound && bound!==path)$('#workspace #editor')?.v2ReadonlyMarkdownPort?.setMarkdown('');
     bound=path;
     revealPhysicalTables(state.tables);
-    report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 · SQL 导航已更新`,'ok');
+    report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · SQL 导航已更新`,'ok');
     if(active)await fetchPage();
-  }catch(error){report('V2 基础表初始化失败：'+error.message,'error');}
+  }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}
 }
 // This event is issued ONLY after the original F02 probe returned readable,

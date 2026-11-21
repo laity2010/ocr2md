@@ -135,6 +135,31 @@ def prepare_rows(files):
                     next_id+=1
     return archive,rows
 
+def write_initial_logical(db):
+    """Populate flat logical rows from the same already-verified base transaction.
+
+    Caller owns the write transaction, must hold a write lock and must ensure
+    the logical table is empty. Neither input JSON nor mineru_base is altered.
+    """
+    if db.execute('SELECT count(*) FROM logical_block').fetchone()[0]:
+        raise BaseError(409,'逻辑表已有状态，禁止初始化覆盖')
+    source=db.execute('SELECT blockid,block_group,block_json FROM mineru_base '
+                      'WHERE blockid>0 ORDER BY blockid').fetchall()
+    rows=initial_rows(source)
+    para_ids={row['blockid'] for row in source if row['block_group']=='para_blocks'}
+    validate_initial(rows,para_ids)
+    db.executemany('INSERT INTO logical_block('
+                   'logical_id,base_blockid,parent_id,logical_order,markdown_text) '
+                   'VALUES (?,?,?,?,?)',[
+                   (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text)
+                   for r in rows])
+    inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+    if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
+    if list(db.execute('PRAGMA foreign_key_check')):
+        raise BaseError(500,'逻辑表存在失效基础块引用')
+    return inserted
+
+
 def new_book(folder:Path,*,overwrite=False):
     files=mineru_sources(folder)
     archive,rows=prepare_rows(files)
@@ -162,13 +187,16 @@ def new_book(folder:Path,*,overwrite=False):
         os.close(fd)
         try:
             with closing(sqlite3.connect(folder/stage)) as db:
+                db.row_factory=sqlite3.Row
                 db.execute('PRAGMA foreign_keys=ON')
                 create_schema(db)
                 db.execute('INSERT INTO mineru_base(blockid,block_json,record_kind,original_bytes) VALUES (0,?,?,?)',
                     (archive_data,'source_archive',raw_archive))
                 marks=','.join('?' for _ in COLUMNS)
                 db.executemany('INSERT INTO mineru_base('+','.join(COLUMNS)+') VALUES ('+marks+')',rows)
-                db.commit()
+                # Base and initial logical content commit together in the
+                # private staged database. Neither table is published alone.
+                logical_count=write_initial_logical(db)
                 assert_schema(db)
                 if db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0]!=len(rows):
                     raise BaseError(500,'基础表入库数量核验失败')
@@ -176,6 +204,7 @@ def new_book(folder:Path,*,overwrite=False):
                 saved=json.loads(db.execute('SELECT original_bytes FROM mineru_base WHERE blockid=0').fetchone()[0]);
                 if [(v['path'],sha(base64.b64decode(v['contentBase64']))) for v in saved]!=[(v['path'],v['sha256']) for v in archive]:
                     raise BaseError(500,'MinerUJSON 原始字节归档校验失败')
+                db.commit()
             # File-by-file SHA guard before publication; JSON files remain read-only.
             for rel,raw,_ in files:
                 if sha(require_regular(folder/rel))!=sha(raw):raise BaseError(409,'导入期间 MinerUJSON 被修改，已取消')
@@ -192,7 +221,7 @@ def new_book(folder:Path,*,overwrite=False):
             try:os.unlink(stage,dir_fd=fd_parent)
             except FileNotFoundError:pass
     finally:os.close(fd_parent)
-    return {'created':True,'replaced':current is not None,'blockCount':len(rows),'sourceCount':len(files),'dbFile':DB_NAME}
+    return {'created':True,'replaced':current is not None,'blockCount':len(rows),'logicalCount':logical_count,'sourceCount':len(files),'dbFile':DB_NAME}
 
 def physical_tables(db):
     """Reflect actual user-defined SQLite tables, including empty tables.
@@ -254,9 +283,11 @@ def existing_state(folder:Path,offset=0,table='mineru_base'):
             catalog.append({'name':name,'columns':[
                 row[1] for row in db.execute('PRAGMA table_info('+identifier+')')]})
         block_count=db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0]
+        logical_count=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+        para_count=db.execute("SELECT count(*) FROM mineru_base WHERE block_group='para_blocks'").fetchone()[0]
         return {'exists':True,'dbFile':DB_NAME,'schema':SCHEMA,
             'sourceCount':len(meta['sources']),'sources':meta['sources'],
-            'blockCount':block_count,'offset':offset,'pageSize':PAGE_SIZE,
+            'blockCount':block_count,'paraBlockCount':para_count,'logicalCount':logical_count,'offset':offset,'pageSize':PAGE_SIZE,
             'tables':catalog,'tableName':chosen['name'],
             'rowCount':chosen['rowCount'],'columns':chosen['columns'],'rows':chosen['rows']}
 
@@ -277,7 +308,7 @@ def existing_markdown(folder:Path):
         assert_schema(db)
         rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text '
                         'FROM logical_block ORDER BY logical_order').fetchall()
-        if not rows:raise BaseError(409,'请先点击「初始化逻辑表」')
+        if not rows:raise BaseError(409,'逻辑表尚未初始化，请重新打开已保存的工作目录')
         try:
             originals=from_sql_rows(rows)
             result=to_markdown(originals)
@@ -288,11 +319,11 @@ def existing_markdown(folder:Path):
         return result
 
 
-def initialize_logical(folder: Path, common):
-    """WP02: explicit, idempotent initialization of the existing logic table.
+def backfill_empty_logical(folder: Path, common):
+    """Auto-complete an older valid V2 DB without touching its base archive.
 
-    The immutable base is never updated. Any non-empty logical table is the
-    latest state: preserve it instead of guessing whether it was edited.
+    Invoked only through the already-authorized, explicitly confirmed `import`
+    POST. The same source must match; non-empty state is never modified.
     """
     db_path=folder/DB_NAME
     if db_path.is_symlink():raise BaseError(403,'SQLite 文件不允许是符号链接')
@@ -300,7 +331,6 @@ def initialize_logical(folder: Path, common):
     except FileNotFoundError:raise BaseError(409,'请先初始化 MinerU 基础表')
     if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink!=1:
         raise BaseError(422,'SQLite 文件类型不合法')
-    # Only an authorized persisted workspace, never an unsaved choice.
     common.probe(folder)
     with closing(sqlite3.connect('file:'+str(db_path)+'?mode=rw',uri=True,timeout=3)) as db:
         db.row_factory=sqlite3.Row
@@ -310,29 +340,15 @@ def initialize_logical(folder: Path, common):
         sources=mineru_sources(folder)
         if [(p,sha(raw)) for p,raw,_ in sources]!=[
             (src['path'],src['sha256']) for src in meta['sources']]:
-            raise BaseError(409,'MinerU 来源与已导入基础表不一致，禁止初始化逻辑层')
+            raise BaseError(409,'MinerU 来源与基础表不一致，禁止自动补全逻辑层')
         existing=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
         if existing:
-            # Nonempty logic is the unique latest state: never regenerate it.
             db.commit()
             return {'created':False,'preserved':True,'logicalCount':existing,
                     'dbFile':DB_NAME,'baseChanged':False}
-        base=db.execute('SELECT blockid,block_group,block_json FROM mineru_base '
-                        'WHERE blockid>0 ORDER BY blockid').fetchall()
-        rows=initial_rows(base)
-        para_ids={row['blockid'] for row in base if row['block_group']=='para_blocks'}
-        validate_initial(rows,para_ids)
-        db.executemany('INSERT INTO logical_block('
-                       'logical_id,base_blockid,parent_id,logical_order,markdown_text) '
-                       'VALUES (?,?,?,?,?)',[
-                       (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text)
-                       for r in rows])
-        inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
-        if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
-        if {r[0] for r in db.execute('PRAGMA foreign_key_check')}:
-            raise BaseError(500,'逻辑表存在失效基础块引用')
+        count=write_initial_logical(db)
         db.commit()
-        return {'created':True,'preserved':False,'logicalCount':inserted,
+        return {'created':True,'preserved':False,'logicalCount':count,
                 'dbFile':DB_NAME,'baseChanged':False}
 
 def dispatch(operation,method,folder,payload,query,common):
@@ -348,11 +364,6 @@ def dispatch(operation,method,folder,payload,query,common):
         if not isinstance(table,str) or not table or len(table)>128:
             raise BaseError(422,'SQL 物理表名称无效')
         return existing_state(folder,offset,table)
-    if operation=='logical-init':
-        if method!='POST':raise BaseError(405,'逻辑块初始化仅可 POST')
-        if payload.get('confirm')!='initialize-logical':
-            raise BaseError(422,'缺少明确逻辑初始化确认')
-        return initialize_logical(folder,common)
     if operation=='import':
         if method!='POST':raise BaseError(405,'导入操作仅可 POST')
         if payload.get('confirm')!='import-mineru-base':raise BaseError(422,'缺少明确导入确认')
@@ -370,7 +381,13 @@ def dispatch(operation,method,folder,payload,query,common):
             else:
                 sources=mineru_sources(folder)
                 if [(v['path'],v['sha256']) for v in result['sources']]==[(p,sha(b)) for p,b,_ in sources]:
+                    if result['logicalCount']==0:
+                        completed=backfill_empty_logical(folder,common)
+                        return {'created':False,'replaced':False,'blockCount':result['blockCount'],
+                            'logicalCount':completed['logicalCount'],'backfilled':completed['created'],
+                            'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
                     return {'created':False,'replaced':False,'blockCount':result['blockCount'],
+                        'logicalCount':result['logicalCount'],'backfilled':False,
                         'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
                 with closing(sqlite3.connect('file:'+str(folder/DB_NAME)+'?mode=ro',uri=True)) as db:
                     if db.execute('SELECT count(*) FROM logical_block').fetchone()[0]:

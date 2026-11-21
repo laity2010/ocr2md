@@ -24,7 +24,8 @@ class MarkdownRoundtripTest(unittest.TestCase):
         base.new_book(self.book)
     def tearDown(self):self.tmp.cleanup()
     def initialize(self):
-        base.dispatch('logical-init','POST',self.book,{'confirm':'initialize-logical'},{},StubF02())
+        # Auto-generated in the same staged database import as mineru_base.
+        self.assertEqual(base.existing_state(self.book)['logicalCount'],224)
     def test_full_224_roundtrip_and_no_sql_or_mineru_mutation(self):
         self.initialize()
         with closing(sqlite3.connect(self.book/base.DB_NAME)) as db:
@@ -49,8 +50,6 @@ class MarkdownRoundtripTest(unittest.TestCase):
             self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},{'mineru_base','logical_block'})
         self.assertEqual(self.source.read_bytes(),self.original)
     def test_missing_init_and_tampering_fail_closed(self):
-        with self.assertRaisesRegex(base.BaseError,'初始化逻辑表'):
-            base.existing_markdown(self.book)
         self.initialize()
         snap=base.existing_markdown(self.book)
         changed=copy.deepcopy(snap);changed['markdown']=snap['markdown'].replace('Bufett','Buffett',1)

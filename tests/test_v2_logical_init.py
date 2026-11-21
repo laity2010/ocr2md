@@ -1,7 +1,7 @@
-"""WP02: work only in disposable SQL + MinerUJSON fixtures, never user files."""
+"""V2 auto-init contracts: use disposable books, never the user's SQL/JSON."""
 from contextlib import closing
 from pathlib import Path
-import hashlib,json,shutil,sqlite3,sys,tempfile,types,io
+import json,shutil,sqlite3,sys,tempfile,types,io
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
@@ -22,67 +22,116 @@ class LogicalInitTest(unittest.TestCase):
         self.source=self.folder/'minerujson'/FIXTURE.name
         shutil.copyfile(FIXTURE,self.source)
         self.original=self.source.read_bytes()
-        base.new_book(self.folder)
         self.db_path=self.folder/base.DB_NAME
     def tearDown(self):self.tmp.cleanup()
-    def test_explicit_init_exact_224_preserves_base_and_source(self):
-        with closing(sqlite3.connect(self.db_path)) as db:
-            before=list(db.execute('SELECT * FROM mineru_base ORDER BY blockid'))
-        baseline=base.existing_state(self.folder,table='logical_block')
-        self.assertEqual(baseline['rowCount'],0)
-        a=StubF02()
-        result=base.dispatch('logical-init','POST',self.folder,
-                {'confirm':'initialize-logical'},{},a)
-        self.assertTrue(result['created']);self.assertFalse(result['preserved'])
-        self.assertEqual(result['logicalCount'],224)
-        self.assertFalse(result['baseChanged'])
-        self.assertEqual(a.probes,1)
+    def import_book(self):
+        return base.dispatch('import','POST',self.folder,
+            {'confirm':'import-mineru-base'},{},StubF02())
+    def test_single_import_creates_base_and_logical_atomically(self):
+        adapter=StubF02()
+        result=base.dispatch('import','POST',self.folder,
+            {'confirm':'import-mineru-base'},{},adapter)
+        self.assertTrue(result['created'])
+        self.assertEqual((result['blockCount'],result['logicalCount']),(539,224))
+        self.assertEqual(adapter.probes,1)
         with closing(sqlite3.connect(self.db_path)) as db:
             db.row_factory=sqlite3.Row
-            self.assertEqual(len(list(db.execute('SELECT * FROM mineru_base'))),540)
-            self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},{'mineru_base','logical_block'})
-            after=[tuple(x) for x in db.execute('SELECT * FROM mineru_base ORDER BY blockid')]
-            self.assertEqual(before,after)
-            base_rows=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
-            wanted=initial_rows(base_rows)
+            self.assertEqual(db.execute('SELECT count(*) FROM mineru_base').fetchone()[0],540)
+            self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
+                {'mineru_base','logical_block'})
+            originals=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
+            expected=initial_rows(originals)
             actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text FROM logical_block ORDER BY logical_order')]
-            self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text) for r in wanted])
+            self.assertEqual(len(actual),224)
+            self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text) for r in expected])
             self.assertFalse(list(db.execute('PRAGMA foreign_key_check')))
-        logical=base.existing_state(self.folder,table='logical_block')
-        self.assertEqual(logical['rowCount'],224)
-        self.assertEqual(len(logical['rows']),120)
-        self.assertEqual(len(base.existing_state(self.folder,offset=120,table='logical_block')['rows']),104)
         self.assertEqual(self.source.read_bytes(),self.original)
+        self.assertFalse(list(self.folder.glob('.ocr2md-v2-*.tmp')))
+        self.assertEqual(self.import_book()['logicalCount'],224)
         for suf in ('-wal','-shm','-journal'):self.assertFalse((self.folder/(base.DB_NAME+suf)).exists())
-    def test_reinit_idempotent_and_protect_future_edit(self):
+    def test_previous_empty_logical_table_is_auto_backfilled_without_base_change(self):
+        base.new_book(self.folder)
+        with closing(sqlite3.connect(self.db_path)) as db:
+            db.execute('DELETE FROM logical_block');db.commit()
+            before=list(db.execute('SELECT * FROM mineru_base ORDER BY blockid'))
+        self.assertEqual(base.existing_state(self.folder)['logicalCount'],0)
         adapter=StubF02()
-        self.assertTrue(base.dispatch('logical-init','POST',self.folder,{'confirm':'initialize-logical'},{},adapter)['created'])
+        result=base.dispatch('import','POST',self.folder,{'confirm':'import-mineru-base'},{},adapter)
+        self.assertFalse(result['created']);self.assertFalse(result['replaced'])
+        self.assertTrue(result['backfilled']);self.assertEqual(result['logicalCount'],224)
+        self.assertEqual(adapter.probes,1)
         with closing(sqlite3.connect(self.db_path)) as db:
-            db.execute("UPDATE logical_block SET markdown_text='hand edited' WHERE logical_order=1");db.commit()
-        outcome=base.dispatch('logical-init','POST',self.folder,{'confirm':'initialize-logical'},{},adapter)
-        self.assertFalse(outcome['created']);self.assertTrue(outcome['preserved'])
-        self.assertEqual(outcome['logicalCount'],224)
+            self.assertEqual(list(db.execute('SELECT * FROM mineru_base ORDER BY blockid')),before)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+        repeat=self.import_book()
+        self.assertFalse(repeat['backfilled']);self.assertEqual(repeat['logicalCount'],224)
+    def test_reopen_preserves_latest_user_edited_logic(self):
+        self.import_book()
         with closing(sqlite3.connect(self.db_path)) as db:
-            self.assertEqual(db.execute('SELECT markdown_text FROM logical_block WHERE logical_order=1').fetchone()[0],'hand edited')
-        self.assertEqual(adapter.probes,2)
-    def test_unapproved_and_changed_source_fail_closed(self):
-        with self.assertRaisesRegex(base.BaseError,'确认'):
-            base.dispatch('logical-init','POST',self.folder,{}, {},StubF02())
-        self.assertEqual(base.existing_state(self.folder,table='logical_block')['rowCount'],0)
-        before=self.db_path.read_bytes()
-        self.source.write_bytes(self.original+b' ')
-        with self.assertRaisesRegex(base.BaseError,'来源'):
-            base.dispatch('logical-init','POST',self.folder,{'confirm':'initialize-logical'},{},StubF02())
-        self.assertEqual(self.db_path.read_bytes(),before)
-        self.assertEqual(base.existing_state(self.folder,table='logical_block')['rowCount'],0)
-        # Existing latest logical state must not be silently overwritten by import.
-        self.source.write_bytes(self.original)
-        base.dispatch('logical-init','POST',self.folder,{'confirm':'initialize-logical'},{},StubF02())
+            db.execute("UPDATE logical_block SET markdown_text='hand edited' WHERE logical_order=1")
+            db.commit()
+            before=list(db.execute('SELECT * FROM logical_block ORDER BY logical_order'))
+        outcome=self.import_book()
+        self.assertFalse(outcome['created']);self.assertFalse(outcome['backfilled'])
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(list(db.execute('SELECT * FROM logical_block ORDER BY logical_order')),before)
+    def test_no_partial_new_database_if_initial_mapping_fails(self):
+        with patch.object(base,'write_initial_logical',side_effect=ValueError('injected')):
+            with self.assertRaisesRegex(ValueError,'injected'):
+                self.import_book()
+        self.assertFalse(self.db_path.exists())
+        self.assertFalse(list(self.folder.glob('.ocr2md-v2-*.tmp')))
+        self.assertEqual(self.source.read_bytes(),self.original)
+    def test_changed_source_and_denied_confirm_never_mutate_existing_state(self):
+        self.import_book()
+        old=self.db_path.read_bytes()
         self.source.write_bytes(self.original+b' ')
         with self.assertRaisesRegex(base.BaseError,'禁止自动覆盖'):
-            base.dispatch('import','POST',self.folder,{'confirm':'import-mineru-base'},{},StubF02())
-        self.assertEqual(base.existing_state(self.folder,table='logical_block')['rowCount'],224)
-    def test_http_auth_and_confirm_gate(self):
+            self.import_book()
+        self.assertEqual(self.db_path.read_bytes(),old)
+        self.source.write_bytes(self.original)
+        with self.assertRaisesRegex(base.BaseError,'确认'):
+            base.dispatch('import','POST',self.folder,{}, {},StubF02())
+        self.assertEqual(self.db_path.read_bytes(),old)
+    def test_bad_source_rejected_on_old_empty_backfill(self):
+        self.import_book()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            db.execute('DELETE FROM logical_block');db.commit()
+        before=self.db_path.read_bytes()
+        self.source.write_bytes(self.original+b' ')
+        # If old base and source differ, a rebuilt database is permitted only
+        # when there is no latest logical state to preserve; it is not an
+        # in-place backfill of obsolete source rows.
+        outcome=self.import_book()
+        self.assertTrue(outcome['replaced']);self.assertEqual(outcome['logicalCount'],224)
+        self.assertNotEqual(self.db_path.read_bytes(),before)
+    def test_valid_empty_paragraph_source_is_a_valid_zero_row_logical_table(self):
+        import json
+        doc=json.loads(self.original)
+        for page in doc['pdf_info']:
+            page['para_blocks']=[]
+        self.source.write_text(json.dumps(doc,ensure_ascii=False))
+        result=self.import_book()
+        self.assertEqual(result['logicalCount'],0)
+        state=base.existing_state(self.folder)
+        self.assertEqual(state['paraBlockCount'],0)
+        self.assertEqual(state['logicalCount'],0)
+        self.assertEqual(state['tables'][1]['name'],'logical_block')
+        self.assertEqual(base.existing_state(self.folder,table='logical_block')['rows'],[])
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],0)
+        repeat=self.import_book()
+        self.assertEqual(repeat['logicalCount'],0)
+        self.assertFalse(repeat['replaced'])
+
+    def test_unauthorized_legacy_initializer_is_gone(self):
+        self.assertFalse(self.db_path.exists())
+        with self.assertRaisesRegex(base.BaseError,'未知'):
+            base.dispatch('logical-init','POST',self.folder,
+                {'confirm':'initialize-logical'},{},StubF02())
+        self.assertFalse(self.db_path.exists())
+
+    def test_http_auth_and_confirm_gate_for_combined_import(self):
         def call(cookie,origin,confirm):
             req={'workspace':str(self.folder),'confirm':confirm}
             payload=json.dumps(req).encode()
@@ -90,13 +139,15 @@ class LogicalInitTest(unittest.TestCase):
             handler=types.SimpleNamespace(command='POST',headers={'Origin':origin,'Cookie':cookie,
                 'Content-Length':str(len(payload))},rfile=io.BytesIO(payload),
                 respond=lambda status,data,*args:responses.append((status,json.loads(data))))
-            base.handle(handler,'logical-init',types.SimpleNamespace(query=''),f02)
+            base.handle(handler,'import',types.SimpleNamespace(query=''),f02)
             return responses[0]
         with patch.object(f02,'authorized_roots',side_effect=lambda cookie:
             [self.folder] if cookie=='yes' else (_ for _ in ()).throw(f02.WorkspaceIOError(403,'未授权'))):
-            self.assertEqual(call('no','https://ocr2md.laity.bid','initialize-logical')[0],403)
-            self.assertEqual(call('yes','https://evil.invalid','initialize-logical')[0],403)
+            self.assertEqual(call('no','https://ocr2md.laity.bid','import-mineru-base')[0],403)
+            self.assertEqual(call('yes','https://evil.invalid','import-mineru-base')[0],403)
             self.assertEqual(call('yes','https://ocr2md.laity.bid','wrong')[0],422)
-            self.assertEqual(base.existing_state(self.folder,table='logical_block')['rowCount'],0)
-            self.assertEqual(call('yes','https://ocr2md.laity.bid','initialize-logical')[1]['logicalCount'],224)
+            self.assertFalse(self.db_path.exists())
+            result=call('yes','https://ocr2md.laity.bid','import-mineru-base')
+            self.assertEqual(result[0],200)
+            self.assertEqual(result[1]['logicalCount'],224)
 if __name__=='__main__':unittest.main()

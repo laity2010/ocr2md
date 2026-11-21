@@ -17,7 +17,7 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1280,height:850}});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalPostCount=0,logicalReady=false,mdRequests=0,probeCount=0;
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalReady=false,mdRequests=0,probeCount=0;
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -39,8 +39,10 @@ try{
     const request=route.request();const op=new URL(request.url()).pathname.split('/').at(-1);
     if(op==='import'){
       postCount++;assert.equal(request.postDataJSON().confirm,'import-mineru-base');
-      exists=true;
-      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true,blockCount:539,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
+      const created=exists==='retired-v2';
+      exists=true;logicalReady=true;
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created,
+        backfilled:!created,blockCount:539,logicalCount:224,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
     }
     if(op==='markdown'){
       mdRequests++;assert(logicalReady,'Markdown should only be rendered from initialized logical rows');
@@ -49,14 +51,7 @@ try{
         body:JSON.stringify({schema:'v2-logical-md/v1',markdown:'## 只读 Markdown 🧪\n\nSome text',
           rowCount:224,segments:[{logicalId:1},{logicalId:2}]})});
     }
-    if(op==='logical-init'){
-      logicalPostCount++;
-      assert.equal(request.postDataJSON().confirm,'initialize-logical');
-      assert.equal(logicalReady,false,'logical initialization only once');
-      logicalReady=true;
-      return route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify({created:true,preserved:false,logicalCount:224,baseChanged:false})});
-    }
+    if(op==='logical-init')throw Error('Deprecated manual initialization must never be requested');
     if(op==='state'&&exists==='retired-v2')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'现有 SQLite 不符合 V2 两表结构，拒绝覆盖'})});
     if(op==='state'){
       const query=new URL(request.url()).searchParams;
@@ -65,7 +60,7 @@ try{
       assert(['mineru_base','logical_block'].includes(table));
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
         {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,
-        tables,tableName:table,rowCount:logical?(logicalReady?224:0):539,
+        tables,tableName:table,paraBlockCount:224,logicalCount:logicalReady?224:0,rowCount:logical?(logicalReady?224:0):539,
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
           Array.from({length:120},(_,i)=>({logical_id:i+1,base_blockid:i+1,parent_id:null,
             logical_order:i+1,markdown_text:'reconstructed'})):[]):rows,
@@ -89,8 +84,8 @@ try{
      {label:'基础表 · mineru_base',value:'sql:mineru-base'},
      {label:'逻辑表 · logical_block',value:'sql:logical_block'}
    ]);
-   // Empty logical_block is still a physical table; choosing it must create
-   // 5 actual AG columns rather than hide the entry or show the MinerU grid.
+   // Both physical tables are populated atomically during initial import;
+   // choosing logical_block must open its 5-column AG view without a click.
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
@@ -100,14 +95,9 @@ try{
    const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
      .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
    assert.deepEqual(logicalHeaders,logicalCols);
-   assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 0–0 \/ 0/);
-   assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),true);
-   const init=page.getByRole('button',{name:'初始化逻辑表'});
-   assert.equal(await init.isVisible(),true,'Initialize action appears ONLY for empty logical table');
-   await init.click();
-   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('1–120 / 224'),null,{timeout:20000});
-   assert.equal(logicalPostCount,1);
-   assert.equal(await init.isVisible(),false,'Initialize button hides once logical data exists');
+   assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 1–120 \/ 224/);
+   assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),false);
+   assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    const mdButton=page.getByRole('button',{name:'查看重构 Markdown（只读）'});
    assert.equal(await mdButton.isVisible(),true);
    await mdButton.click();
@@ -128,8 +118,16 @@ try{
    await page.getByRole('button',{name:'SQL 表下一页'}).click();
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
    assert.equal(postCount,1);
+   // Simulate a previously-created WP00 SQLite with an empty logical table:
+   // the next verified reopen automatically backfills through the SAME import
+   // endpoint. The user must not click a separate initializer.
+   logicalReady=false;
+   await page.reload({waitUntil:'domcontentloaded'});
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪'),null,{timeout:25000});
+   assert.equal(postCount,2,'previous empty logical table should auto-backfill once');
+   assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    assert.deepEqual(errors,[]);
-   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,logicalPostCount,mdRequests,probeCount}));
+   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,mdRequests,probeCount}));
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

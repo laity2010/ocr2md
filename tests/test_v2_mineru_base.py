@@ -38,7 +38,7 @@ class MineruBaseTest(unittest.TestCase):
         db=sqlite3.connect(self.book/v.DB_NAME)
         self.assertEqual({row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
             {'mineru_base','logical_block'})
-        self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],0)
+        self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
         blocks=db.execute('SELECT blockid,block_group,source_json_path,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid').fetchall()
         self.assertEqual(len(blocks),539)
         self.assertEqual([r[0] for r in blocks],list(range(1,540)))
@@ -69,18 +69,18 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual(state['rowCount'],539)
         logical=v.existing_state(self.book,table='logical_block')
         self.assertEqual(logical['tableName'],'logical_block')
-        self.assertEqual(logical['rowCount'],0)
-        self.assertEqual(logical['rows'],[])
+        self.assertEqual(logical['rowCount'],224)
+        self.assertEqual(len(logical['rows']),120)
         self.assertEqual(len(logical['columns']),5)
         self.assertEqual(logical['tables'],state['tables'])
         self.assertEqual(logical['blockCount'],539)
         self.assertEqual(v.dispatch('state','GET',self.book,{},
-            {'table':['logical_block']},StubF02())['rowCount'],0)
+            {'table':['logical_block']},StubF02())['rowCount'],224)
         with self.assertRaisesRegex(v.BaseError,'不存在'):
             v.dispatch('state','GET',self.book,{},
                 {'table':['mineru_base; DROP TABLE logical_block']},StubF02())
         with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
             self.assertEqual(db.execute('SELECT count(*) FROM mineru_base').fetchone()[0],540)
         self.assertEqual(self.source.read_bytes(),self.original)
 
@@ -104,6 +104,9 @@ class MineruBaseTest(unittest.TestCase):
         v.new_book(self.book)
         with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
             oldsha=db.execute('SELECT source_sha256 FROM mineru_base WHERE blockid=1').fetchone()[0]
+        # Only a legacy empty logic table may be rebuilt due to source changes.
+        with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
+            db.execute('DELETE FROM logical_block');db.commit()
         self.source.write_bytes(self.original+b' ')
         result=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
         self.assertTrue(result['created']);self.assertTrue(result['replaced'])
@@ -151,7 +154,7 @@ class MineruBaseTest(unittest.TestCase):
         with closing(sqlite3.connect(db_path)) as db:
             columns=[r[1] for r in db.execute('PRAGMA table_info(logical_block)')]
             self.assertEqual(columns,['logical_id','base_blockid','parent_id','logical_order','markdown_text'])
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
             self.assertEqual(db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0],539)
         self.assertEqual(self.source.read_bytes(),self.original)
 
