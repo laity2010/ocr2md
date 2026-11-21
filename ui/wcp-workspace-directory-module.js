@@ -88,7 +88,7 @@ export function createWorkspaceDirectoryModule(directoryPort,onStatus=()=>{}){
           return;
         }
         if(!mounted)await loadDirectoryRoots();
-        else await mounted.refresh({announce:true});
+        else await mounted.refresh({announce:true,reloadRoots:true});
       }catch(error){status('目录刷新失败：'+error.message,'error');}
       finally{refreshButton.disabled=false;}
     });

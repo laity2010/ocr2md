@@ -1,6 +1,6 @@
 # OCR2MD · V2 · MinerU 无损基础表（Lab-Frame）
 
-本 WP00 是在已验收的 Lab-Frame SHA `2da79064a83e0e91b82b4bff93fd42c19363d7b9` 之上重建的独立框架型 V2，保留 Frame 独立授权与 F02 文件读写能力；WP01～WP03 业务代码已可追溯撤销。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
+本 WP00 是在已验收的 Lab-Frame SHA `da903ef8e37e98931d4809e65e6052c653be7f1b` 之上重建的独立框架型 V2，保留 Frame 独立授权与 F02 文件读写能力；WP01～WP03 业务代码已可追溯撤销。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
 
 ## 单一权威与不可触碰范围
 
@@ -25,6 +25,7 @@
 
 - 目录列表现在直接调用公共 Frame `GET /labs/lab-frame/api/workspace-io/{roots,browse}`；不调用 Main `/api/session`、`/api/workspace/roots` 或 Main 本地端口。Lab-Frame 的 `ui/frame/access-auth.js` 在「工作区 → 资料目录 → 浏览目录」的**同一目录树区域**展示访问码输入框与「授权 Frame」按钮（不在顶栏、不使用弹窗），用户输入 Frame 独立访问码后，通过私有 F02 session/unlock 签发并校验 7 天 HttpOnly/Secure Cookie，成功即自动加载目录树。
 - 权限由 Frame 私有 `ocr2md/.ops/frame-access.json` 的 `0600` 配置、允许的目录白名单和签名会话共同决定，绝不允许无认证读写、路径穿越或打开全盘目录。V2 仅调用 Frame F02 `authorized_roots`、`checked_workspace`、`probe` 公共能力，不另建登录页、权限状态或文件接口。
+- Frame 与 V2 手动点击「刷新目录」会重取最新授权根目录（含已置顶的 Obsidian 快捷目录），不会因原有树缓存隐藏新配置。后台轮询仍只更新展开的文件夹内容。
 - 在 Main 未启动或编辑授权不可用时，Frame 和 V2 的目录访问与读写不应受其影响；公网与 LAN 的 Cookie 仍分别属于各自站点。用户可以在 Mac 运行 `python3 scripts/frame_access_setup.py --show-code` 获取 Frame 自己的访问码。框架单测与浏览器模拟不代替真实 iPad Safari 验收。
 
 ## 业务 API 与窗口
