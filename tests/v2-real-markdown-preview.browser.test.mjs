@@ -34,7 +34,8 @@ try{
     if(i===99)throw Error('V2 fixture server failed '+logs);
     await sleep(200);
   }
-  for(const [name,engine] of [['Chromium',chromium],['iPad-WebKit',webkit]]){
+  for(const [name,engine] of [['Chromium',chromium],['iPad-WebKit',webkit]]
+    .filter(([name])=>!process.env.V2_TEST_BROWSER||name===process.env.V2_TEST_BROWSER)){
     const browser=await engine.launch({headless:true});
     try{
       const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:834,height:1112}:{width:1100,height:900},
@@ -72,12 +73,12 @@ try{
         'lines_json','blocks_json','block_json','record_kind','original_bytes'];
       const logicCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'];
       const tables=[{name:'mineru_base',columns:baseCols},{name:'logical_block',columns:logicCols}];
-      let sqlPosts=0,markdownGets=0;
+      let sqlPosts=0,markdownGets=0,pdfGets=0;
       await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
         const req=route.request();const op=new URL(req.url()).pathname.split('/').at(-1);
         if(op==='import'){sqlPosts++;return route.fulfill({status:500,contentType:'application/json',body:'{"error":"No DB import in WP04"}'});}
         if(op==='pdf-map')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(projection)});
-        if(op==='pdf')return route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes});
+        if(op==='pdf'){pdfGets++;return route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes});}
         if(op==='markdown'){markdownGets++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(snapshot)});}
         if(op==='state'){
           const query=new URL(req.url()).searchParams;
@@ -191,6 +192,72 @@ try{
       assert.deepEqual(density.overText,[],name+' PBS labels must stay outside OCR rectangles');
       assert(density.lanes.every(n=>Number.isInteger(n)&&n>=0),density);
       assert(density.maxLane>=1,'actual V1 must use multiple outward tracks; single left/right rail is NOT accepted');
+      // USER SAFARI REGRESSION: split OFF -> PDF in preview dropdown -> split ON
+      // must preserve the original V1 PDF.js viewer/worker and all PBS overlays.
+      const split=page.locator('#workspace .ocr-preview-split-toggle input');
+      const previewMode=page.locator('#workspace .ocr-preview-mode');
+      const livePdf=()=>page.locator('#workspace .ocr-preview-pdf-host');
+      assert.equal(await split.isChecked(),true,'V2 starts split with detached PDF');
+      assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true);
+      assert.equal(pdfGets,1,'initial real PDF downloaded exactly once');
+      await page.evaluate(()=>window.__v2PreviewInstance=
+        document.querySelector('#workspace .ocr-preview-pdf-host').v2PDFPort.getV1Preview());
+      for(let cycle=0;cycle<2;cycle++){
+        await split.uncheck();
+        await page.waitForFunction(()=>document.querySelectorAll('#workspace .dv-content-container').length===3,
+          null,{timeout:12000});
+        assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),false,
+          'unsplit must enable PDF in preview dropdown');
+        await previewMode.selectOption('pdf');
+        await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pane')?.dataset.previewMode==='pdf'&&
+          !!document.querySelector('#workspace .ocr-preview-pane>.ocr-preview-pdf-host'),null,{timeout:12000});
+        assert.equal(await page.locator('#workspace .ocr-preview-pane .ocr-preview-pdf-host').isVisible(),true);
+        assert.equal(await page.locator('#workspace .ocr-preview-pane .lab-ocr-pdf-controls').count(),1,
+          'original V1 toolbar must move into the single preview pane');
+        assert.equal(await page.locator('#workspace .ocr-preview-pane .ocr-preview-pdf-host').evaluate(el=>
+          el.v2PDFPort.getV1Preview()===window.__v2PreviewInstance),true,
+          'unsplit must NOT recreate the V1 PDF viewer');
+        assert.equal(await page.locator('#workspace .ocr-preview-pane .ocr-preview-pdf-host').evaluate(el=>
+          el.v2PDFPort.getState().loaded),true);
+        assert.equal(pdfGets,1,'unsplit must not refetch PDF bytes');
+        try{
+          await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pane .lab-ocr-pdf-pbs-tag[data-block-id="23"]'),
+            null,{timeout:12000});
+        }catch(error){
+          console.log('SPLIT_UNSPLIT_PDF_DETAIL',name,cycle,JSON.stringify(
+            await page.locator('#workspace .ocr-preview-pane').evaluate(el=>{
+              const p=el.querySelector('.ocr-preview-pdf-host'),v=p?.v2PDFPort?.getV1Preview();
+              return {mode:el.dataset.previewMode,pdfPort:p?.v2PDFPort?.getState(),
+                toolbar:el.querySelector('.lab-ocr-pdf-controls')?.outerHTML?.slice(0,320),
+                pane:{w:el.clientWidth,h:el.clientHeight},pdf:{w:p?.clientWidth,h:p?.clientHeight},
+                scroller:{w:p?.querySelector('.lab-ocr-pdf-scroller')?.clientWidth,
+                  h:p?.querySelector('.lab-ocr-pdf-scroller')?.clientHeight,
+                  top:p?.querySelector('.lab-ocr-pdf-scroller')?.scrollTop},
+                pagecount:p?.querySelectorAll('.page').length,
+                firstPage:p?.querySelector('.page')?.outerHTML?.slice(0,400),
+                tags:p?.querySelectorAll('.lab-ocr-pdf-pbs-tag').length,
+                covers:p?.querySelectorAll('.lab-ocr-pdf-overlay-box').length,
+                canvas:p?.querySelectorAll('canvas').length,
+                statuses:window.__v2PdfStatuses.slice(-15),
+              };
+            })));
+          throw error;
+        }
+        await previewMode.selectOption('md');
+        assert.equal(await page.locator('#workspace .ocr-preview-pane').getAttribute('data-preview-mode'),'md');
+        assert.equal(await page.locator('#workspace .ocr-preview-pane .ocr-preview-md-scroll').isVisible(),true);
+        await split.check();
+        await page.waitForFunction(()=>document.querySelectorAll('#workspace .dv-content-container').length===4&&
+          !!document.querySelector('#workspace .ocr-detached-pdf-pane .ocr-preview-pdf-host'),null,{timeout:12000});
+        assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true);
+        assert.equal(await livePdf().evaluate(el=>el.v2PDFPort.getV1Preview()===window.__v2PreviewInstance),true,
+          'resplit must reparent the SAME V1 PDF viewer');
+        assert.equal(await page.locator('#workspace .ocr-detached-pdf-pane .lab-ocr-pdf-controls').count(),1);
+        await page.waitForFunction(()=>document.querySelector('#workspace .ocr-detached-pdf-pane .lab-ocr-pdf-pbs-tag[data-block-id="23"]'),
+          null,{timeout:12000});
+        assert.equal(pdfGets,1,'resplit cannot re-download or clear the PDF');
+        assert.equal(await page.locator('#workspace .ocr-preview-pane .ocr-preview-md-scroll').isVisible(),true);
+      }
       const boxSelector='#workspace .lab-ocr-pdf-overlay-box[data-block-ids="23"]';
       const coverBefore=await page.locator(boxSelector).first().evaluate(el=>({
         left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,

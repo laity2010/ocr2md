@@ -44,17 +44,34 @@ export default defineConfig({
         // V2-only build adapter: replace Frame's single empty EditorView mount,
         // NOT its shared layout or a second editor/instance.
         code=exact(code,"import {EditorState} from '@codemirror/state';",
-          "import {mountV2PDF} from '../v2-pdf-viewer.js';\nimport {mountV2MarkdownPreview} from '../v2-markdown-preview.js';\nimport {mountV2Source} from '../v2-source-session.js';\nimport {EditorState} from '@codemirror/state';",
+          "import {mountV2PreviewSlot,mountV2DetachedPDF} from '../v2-preview-slot.js';\nimport {mountV2Source} from '../v2-source-session.js';\nimport {EditorState} from '@codemirror/state';",
           'single CM6 source adapter import');
         code=exact(code,'element.append(body);owned=()=>mountEmptySource(body);',
           'element.append(body);owned=()=>mountV2Source(body);',
           'single V2 source editor mount');
+        // Adapt the V1 lab-ocr Frame PDF slot without changing Frame source.
+        // PDF.js ownership is the preview pane, not the disposable split panel.
+        code=exact(code,"function blankPane(name,onSplit,onModuleChange){",
+          "function blankPane(name,onSplit,onModuleChange,pdfSlot){",
+          'V1 PDF slot passed into Frame pane');
+        code=exact(code,"  let split=false;\n  const dockview=createDockview",
+          "  let split=false;\n  const pdfSlot={preview:null,detached:null,current:null};\n  const dockview=createDockview",
+          'V1 single PDF.js owner');
+        code=exact(code,"blankPane(name,setSplit,onModuleChange)",
+          "blankPane(name,setSplit,onModuleChange,pdfSlot)",
+          'Frame PDF slot propagation');
+        code=exact(code,'<option value="pdf" disabled>PDF 原文</option>',
+          '<option value="pdf">PDF 原文</option>',
+          'V1 unsplit PDF option');
         code=exact(code,"element.append(area);\n    element.setAttribute('aria-label','Markdown 预览（空白）');",
-          "element.append(area);owned=()=>mountV2MarkdownPreview(area);\n    element.setAttribute('aria-label','Markdown 阅读预览');",
-          'V1 Markdown renderer in original Frame preview pane');
+          "const pdfTools=document.createElement('div');pdfTools.className='ocr-preview-mode-tools';pdfTools.dataset.mode='pdf';pdfTools.hidden=true;bar.append(pdfTools);\n"+
+          "const pdfSurface=document.createElement('div');pdfSurface.className='ocr-preview-pdf-host';pdfSurface.dataset.pdfTheme='dark';\n"+
+          "element.append(area,pdfSurface);owned=()=>mountV2PreviewSlot({pane:element,mdScroller:area,modeSelect:mode,pdfSurface,pdfTools,pdfSlot});\n"+
+          "element.setAttribute('aria-label','Markdown / PDF 预览');",
+          'V1 permanent PDF and Markdown preview slot');
         code=exact(code,'host.append(surface);element.append(host);',
-          'host.append(surface);element.append(host);owned=()=>mountV2PDF(surface);',
-          'V1 PDF.js viewer in original Frame detached PDF pane');
+          'host.append(surface);element.append(host);owned=()=>mountV2DetachedPDF({surface,actions,pdfSlot});',
+          'V1 move the SAME PDF viewer and native controls');
         return exact(code,'return {dispose(){grid.destroy();},layout:()=>{}};',
           "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs(),onRowClicked:handler=>{grid.addEventListener('rowClicked',handler);return ()=>grid.removeEventListener('rowClicked',handler);},focusRow:(field,id)=>{grid.setGridOption('rowClassRules',{'v2-sync-ag-row':p=>p.data?.[field]===id});grid.redrawRows();for(let i=0;i<grid.getDisplayedRowCount();i++){const node=grid.getDisplayedRowAtIndex(i);if(node?.data?.[field]===id){grid.ensureIndexVisible(i,'auto');return true;}}return false;}});return {dispose(){grid.destroy();},layout:()=>{}};",
           'AG view data port');
@@ -66,7 +83,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp04-v1-pdf-pbs-four-pane-f02',
+        stage:'wp04-v1-pdf-slot-restore-split-f02',
       })+'\n'});
     },
   }],

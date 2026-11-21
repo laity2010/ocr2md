@@ -12,8 +12,8 @@ const $=selector=>document.querySelector(selector);
 function notify(text,kind='info'){
   document.dispatchEvent(new CustomEvent('v2-pdf-status',{detail:{text,kind}}));
 }
-export function mountV2PDF(host){
-  const toolbar=host.closest('.ocr-detached-pdf-pane')?.querySelector('.ocr-detached-pdf-tools');
+export function mountV2PDF(host,{toolbar}={}){
+  toolbar??=host.closest('.ocr-detached-pdf-pane')?.querySelector('.ocr-detached-pdf-tools');
   if(!toolbar)throw Error('Frame PDF toolbar missing');
   let native=null,projection=null,workspace='',disposed=false,generation=0;
   let ready=false,selectedId=null,lastPdfPage=1,pendingMeasure=null;
@@ -117,7 +117,20 @@ export function mountV2PDF(host){
   });
   host.v2PDFPort=port;
   return {
-    layout(){native?.relayout();},
+    layout(){
+      native?.relayout();
+      // PDF.js may replace WebKit's cached page DOM when the existing
+      // V1 viewer is reparented between Frame panes without pagerendered.
+      // Re-apply the EXISTING V1 overlay renderer after the new layout,
+      // rather than making another PBS/rail implementation or refetching.
+      const stamp=generation;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        if(!disposed&&stamp===generation&&ready&&native){
+          native.relayout();
+          native.repaintOverlayPage(lastPdfPage);
+        }
+      }));
+    },
     dispose(){disposed=true;
       document.removeEventListener('v2-sync-focus',onFocus);
       document.removeEventListener('v2-cm-session',onSession);
