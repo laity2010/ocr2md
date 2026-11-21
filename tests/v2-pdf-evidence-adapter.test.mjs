@@ -22,7 +22,7 @@ assert.equal(projection.mappedCount,224);
 assert.equal(evidence.byId.size,224);
 assert.equal(Array.from({length:22},(_,i)=>evidence.page(i+1).boxes.length).reduce((a,b)=>a+b,0),224);
 assert.equal(evidence.page(1).level,'block');
-assert.equal(evidence.page(1).boxes[0].pbs,'p0b0');
+assert.equal(evidence.page(1).boxes[0].pbs,'p0b0s0');
 assert.equal(evidence.page(1).boxes[0].blockId,'23');
 assert.equal(evidence.page(1).boxes[0].parentBlockId,null);
 assert.equal(evidence.page(1).boxes[0].blockGroup,'para_blocks');
@@ -50,7 +50,7 @@ assert.throws(()=>projectV2PDFEvidence(duplicate),/重复/);
 // This layout assertion tests the ACTUAL, unchanged V1 lane engine, including
 // a collision's outward tracks and immediate return to the nearest lane.
 const labels=[
-  {pbs:'p0b0',blockId:'1',bbox:[80,100,180,120]},
+  {pbs:'p0b0s0',blockId:'1',bbox:[80,100,180,120]},
   {pbs:'p0b1',blockId:'2',bbox:[80,101,180,121]},
   {pbs:'p0b2',blockId:'3',bbox:[80,102,180,122]},
   {pbs:'p0b3',blockId:'4',bbox:[80,380,180,400]},

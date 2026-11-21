@@ -19,6 +19,9 @@ class LogicalRow:
     logical_order: int
     markdown_text: str
     block_type: str = ''  # current logic; never infer from base after initialization
+    p: int | None = None
+    b: int | None = None
+    s: int | None = None
 
 
 def lines_text(block: dict) -> str:

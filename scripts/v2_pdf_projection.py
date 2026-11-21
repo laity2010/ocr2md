@@ -6,6 +6,7 @@ V1 PCB/PBS labels are visual, current and mutable. The source identity
 from __future__ import annotations
 import base64, json, math, sqlite3
 from pathlib import Path
+from v2_pbs import validate_pbs
 
 class PDFProjectionError(ValueError):pass
 
@@ -42,49 +43,15 @@ def project_pdf(db:sqlite3.Connection):
             raise PDFProjectionError('MinerU 页序不是连续原始 PDF 页序，不能假定坐标对应')
         page_sizes.append(size)
     base={r['blockid']:r for r in db.execute('SELECT blockid,page_index,block_group,page_block_index,bbox_json FROM mineru_base WHERE blockid>0')}
-    logical=[dict(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type FROM logical_block ORDER BY logical_order,logical_id')]
-    ids={row['logical_id']:row for row in logical}
-    if len(ids)!=len(logical):raise PDFProjectionError('重复逻辑 ID')
-    # Validate ancestor chain before constructing mutable visual PBS IDs.
-    def root_id(row):
-        seen=set();current=row
-        while current['parent_id'] is not None:
-            if current['logical_id'] in seen:raise PDFProjectionError('逻辑父子关系存在循环')
-            seen.add(current['logical_id'])
-            parent=ids.get(current['parent_id'])
-            if parent is None:raise PDFProjectionError('逻辑父块不存在')
-            current=parent
-        return current['logical_id']
-    roots={row['logical_id']:root_id(row) for row in logical}
-    by_root={}
-    for row in logical:by_root.setdefault(roots[row['logical_id']],[]).append(row['logical_id'])
-    # Current b order follows logical_order of roots ON EACH ROOT'S physical
-    # home page; never depend on renumbered original OCR index.
-    counters={};pbs={};children={}
-    for row in logical:
-        if row['parent_id'] is not None:continue
-        origin=base.get(row['base_blockid']);page=origin['page_index'] if origin else None
-        if not isinstance(page,int) or page<0 or page>=len(page_sizes):
-            raise PDFProjectionError('逻辑根块无法追溯原始 PDF 页面')
-        n=counters.get(page,0);counters[page]=n+1
-        pbs[row['logical_id']]=f'p{page}b{n}'
-    for row in logical:
-        if row['parent_id'] is None:continue
-        parent=row['parent_id']
-        if parent not in pbs:
-            # Preorder is not guaranteed, but parent always exists. Assign
-            # in stable logical_order after its ancestor resolves.
-            pass
-    def child_pbs(row):
-        lid=row['logical_id']
-        if lid in pbs:return pbs[lid]
-        parent=ids[row['parent_id']]
-        prefix=child_pbs(parent)
-        count=children.get(parent['logical_id'],0)+1
-        children[parent['logical_id']]=count
-        pbs[lid]=prefix+f's{count}'
-        return pbs[lid]
-    for row in logical:child_pbs(row)
+    logical=[dict(r) for r in db.execute(
+        'SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s '
+        'FROM logical_block ORDER BY logical_order,logical_id')]
+    try:groups=validate_pbs(logical)
+    except ValueError as err:raise PDFProjectionError(str(err)) from err
+    # PBS coordinates, not logical_order, own the displayed identities.
+    # s0 is the logical parent/group anchor; s1+ are its only child level.
+    roots={row['logical_id']:groups[(row['p'],row['b'])][0] for row in logical}
+    pbs={row['logical_id']:f"p{row['p']}b{row['b']}s{row['s']}" for row in logical}
     covers=[];unmapped=[]
     for row in logical:
         lid=row['logical_id'];original=base.get(row['base_blockid'])
@@ -98,7 +65,8 @@ def project_pdf(db:sqlite3.Connection):
         if not valid_bbox(bbox,page_sizes[page]):
             unmapped.append(lid);continue
         covers.append({'logicalId':lid,'baseBlockId':row['base_blockid'],
-            'parentId':row['parent_id'],'rootLogicalId':roots[lid],
+            'parentId':None if row['s']==0 else roots[lid],
+            'rootLogicalId':roots[lid],
             'logicalOrder':row['logical_order'],'pbs':pbs[lid],
             'physicalPageIndex':page,'physicalBlockIndex':original['page_block_index'],
             'pageSize':page_sizes[page],'bbox':bbox,'empty':not bool(row['markdown_text'])})

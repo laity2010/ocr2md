@@ -33,7 +33,7 @@ try{
    const cols=['blockid','source_path','source_sha256','page_index','page_number','block_group',
      'page_block_index','source_json_path','block_type','mineru_index','bbox_json','angle','level',
      'lines_json','blocks_json','block_json','record_kind','original_bytes'];
-   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'];
+   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'];
    const tables=[{name:'mineru_base',columns:cols},{name:'logical_block',columns:logicalCols}];
    const rows=Array.from({length:120},(_,i)=>Object.fromEntries(cols.map(k=>[k,k==='blockid'?i+1:k==='block_type'?'text':k==='block_json'?'{"type":"text"}':null])));
    // Match the actual WP03 out-of-band UTF-16 segment contract. The single
@@ -86,7 +86,7 @@ try{
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
           Array.from({length:Math.max(0,Math.min(120,224-pageOffset))},(_,i)=>({
             logical_id:pageOffset+i+1,base_blockid:pageOffset+i+1,parent_id:null,
-            logical_order:pageOffset+i+1,markdown_text:'reconstructed',block_type:'text'})):[]):
+            logical_order:pageOffset+i+1,markdown_text:'reconstructed',block_type:'text',p:0,b:pageOffset+i,s:0})):[]):
           Array.from({length:Math.max(0,Math.min(120,539-pageOffset))},(_,i)=>({
             ...rows[0],blockid:pageOffset+i+1})),
         offset:pageOffset}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
@@ -115,11 +115,18 @@ try{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
    await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
-      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===6,
+      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===10,
       null,{timeout:30000});
    const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
      .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
-   assert.deepEqual(logicalHeaders,logicalCols);
+   assert.deepEqual(logicalHeaders,['pbs',...logicalCols]);
+   const derivedPBS=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
+     const columns=el.v2BaseGridPort.getColumns();
+     const row=el.querySelector('.ag-row[row-index="0"]');
+     return {pinned:columns[0].pinned,field:columns[0].field,
+       rendered:row?.querySelector('[col-id="pbs"]')?.textContent?.trim()};
+   });
+   assert.deepEqual(derivedPBS,{pinned:'left',field:'pbs',rendered:'p0b0s0'});
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
      el=>el.v2BaseGridPort.getColumns().find(column=>column.field==='block_type').headerName),
      'Block Type（当前）');
@@ -271,7 +278,7 @@ try{
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown()),beforeCross);
    assert.equal(postCount,1);
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
-     el=>el.v2BaseGridPort.getColumns().length),6);
+     el=>el.v2BaseGridPort.getColumns().length),10);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:mineru-base';select.dispatchEvent(new Event('change',{bubbles:true}));
    });

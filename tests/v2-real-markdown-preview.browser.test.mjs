@@ -71,7 +71,7 @@ try{
       const baseCols=['blockid','source_path','source_sha256','page_index','page_number','block_group',
         'page_block_index','source_json_path','block_type','mineru_index','bbox_json','angle','level',
         'lines_json','blocks_json','block_json','record_kind','original_bytes'];
-      const logicCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'];
+      const logicCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'];
       const tables=[{name:'mineru_base',columns:baseCols},{name:'logical_block',columns:logicCols}];
       let sqlPosts=0,markdownGets=0,pdfGets=0;
       await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
@@ -87,6 +87,8 @@ try{
           const rows=table==='logical_block'
             ? projection.covers.slice(offset,offset+120).map(item=>({logical_id:item.logicalId,
                 base_blockid:item.baseBlockId,parent_id:item.parentId,
+                p:Number(item.pbs.match(/^p(\d+)/)?.[1]),b:Number(item.pbs.match(/b(\d+)/)?.[1]),
+                s:Number(item.pbs.match(/s(\d+)$/)?.[1]),
                 logical_order:item.logicalOrder,markdown_text:'original logic',block_type:'text'}))
             : projection.covers.slice(offset,offset+120).map(item=>({blockid:item.baseBlockId,
                 page_index:item.physicalPageIndex,block_type:'text'}));
@@ -160,7 +162,7 @@ try{
       assert.equal(await page.locator('#workspace .v2-pdf-label,#workspace .v2-pdf-cover,#workspace .ocr-pdf-block-ctrl').count(),0,
         'neither handmade V2 tags nor Main/V6 PdfPreview may be mounted');
       const firstTag=page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="23"]').first();
-      assert.equal(await firstTag.textContent(),'p0b0');
+      assert.equal(await firstTag.textContent(),'p0b0s0');
       assert.equal(await firstTag.getAttribute('data-lane'),'0');
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host canvas').count()>0,true,'original V1 PDF.js canvas');
       const density=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>{

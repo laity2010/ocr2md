@@ -35,6 +35,9 @@ def checked_rows(rows):
         if (not isinstance(row.base_blockid,int) or row.base_blockid<=0 or
                 not isinstance(row.markdown_text,str) or not isinstance(row.block_type,str)):
             raise ValueError('逻辑块来源或文本无效')
+        if any(v is not None for v in (row.p,row.b,row.s)) and not all(
+                type(v) is int and v>=0 for v in (row.p,row.b,row.s)):
+            raise ValueError('PBS p/b/s 必须完整且非负')
         if row.parent_id is not None and row.parent_id not in linked:
             raise ValueError('逻辑块父节点未定义')
     for id in ids:
@@ -50,7 +53,8 @@ def checked_rows(rows):
 def from_sql_rows(rows):
     """Public adapter for existing SQL five-column records (not an extra table)."""
     return checked_rows([LogicalRow(row['logical_id'],row['base_blockid'],
-                     row['parent_id'],row['logical_order'],row['markdown_text'],row['block_type'])
+                     row['parent_id'],row['logical_order'],row['markdown_text'],row['block_type'],
+                     row['p'],row['b'],row['s'])
                      for row in rows])
 
 
@@ -71,6 +75,7 @@ def to_markdown(rows):
         spans.append({'logicalId':row.logical_id,'baseBlockId':row.base_blockid,
                       'parentId':row.parent_id,'logicalOrder':row.logical_order,
                       'blockType':row.block_type,
+                      'p':row.p,'b':row.b,'s':row.s,
                       'startChar':start_char,'endChar':end_char,
                       'startUtf16':start_utf16,'endUtf16':end_utf16,
                       'fragmentSha256':digest(chunk)})
@@ -115,7 +120,8 @@ def from_markdown(snapshot):
                 item.get('fragmentSha256')!=digest(fragment)):
             raise ValueError('逻辑块位置或文本哈希不一致')
         rows.append(LogicalRow(item.get('logicalId'),item.get('baseBlockId'),
-                      item.get('parentId'),item.get('logicalOrder'),fragment,item.get('blockType')))
+                      item.get('parentId'),item.get('logicalOrder'),fragment,item.get('blockType'),
+                      item.get('p'),item.get('b'),item.get('s')))
         cursor=end;cursor16+=length_utf16(fragment)
     if cursor!=len(md) or cursor16!=length_utf16(md):
         raise ValueError('Markdown 结尾存在未映射内容')

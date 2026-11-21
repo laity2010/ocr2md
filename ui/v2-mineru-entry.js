@@ -103,8 +103,16 @@ function renderGrid(state){
     width:key==='blockid'?100:key==='block_json'?440:key==='original_bytes'?155:undefined,
     pinned:index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
+  if(state.tableName==='logical_block'){
+    // PBS is the user-facing identity. Retain all nine physical fields in AG.
+    columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
+      minWidth:125,width:135,pinned:'left',resizable:true,sortable:true});
+    for(const column of columns)if(column.field==='logical_id')column.pinned=undefined;
+  }
   port.setColumns(columns);
-  port.setRows(state.rows);
+  port.setRows(state.tableName==='logical_block'
+    ?state.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`}))
+    :state.rows);
   if(lastFocus){
     port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
       state.tableName==='logical_block'?lastFocus.logicalId:lastFocus.baseBlockId);

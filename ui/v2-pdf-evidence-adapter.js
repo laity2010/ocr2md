@@ -12,7 +12,7 @@ export function projectV2PDFEvidence(map){
   for(const row of map.covers){
     const {logicalId,pbs,physicalPageIndex,bbox}=row;
     if(!Number.isSafeInteger(logicalId)||logicalId<1||
-      typeof pbs!=='string'||!/^p\d+b\d+(?:s\d+)*$/.test(pbs)||
+      typeof pbs!=='string'||!/^p\d+b\d+s\d+$/.test(pbs)||
       !Number.isInteger(physicalPageIndex)||physicalPageIndex<0||!byPage[physicalPageIndex]||
       !Array.isArray(bbox)||bbox.length!==4||bbox.some(v=>!Number.isFinite(v))||
       bbox[2]<=bbox[0]||bbox[3]<=bbox[1])

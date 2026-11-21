@@ -64,14 +64,14 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual([t['name'] for t in state['tables']],['mineru_base','logical_block'])
         self.assertEqual(state['tables'][0]['columns'],list(v.COLUMNS))
         self.assertEqual(state['tables'][1]['columns'],
-            ['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'])
+            ['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'])
         self.assertEqual(state['tableName'],'mineru_base')
         self.assertEqual(state['rowCount'],539)
         logical=v.existing_state(self.book,table='logical_block')
         self.assertEqual(logical['tableName'],'logical_block')
         self.assertEqual(logical['rowCount'],224)
         self.assertEqual(len(logical['rows']),120)
-        self.assertEqual(len(logical['columns']),6)
+        self.assertEqual(len(logical['columns']),9)
         self.assertEqual(logical['tables'],state['tables'])
         self.assertEqual(logical['blockCount'],539)
         self.assertEqual(v.dispatch('state','GET',self.book,{},
@@ -136,7 +136,7 @@ class MineruBaseTest(unittest.TestCase):
         self.assertFalse(list(self.book.glob('.ocr2md-v2-*.tmp')))
         repeat=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
         self.assertEqual(repeat['created'],False);self.assertEqual(adapter.calls,1)
-    def test_populated_nine_column_logical_sqlite_rebuilds_as_wp00(self):
+    def test_unknown_nonempty_nine_column_logical_sqlite_rejected_without_loss(self):
         v.new_book(self.book)
         db_path=self.book/v.DB_NAME
         with closing(sqlite3.connect(db_path)) as db:
@@ -149,12 +149,12 @@ class MineruBaseTest(unittest.TestCase):
             db.commit()
         with self.assertRaisesRegex(v.BaseError,'不兼容'):
             v.existing_state(self.book)
-        written=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
-        self.assertTrue(written['created']);self.assertTrue(written['replaced'])
         with closing(sqlite3.connect(db_path)) as db:
-            columns=[r[1] for r in db.execute('PRAGMA table_info(logical_block)')]
-            self.assertEqual(columns,['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'])
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+            before=[tuple(r) for r in db.execute('SELECT * FROM logical_block')]
+        with self.assertRaisesRegex(v.BaseError,'未知非空逻辑表'):
+            v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
+        with closing(sqlite3.connect(db_path)) as db:
+            self.assertEqual([tuple(r) for r in db.execute('SELECT * FROM logical_block')],before)
             self.assertEqual(db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0],539)
         self.assertEqual(self.source.read_bytes(),self.original)
 

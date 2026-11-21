@@ -15,8 +15,8 @@ class PdfProjectionTests(unittest.TestCase):
   m=v.existing_pdf_map(self.folder)
   self.assertEqual((m['pageCount'],m['mappedCount'],m['logicalCount']),(22,224,224))
   self.assertEqual(len(m['unmappedLogicalIds']),0)
-  self.assertEqual(m['covers'][0]['pbs'],'p0b0')
-  self.assertEqual(m['covers'][-1]['pbs'],'p21b20')
+  self.assertEqual(m['covers'][0]['pbs'],'p0b0s0')
+  self.assertEqual(m['covers'][-1]['pbs'],'p21b20s0')
   self.assertEqual(len({c['pbs'] for c in m['covers']}),224)
   self.assertTrue(all(valid_bbox(c['bbox'],c['pageSize']) for c in m['covers']))
   with closing(sqlite3.connect(self.folder/v.DB_NAME)) as db:
@@ -25,7 +25,8 @@ class PdfProjectionTests(unittest.TestCase):
   before=v.existing_pdf_map(self.folder)
   first=before['covers'][0];last=before['covers'][-1]
   with closing(sqlite3.connect(self.folder/v.DB_NAME)) as db:
-   db.execute('UPDATE logical_block SET parent_id=? WHERE logical_id=?', (first['logicalId'],last['logicalId']))
+   db.execute('UPDATE logical_block SET p=0,b=0,s=1,parent_id=? WHERE logical_id=?',
+              (first['logicalId'],last['logicalId']))
    db.commit()
   after=v.existing_pdf_map(self.folder)
   child=next(c for c in after['covers'] if c['logicalId']==last['logicalId'])
