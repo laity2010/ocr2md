@@ -1,0 +1,17 @@
+/* V2 only: PDF.js renderer, V1 dark page styling and rail solver; no canvas
+   substitution, bogus PDF position or overlaid editor/second viewport. */
+#workspace .ocr-preview-pdf-host.ocr-pdf-pane{height:100%;width:100%;min-width:0;min-height:0}
+#workspace .ocr-detached-pdf-toolbar{display:flex;align-items:center;gap:6px}
+#workspace .ocr-detached-pdf-tools .v2-pdf-nav{display:flex;align-items:center;gap:5px;min-width:0;white-space:nowrap}
+#workspace .v2-pdf-nav button{padding:2px 6px;background:#35474a;color:#d3c6aa;border:1px solid #536966;border-radius:3px}
+#workspace .v2-pdf-nav label{display:inline-flex;align-items:center;gap:3px}
+#workspace .v2-pdf-cover{position:absolute;z-index:5;pointer-events:none;background:rgba(144,199,184,.13);outline:1px solid rgba(132,190,178,.37);outline-offset:-1px}
+#workspace .v2-pdf-cover.v2-pdf-selected{z-index:6;background:rgba(255,190,63,.31);outline:2px solid #ffc147;outline-offset:-2px}
+#workspace .v2-pdf-cover.v2-pdf-parent-group{background:rgba(255,190,63,.15);outline:1px solid #efb852}
+#workspace .v2-pdf-label-layer{position:absolute;inset:0;z-index:7;pointer-events:none}
+#workspace .v2-pdf-leaders{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+#workspace .v2-pdf-leaders path{fill:none;stroke:#80a79e;stroke-width:.8;opacity:.86}
+#workspace .v2-pdf-label{position:absolute;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:0 1px;border:1px solid #76a497;border-radius:3px;background:#273f3c;color:#e4ebd6;white-space:nowrap;font:600 10px/1 monospace;cursor:pointer;pointer-events:auto;overflow:hidden;touch-action:manipulation}
+#workspace .v2-pdf-label.v2-pdf-child{border-color:#8ab5ca;background:#223846;color:#e4effa}
+#workspace .v2-pdf-label.v2-pdf-empty{border-style:dashed;border-color:#e3b76a;color:#f9ddb4}
+#workspace .v2-pdf-label.v2-pdf-selected{border:2px solid #f6be44;background:#684c2d;color:#fff5d5}

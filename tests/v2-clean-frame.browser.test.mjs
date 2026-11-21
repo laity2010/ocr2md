@@ -92,7 +92,7 @@ try{
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-ocr-v2-frame.settings.json.v1')),null,
     'reading/probing a directory does not implicitly Save');
    await page.locator('#global-save').click();
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪'),null,{timeout:26000});
+   await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select optgroup[label="SQL"]')?.querySelectorAll('option').length===2&&document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,null,{timeout:26000});
    assert.equal(posts,1);
    assert.equal(await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option').count(),2);
    assert.deepEqual(probes,['/demo/books/my-book','/demo/books/my-book']);
@@ -104,7 +104,7 @@ try{
    assert.equal(JSON.parse(saved.latest).settings['workspace.dataDirectory'].value,'/demo/books/my-book');
    assert(saved.old.includes('/old-v2/book'));assert(saved.frame.includes('/old-frame/book'));
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪'),null,{timeout:24000});
+   await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select optgroup[label="SQL"]')?.querySelectorAll('option').length===2&&document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,null,{timeout:24000});
    assert.equal(posts,1,'reloading existing SQLite must not reimport');
    assert.equal(probes.length,3,'saved V2 Settings re-probes on reload');
    assert.equal(await page.locator('#workspace').isVisible(),false);

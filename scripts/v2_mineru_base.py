@@ -16,10 +16,12 @@ import stat
 from urllib.parse import parse_qs
 from v2_logical_contract import initial_rows, validate_initial
 from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown
+from v2_pdf_projection import project_pdf, PDFProjectionError
 
 DB_NAME='ocr2md.v2.sqlite'
 SCHEMA='ocr2md-v2-mineru-base/v1'
 MAX_SOURCE_FILE=64*1024*1024
+MAX_PDF_FILE=64*1024*1024
 MAX_SOURCE_TOTAL=128*1024*1024
 PAGE_SIZE=120
 LEGACY_LOGICAL_COLS=('logical_id','base_blockid','parent_id','logical_order','markdown_text')
@@ -417,7 +419,57 @@ def backfill_empty_logical(folder: Path, common):
         return {'created':True,'preserved':False,'logicalCount':count,
                 'dbFile':DB_NAME,'baseChanged':False}
 
+def read_verified_pdf(folder:Path):
+    """Return the one PDF directly under an F02-authorized book folder.
+
+    Not a general-purpose file API: no filename user argument or path escape,
+    no root recursion, no touching other books, no symlink/hardlink reads.
+    """
+    candidates=[]
+    for directory in (folder,folder/'pdf'):
+        if directory!=folder:
+            if not directory.exists():continue
+            if directory.is_symlink() or not directory.is_dir():
+                raise BaseError(403,'PDF 子目录不允许是符号链接')
+        for path in sorted(directory.iterdir()):
+            if path.name.startswith('.') or path.suffix.lower()!='.pdf':continue
+            candidates.append(path)
+    if not candidates:raise BaseError(404,'工作目录中没有可预览的原始 PDF 文件')
+    if len(candidates)!=1:raise BaseError(409,'检测到多个 PDF 文件，禁止猜测对应 MinerU 来源')
+    path=candidates[0]
+    if path.is_symlink():raise BaseError(403,'PDF 文件不允许是符号链接')
+    fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:
+            raise BaseError(422,'PDF 必须是普通非硬链接文件')
+        if not 8<=info.st_size<=MAX_PDF_FILE:
+            raise BaseError(413,'PDF 超过 64 MiB 或不是有效文件')
+        with os.fdopen(os.dup(fd),'rb') as stream:
+            raw=stream.read(MAX_PDF_FILE+1)
+        if len(raw)!=info.st_size or not raw.startswith(b'%PDF-'):
+            raise BaseError(422,'PDF 原始字节不完整或缺少 PDF 文件头')
+        return raw
+    finally:os.close(fd)
+
+
+def existing_pdf_map(folder:Path):
+    path=folder/DB_NAME
+    if path.is_symlink():raise BaseError(403,'数据库不允许是符号链接')
+    with closing(sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True)) as db:
+        db.row_factory=sqlite3.Row
+        assert_schema(db)
+        try:return project_pdf(db)
+        except PDFProjectionError as err:raise BaseError(409,str(err)) from err
+
+
 def dispatch(operation,method,folder,payload,query,common):
+    if operation=='pdf':
+        if method!='GET':raise BaseError(405,'PDF 原文只能只读 GET')
+        return read_verified_pdf(folder)
+    if operation=='pdf-map':
+        if method!='GET':raise BaseError(405,'PDF 映射仅可 GET')
+        return existing_pdf_map(folder)
     if operation=='markdown':
         if method!='GET':raise BaseError(405,'Markdown 重构仅可 GET')
         return existing_markdown(folder)
@@ -485,7 +537,9 @@ def handle(handler,operation,parsed,common):
         path=payload.get('workspace') if handler.command=='POST' else q.get('workspace',[None])[0]
         roots=common.authorized_roots(handler.headers.get('Cookie',''))
         folder=common.checked_workspace(path,roots)
-        respond(200,dispatch(operation,handler.command,folder,payload,q,common))
+        result=dispatch(operation,handler.command,folder,payload,q,common)
+        if operation=='pdf':handler.respond(200,result,'application/pdf')
+        else:respond(200,result)
     except BaseError as error:respond(error.status,{'error':str(error)})
     except common.WorkspaceIOError as error:respond(error.code,{'error':str(error)})
     except common.AccessError as error:respond(error.code,{'error':str(error)})

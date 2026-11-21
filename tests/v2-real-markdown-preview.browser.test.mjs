@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {spawn,execFileSync} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
+import {makePDF} from './v2-pdf-fixture.mjs';
 const python=String.raw`
 import sys,json,shutil,tempfile
 from pathlib import Path
@@ -16,10 +17,13 @@ with tempfile.TemporaryDirectory(prefix='wp04-reader-') as td:
   folder=Path(td);(folder/'minerujson').mkdir()
   shutil.copyfile(fixture,folder/'minerujson'/fixture.name)
   backend.new_book(folder)
-  print(json.dumps(backend.existing_markdown(folder),ensure_ascii=False))
+  print(json.dumps({'source':backend.existing_markdown(folder),'pdf':backend.existing_pdf_map(folder)},ensure_ascii=False))
 `;
-const snapshot=JSON.parse(execFileSync('python3',['-c',python],{encoding:'utf8'}));
+const evidence=JSON.parse(execFileSync('python3',['-c',python],{encoding:'utf8'}));
+const snapshot=evidence.source,projection=evidence.pdf;
+const pdfBytes=makePDF(projection.pageSizes);
 assert.equal(snapshot.rowCount,224);
+assert.equal(projection.mappedCount,224);
 const port=5427,url=`http://127.0.0.1:${port}/labs/lab-ocr-v2/`;
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
   '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -55,13 +59,23 @@ try{
       await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
         const req=route.request();const op=new URL(req.url()).pathname.split('/').at(-1);
         if(op==='import'){sqlPosts++;return route.fulfill({status:500,contentType:'application/json',body:'{"error":"No DB import in WP04"}'});}
+        if(op==='pdf-map')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(projection)});
+        if(op==='pdf')return route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes});
         if(op==='markdown'){markdownGets++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(snapshot)});}
         if(op==='state'){
-          const table=new URL(req.url()).searchParams.get('table')||'mineru_base';
+          const query=new URL(req.url()).searchParams;
+          const table=query.get('table')||'mineru_base';
+          const offset=Number(query.get('offset')||0);
+          const rows=table==='logical_block'
+            ? projection.covers.slice(offset,offset+120).map(item=>({logical_id:item.logicalId,
+                base_blockid:item.baseBlockId,parent_id:item.parentId,
+                logical_order:item.logicalOrder,markdown_text:'original logic',block_type:'text'}))
+            : projection.covers.slice(offset,offset+120).map(item=>({blockid:item.baseBlockId,
+                page_index:item.physicalPageIndex,block_type:'text'}));
           return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
             exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,paraBlockCount:224,logicalCount:224,
             sourceCount:1,tables,tableName:table,rowCount:table==='logical_block'?224:539,
-            columns:table==='logical_block'?logicCols:baseCols,rows:[],offset:0,
+            columns:table==='logical_block'?logicCols:baseCols,rows,offset,
           })});
         }
         return route.abort();
@@ -95,6 +109,68 @@ try{
         'each of 224 blocks contributes exactly two newline characters, one blank line');
       assert.equal(result.separator,'\n\n');
       assert.equal(result.editorCount,1);
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')
+        ?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+      await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-label[data-logical-id="23"]'),
+        null,{timeout:30000});
+      const pdfState=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState());
+      assert.equal(pdfState.pageCount,22);
+      assert.equal(pdfState.mappedCount,224);
+      assert.equal(await page.locator('#workspace .v2-pdf-label[data-logical-id="23"]').first().textContent(),'p0b0');
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host canvas').count()>0,true,'PDF.js original canvas');
+      const coverBefore=await page.locator('#workspace .v2-pdf-cover[data-logical-id="23"]').first().evaluate(el=>({
+        left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,
+      }));
+      assert(Math.abs(parseFloat(coverBefore.left)-95/634*100)<.001,'original MinerU x0 stays page-relative');
+      await page.locator('#workspace .v2-pdf-plus').click();
+      await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-zoom')
+        ?.textContent!=='—',null,{timeout:12000});
+      await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-cover[data-logical-id="23"]'),null,{timeout:12000});
+      const coverAfter=await page.locator('#workspace .v2-pdf-cover[data-logical-id="23"]').first().evaluate(el=>({
+        left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,
+      }));
+      assert.deepEqual(coverAfter,coverBefore,'PDF zoom never changes original normalized bbox');
+      // Actual PDF V1-style PBS label => original CM6 logical ID and MD focus.
+      await page.locator('#workspace .v2-pdf-label[data-logical-id="23"]').first().click();
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+        ?.v2MarkdownPreviewPort?.getFocusedId()===23,null,{timeout:10000});
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .v2-sync-ag-row')
+        ?.querySelector('[col-id="logical_id"]')?.textContent?.includes('23'),null,{timeout:10000});
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),23);
+      assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),
+        0);
+      // Source selection at a last-page logical block navigates back to the
+      // real physical PDF page, without inventing a new page or bbox.
+      await page.locator('#workspace #editor').evaluate((el,last)=>{
+        const port=el.v2SourcePort;
+        const interval=port.getIntervals().find(row=>row.logicalId===last);
+        port.getEditorView().dispatch({selection:{anchor:interval.from}});
+      },539);
+      try{
+        await page.waitForFunction(()=>document.querySelector('#workspace .ocr-detached-pdf-toolbar .ocr-pdf-page')?.value==='22',
+          null,{timeout:15000});
+      }catch(err){
+        console.log('V2_PDF_FOCUS_DIAG',name,await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>({
+          state:el.v2PDFPort.getState(),pageField:el.closest('.ocr-detached-pdf-pane').querySelector('.ocr-pdf-page')?.value,
+          viewerPage:el.v2PDFPort.getViewer()?.currentPageNumber,scroll:el.querySelector('.ocr-pdf-scroller')?.scrollTop,
+          sourceHead:document.querySelector('#workspace #editor')?.v2SourcePort?.getEditorView().state.selection.main.head,
+          sourceFocus:document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.getFocusedId(),
+        })),errors);
+        throw err;
+      }
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),539);
+      await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
+        ?.textContent.includes('121–224'),null,{timeout:10000});
+      // AG 2nd-page row -> the corresponding physical PDF page, using the
+      // actual logical row ID (a programmatic scroll must not fake an index).
+      const agId=Number(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="logical_id"]').first().textContent());
+      await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell').first().click();
+      await page.waitForFunction(expected=>document.querySelector('#workspace .ocr-preview-pdf-host')
+        ?.v2PDFPort?.getState().selectedId===expected,agId,{timeout:10000});
+      const expectedPage=projection.covers.find(row=>row.logicalId===agId).physicalPageIndex+1;
+      await page.waitForFunction(n=>document.querySelector('#workspace .ocr-detached-pdf-toolbar .ocr-pdf-page')?.value===String(n),
+        expectedPage,{timeout:12000});
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),agId);
       assert(result.headingCount>0,result);
       assert(result.textLength>10000,result);
       assert.equal(sqlPosts,0);

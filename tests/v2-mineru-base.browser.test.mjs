@@ -288,7 +288,18 @@ try{
    // endpoint. The user must not click a separate initializer.
    logicalReady=false;
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪'),null,{timeout:25000});
+   try{
+     await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded&&
+       document.querySelector('#workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:25000});
+   }catch(error){
+     console.log('V2_PDF_ABSENT_RELOAD_DIAG',kind,{postCount,mdRequests,probeCount,errors},
+       await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,
+         frame:!!document.querySelector('#workspace'),
+         editor:document.querySelector('#workspace #editor')?.v2SourcePort?.getState(),
+         options:[...document.querySelectorAll('#workspace .ocr-source-file-select option')].map(x=>x.value),
+       })));
+     throw error;
+   }
    assert.equal(postCount,2,'previous empty logical table should auto-backfill once');
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    assert.deepEqual(errors,[]);

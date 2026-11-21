@@ -177,6 +177,18 @@ async function ensureBase(path){
       }
     }
     bound=path;
+    // PDF evidence is separate and strictly read-only; never discard live
+    // CM6 edits or verified SQL because a PDF is absent or ambiguous.
+    const pdfPort=$('#workspace .ocr-preview-pdf-host')?.v2PDFPort;
+    if(pdfPort&&pdfPort.getState().workspace!==path){
+      void (async()=>{
+        try{
+          const projection=await request('pdf-map',path);
+          if(persistedDirectory()!==path)return;
+          await pdfPort.load(path,projection);
+        }catch(error){report('PDF 原文未加载：'+error.message,'warning');}
+      })();
+    }
     revealPhysicalTables(state.tables);
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
     if(active)await fetchPage();
@@ -200,6 +212,10 @@ document.addEventListener('v2-sync-focus',event=>{
 });
 // Editing is an in-memory-only event; Frame's global Save remains Settings-only.
 // Repeated verified workspace events must never reset the live CM6 history.
+document.addEventListener('v2-pdf-status',event=>{
+  const {text,kind}=event.detail||{};
+  if(text)report(text,kind||'info');
+});
 document.addEventListener('v2-cm-protected-separator',()=>
   report('WP04：逻辑块之间的空行是结构边界，暂不允许跨块删除或合并','warning'));
 document.addEventListener('v2-cm-session',event=>{

@@ -33,7 +33,7 @@
 - **单独的 V2 MinerU 业务 API** `/labs/lab-ocr-v2/api/mineru-base/{state,import}`：GET state 支持 `table` 指定物理表并按 120 行分页，返回 `sqlite_master` 枚举的 `tables`（表名及真实列结构）；POST import 仅在目录已授权、Origin 合法、带 `confirm=import-mineru-base`、真实 F02 probe 成功后写入；**新库同一私有 staging 数据库同时建好基础表与逻辑表才一次性发布**，仅对同名 V2 SQLite 做安全原子覆盖；同源非空逻辑表重复请求不写入，旧版同源空逻辑表由该接口原子补全。复用 F02 服务端 `authorized_roots`、`checked_workspace`、`probe`；**不是第二套 Workspace 文件读写 API**，无新监听端口、进程、Tunnel、授权或 Cookie。旧 `/api/v2/` 仍必须 404。
 - V2 模块 `ui/v2-mineru-entry.js` **订阅 Frame F02 已验证事件**，仅对已保存目录检查 SQLite。未存在则无损导入，旧 Schema 或逻辑表列结构不兼容则自动重新导入并替换同名库；Schema 合格则加载。返回主工作区不依赖复制另一个 Settings/Navigation。
 - 原生导航下拉在验证导入后自动添加 `SQL` 组：**始终展示当前 SQLite `sqlite_master` 中的所有用户物理表（不包括 SQLite 内部表及 View），不按行数或是否已启用业务功能隐藏表**，不再硬编码唯一「基础表」。WP00 当前两张物理表固定为 `基础表 · mineru_base`、`逻辑表 · logical_block`；即使来源没有任何 `para_blocks` 导致逻辑表合法为空，仍可从导航点击并在**原有 AG Grid 实例**显示全部 6 个真实 SQL 字段。`mineru_base` 保持 **18 列**、BlockID 为首列和整数排序，原始归档 `blockid=0` 仅供无损保存不作为业务行展示；所有表均只读，按 120 行分页。导航和 API 通过 SQL 表结构元数据同步，不在导航中增加任何额外应用物理表。
-- 当前验收 SQL 物理表导航及**结构/行数据的只读展示**；默认逻辑表与基础表一起初始化完成；逻辑表 `block_type` 是当前唯一类型权威（初始继承基础块，之后可以与 OCR 原始判断不同）。本阶段 AG 仍只读；源码 CM6 在 WP04 已可编辑但变化只在内存，不会持久化到逻辑表。Markdown 预览窗现已复用 V1 原版 `renderMarkdown`，从当前 CM6 内存源码实时渲染；PDF 窗仍为 Frame 空壳；AG、源码和 MD 预览已复用 V1 临时状态和行级同步，**只有 PDF 尚未完成真实四窗联动**。不得把本阶段宣称为完整 V2 或 V1 等价实现。
+- 当前验收 SQL 物理表导航及**结构/行数据的只读展示**；默认逻辑表与基础表一起初始化完成；逻辑表 `block_type` 是当前唯一类型权威（初始继承基础块，之后可以与 OCR 原始判断不同）。本阶段 AG 仍只读；源码 CM6 在 WP04 已可编辑但变化只在内存，不会持久化到逻辑表。Markdown 预览窗现已复用 V1 原版 `renderMarkdown`，从当前 CM6 内存源码实时渲染；PDF 窗目前已接入 V1 的 PDF.js/原始 bbox/PBS 只读映射；AG、源码、MD、PDF 四窗在有可验证的唯一 PDF 时使用逻辑 ID 联动，PDF 缺失或来源不匹配时仍保留三窗能力且不绘制虚假覆盖框。不得把本阶段宣称为完整 V2 或 V1 等价实现。
 
 ## WP01～WP03 · 逻辑层与 Markdown 严格往返（2026-11-21）
 
@@ -52,14 +52,17 @@
 
 
 - **WP04 多窗同步修正**：直接复用 V1 `ui/view-store.js` 临时事件和 `ui/scroll-sync.js` 行级滚动器，AG↔CM6↔Markdown 当前三窗焦点、滚动和高亮联动，AG 通过 `logical_id/base_blockid` 精确映射并自动分页，所有 CM6 编辑/撤销更新位置映射，不写 SQL；**PDF 没有真实数据，尚不宣称四窗同步**。见 `docs/v2/WP04_V1_MULTI_PANE_SYNC.md`。
+- **WP04 PDF / PBS / 覆盖框增补**：在原 Frame PDF 分屏复用 V1 官方 `PDFViewer` 与真实 `pdfOverlayRect`、`layoutPDFEdgeRails`，由 `logical_id→base_blockid→mineru_base`、原始 MinerU 页尺寸生成**不落表的当前 PBS**及原始 bbox，使用已授权工作目录的唯一真实 PDF。PDF 标签/原文框↔AG/CM6/Markdown 按稳定逻辑 ID 双向聚焦，缩放/页码/覆盖框恢复；本阶段 PDF 和 AG 均只读，仍不进行 SQL 持久化。缺失/多份/页数或原始尺寸不符的 PDF 不强制绘制覆盖框。**V1 只读预览行为迁入不代表 V1 的 PDF 原文提取、结构编辑已迁入**。详见 `docs/v2/WP04_V1_PDF_PBS_SYNC.md`。
 
 
 
-## 验收与发布（WP00）
+
+## 验收与发布（WP00～WP04）
 
 1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、`sqlite_master` 枚举与逻辑表 6 列及旧 5 列保留数据迁移、安全表名校验、重复导入幂等、旧 Schema、九列逻辑表和源变化可安全原子替换。
 2. `node tests/v2-mineru-base.browser.test.mjs`：Chromium/WebKit、Settings 保存权限、自动导入、SQL 原生下拉同时展示两张物理表，自动生成的逻辑表六列/224 行（样本）与基础表 18 列/分页。
 3. `node tests/v2-clean-frame-isolation.test.mjs`：逐字节共享 Frame 基线不变；旧 V2 组件不复活。
 4. WP04 `node tests/v2-block-source.test.mjs` 和 `node tests/v2-block-source-fixture.test.mjs`：一个空行的块间距、真实224块含9空块/Emoji UTF-16、内存区间与跨块编辑保护；`node tests/v2-mineru-base.browser.test.mjs`：自动 CM6 文本、V1 标题样式和原版 MD 预览（Math/HTML/脚注/callout）、输入/Undo/Redo 实时联动、AG↔源码↔MD双向焦点/滚动、AG自动翻页、iPad WebKit、DOMPurify 安全以及 SQL 不写入。
-5. Frame 独立授权、F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
-6. Git 提交完成后 `npm exec vite build -- --config labs/lab-ocr-v2/vite.config.mjs`，使用 `python3 scripts/v2_frame_publish.py --release-root /Users/daisor/AgentDock/ocr2md/release` 发布，核对 `sourceCommit`、所有资源 SHA、其余六 Lab 不变和公网入口 200。
+5. PDF 映射/授权：`python3 tests/test_v2_pdf_projection.py -q`；`node tests/v2-real-markdown-preview.browser.test.mjs` 实际 22 页测试 PDF 对应 224 逻辑块 PBS/覆盖框与四窗焦点同步，真实工作目录只接受 F02 授权且唯一 PDF；失败不改库、不伪造框。
+6. Frame 独立授权、F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
+7. Git 提交完成后 `npm exec vite build -- --config labs/lab-ocr-v2/vite.config.mjs`，使用 `python3 scripts/v2_frame_publish.py --release-root /Users/daisor/AgentDock/ocr2md/release` 发布，核对 `sourceCommit`、所有资源 SHA、其余六 Lab 不变和公网入口 200。
