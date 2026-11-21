@@ -1,78 +1,66 @@
-# OCR2MD · V2 · 两表逻辑层与 CM6 内存源码工作台（Lab-Frame）
+# OCR2MD · V2 工程契约（当前事实、PBS 目标与开发门禁）
 
-本 WP00 是在已验收的 Lab-Frame SHA `da903ef8e37e98931d4809e65e6052c653be7f1b` 之上重建的独立框架型 V2，保留 Frame 独立授权与 F02 文件读写能力；旧版失败的 WP01～WP03 业务代码已可追溯撤销；当前重新实现的 WP01～WP03 有独立 Git 记录和验证。Frame 公共源码与 Frame 工作树逐字节一致。每轮先读共用 `AGENTS.md`，再读本 README。旧的失败 V2 已归档到 Git 证据标签 `archive/retired-lab-ocr-v2-20261120`；**禁止复制、恢复其旧 SQLite/业务 UI、把旧 V2 假冒当前实现。**
+> **接手前必读**：先读本工作树的 `AGENTS.md`，再读本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [已确认目标·未实施] / [BLOCKED·已发现风险]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
+>
+> **本次文档整理不代表 PBS 数据结构迁移或已修复风险。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；唯一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。
 
-## 单一权威与不可触碰范围
+## 1. 版本身份、框架和边界
 
-- 源码：`labs/lab-ocr-v2`，分支 `experiment/lab-ocr-v2`；统一门户固定 URL `https://ocr2md.laity.bid/labs/lab-ocr-v2/`。
-- 框架：复用 Lab-Frame 的四窗、全局设置、资料目录、Sarasa、状态栏、导航 Tom Select、AG Grid；`ui/frame/*` 和共享 `ui/frame/workspace-io.js` / `scripts/frame_workspace_io.py` 必须与已验收 Lab-Frame **逐字节一致**。仅在 V2 的 Vite 配置内声明精确适配点，适配漂移立即构建失败。V2 不建立新的全局设置、导航实例、AG 实例、权限状态管理器。
-- 授权：资料目录只由原全局设置 `workspace.dataDirectory` 保存。复用公共 **F02** `/labs/lab-frame/api/workspace-io/probe` 实测创建→写→读→验证→清理。只有**已保存目录且 F02 读写验证成功**才能触发 MinerU 基础表与逻辑表自动初始化；未保存的选择不能写入 SQLite。
-- 原始数据：书籍目录的 MinerU JSON 是不可修改输入。基础表完整原样保留**每个 JSON 源文件的全部原始字节和 SHA256**，任何块级抽取只作为索引与展示；不改原始 JSON、PDF、其他数据库、Main 或其他 Lab 的数据；仅用户明确许可覆盖本工作目录同名的 V2 SQLite；一旦 `logical_block` 非空便禁止因来源变化自动覆盖该 SQLite。
-- SQL：工作目录内 `ocr2md.v2.sqlite` 是**唯一允许覆盖**的目标文件。现有 SQLite 为旧逻辑表结构、旧 Schema 或 MinerUJSON 来源变更时，按用户许可**直接重建并原子替换**；相同源且 Schema 合格时直接复用。先在同目录生成新库、验证两表和原始字节，再替换旧文件；转换失败保留旧库。保留原始 JSON、PDF 与所有其他文件不变；如果旧库属于符号链接/硬链接或存在活动 SQLite 日志，则拒绝不安全覆盖。
+| 称呼 | 实际项目 | 权威角色 |
+| --- | --- | --- |
+| V0 | `main` | 历史主线工作台，**不是** V1 源码；Git 分支/工作树名称不作改名 |
+| V1 | `lab-ocr` | 现有已验证交互、PDF 动态多轨 PBS、手势和样式的**复用基线** |
+| V2 | `lab-ocr-v2` | 当前**两表 + N View** 独立实验工作台和唯一 V2 发布目标 |
+| Frame | `lab-frame` | 原四窗、全局设置、目录授权、导航和 AG Grid 的基础框架 |
 
-## WP00 · 两表基线（现有 WP02 逻辑初始化已自动化）
+- V2 是 **框架型 Lab**，不是 V0/Main 的镜像。优先复用真实 V1 `lab-ocr` 的原组件及公开 API，不得把 V0 的 `ui/pdf-preview.js` 固定双轨误当 V1；业务数据用隔离适配器接入，不额外制作平行 PDF、AG、Settings、导航、状态栏或 CM6 实例。
+- 保留已验收 Frame 公共源码（`ui/frame/*`、共享 F02 I/O 与脚本）逐字节隔离；V2 只允许自己受精确签名校验的 Vite 构建适配。不在 V2 实验中修改 V0/V1/Frame 工作树及其持久化数据。
+- 工作目录只由 **Frame 原全局设置** `workspace.dataDirectory` 绑定并保存。只在 Frame F02 授权 Cookie、目录白名单及实际读写 `probe` 验证通过后，才可处理书籍数据。原 MinerU JSON、PDF、媒体、其他数据库一律只读保护；禁止假定使用仓库目录或其他 Lab 的数据库。
+- 已弃用 V2 的历史证据在 Git 标签 `archive/retired-lab-ocr-v2-20261120`。不得把它的旧业务源码、SQLite 或 UI 当成当前 V2 基线恢复。
 
-选定书籍目录创建 `ocr2md.v2.sqlite`，用户自选书籍的实际目录由授权决定；**不使用仓库目录、Main 工作区或旧 Lab SQL**。
+## 2. 数据唯一权威：[已实现]
 
-| 物理表 | 用途 | 当前状态 |
-|---|---|---|
-| `mineru_base` | MinerU 原始块无损基础表，BlockID 为 1、2、3…的**全局整数索引**；附独立 `blockid=0` 原始源文件档案记录，不作为业务块展示 | 建库时无损导入 |
-| `logical_block` | V2 最新逻辑状态，唯一有效 `block_type` 归属，未来由 CM6 驱动 | **随基础表自动初始化**（样本 224 行）；**6 列**，SQL 原样只读，WP04 编辑仅存 CM6 内存，尚未回写 |
+**当前仅有两张应用物理表**：已授权书籍目录内的 `ocr2md.v2.sqlite`。AG/源码/Markdown/PDF/标题等均是视图；不新增第三张业务表、父块表、Markdown 行表或 SQL 历史表。
 
-**不得新增第 3 张应用物理表，不以 SQL 表保存操作历史。** WP04 已使用 CM6 内存 Undo/Redo，WP05 另行接入经确认的安全 SQL 增量写回。基础表不保存归一化造成的信息损失：`block_json` 保留每个块的完整 JSON 对象，包括额外未知字段与内嵌子块；`source_json_path` 指向输入页与三类原始块组 `preproc_blocks`、`discarded_blocks`、`para_blocks`；`original_bytes` 仅在 `blockid=0` 的档案记录按 Base64 保存源文件的逐字节内容。因此，原始 JSON 文件本身可按字节还原，BlockID>0 的索引不会改变源数据结构。源文件校验 SHA、路径、页索引、页块组、bbox、原始 lines/blocks 等列均可在 AG 基础表中查阅。
+| 物理表 | 当前列与来源 | 作用 |
+| --- | --- | --- |
+| `mineru_base` | **18 列**；`blockid` 为全局稳定整数索引；`blockid=0` 是非业务源文件档案 | 无损保留三类 MinerU 原始块（`preproc_blocks`、`discarded_blocks`、`para_blocks`）、原始 JSON 字节及 SHA256、完整 `block_json`、原始页码和 bbox；不因逻辑编辑而改变 |
+| `logical_block` | **6 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`markdown_text`、`block_type` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，当前类型以 `logical_block.block_type` 为准 |
 
-## PBS 两层逻辑块契约（用户确认的 V2 目标设计；**尚未实施**）
+- **初始化现状**：只从最终 `para_blocks` 初始化逻辑行，不把前处理和丢弃块当正文；真实 22 页样本为 539 个原始基础块 / 224 条初始逻辑行。初始化时两表一起生成；已兼容的空逻辑表可按受控导入补全，同源兼容的非空逻辑状态应保留。原始源文件逐字节归档于基础表的 `blockid=0` 记录，可验证、恢复。
+- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表；AG Grid 原生实例按 120 行分页，列由数据库元数据提供，横向虚拟化不等于字段缺失。源码窗为唯一 CM6 文档，逻辑块按 `\n\n` 隔出一个空行，位置映射在内存、不插 CMD 注释。CM6 可编辑、Undo/Redo、保护块间边界，**当前修改仅留在内存，尚未持久化 SQL；刷新后消失**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 在有唯一、获授权且坐标可验证的 PDF 时同步高亮和定位；PDF 仍**只读**，拖动仅预演，不写逻辑关系。
+- **V1 PDF 现状**：直接复用 V1 `lab-ocr` 的 `mountLabOcrPdf` 和 `layoutPbsLabels` 原版动态多轨、引线、手势与 PDF.js。三窗时预览下拉可选 PDF/Markdown；四窗切分时同一个 PDFViewer 和工具栏 DOM 移入独立面板，恢复也不重新建立 PDF 实例。原始 PDF 位置只取基础表的真实 bbox，失配/多来源/无 PDF 时不伪造覆盖框。
+- **当前 PBS 不是新标准**：`scripts/v2_pdf_projection.py` 仍根据 `parent_id`、`logical_order` 和原始物理页动态生成 `p0b0` 等父编号及递归 `s` 后缀；**没有**持久化 `p,b,s`、没有逐基础块的 `s0`，移动时也**没有**实现局部不重排。当前视觉标签能显示 ≠ 下述新 PBS 数据契约已实施。
 
-> **每次 V2 开发先核对本节。** 当前 `logical_block` 仍是旧的 **6 个物理字段**（`logical_id, base_blockid, parent_id, logical_order, markdown_text, block_type`）。下面是用户确认的**下一阶段目标契约**，**不是当前数据库 Schema 或已经上线的功能**。实际迁移必须另立航点、验证并保全回退，绝不因本 README 修改而重建/覆盖用户的 `ocr2md.v2.sqlite`。
+## 3. PBS 两层逻辑块：[已确认目标·未实施]
 
-- **用途与层级**：PBS 专用于纠正 MinerU OCR 识别时的块归属错误（张冠李戴、跨栏/跨页错配、归入、拆分、重组），而非任意层级树。**只允许“父块 → 子块”两层，禁止孙块和递归嵌套。**
-- **两种身份**：`mineru_base.blockid` 是稳定的原始基础块整数 ID；PBS 是面向用户的**当前逻辑块编号**。逻辑表的 `base_blockid` 关联基础块，原始 PDF 页码和 bbox 始终从基础表获取；移动/归入不改原始 bbox。`logical_id` 可保留为隐藏的稳定内部主键，AG 默认以 PBS 表示逻辑块。
-- **PBS 三列**：目标逻辑表持久保存 `p`、`b`、`s` 三个整数，显示为 `pNbMsK`。`pNbM` 只是**父块分组**，默认不另建父块 SQL 行；同一 `(p,b)` 下的 `s0,s1,...` 均为子块；`(p,b,s)` 必须唯一。目标 Schema 中原有 `parent_id/logical_order` 如何保留或迁移，需下一航点单独验证；不得未经验证重写。
-- **默认 s0**：每个原始基础块进入逻辑表时，都默认是一个独立父块下面的 `s0` 子块。允许一个原始基础块拆成多个逻辑子块，多个逻辑行可关联同一 `base_blockid`，但必须保留各自的原文及溯源，不能伪造来源。
-- **只局部修改**：例如 `p1b4s0 → p1b3s1`，只需要调整受影响逻辑行的 `b:4→3`、`s:0→1`；`p1b3s0`、`p1b5s0` 均保持不变。**PBS 可以不连续、留下空号；不允许为保持连续而重算无关的 PBS**。同父块内发生子编号冲突时，仅处理冲突所需的受影响子块，禁止全页/全文重排。不要从 `logical_order` 自动推导连续 PBS。
-- **两表 N View 不变**：仅允许 `mineru_base` 和 `logical_block` 两个应用物理表，不建独立父块表或 SQL 历史表。CM6 管理当前编辑/Undo/Redo，未来只允许经测试的局部 SQL 增量写回。
-- **验收门禁**：迁移前必须有直接测试覆盖初始 s0、局部归入、跨页物理 bbox 不变、同基础块拆分、PBS 唯一、编号间断合法、无孙块、两表不增表、回退恢复，以及真实 V1 `lab-ocr` PDF PBS 多轨、AG/CM6/MD/PDF 同步。**本次只更新项目契约，不实施数据库/界面改造。**
+**用途**：修正 OCR 块识别时的张冠李戴、跨栏/跨页归属错误、拆分、归入和重组；**只允许“父块分组 → 子块”两层，禁止孙块、递归多层和复杂树结构**。
 
-## 独立 Frame 授权与目录访问（2026-11-20）
+- **字段与身份**：目标逻辑表将 `p`、`b`、`s` **作为三个整数持久化**，对外显示 `pNbMsK`。`pNbM` 为父块**分组**，不另建一条父块 SQL 行；每个实际逻辑行代表 `sK` 子块，`(p,b,s)` 在当前逻辑表唯一。`logical_id` 继续可作为隐藏、稳定的内部行身份；面向用户的逻辑编号是 PBS。`base_blockid` 指向不变的原始基础块 ID，PDF 物理页和原始 bbox 始终来自基础表，跨页逻辑归属不改变物理覆盖框。
+- **默认 `s0`**：每个被纳入逻辑层的原始基础块，初始是对应独立父块下的 `s0`；以后可以归入其他父块成为 `s1` 等。允许一个基础块拆出多个逻辑子块，多个逻辑行可指向同一 `base_blockid`，但须保留各自文本及来源关系，不凭空造原始基础块。
+- **只局部修改 PBS**：例如 `p1b4s0 → p1b3s1`，仅更新该逻辑块的 `b:4→3`、`s:0→1`；`p1b3s0`、`p1b5s0` **都不动**。PBS 允许空号与非连续编号；不为了“补洞”对其他父块、整页或全文重新编号，不由 `logical_order` 反复连续重算 `p/b/s`。同组编号冲突只处理受影响的子块。
+- **结构/状态职责**：`p,b,s` 管当前归属编号，CM6 管当前编辑及 Undo/Redo，SQL 仅存最新状态（写回须经单独安全事务验证）。`parent_id`、`logical_order` 是否保留、是否仅负责读序，须在 PBS Schema 航点先设计/测试，不能为实施方便自作主张。
+- **待确认范围，不得猜测**：用户说“每个基础块默认是 s0”，但**当前仅 `para_blocks` 进入逻辑表**；是否把 `preproc_blocks`、`discarded_blocks` 也纳入可编辑逻辑层尚未确认，不得自动把 539 个原始记录全部当正文。编号起点也须核对 V1 原有约定：**当前 V2 PDF 投影从 `p0`/`b0` 开始**，这里的 `p1b4` 仅为结构举例，不能据此偷偷改成从 1 开始。
+- **迁移验收要求**：初始 `s0`、归入只变受影响行、PBS 唯一与缺号合法、跨页移动仍指向原始物理 bbox、同基础块拆分保留溯源、禁止孙块、CM6/AG/MD/PDF 原生联动、Undo/Redo、事务失败回滚、两表恒定及历史用户状态保护。**不能直接用当前六列表或递归 PBS 投影的测试 PASS 冒充目标契约验收。**
 
-- 目录列表现在直接调用公共 Frame `GET /labs/lab-frame/api/workspace-io/{roots,browse}`；不调用 Main `/api/session`、`/api/workspace/roots` 或 Main 本地端口。Lab-Frame 的 `ui/frame/access-auth.js` 在「工作区 → 资料目录 → 浏览目录」的**同一目录树区域**展示访问码输入框与「授权 Frame」按钮（不在顶栏、不使用弹窗），用户输入 Frame 独立访问码后，通过私有 F02 session/unlock 签发并校验 7 天 HttpOnly/Secure Cookie，成功即自动加载目录树。
-- 权限由 Frame 私有 `ocr2md/.ops/frame-access.json` 的 `0600` 配置、允许的目录白名单和签名会话共同决定，绝不允许无认证读写、路径穿越或打开全盘目录。V2 仅调用 Frame F02 `authorized_roots`、`checked_workspace`、`probe` 公共能力，不另建登录页、权限状态或文件接口。
-- Frame 与 V2 手动点击「刷新目录」会重取最新授权根目录（含已置顶的 Obsidian 快捷目录），不会因原有树缓存隐藏新配置。后台轮询仍只更新展开的文件夹内容。
-- 在 Main 未启动或编辑授权不可用时，Frame 和 V2 的目录访问与读写不应受其影响；公网与 LAN 的 Cookie 仍分别属于各自站点。用户可以在 Mac 运行 `python3 scripts/frame_access_setup.py --show-code` 获取 Frame 自己的访问码。框架单测与浏览器模拟不代替真实 iPad Safari 验收。
+## 4. 数据保护阻断项：[BLOCKED · 已证实风险 · 尚未修复]
 
-## 业务 API 与窗口
+**不得启动 PBS 三列 SQL 迁移，直到修复并验证这一风险。**
 
-- **单独的 V2 MinerU 业务 API** `/labs/lab-ocr-v2/api/mineru-base/{state,import}`：GET state 支持 `table` 指定物理表并按 120 行分页，返回 `sqlite_master` 枚举的 `tables`（表名及真实列结构）；POST import 仅在目录已授权、Origin 合法、带 `confirm=import-mineru-base`、真实 F02 probe 成功后写入；**新库同一私有 staging 数据库同时建好基础表与逻辑表才一次性发布**，仅对同名 V2 SQLite 做安全原子覆盖；同源非空逻辑表重复请求不写入，旧版同源空逻辑表由该接口原子补全。复用 F02 服务端 `authorized_roots`、`checked_workspace`、`probe`；**不是第二套 Workspace 文件读写 API**，无新监听端口、进程、Tunnel、授权或 Cookie。旧 `/api/v2/` 仍必须 404。
-- V2 模块 `ui/v2-mineru-entry.js` **订阅 Frame F02 已验证事件**，仅对已保存目录检查 SQLite。未存在则无损导入，旧 Schema 或逻辑表列结构不兼容则自动重新导入并替换同名库；Schema 合格则加载。返回主工作区不依赖复制另一个 Settings/Navigation。
-- 原生导航下拉在验证导入后自动添加 `SQL` 组：**始终展示当前 SQLite `sqlite_master` 中的所有用户物理表（不包括 SQLite 内部表及 View），不按行数或是否已启用业务功能隐藏表**，不再硬编码唯一「基础表」。WP00 当前两张物理表固定为 `基础表 · mineru_base`、`逻辑表 · logical_block`；即使来源没有任何 `para_blocks` 导致逻辑表合法为空，仍可从导航点击并在**原有 AG Grid 实例**显示全部 6 个真实 SQL 字段。`mineru_base` 保持 **18 列**、BlockID 为首列和整数排序，原始归档 `blockid=0` 仅供无损保存不作为业务行展示；所有表均只读，按 120 行分页。导航和 API 通过 SQL 表结构元数据同步，不在导航中增加任何额外应用物理表。
-- 当前验收 SQL 物理表导航及**结构/行数据的只读展示**；默认逻辑表与基础表一起初始化完成；逻辑表 `block_type` 是当前唯一类型权威（初始继承基础块，之后可以与 OCR 原始判断不同）。本阶段 AG 仍只读；源码 CM6 在 WP04 已可编辑但变化只在内存，不会持久化到逻辑表。Markdown 预览窗现已复用 V1 原版 `renderMarkdown`，从当前 CM6 内存源码实时渲染；PDF 窗目前已接入 V1 的 PDF.js/原始 bbox/PBS 只读映射；AG、源码、MD、PDF 四窗在有可验证的唯一 PDF 时使用逻辑 ID 联动，PDF 缺失或来源不匹配时仍保留三窗能力且不绘制虚假覆盖框。不得把本阶段宣称为完整 V2 或 V1 等价实现。
+- **复现事实**：当前 `scripts/v2_mineru_base.py` 的 `dispatch(import)` 发现现有 SQLite 的逻辑表为不兼容结构时，可能进入 `new_book(overwrite=True)`。此前已使用**临时测试库**模拟“非空九列逻辑表 + 人工改动文本”，导入后被重建为六列表，文本修改丢失。**这不是理论风险；也不是已修复状态。**
+- **保护目标**：凡已有非空 `logical_block`，无论源文件相同与否、列数或 Schema 是否兼容，自动初始化/导入不得直接清除用户编辑。对未知结构，应**拒绝自动重建**并报告原因，须通过明确授权、数据备份及受测的非破坏迁移/恢复方案处理；普通重新打开、只读查询、PDF 预览、选择导航均不能触发非空状态覆盖。对**空库或明确废弃且证明确无待保存逻辑状态**的重建，仍须按 F02、源校验、原子替换等门禁执行。
+- **当前安全状态**：README 提出的保护目标**尚未由执行代码完全保证**。修复 `import` 的不兼容 Schema 覆盖路径、加入非空九列人工编辑不丢失的直接回归测试，必须先于 PBS Schema 迁移；**本文档更新不关闭 BLOCKED，也不改变现有 import 行为**。
+- 输入 MinerUJSON/PDF 原件和其他 Lab 工作目录绝不可写；仅对当前用户已保存、F02 验证成功的书籍目录执行受控写入，遇活动 WAL/journal、符号链接/硬链接、源变化或其他安全不确定性应拒绝并保留旧库。
 
-## WP01～WP03 · 逻辑层与 Markdown 严格往返（2026-11-21）
+## 5. 开发、验收与发布门禁
 
-- **WP01**：已验证纯映射，详见 `docs/v2/WP01_LOGICAL_CONTRACT.md`。初始逻辑只从最终 `para_blocks` 构造（真实样本 224 条），排除前处理/丢弃重复内容；六列只足以表达未经人工确认的扁平状态，暂不自动猜测跨页或父子结构。
-- **WP02（已依本轮要求修订）**：在生成 `mineru_base` 的同一 SQL 创建流程中，自动由 `para_blocks` 生成 `logical_block`，只有**两张表都完成**才发布 SQLite；旧 WP00/WP02 已有空逻辑表，在已保存且 F02 验证通过的工作区重新打开时，由同一个受控 `POST import` 接口自动补全，而**不再使用独立 `logical-init` 接口、确认码或「初始化逻辑表」按钮**。相同源非空逻辑表只读保留，来源变更不得擅自覆盖已有逻辑编辑。详见 `docs/v2/WP02_LOGICAL_INITIALIZATION.md`。
-- **WP03**：`GET .../api/mineru-base/markdown` 严格从逻辑表只读导出 Markdown + 内存位置清单，核验后可在原有 CM6 **只读**源码窗浏览；不产生用户 `.md` 文件、不插 CMD 标签、不启动 CM6 编辑，也不影响 AG/PDF/MD 预览业务后续航点。`scripts/v2_markdown_roundtrip.py` 有两个公开纯函数 `to_markdown`、`from_markdown`：它们以 Markdown+外部位置信息往返保留全部逻辑行，绝不宣称裸 Markdown 独立可反推原始 MinerUJSON。见 `docs/v2/WP03_MARKDOWN_ROUNDTRIP.md`。
-- **WP03 单列类型修正**：`logical_block` 在既有五列末尾仅增加一个 `block_type TEXT NOT NULL DEFAULT ''` 字段。新逻辑块初始取 `mineru_base.block_type`，以后所有当前块类型以 `logical_block.block_type` 为准；OCR 原始类型只保留为只读证据。已存在的五列 SQLite 仅在来源相同、F02 权限验证通过时，通过同一 `POST import` 事务内 `ALTER TABLE` 追加列并映射原始类型；旧文本、ID、顺序、父子关系完整保留，不重新生成 SQL/Markdown，不额外增加审核状态或第三张表。WP03 的 Markdown 位置清单追加 `blockType` 字段，往返格式升级至 `v2-logical-md/v2`。AG 目前只读，未来类型编辑需遵守 CM6/Undo/Redo 航点。见 `docs/v2/WP03_BLOCK_TYPE_CONTRACT.md`。
-- 所有原始 MinerUJSON、PDF 和原始基础表仍然不可改；两张物理表与 Frame 共享组件保持不变。
+- **按 AGENTS.md 执行**：任务开始先读本 README，查受影响源码、公开 API 和独立测试；先固定可回退 Git 点；在隔离夹具上实验，不以推测修补未定位故障；任何新的结构 Schema 必须有明确迁移与数据恢复测试。README 只记录当前项目契约，开发历史放 `docs/v2/`。
+- **Frame/F02**：`ui/frame/*` 基线一致性和 Settings 保存、权限验证、两表导航；旧 `/api/v2/` 不得复活。V2 的业务 API 为 `/labs/lab-ocr-v2/api/mineru-base/{state,import,markdown,pdf-map,pdf}`，只处理本书籍的授权数据；不新设端口、Tunnel、认证或平行文件管理器。
+- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移；**现有通过不表示上面的 BLOCKED 已消除**）、`python3 tests/test_v2_pdf_projection.py -q`；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。浏览器回归包括 Chromium 和 iPad-WebKit，特别验证三窗↔四窗两轮切换中 PDFViewer 不换实例、不重复下载、原 PBS 标签恢复；**实机 iPad Safari 仍须单独验收**。
+- **Git/发布**：变更经过有依据的定向回归与审计、commit/push 后，按 `AGENTS.md` 第 9 节的唯一 `release/`+manifest 网关发布同一 `lab-ocr-v2` 入口，核对 Git SHA、静态文件 SHA256 和其余 Lab 不变。**仅改 README 的工程契约，不等于运行代码变化；不需要为文档-only 更改重新发布应用。**
 
-## WP04/18 · 逻辑块连续 CM6 源码窗（只做内存编辑）
+## 6. 既有航点文档（历史证据与模块说明；不得覆盖本 README）
 
-- 进入已验证、已保存的工作目录后，自动读取逻辑表全部块并渲染到**原有单一 CM6 源码窗**；每个块文本后追加**一个完整空行**（固定 `\n\n`），包括空逻辑块和最后一块，不再需要点击「查看 Markdown」。逻辑 ID/范围信息位于外部内存映射，源码不插 CMD 标签。
-- V1 的 Obsidian/Everforest 配色、标题源码样式、Markdown/HTML/LaTeX 高亮、Sarasa、行号与 iPad 原生文本选区直接复用现有组件；原来 Frame 的 Undo/Redo 按钮已绑定本 CM6 的官方 History，可键入/撤销/重做。
-- WP04 `changeFilter` 保护逻辑块之间的空行，禁止跨块删除/合并，避免结构与映射破坏。**全部编辑仅在内存**：重复的工作区验证/AG 视图切换不丢当前 CM6 编辑，页面重载则消失；未新增 SQL 写回操作。原始基础表及逻辑表只读，后续 WP05 实施可测试的增量持久化。详见 `docs/v2/WP04_CM6_SOURCE_CONTRACT.md`。
-- **WP04 Markdown 预览修正**：在 Frame 原有 Markdown 预览滚动窗嵌入 V1 的 `article.ocr-markdown`，由 **V1 原版** `ui/markdown-preview.js` 渲染 **当前 CM6 文档**，而非 SQL 旧快照；导入后自动显示、输入/Undo/Redo 后约 180ms 更新，复用 Markdown-it、DOMPurify、KaTeX、代码高亮、Obsidian callout/图片、脚注弹窗和 V1 Everforest CSS。点击带 `data-source-start` 的预览内容可定位现有源码窗；不提前实现 PDF 联动或 SQL 写回。参见 `docs/v2/WP04_V1_MD_PREVIEW.md`。
-
-
-- **WP04 多窗同步修正**：直接复用 V1 `ui/view-store.js` 临时事件和 `ui/scroll-sync.js` 行级滚动器，AG↔CM6↔Markdown 当前三窗焦点、滚动和高亮联动，AG 通过 `logical_id/base_blockid` 精确映射并自动分页，所有 CM6 编辑/撤销更新位置映射，不写 SQL；**PDF 没有真实数据，尚不宣称四窗同步**。见 `docs/v2/WP04_V1_MULTI_PANE_SYNC.md`。
-- **WP04 真正 V1 Lab-OCR 动态多轨 PDF**：2026-11-21 用户实机纠正前两轮错误。此前误以 Main 的 ui/pdf-preview.js/layoutPDFEdgeRails 固定双轨是 V1，复刻不合格。现在逐文件复制 lab-ocr 已验证的 mountLabOcrPdf、layoutPbsLabels 与全部 PDF.js、标签样式/引线/触摸依赖。真正 V1 按标签 Y 碰撞分配多条外侧轨道，空闲立即退回内轨；V2 仅将两表当前逻辑 PBS、稳定 ID、原 bbox 经原组件 setOverlays/loadPage 注入；F02 授权 PDF 路径可选注入，不另造 UI。当前 WP04 PDF 只读，不改变 SQL。见 docs/v2/WP04_V1_LABOCR_MULTILANE_SOURCE.md。
-- **WP04 V1 PDF 单窗/切分往返修复**：针对 iPad Safari“取消切分预览下拉 PDF 不可用、恢复切分 PDF 消失”的实机失败，核对真正 V1 `lab-ocr/ui/frame/layout.js` 的 `pdfSlot`。原 V1 在**永久预览窗**只创建一个 PDF.js 实例，切分只是把同一 PDF DOM/工具栏来回搬移。V2 现已在 Vite 精确隔离适配中复用此机制：三窗预览下拉 PDF 可用、四窗 PDF 在独立窗、恢复切分**不重新获取 PDF 或创建实例**。iPad WebKit PDF 页面 DOM 搬移后，用 V1 原生 `repaintOverlayPage()` 恢复覆盖框与多轨 PBS。`tests/v2-real-markdown-preview.browser.test.mjs` 增加**连续两轮切分取消/恢复 + 选 PDF + Viewer 引用一致 + PDF GET 始终 1**的 Chromium/iPad-WebKit 长期门禁。见 `docs/v2/WP04_V1_PDF_PREVIEW_SPLIT_LIFECYCLE.md`。
-
-## 验收与发布（WP00～WP04）
-
-1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、`sqlite_master` 枚举与逻辑表 6 列及旧 5 列保留数据迁移、安全表名校验、重复导入幂等、旧 Schema、九列逻辑表和源变化可安全原子替换。
-2. `node tests/v2-mineru-base.browser.test.mjs`：Chromium/WebKit、Settings 保存权限、自动导入、SQL 原生下拉同时展示两张物理表，自动生成的逻辑表六列/224 行（样本）与基础表 18 列/分页。
-3. `node tests/v2-clean-frame-isolation.test.mjs`：逐字节共享 Frame 基线不变；旧 V2 组件不复活。
-4. WP04 `node tests/v2-block-source.test.mjs` 和 `node tests/v2-block-source-fixture.test.mjs`：一个空行的块间距、真实224块含9空块/Emoji UTF-16、内存区间与跨块编辑保护；`node tests/v2-mineru-base.browser.test.mjs`：自动 CM6 文本、V1 标题样式和原版 MD 预览（Math/HTML/脚注/callout）、输入/Undo/Redo 实时联动、AG↔源码↔MD双向焦点/滚动、AG自动翻页、iPad WebKit、DOMPurify 安全以及 SQL 不写入。
-5. PDF 映射/授权：`python3 tests/test_v2_pdf_projection.py -q`；`node tests/v2-real-markdown-preview.browser.test.mjs` 实际 22 页测试 PDF 对应 224 逻辑块 PBS/覆盖框与四窗焦点同步，真实工作目录只接受 F02 授权且唯一 PDF；失败不改库、不伪造框。
-6. Frame 独立授权、F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
-7. Git 提交完成后 `npm exec vite build -- --config labs/lab-ocr-v2/vite.config.mjs`，使用 `python3 scripts/v2_frame_publish.py --release-root /Users/daisor/AgentDock/ocr2md/release` 发布，核对 `sourceCommit`、所有资源 SHA、其余六 Lab 不变和公网入口 200。
+- 两表和 Markdown：[WP01 逻辑契约](docs/v2/WP01_LOGICAL_CONTRACT.md)、[WP02 初始化](docs/v2/WP02_LOGICAL_INITIALIZATION.md)、[WP03 无损往返](docs/v2/WP03_MARKDOWN_ROUNDTRIP.md)、[WP03 类型列](docs/v2/WP03_BLOCK_TYPE_CONTRACT.md)；当时只读阶段与五→六列迁移属于历史，当前 CM6 已可编辑。
+- CM6/Markdown/联动：[WP04 CM6](docs/v2/WP04_CM6_SOURCE_CONTRACT.md)、[V1 MD 预览](docs/v2/WP04_V1_MD_PREVIEW.md)、[多窗联动](docs/v2/WP04_V1_MULTI_PANE_SYNC.md)；其早期“PDF 无真实数据/仅三窗”结论已被后续 PDF 接入取代。
+- 正确 V1 PDF：[真正 V1 多轨源](docs/v2/WP04_V1_LABOCR_MULTILANE_SOURCE.md)、[单窗与切分恢复](docs/v2/WP04_V1_PDF_PREVIEW_SPLIT_LIFECYCLE.md)。早期 [错误 PDF 映射](docs/v2/WP04_V1_PDF_PBS_SYNC.md)、[错误复用方案](docs/v2/WP04_V1_PBS_DIRECT_REUSE.md) 曾误将 V0/Main 的固定双轨当 V1，**仅保留为失败证据**，不可作为当前复刻依据。
