@@ -15,7 +15,8 @@ try{
  for(const [kind,browserType] of [['chromium',chromium],['webkit',webkit]]){
   const browser=await browserType.launch({headless:true});
   try{
-   const page=await browser.newPage({viewport:{width:1280,height:850}});
+   const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
+     hasTouch:true,...(kind==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
    const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalReady=false,mdRequests=0,probeCount=0;
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
@@ -35,6 +36,19 @@ try{
    const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type'];
    const tables=[{name:'mineru_base',columns:cols},{name:'logical_block',columns:logicalCols}];
    const rows=Array.from({length:120},(_,i)=>Object.fromEntries(cols.map(k=>[k,k==='blockid'?i+1:k==='block_type'?'text':k==='block_json'?'{"type":"text"}':null])));
+   // Match the actual WP03 out-of-band UTF-16 segment contract. The single
+   // CM6 source is automatically populated with all 224 logical rows.
+   const fragments=Array.from({length:224},(_,i)=>
+     i===0?'# WP04 Chapter 🧪':i===1?'Original text':i===2?'':i===3?'中文😀 content':`Paragraph ${i+1}`);
+   const segments=[];let markdown='';
+   for(let i=0;i<fragments.length;i++){
+     if(i)markdown+='\n\n';
+     const startUtf16=markdown.length;
+     markdown+=fragments[i];
+     segments.push({logicalId:i+1,baseBlockId:i+1,parentId:null,logicalOrder:i+1,
+       blockType:i===0?'title':'text',startUtf16,endUtf16:markdown.length});
+   }
+   const mdSnapshot={schema:'v2-logical-md/v2',markdown,rowCount:224,segments};
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
     const request=route.request();const op=new URL(request.url()).pathname.split('/').at(-1);
     if(op==='import'){
@@ -48,8 +62,7 @@ try{
       mdRequests++;assert(logicalReady,'Markdown should only be rendered from initialized logical rows');
       assert.equal(request.method(),'GET');
       return route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify({schema:'v2-logical-md/v2',markdown:'## 只读 Markdown 🧪\n\nSome text',
-          rowCount:224,segments:[{logicalId:1},{logicalId:2}]})});
+        body:JSON.stringify(mdSnapshot)});
     }
     if(op==='logical-init')throw Error('Deprecated manual initialization must never be requested');
     if(op==='state'&&exists==='retired-v2')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'现有 SQLite 不符合 V2 两表结构，拒绝覆盖'})});
@@ -85,7 +98,7 @@ try{
      {label:'逻辑表 · logical_block',value:'sql:logical_block'}
    ]);
    // Both physical tables are populated atomically during initial import;
-   // choosing logical_block must open its 5-column AG view without a click.
+   // choosing logical_block must open its 6-column AG view without a click.
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
@@ -101,12 +114,70 @@ try{
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 1–120 \/ 224/);
    assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),false);
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
-   const mdButton=page.getByRole('button',{name:'查看重构 Markdown（只读）'});
-   assert.equal(await mdButton.isVisible(),true);
-   await mdButton.click();
-   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2ReadonlyMarkdownPort?.getMarkdown()==='## 只读 Markdown 🧪\n\nSome text',null,{timeout:12000});
-   assert.equal(mdRequests,1);
-   assert.equal(await page.locator('#workspace .cm-content').first().getAttribute('contenteditable'),'false');
+   // WP04 loads this automatically, with two fully blank lines after EVERY
+   // block (including the last); no second CM6 editor or SQL document writer.
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,
+     null,{timeout:15000});
+   const sourceState=await page.locator('#workspace #editor').evaluate(el=>({
+     text:el.v2SourcePort.getMarkdown(),state:el.v2SourcePort.getState(),
+     blocks:el.v2SourcePort.getBlocks(),intervals:el.v2SourcePort.getIntervals(),
+     cmCount:el.querySelectorAll('.cm-editor').length,
+   }));
+   assert.equal(sourceState.cmCount,1,'one existing Frame editor host');
+   assert.equal(sourceState.blocks.length,224);
+   assert.equal(sourceState.blocks[0].markdownText,'# WP04 Chapter 🧪');
+   assert.equal(sourceState.blocks[2].markdownText,'');
+   assert.equal(sourceState.text,fragments.map(text=>text+'\n\n\n').join(''));
+   assert.equal(sourceState.state.dirty,false);
+   assert.equal(sourceState.state.undo,0);
+   assert.equal(sourceState.state.redo,0);
+   assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'true');
+   const computed=await page.locator('#workspace #editor .cm-editor').evaluate(el=>({
+     background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,
+     family:getComputedStyle(el).fontFamily,gutters:el.querySelectorAll('.cm-gutters').length,
+   }));
+   assert.match(computed.background,/rgb\(47, 56, 62\)/,'V1 Everforest source background');
+   assert.equal(computed.gutters,1,'V1 line-number gutter');
+   assert.match(computed.family,/Sarasa/i);
+   await page.waitForFunction(()=>Boolean(document.querySelector('#workspace #editor .cm-ob-heading-line-1')),
+     null,{timeout:12000});
+   const headerPx=await page.locator('#workspace #editor .cm-ob-heading-line-1').first()
+     .evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+   const bodyPx=await page.locator('#workspace #editor .cm-content')
+     .evaluate(el=>parseFloat(getComputedStyle(el).fontSize));
+   assert(headerPx>bodyPx*1.8,'V1 Obsidian heading line style should enlarge H1');
+   assert.equal(mdRequests,1,'auto load should fetch Markdown once');
+   assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
+   assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
+   // Type directly through the existing native CM6 DOM. No SQL POST is sent.
+   await page.locator('#workspace #editor .cm-line').first().click();
+   await page.keyboard.press('End');
+   await page.keyboard.type(' EDIT');
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText.endsWith(' EDIT'),
+     null,{timeout:10000});
+   assert.equal(await page.locator('#workspace #undo').isDisabled(),false);
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),true);
+   assert.equal(postCount,1,'typing must not post SQL');
+   // Replaying the same validated snapshot cannot overwrite unsaved edits.
+   assert.equal(await page.locator('#workspace #editor').evaluate((el,snapshot)=>el.v2SourcePort.load(snapshot,'/demo/books/my-book'),mdSnapshot),false);
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getBlocks()[0].markdownText.endsWith(' EDIT')),true);
+   await page.locator('#workspace #undo').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText==='# WP04 Chapter 🧪',
+     null,{timeout:12000});
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),false);
+   assert.equal(await page.locator('#workspace #redo').isDisabled(),false);
+   await page.locator('#workspace #redo').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText.endsWith(' EDIT'),
+     null,{timeout:12000});
+   assert.equal(postCount,1,'undo/redo must not post SQL');
+   // Structural boundaries are not user text: Ctrl/Meta+A replacement across
+   // all blocks must be refused rather than erase identities or blank lines.
+   const beforeCross=await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown());
+   await page.locator('#workspace #editor .cm-content').click();
+   await page.keyboard.press('ControlOrMeta+A');
+   await page.keyboard.type('SHOULD BE DENIED');
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown()),beforeCross);
+   assert.equal(postCount,1);
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
      el=>el.v2BaseGridPort.getColumns().length),6);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{

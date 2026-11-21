@@ -74,21 +74,6 @@ function pagingControls(){
   let host=bar.querySelector('.v2-base-paging');
   if(host)return host;
   host=document.createElement('div');host.className='v2-base-paging';
-  const preview=document.createElement('button');preview.type='button';
-  preview.className='v2-md-readonly';preview.textContent='查看 Markdown';preview.hidden=true;
-  preview.setAttribute('aria-label','查看重构 Markdown（只读）');
-  preview.addEventListener('click',async()=>{
-    if(selectedTable!=='logical_block'||!bound)return;
-    preview.disabled=true;
-    try{
-      const result=await request('markdown',bound);
-      const port=$('#workspace #editor')?.v2ReadonlyMarkdownPort;
-      if(!port)throw Error('原有 CM6 只读源码接口未就绪');
-      port.setMarkdown(result.markdown);
-      report(`✓ 从逻辑表重构 Markdown · ${result.rowCount} 块 · CM6 只读展示`,'ok');
-    }catch(error){report('Markdown 重构失败：'+error.message,'error');}
-    finally{preview.disabled=false;}
-  });
   const prev=document.createElement('button');prev.type='button';prev.textContent='‹';
   prev.setAttribute('aria-label','SQL 表上一页');
   const label=document.createElement('span');label.className='v2-base-count';
@@ -96,7 +81,7 @@ function pagingControls(){
   next.setAttribute('aria-label','SQL 表下一页');
   prev.addEventListener('click',()=>{offset=Math.max(0,offset-120);void fetchPage();});
   next.addEventListener('click',()=>{offset+=120;void fetchPage();});
-  host.append(preview,prev,label,next);bar.append(host);return host;
+  host.append(prev,label,next);bar.append(host);return host;
 }
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
@@ -116,7 +101,6 @@ function renderGrid(state){
     const first=count?state.offset+1:0;
     const last=Math.min(count,state.offset+state.rows.length);
     paging.querySelector('.v2-base-count').textContent=`${tableLabel(state.tableName)} ${first}–${last} / ${count}`;
-    paging.querySelector('.v2-md-readonly').hidden=!(state.tableName==='logical_block'&&count>0);
     const prev=paging.querySelector('[aria-label="SQL 表上一页"]');
     const next=paging.querySelector('[aria-label="SQL 表下一页"]');
     prev.disabled=state.offset===0;
@@ -166,14 +150,34 @@ async function ensureBase(path){
       state=await request('state',path);
       if(state.logicalCount===0)throw Error('逻辑表自动初始化未完成');
     }
-    if(bound && bound!==path)$('#workspace #editor')?.v2ReadonlyMarkdownPort?.setMarkdown('');
+    if(persistedDirectory()!==path)return; // a later verified directory won the race
+    const port=$('#workspace #editor')?.v2SourcePort;
+    if(!port)throw Error('现有 CM6 源码接口未就绪');
+    if(port.getWorkspace()!==path){
+      // Never retain an old book's source after switching verified workspaces.
+      port.clear();
+      if(state.logicalCount>0){
+        const snapshot=await request('markdown',path);
+        if(persistedDirectory()!==path)return;
+        port.load(snapshot,path);
+      }
+    }
     bound=path;
     revealPhysicalTables(state.tables);
-    report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · SQL 导航已更新`,'ok');
+    report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
     if(active)await fetchPage();
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}
 }
+// Editing is an in-memory-only event; Frame's global Save remains Settings-only.
+// Repeated verified workspace events must never reset the live CM6 history.
+document.addEventListener('v2-cm-protected-separator',()=>
+  report('WP04：逻辑块之间的空行是结构边界，暂不允许跨块删除或合并','warning'));
+document.addEventListener('v2-cm-session',event=>{
+  const {kind,dirty,blocks}=event.detail||{};
+  if(kind==='edit')report(dirty?`● WP04 内存修改 · ${blocks} 逻辑块 · 尚未写入 SQL`:
+    `✓ WP04 撤销至原始内容 · ${blocks} 逻辑块 · SQL 未修改`,dirty?'warning':'ok');
+});
 // This event is issued ONLY after the original F02 probe returned readable,
 // writable and verified. Ignore unsaved directory adoptions explicitly.
 document.addEventListener('v2-workspace-verified',event=>{

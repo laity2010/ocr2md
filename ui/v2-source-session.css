@@ -1,0 +1,9 @@
+/* V2 WP04: use the already-shared V1 Obsidian/Everforest styles and dynamic
+   Frame Sarasa font setting. Override only Frame's empty-editor background. */
+#workspace .ocr-cm-source.v2-source-session .cm-editor{
+  background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);
+  line-height:1.5;
+}
+#workspace .ocr-cm-source.v2-source-session .cm-scroller{
+  background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);
+}

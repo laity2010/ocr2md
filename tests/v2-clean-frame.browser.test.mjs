@@ -47,6 +47,10 @@ try{
        assert.equal(route.request().postDataJSON().confirm,'import-mineru-base');
        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true})});
      }
+     if(op==='markdown')return route.fulfill({status:200,contentType:'application/json',
+       body:JSON.stringify({schema:'v2-logical-md/v2',markdown:'V2 block',rowCount:1,
+         segments:[{logicalId:1,baseBlockId:1,parentId:null,logicalOrder:1,
+           blockType:'text',startUtf16:0,endUtf16:8}]})});
      if(op==='state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(imported?
        {exists:true,blockCount:1,paraBlockCount:1,logicalCount:1,sourceCount:1,offset:0,tableName:'mineru_base',rowCount:1,
         tables:[{name:'mineru_base',columns:['blockid']},{name:'logical_block',columns:['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type']}],

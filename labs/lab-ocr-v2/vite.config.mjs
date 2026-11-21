@@ -41,9 +41,14 @@ export default defineConfig({
           'Frame module switch event');
       }
       if(id.endsWith('/ui/frame/layout.js')){
-        code=exact(code,'return {dispose:()=>editor.destroy(),layout:()=>editor.requestMeasure()};',
-          "host.v2ReadonlyMarkdownPort=Object.freeze({setMarkdown:text=>editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:String(text)}}),getMarkdown:()=>editor.state.doc.toString()});return {dispose:()=>{delete host.v2ReadonlyMarkdownPort;editor.destroy();},layout:()=>editor.requestMeasure()};",
-          'existing CM6 readonly Markdown projection port');
+        // V2-only build adapter: replace Frame's single empty EditorView mount,
+        // NOT its shared layout or a second editor/instance.
+        code=exact(code,"import {EditorState} from '@codemirror/state';",
+          "import {mountV2Source} from '../v2-source-session.js';\nimport {EditorState} from '@codemirror/state';",
+          'single CM6 source adapter import');
+        code=exact(code,'element.append(body);owned=()=>mountEmptySource(body);',
+          'element.append(body);owned=()=>mountV2Source(body);',
+          'single V2 source editor mount');
         return exact(code,'return {dispose(){grid.destroy();},layout:()=>{}};',
           "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs()});return {dispose(){grid.destroy();},layout:()=>{}};",
           'AG view data port');
@@ -55,7 +60,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp03-logical-markdown-readonly-f02',
+        stage:'wp04-logical-cm6-memory-edit-f02',
       })+'\n'});
     },
   }],
