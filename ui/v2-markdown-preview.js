@@ -5,6 +5,8 @@
 import {renderMarkdown} from './markdown-preview.js';
 import morphdom from 'morphdom';
 import {createFootnotePopover} from './footnote-popover.js';
+import {mountV2PaneFocus,focusSourceLine} from './v2-pane-focus.js';
+import './v2-markdown-preview.css';
 
 const SOURCE='#workspace #editor';
 export function mountV2MarkdownPreview(scroller){
@@ -14,17 +16,39 @@ export function mountV2MarkdownPreview(scroller){
   article.className='ocr-markdown';
   scroller.append(article);
   const sourcePort=()=>document.querySelector(SOURCE)?.v2SourcePort;
+  const coordinator=mountV2PaneFocus(scroller,article);
   const footnotes=createFootnotePopover({root:article,onLocate:({sourceLine})=>
-    sourcePort()?.locateSourceLine(sourceLine)});
+    focusSourceLine(sourceLine,'footnote-reader')});
   const onClick=event=>{
     if(footnotes.handleClick(event))return;
     if(!(event.target instanceof Element)||event.target.closest('a[href],summary'))return;
     const tagged=event.target.closest('[data-source-start]');
     if(!tagged||!article.contains(tagged))return;
-    sourcePort()?.locateSourceLine(Number(tagged.dataset.sourceStart));
+    focusSourceLine(Number(tagged.dataset.sourceStart),'preview');
   };
   article.addEventListener('click',onClick);
-  let lastSource=null,renderCount=0,timer=null,disposed=false;
+  let lastSource=null,renderCount=0,timer=null,disposed=false,focusedId=null;
+  const highlight=(logicalId)=>{
+    for(const node of article.querySelectorAll('.v2-sync-preview-focus'))
+      node.classList.remove('v2-sync-preview-focus');
+    if(!Number.isInteger(logicalId))return;
+    const source=sourcePort();
+    const row=source?.getIntervals().find(item=>item.logicalId===logicalId);
+    if(!row)return;
+    const first=source.getLineAtOffset(row.from);
+    const last=source.getLineAtOffset(Math.max(row.from,row.to-1));
+    // Multiple Markdown tokens can belong to one logical block; mark all
+    // intersecting render ranges, not just the first paragraph.
+    for(const node of article.querySelectorAll('[data-source-start][data-source-end]')){
+      const a=Number(node.dataset.sourceStart),b=Number(node.dataset.sourceEnd);
+      if(a<=last&&b>first)node.classList.add('v2-sync-preview-focus');
+    }
+  };
+  const onFocus=event=>{
+    focusedId=event.detail?.logicalId??null;
+    highlight(focusedId);
+  };
+  document.addEventListener('v2-sync-focus',onFocus);
 
   const refresh=()=>{
     if(disposed)return;
@@ -34,6 +58,7 @@ export function mountV2MarkdownPreview(scroller){
     // The V1 renderMarkdown() function is already responsible for its
     // Markdown-it/KaTeX/footnote/Obsidian plugins and DOMPurify sanitation.
     // Render first, then update the DOM, so malformed input doesn't clear it.
+    const location=coordinator.port.beforeRender();
     const html=source?renderMarkdown(source):'';
     footnotes.close();
     const ratio=scroller.scrollHeight>scroller.clientHeight
@@ -50,7 +75,12 @@ export function mountV2MarkdownPreview(scroller){
       if(folds.has(key))detail.open=folds.get(key);
     }
     lastSource=source;renderCount++;
-    scroller.scrollTop=ratio*Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+    highlight(focusedId);
+    if(location)coordinator.port.afterRender(location);
+    else{
+      scroller.scrollTop=ratio*Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+      coordinator.port.measureLater();
+    }
   };
   const schedule=(immediate=false)=>{
     clearTimeout(timer);timer=null;
@@ -67,6 +97,9 @@ export function mountV2MarkdownPreview(scroller){
     getHtml:()=>article.innerHTML,
     getText:()=>article.textContent,
     getRenderedCount:()=>renderCount,
+    getFocusedId:()=>focusedId,
+    getScrollDriver:()=>coordinator.port.getScrollDriver(),
+    getScrollAnchorCount:()=>coordinator.port.getScrollAnchorCount(),
     refresh:()=>schedule(true),
   });
   scroller.v2MarkdownPreviewPort=port;
@@ -75,6 +108,8 @@ export function mountV2MarkdownPreview(scroller){
   return Object.freeze({dispose(){
     disposed=true;clearTimeout(timer);
     document.removeEventListener('v2-cm-session',onSession);
+    document.removeEventListener('v2-sync-focus',onFocus);
+    coordinator.dispose();
     delete scroller.v2MarkdownPreviewPort;
     article.removeEventListener('click',onClick);
     footnotes.dispose();

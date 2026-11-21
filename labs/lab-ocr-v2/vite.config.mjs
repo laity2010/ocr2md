@@ -53,7 +53,7 @@ export default defineConfig({
           "element.append(area);owned=()=>mountV2MarkdownPreview(area);\n    element.setAttribute('aria-label','Markdown 阅读预览');",
           'V1 Markdown renderer in original Frame preview pane');
         return exact(code,'return {dispose(){grid.destroy();},layout:()=>{}};',
-          "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs()});return {dispose(){grid.destroy();},layout:()=>{}};",
+          "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs(),onRowClicked:handler=>{grid.addEventListener('rowClicked',handler);return ()=>grid.removeEventListener('rowClicked',handler);},focusRow:(field,id)=>{grid.setGridOption('rowClassRules',{'v2-sync-ag-row':p=>p.data?.[field]===id});grid.redrawRows();for(let i=0;i<grid.getDisplayedRowCount();i++){const node=grid.getDisplayedRowAtIndex(i);if(node?.data?.[field]===id){grid.ensureIndexVisible(i,'auto');return true;}}return false;}});return {dispose(){grid.destroy();},layout:()=>{}};",
           'AG view data port');
       }
       if(id.endsWith('/ui/frame/refresh.js')){
@@ -63,7 +63,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp04-live-v1-markdown-preview-one-blank-line-f02',
+        stage:'wp04-v1-multi-pane-source-ag-preview-sync-f02',
       })+'\n'});
     },
   }],

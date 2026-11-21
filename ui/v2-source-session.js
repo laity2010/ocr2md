@@ -2,8 +2,8 @@
  * Same V1 CodeMirror Markdown extensions/palette, no second EditorView,
  * no SQL writes. Undo/Redo use native CodeMirror history only.
  */
-import {EditorState} from '@codemirror/state';
-import {EditorView} from '@codemirror/view';
+import {EditorState,StateField,StateEffect} from '@codemirror/state';
+import {EditorView,Decoration} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
@@ -14,10 +14,29 @@ import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
 import {composeBlockSource,canEditBlocks,mapEditedBlocks,logicalTextRows,BLOCK_END} from './v2-block-source.js';
+import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
+import {logicalAtOffset} from './v2-focus-map.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
-  let book='',loaded=false,initial='',blocks=[],dirty=false;
+  let book='',loaded=false,initial='',blocks=[],dirty=false,programmatic=false;
+  const focusEffect=StateEffect.define();
+  const focusField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      value=value.map(tr.changes);
+      for(const effect of tr.effects)if(effect.is(focusEffect)){
+        const {from,to}=effect.value||{};
+        if(!Number.isInteger(from)||!Number.isInteger(to))value=Decoration.none;
+        else if(from===to){
+          const line=tr.state.doc.lineAt(Math.min(from,tr.state.doc.length));
+          value=Decoration.set([Decoration.line({class:'v2-sync-source-focus'}).range(line.from)]);
+        }else value=Decoration.set([Decoration.mark({class:'v2-sync-source-focus'}).range(from,to)]);
+      }
+      return value;
+    },provide:f=>EditorView.decorations.from(f),
+  });
+  let selectedId=null;
   host.classList.add('v2-source-session');
   const native=isIOSWebKit();
   host.classList.toggle('ocr-ios-native-selection',native);
@@ -38,7 +57,7 @@ export function mountV2Source(host){
     EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),obsidianMarkdown,
     syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
-    obsidianSourceSyntax,obsidianHeadingMarkers,
+    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,
     EditorState.changeFilter.of(tr=>{
       if(!tr.docChanged||!loaded)return true;
       const allowed=canEditBlocks(blocks,tr.changes);
@@ -49,8 +68,22 @@ export function mountV2Source(host){
       if(update.docChanged&&loaded){
         blocks=mapEditedBlocks(blocks,update.changes);
         dirty=update.state.doc.toString()!==initial;
+        documentChanged(); // V1 revision rejects stale multi-pane focus/scroll
         refresh();emit('edit');
       }else if(update.transactions.length&&loaded){refresh();}
+      if(loaded&&!programmatic&&(update.selectionSet||update.docChanged)){
+        const pos=update.state.selection.main.head;
+        selectionChanged(pos);
+        const row=logicalAtOffset(blocks,pos);
+        if(row&&row.logicalId!==selectedId){
+          selectedId=row.logicalId;
+          // CM6 cannot dispatch while its own update is in progress.
+          // Schedule only the decoration; the state-bus focus is synchronous.
+          queueMicrotask(()=>{if(loaded&&selectedId===row.logicalId)setFocused(row);});
+          publishFocus({sourceLine:update.state.doc.lineAt(Math.min(pos,update.state.doc.length)).number,
+            origin:'cm6',intent:'click',elementId:String(row.logicalId)});
+        }
+      }
     }),
   ];
   const editor=new EditorView({state:EditorState.create({doc:'',extensions}),parent:host});
@@ -62,30 +95,56 @@ export function mountV2Source(host){
     loaded=false; // state replacement is not a user edit/history step
     editor.setState(next);
     book=workspace;blocks=created.blocks;initial=created.source;
-    loaded=true;dirty=false;refresh();emit('load');
+    loaded=true;dirty=false;selectedId=null;documentChanged();refresh();emit('load');
     return true;
   };
   const clear=()=>{
     if(!loaded&&!book)return;
-    loaded=false;book='';blocks=[];initial='';dirty=false;
+    loaded=false;book='';blocks=[];initial='';dirty=false;selectedId=null;
     editor.setState(EditorState.create({doc:'',extensions}));
-    refresh();emit('clear');
+    documentChanged();refresh();emit('clear');
   };
   const onUndo=()=>{if(loaded&&undoDepth(editor.state))undo(editor);refresh();};
   const onRedo=()=>{if(loaded&&redoDepth(editor.state))redo(editor);refresh();};
   undoButton?.addEventListener('click',onUndo);
   redoButton?.addEventListener('click',onRedo);
+  const setFocused=row=>{
+    if(!row)return false;
+    const from=Math.min(row.from,editor.state.doc.length);
+    const to=Math.min(row.to,editor.state.doc.length);
+    selectedId=row.logicalId;
+    programmatic=true;
+    try{editor.dispatch({effects:focusEffect.of({from,to})});}finally{programmatic=false;}
+    return true;
+  };
   const locateSourceLine=line=>{
     if(!loaded||!Number.isInteger(line)||line<1||line>editor.state.doc.lines)return false;
     const pos=editor.state.doc.line(line).from;
-    editor.dispatch({selection:{anchor:pos},effects:EditorView.scrollIntoView(pos,{y:'center'})});
+    const row=logicalAtOffset(blocks,pos);
+    programmatic=true;
+    try{editor.dispatch({selection:{anchor:pos},effects:focusEffect.of(row)});}
+    finally{programmatic=false;}
+    selectedId=row?.logicalId??null;
     editor.focus();
     return true;
   };
+  const locateLogicalId=id=>{
+    if(!loaded)return false;
+    const row=blocks.find(row=>row.logicalId===id);
+    if(!row)return false;
+    const pos=row.from;
+    programmatic=true;
+    try{editor.dispatch({selection:{anchor:pos},effects:focusEffect.of(row)});}
+    finally{programmatic=false;}
+    selectedId=id;editor.focus();return true;
+  };
   const port=Object.freeze({
-    load,clear,locateSourceLine,getMarkdown:()=>editor.state.doc.toString(),
+    load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
+    getEditorView:()=>editor,getDoc:()=>editor.state.doc,
+    getLineAtOffset:pos=>editor.state.doc.lineAt(Math.min(Math.max(pos,0),editor.state.doc.length)).number,
+    getMarkdown:()=>editor.state.doc.toString(),
     getBlocks:()=>logicalTextRows(editor.state.doc.toString(),blocks),
-    getIntervals:()=>blocks.map(({logicalId,from,to})=>({logicalId,from,to})),
+    getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,from,to})=>({logicalId,baseBlockId,logicalOrder,blockType,from,to})),
     getWorkspace:()=>book,
     getState:()=>({book,loaded,dirty,blockCount:blocks.length,
       undo:undoDepth(editor.state),redo:redoDepth(editor.state),separator:BLOCK_END}),

@@ -4,6 +4,7 @@
  */
 import {createFrameStatus} from './frame/global-status.js';
 import './v2-mineru-base.css';
+import {pageForLogical} from './v2-focus-map.js';
 const status=createFrameStatus(document.getElementById('status'));
 const API='/labs/lab-ocr-v2/api/mineru-base/';
 const SETTINGS_KEY='ocr2md.lab-ocr-v2-frame.settings.json.v1';
@@ -18,6 +19,7 @@ const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:
   blocks_json:'blocks',block_json:'完整原始 Block JSON',record_kind:'记录类型',
   original_bytes:'原文件归档字节'};
 let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
+let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
 const $=selector=>document.querySelector(selector);
 function persistedDirectory(){
   try{return JSON.parse(localStorage.getItem(SETTINGS_KEY))?.settings?.['workspace.dataDirectory']?.value||'';}
@@ -86,6 +88,14 @@ function pagingControls(){
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
   if(!port)throw Error('AG 公共数据显示接口尚未就绪');
+  if(port!==wiredGrid){
+    unsubscribeGridClick?.();wiredGrid=port;
+    unsubscribeGridClick=port.onRowClicked(event=>{
+      if(!active||!bound||!event.data)return;
+      document.dispatchEvent(new CustomEvent('v2-ag-row-click',{
+        detail:{table:selectedTable,row:event.data,workspace:bound}}));
+    });
+  }
   const columns=state.columns.map((key,index)=>({field:key,
     headerName:key==='block_type'&&state.tableName==='logical_block'?'Block Type（当前）':sourceHeaders[key]||key,
     headerTooltip:key,tooltipField:key,resizable:true,sortable:true,
@@ -95,6 +105,10 @@ function renderGrid(state){
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
   port.setColumns(columns);
   port.setRows(state.rows);
+  if(lastFocus){
+    port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
+      state.tableName==='logical_block'?lastFocus.logicalId:lastFocus.baseBlockId);
+  }
   const count=Number(state.rowCount??state.blockCount??0);
   const paging=pagingControls();
   if(paging){
@@ -169,12 +183,28 @@ async function ensureBase(path){
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}
 }
+// One-way V1-style transient focus event from CM6/preview/AG. Only the
+// currently displayed AG page follows; never write focus to SQLite.
+document.addEventListener('v2-sync-focus',event=>{
+  const row=event.detail;
+  const source=$('#workspace #editor')?.v2SourcePort;
+  if(!row||!bound||source?.getWorkspace()!==bound)return;
+  lastFocus=row;
+  if(!active)return;
+  const desired=pageForLogical(row,selectedTable);
+  if(desired===null)return;
+  if(desired!==offset){offset=desired;void fetchPage();return;}
+  $('#workspace .ocr-outline-grid')?.v2BaseGridPort?.focusRow(
+    selectedTable==='logical_block'?'logical_id':'blockid',
+    selectedTable==='logical_block'?row.logicalId:row.baseBlockId);
+});
 // Editing is an in-memory-only event; Frame's global Save remains Settings-only.
 // Repeated verified workspace events must never reset the live CM6 history.
 document.addEventListener('v2-cm-protected-separator',()=>
   report('WP04：逻辑块之间的空行是结构边界，暂不允许跨块删除或合并','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
+  if(kind==='clear')lastFocus=null;
   if(kind==='edit')report(dirty?`● WP04 内存修改 · ${blocks} 逻辑块 · 尚未写入 SQL`:
     `✓ WP04 撤销至原始内容 · ${blocks} 逻辑块 · SQL 未修改`,dirty?'warning':'ok');
 });

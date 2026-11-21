@@ -77,14 +77,18 @@ try{
       const query=new URL(request.url()).searchParams;
       const table=query.get('table')||'mineru_base';
       const logical=table==='logical_block';
+      const pageOffset=Number(query.get('offset')||0);
       assert(['mineru_base','logical_block'].includes(table));
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
         {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,
         tables,tableName:table,paraBlockCount:224,logicalCount:logicalReady?224:0,rowCount:logical?(logicalReady?224:0):539,
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
-          Array.from({length:120},(_,i)=>({logical_id:i+1,base_blockid:i+1,parent_id:null,
-            logical_order:i+1,markdown_text:'reconstructed',block_type:'text'})):[]):rows,
-        offset:Number(query.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
+          Array.from({length:Math.max(0,Math.min(120,224-pageOffset))},(_,i)=>({
+            logical_id:pageOffset+i+1,base_blockid:pageOffset+i+1,parent_id:null,
+            logical_order:pageOffset+i+1,markdown_text:'reconstructed',block_type:'text'})):[]):
+          Array.from({length:Math.max(0,Math.min(120,539-pageOffset))},(_,i)=>({
+            ...rows[0],blockid:pageOffset+i+1})),
+        offset:pageOffset}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
     }
     return route.abort();
    });
@@ -165,6 +169,54 @@ try{
      'V1 source line coordinate projection exists');
    assert.equal(sourceState.state.undo,0);
    assert.equal(sourceState.state.redo,0);
+   // V1 transient state bus + logical-id adapter: AG -> source -> MD.
+   await page.locator('#workspace .ocr-outline-grid .ag-row[row-index="1"] .ag-cell').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getFocusedId()===2,null,{timeout:10000});
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),
+     sourceState.intervals[1].from);
+   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   // Preview -> source + AG, without a second CM6 document.
+   await article.locator('h1').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getFocusedId()===1,null,{timeout:10000});
+   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   // Source/CM6 selection in a distant block -> AG automatic page 121-224.
+   await page.locator('#workspace #editor').evaluate(el=>{
+     const p=el.v2SourcePort;const row=p.getIntervals().find(b=>b.logicalId===130);
+     p.getEditorView().dispatch({selection:{anchor:row.from}});
+   });
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
+     ?.textContent.includes('121–224'),null,{timeout:12000});
+   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   // Navigate back to the first page for the remaining CM6 edit regression.
+   await page.locator('#workspace #editor').evaluate(el=>{
+     const p=el.v2SourcePort;p.getEditorView().dispatch({selection:{anchor:p.getIntervals()[0].from}});
+   });
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
+     ?.textContent.includes('1–120'),null,{timeout:12000});
+   // The exact V1 scroll-sync coordinator must have installed source-line
+   // anchors for real two-way scrolling (not percentage-only linking).
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getScrollAnchorCount()>100,null,{timeout:12000});
+   await page.locator('#workspace .ocr-preview-md-scroll').evaluate(pane=>{
+     pane.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:350}));
+     pane.scrollTop=Math.min(pane.scrollHeight-pane.clientHeight,1800);
+     pane.dispatchEvent(new Event('scroll'));
+   });
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getScrollDriver()==='preview',null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort
+     ?.getEditorView().scrollDOM.scrollTop>200,null,{timeout:12000});
+   await page.locator('#workspace #editor').evaluate(el=>{
+     const src=el.v2SourcePort.getEditorView().scrollDOM;
+     src.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:-350}));
+     src.scrollTop=0;src.dispatchEvent(new Event('scroll'));
+   });
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getScrollDriver()==='cm6',null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.scrollTop<500,null,{timeout:12000});
    assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'true');
    const computed=await page.locator('#workspace #editor .cm-editor').evaluate(el=>({
      background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,
