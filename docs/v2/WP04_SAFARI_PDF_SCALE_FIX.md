@@ -1,0 +1,23 @@
+# WP04 V2 · iPad Safari PDF.js −5% 缩放与第2页绘制失败修复
+
+## 实机证据与确定原因
+
+2026-11-21 用户 Safari 截图（192.168.1.10 V2, build 20261121-2055）顶部报告 `PDF 页面渲染错误：第 2 页`，PDF 工具栏报告 `-5%`，原文区空白。这是**PDF 层的渲染错误**，不能归罪于逻辑表或 bbox。
+
+直接检查本项目安装的官方 `pdfjs-dist/web/pdf_viewer.mjs`：`#setScale('page-width')` 使用 `(container.clientWidth - 40) / pageWidth * pageScale`。Dockview 四窗在初始隐藏、分屏切换或 iPad 布局尚未完成时可能返回 `clientWidth=0`。当页宽约 792 CSS px 时，计算出 `-0.05050505`，正好显示 `-5%`。用真实 22 页测试书籍在 Chromium 浏览器把 PDF scroller 宽设为 `0px` 再点击「适宽」**已复现同一 `-0.05050505` 失败值**，此测试修复前 FAIL；仅调用 `viewer.update()` 不会重新计算 `page-width`，所以面板展开后仍可保持错误值。
+
+## 安全修复与范围
+
+只改 V2 自己的 `ui/v2-pdf-viewer.js`，不改 shared Lab-Frame、Main、SQL 或 V1 PDF.js 源码。
+
+- 对 PDF.js 初始 `pagesinit`，以及「适宽」工具栏和 ResizeObserver 的每次重布局，先确认页容器实测 `clientWidth>=80`、`clientHeight>=50`，且 PDF 页完成初始化。**在 0px 时不调用官方 `currentScaleValue='page-width'`**，用正的 0.75 暂时保底并设置 `fitPending`。
+- Dockview 布局变成有效尺寸时，ResizeObserver 触发**重新赋值** `currentScaleValue='page-width'`，PDFViewer 重新计算正的比例，并执行 `update()`；同一宽度不无谓多次刷新。用户手工缩放保留 `manual` 模式，不在非适宽状态偷偷重置。
+- 工具栏仅显示有限正比例或占位符，不显示负值；`pagerendered.error` 提示具体有限长度错误消息，便于再次诊断，不隐藏非缩放导致的真实 PDF 错误。
+- 不改变 V1 `pdfOverlayRect`、`layoutPDFEdgeRails`、原始 PDF bbox 和 PBS/逻辑 ID 映射。原始两物理表、CM6 Undo/Redo /多窗同步保持。
+
+## 测试门禁
+
+- `tests/v2-real-markdown-preview.browser.test.mjs`：Chromium + iPad UA WebKit，真实 MinerU 22 页、224 块/框，**iPad 首次 PDF.js pagesinit 时 scroller 0px**，检查安全正比例+`fitPending=true`，可见后恢复适宽；四窗导航、AG 跨页、PDF 标签点击、缩放覆盖框比例不变；再将已经正常显示的 PDF scroller 强制设为 0 并点击「适宽」，检查仍然是正比例，恢复后重新自动适宽；断言期间无 `PDF 页面渲染错误`，无页面 JS 异常。
+- 原 WP00–04 全部 SQL/PDF 映射/CM6/Markdown/Frame CSS 与共享组件指纹回归，GitHub独立 commit/tag，可回退；只更新 V2 Lab 当前统一发布文件，不更改用户书籍数据。
+
+真实用户的 iPad Safari 必须重新加载该修复版本再现场确认第 2 页绘制成功；自动化 iPad WebKit 只能证明该负比例问题已被修复，不能充当用户实机验收。

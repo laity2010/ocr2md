@@ -15,6 +15,10 @@ import './pdf-preview.css';
 import './v2-pdf-viewer.css';
 GlobalWorkerOptions.workerSrc=workerUrl;
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+// PDF.js page-width subtracts its 40px scrollbar/padding allowance.
+// Hidden Dockview panes can report 0px at pagesinit: that produces -5% (!)
+// and a broken PDF canvas. Defer auto-fit until a real pane is measurable.
+const MIN_FIT_WIDTH=80,MIN_FIT_HEIGHT=50;
 const API='/labs/lab-ocr-v2/api/mineru-base/';
 const $=selector=>document.querySelector(selector);
 function notify(text,kind='info'){
@@ -45,13 +49,42 @@ export function mountV2PDF(host){
   let pdf=null,task=null,viewer=null,model=null,workspace='',token=0,selectedId=null;
   let pdfUserUntil=0,disposed=false,rotationInvalid=new Set(),readyPages=new Set(),
     repaintPending=false,hasPrinted=false;
+  let pagesInitialized=false,fitPending=true,lastFitWidth=0,zoomMode='page-width';
   const rowsById=new Map();
   const canPaint=()=>Boolean(pdf&&viewer&&model&&!disposed);
   const source=()=>$('#workspace #editor')?.v2SourcePort;
   const rowsOnPage=page=>model?.covers.filter(item=>item.physicalPageIndex===page)||[];
   const getPageDiv=page=>viewer?.getPageView(page)?.div;
   const findLogical=(id)=>source()?.getIntervals().find(row=>row.logicalId===id);
-  const updateZoom=()=>{zoom.textContent=viewer?Math.round(viewer.currentScale*100)+'%':'—';};
+  const updateZoom=()=>{
+    const scale=viewer?.currentScale;
+    zoom.textContent=Number.isFinite(scale)&&scale>0?Math.round(scale*100)+'%':'—';
+  };
+  function fitPageWidth(force=false){
+    if(!viewer?.pdfDocument||!pagesInitialized){fitPending=true;return false;}
+    const width=scroller.clientWidth,height=scroller.clientHeight;
+    if(width<MIN_FIT_WIDTH||height<MIN_FIT_HEIGHT){
+      fitPending=true;
+      // An already-invalid scale (e.g. from an older pre-fix instance)
+      // must never be propagated into PDF.js canvas rendering.
+      if(!Number.isFinite(viewer.currentScale)||viewer.currentScale<=0){
+        viewer.currentScaleValue=0.75;
+        viewer.update();
+      }
+      updateZoom();return false;
+    }
+    if(!force&&!fitPending&&lastFitWidth===width&&viewer.currentScale>0){
+      updateZoom();return true;
+    }
+    viewer.currentScaleValue='page-width';
+    if(!Number.isFinite(viewer.currentScale)||viewer.currentScale<=0){
+      viewer.currentScaleValue=0.75;
+      fitPending=true;updateZoom();return false;
+    }
+    lastFitWidth=width;fitPending=false;
+    viewer.update();updateZoom();repaintLater();
+    return true;
+  }
   function clearVisuals(){
     pages.querySelectorAll('.v2-pdf-cover,.v2-pdf-label-layer').forEach(n=>n.remove());
   }
@@ -146,7 +179,11 @@ export function mountV2PDF(host){
   observer.observe(pages,{subtree:true,childList:true});
   const resize=new ResizeObserver(()=>{
     if(!canPaint()||!host.isConnected)return;
-    if(viewer.currentScaleValue==='page-width')viewer.update();
+    // V1 onResize performs a NEW page-width calculation when the pane
+    // becomes visible / its width changes. PDFViewer.update() alone does
+    // NOT recalculate page-width, leaving the initial -5% stuck forever.
+    if(zoomMode==='page-width')fitPageWidth();
+    else viewer.update();
     repaintLater();
   });resize.observe(scroller);
   async function navigatePDF(id,{reveal=false}={}){
@@ -206,6 +243,7 @@ export function mountV2PDF(host){
     ++token; // abort pending fetch/decoder from a previous authorized book
     model=null;workspace='';selectedId=null;rowsById.clear();
     rotationInvalid.clear();readyPages.clear();hasPrinted=false;
+    pagesInitialized=false;fitPending=true;lastFitWidth=0;zoomMode='page-width';
     clearVisuals();
     viewer?.setDocument(null);viewer=null;
     // Worker owns the original bytes; release them before opening another PDF.
@@ -249,11 +287,22 @@ export function mountV2PDF(host){
     task=loading;pdf=opened;model=next;workspace=workspacePath;
     rowsById.clear();for(const row of model.covers)rowsById.set(row.logicalId,row);
     selectedId=null;rotationInvalid.clear();readyPages.clear();hasPrinted=false;
+    pagesInitialized=false;fitPending=true;lastFitWidth=0;zoomMode='page-width';
     const bus=new EventBus();
     viewer=new PDFViewer({container:scroller,viewer:pages,eventBus:bus,
       textLayerMode:1,annotationMode:0,
       maxCanvasPixels:/(iPad|iPhone|iPod)/i.test(navigator.userAgent)?1_500_000:6_000_000});
-    bus.on('pagesinit',()=>{viewer.currentScaleValue='page-width';viewer.update();updateZoom();repaintLater();});
+    bus.on('pagesinit',()=>{
+      pagesInitialized=true;
+      if(!fitPageWidth(true)){
+        // Loading a hidden PDF should never create a negative zoom (the
+        // screenshot's -5%). Start with a safe positive scale; ResizeObserver
+        // re-fits when Dockview supplies a measurable size.
+        viewer.currentScaleValue=0.75;
+        viewer.update();updateZoom();
+      }
+      repaintLater();
+    });
     bus.on('pagechanging',event=>{
       pageInput.value=String(event.pageNumber);
       if(performance.now()>pdfUserUntil)return;
@@ -265,7 +314,14 @@ export function mountV2PDF(host){
       if(line)publishFocus({sourceLine:line,origin:'pdf',intent:'click',elementId:String(row.logicalId)});
     });
     bus.on('pagerendered',event=>{
-      if(event.error){notify('PDF 页面渲染错误：第 '+event.pageNumber+' 页','error');return;}
+      if(event.error){
+        const detail=String(event.error?.message||event.error||'未知原因').slice(0,140);
+        notify('PDF 页面渲染错误：第 '+event.pageNumber+' 页 · '+detail,'error');
+        // If a now-visible pane still has a stale zoom value, trigger a
+        // positive fit rather than letting PDF.js retry negative canvas sizes.
+        if(zoomMode==='page-width'&&fitPending)fitPageWidth(true);
+        return;
+      }
       readyPages.add(event.pageNumber-1);
       layoutPage(event.pageNumber-1);
     });
@@ -276,8 +332,14 @@ export function mountV2PDF(host){
     return true;
   };
   const setZoom=value=>{
-    if(!viewer)return;
-    viewer.currentScaleValue=value;viewer.update();updateZoom();repaintLater();
+    if(!viewer||!pagesInitialized)return;
+    if(value==='page-width'){
+      zoomMode='page-width';fitPageWidth(true);return;
+    }
+    const scale=Number(value);
+    if(!Number.isFinite(scale)||scale<=0)return;
+    zoomMode='manual';fitPending=false;
+    viewer.currentScaleValue=scale;viewer.update();updateZoom();repaintLater();
   };
   toolbar.querySelector('.v2-pdf-fit').addEventListener('click',()=>setZoom('page-width'));
   toolbar.querySelector('.v2-pdf-plus').addEventListener('click',()=>{
@@ -295,10 +357,13 @@ export function mountV2PDF(host){
   const port=Object.freeze({load:ready,focusId:id=>navigatePDF(id,{reveal:true}),
     getState:()=>({loaded:Boolean(pdf&&model),workspace,pageCount:pdf?.numPages||0,
       mappedCount:model?.mappedCount||0,painted:hasPrinted,selectedId,
-      invalidPages:[...rotationInvalid]}),
+      invalidPages:[...rotationInvalid],scale:viewer?.currentScale??null,
+      fitPending,scrollerWidth:scroller.clientWidth}),
     getCovers:()=>model?.covers||[],getViewer:()=>viewer,clear:clearDocument});
   host.v2PDFPort=port;
-  return {layout(){if(viewer&&scroller.clientWidth)viewer.update();repaintLater();},
+  return {layout(){if(zoomMode==='page-width')fitPageWidth();
+      else if(viewer&&scroller.clientWidth)viewer.update();
+      repaintLater();},
     dispose(){disposed=true;token++;resize.disconnect();observer.disconnect();
       pages.removeEventListener('click',onPdfClick);
       for(const type of ['wheel','touchstart','pointerdown','keydown'])

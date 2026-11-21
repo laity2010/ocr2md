@@ -40,7 +40,24 @@ try{
       const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:834,height:1112}:{width:1100,height:900},
         hasTouch:true,...(name==='iPad-WebKit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
       const errors=[];page.on('pageerror',event=>errors.push(event.message));
+      await page.addInitScript(()=>{
+        window.__v2PdfStatuses=[];
+        document.addEventListener('v2-pdf-status',event=>{
+          if(window.__v2PdfStatuses.length<60)window.__v2PdfStatuses.push(event.detail?.text||'');
+        });
+      });
       const folder='/demo/books/wp04-real-preview';
+      // Reproduce the real iPad failure at INITIAL PDF.js pagesinit: Dockview
+      // can initialize the PDF with a zero-width (not yet laid out) scroller.
+      // Remove only after page initialization, then require auto-refit.
+      if(name==='iPad-WebKit')await page.addInitScript(()=>{
+        document.addEventListener('DOMContentLoaded',()=>{
+          const style=document.createElement('style');
+          style.id='v2-test-zero-width-on-pagesinit';
+          style.textContent='#workspace .ocr-pdf-scroller{width:0px!important}';
+          document.head.append(style);
+        },{once:true});
+      });
       await page.addInitScript(directory=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
         JSON.stringify({settings:{
           'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -111,6 +128,19 @@ try{
       assert.equal(result.editorCount,1);
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')
         ?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+      if(name==='iPad-WebKit'){
+        await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-zoom')
+          ?.textContent!=='—',null,{timeout:15000});
+        const hidden=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState());
+        assert.equal(hidden.scrollerWidth,0,'the PDF must initialize in a collapsed pane');
+        assert(hidden.fitPending,'initial fit must remain pending until layout is valid');
+        assert(hidden.scale>0,'initial collapsed PDF cannot create negative scale');
+        await page.evaluate(()=>document.getElementById('v2-test-zero-width-on-pagesinit')?.remove());
+        await page.waitForFunction(()=>{
+          const state=document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState();
+          return state&&!state.fitPending&&state.scrollerWidth>80&&state.scale>0;
+        },null,{timeout:18000});
+      }
       await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-label[data-logical-id="23"]'),
         null,{timeout:30000});
       const pdfState=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState());
@@ -168,13 +198,49 @@ try{
       await page.waitForFunction(expected=>document.querySelector('#workspace .ocr-preview-pdf-host')
         ?.v2PDFPort?.getState().selectedId===expected,agId,{timeout:10000});
       const expectedPage=projection.covers.find(row=>row.logicalId===agId).physicalPageIndex+1;
-      await page.waitForFunction(n=>document.querySelector('#workspace .ocr-detached-pdf-toolbar .ocr-pdf-page')?.value===String(n),
-        expectedPage,{timeout:12000});
+      try{
+        await page.waitForFunction(n=>document.querySelector('#workspace .ocr-detached-pdf-toolbar .ocr-pdf-page')?.value===String(n),
+          expectedPage,{timeout:12000});
+      }catch(error){
+        console.log('V2_PDF_AG_PAGE_DIAG',name,JSON.stringify({agId,expectedPage,
+          model:projection.covers.find(c=>c.logicalId===agId),
+          pdf:await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>({
+            state:el.v2PDFPort.getState(),viewerPage:el.v2PDFPort.getViewer()?.currentPageNumber,
+            field:el.closest('.ocr-detached-pdf-pane').querySelector('.ocr-pdf-page')?.value,
+            scrollerHeight:el.querySelector('.ocr-pdf-scroller')?.scrollHeight,
+            scrollTop:el.querySelector('.ocr-pdf-scroller')?.scrollTop,
+          }))}));
+        throw error;
+      }
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),agId);
+      // iPad split panes are often hidden or 0px wide when PDF.js pagesinit
+      // fires; PDF.js page-width=(clientWidth-40)/pageWidth, which is negative
+      // at width 0. Fit must never apply that negative value and must recover
+      // automatically after Dockview reveals the panel again.
+      await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>{
+        el.querySelector('.ocr-pdf-scroller').style.width='0px';
+      });
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host .ocr-pdf-scroller')?.clientWidth===0,
+        null,{timeout:8000});
+      await page.locator('#workspace .v2-pdf-fit').click();
+      const hiddenScale=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getViewer().currentScale);
+      assert(Number.isFinite(hiddenScale)&&hiddenScale>0,'collapsed PDF panel cannot produce a negative scale: '+hiddenScale);
+      await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>{
+        el.querySelector('.ocr-pdf-scroller').style.width='';
+      });
+      await page.waitForFunction(()=>{
+        const host=document.querySelector('#workspace .ocr-preview-pdf-host');
+        const scroller=host?.querySelector('.ocr-pdf-scroller');
+        const scale=host?.v2PDFPort?.getViewer()?.currentScale;
+        return scroller?.clientWidth>80&&Number.isFinite(scale)&&scale>0&&
+          Number(document.querySelector('#workspace .v2-pdf-zoom')?.textContent.replace('%',''))>0;
+      },null,{timeout:12000});
       assert(result.headingCount>0,result);
       assert(result.textLength>10000,result);
       assert.equal(sqlPosts,0);
       assert.equal(markdownGets,1);
+      const renderFailures=await page.evaluate(()=>window.__v2PdfStatuses.filter(x=>x.includes('页面渲染错误')));
+      assert.deepEqual(renderFailures,[],name+' should not report PDF canvas errors, even when panes start at zero width');
       assert.deepEqual(errors,[]);
       console.log('WP04_REAL_V1_PREVIEW_BROWSER_PASS',name,JSON.stringify(result));
     }finally{await browser.close();}
