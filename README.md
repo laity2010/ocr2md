@@ -21,6 +21,18 @@
 
 **不得新增第 3 张应用物理表，不以 SQL 表保存操作历史。** WP04 已使用 CM6 内存 Undo/Redo，WP05 另行接入经确认的安全 SQL 增量写回。基础表不保存归一化造成的信息损失：`block_json` 保留每个块的完整 JSON 对象，包括额外未知字段与内嵌子块；`source_json_path` 指向输入页与三类原始块组 `preproc_blocks`、`discarded_blocks`、`para_blocks`；`original_bytes` 仅在 `blockid=0` 的档案记录按 Base64 保存源文件的逐字节内容。因此，原始 JSON 文件本身可按字节还原，BlockID>0 的索引不会改变源数据结构。源文件校验 SHA、路径、页索引、页块组、bbox、原始 lines/blocks 等列均可在 AG 基础表中查阅。
 
+## PBS 两层逻辑块契约（用户确认的 V2 目标设计；**尚未实施**）
+
+> **每次 V2 开发先核对本节。** 当前 `logical_block` 仍是旧的 **6 个物理字段**（`logical_id, base_blockid, parent_id, logical_order, markdown_text, block_type`）。下面是用户确认的**下一阶段目标契约**，**不是当前数据库 Schema 或已经上线的功能**。实际迁移必须另立航点、验证并保全回退，绝不因本 README 修改而重建/覆盖用户的 `ocr2md.v2.sqlite`。
+
+- **用途与层级**：PBS 专用于纠正 MinerU OCR 识别时的块归属错误（张冠李戴、跨栏/跨页错配、归入、拆分、重组），而非任意层级树。**只允许“父块 → 子块”两层，禁止孙块和递归嵌套。**
+- **两种身份**：`mineru_base.blockid` 是稳定的原始基础块整数 ID；PBS 是面向用户的**当前逻辑块编号**。逻辑表的 `base_blockid` 关联基础块，原始 PDF 页码和 bbox 始终从基础表获取；移动/归入不改原始 bbox。`logical_id` 可保留为隐藏的稳定内部主键，AG 默认以 PBS 表示逻辑块。
+- **PBS 三列**：目标逻辑表持久保存 `p`、`b`、`s` 三个整数，显示为 `pNbMsK`。`pNbM` 只是**父块分组**，默认不另建父块 SQL 行；同一 `(p,b)` 下的 `s0,s1,...` 均为子块；`(p,b,s)` 必须唯一。目标 Schema 中原有 `parent_id/logical_order` 如何保留或迁移，需下一航点单独验证；不得未经验证重写。
+- **默认 s0**：每个原始基础块进入逻辑表时，都默认是一个独立父块下面的 `s0` 子块。允许一个原始基础块拆成多个逻辑子块，多个逻辑行可关联同一 `base_blockid`，但必须保留各自的原文及溯源，不能伪造来源。
+- **只局部修改**：例如 `p1b4s0 → p1b3s1`，只需要调整受影响逻辑行的 `b:4→3`、`s:0→1`；`p1b3s0`、`p1b5s0` 均保持不变。**PBS 可以不连续、留下空号；不允许为保持连续而重算无关的 PBS**。同父块内发生子编号冲突时，仅处理冲突所需的受影响子块，禁止全页/全文重排。不要从 `logical_order` 自动推导连续 PBS。
+- **两表 N View 不变**：仅允许 `mineru_base` 和 `logical_block` 两个应用物理表，不建独立父块表或 SQL 历史表。CM6 管理当前编辑/Undo/Redo，未来只允许经测试的局部 SQL 增量写回。
+- **验收门禁**：迁移前必须有直接测试覆盖初始 s0、局部归入、跨页物理 bbox 不变、同基础块拆分、PBS 唯一、编号间断合法、无孙块、两表不增表、回退恢复，以及真实 V1 `lab-ocr` PDF PBS 多轨、AG/CM6/MD/PDF 同步。**本次只更新项目契约，不实施数据库/界面改造。**
+
 ## 独立 Frame 授权与目录访问（2026-11-20）
 
 - 目录列表现在直接调用公共 Frame `GET /labs/lab-frame/api/workspace-io/{roots,browse}`；不调用 Main `/api/session`、`/api/workspace/roots` 或 Main 本地端口。Lab-Frame 的 `ui/frame/access-auth.js` 在「工作区 → 资料目录 → 浏览目录」的**同一目录树区域**展示访问码输入框与「授权 Frame」按钮（不在顶栏、不使用弹窗），用户输入 Frame 独立访问码后，通过私有 F02 session/unlock 签发并校验 7 天 HttpOnly/Secure Cookie，成功即自动加载目录树。
