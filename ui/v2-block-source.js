@@ -1,9 +1,9 @@
 /** WP04: pure logical Markdown -> editable CM6 source projection.
  * No SQL, filesystem, HTML CMD tags, or additional editor states.
- * In a V2 source view every logical block is followed by TWO blank lines.
+ * In a V2 source view every logical block is followed by ONE blank line.
  * The separate segment inventory, not the visible blank lines, owns IDs.
  */
-export const BLOCK_END='\n\n\n';
+export const BLOCK_END='\n\n';
 const BACKEND_SEP='\n\n';
 export function composeBlockSource(snapshot){
   if(!snapshot||snapshot.schema!=='v2-logical-md/v2'||

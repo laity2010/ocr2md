@@ -44,11 +44,14 @@ export default defineConfig({
         // V2-only build adapter: replace Frame's single empty EditorView mount,
         // NOT its shared layout or a second editor/instance.
         code=exact(code,"import {EditorState} from '@codemirror/state';",
-          "import {mountV2Source} from '../v2-source-session.js';\nimport {EditorState} from '@codemirror/state';",
+          "import {mountV2MarkdownPreview} from '../v2-markdown-preview.js';\nimport {mountV2Source} from '../v2-source-session.js';\nimport {EditorState} from '@codemirror/state';",
           'single CM6 source adapter import');
         code=exact(code,'element.append(body);owned=()=>mountEmptySource(body);',
           'element.append(body);owned=()=>mountV2Source(body);',
           'single V2 source editor mount');
+        code=exact(code,"element.append(area);\n    element.setAttribute('aria-label','Markdown 预览（空白）');",
+          "element.append(area);owned=()=>mountV2MarkdownPreview(area);\n    element.setAttribute('aria-label','Markdown 阅读预览');",
+          'V1 Markdown renderer in original Frame preview pane');
         return exact(code,'return {dispose(){grid.destroy();},layout:()=>{}};',
           "host.v2BaseGridPort=Object.freeze({setColumns:cols=>grid.setGridOption('columnDefs',cols),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs()});return {dispose(){grid.destroy();},layout:()=>{}};",
           'AG view data port');
@@ -60,7 +63,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp04-logical-cm6-memory-edit-f02',
+        stage:'wp04-live-v1-markdown-preview-one-blank-line-f02',
       })+'\n'});
     },
   }],

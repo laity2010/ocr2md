@@ -39,7 +39,14 @@ try{
    // Match the actual WP03 out-of-band UTF-16 segment contract. The single
    // CM6 source is automatically populated with all 224 logical rows.
    const fragments=Array.from({length:224},(_,i)=>
-     i===0?'# WP04 Chapter 🧪':i===1?'Original text':i===2?'':i===3?'中文😀 content':`Paragraph ${i+1}`);
+     i===0?'# WP04 Chapter 🧪':i===1?'Original text':i===2?'':
+     i===3?'中文😀 content':i===4?'$$\nx^2+1\n$$':
+     i===5?'<table><tr><td>V1 Table</td></tr></table>':
+     i===6?'> [!note] V1 Callout\n> V1 callout body':
+     i===7?'**V1 Bold** and `inline code`':
+     i===8?'<script>window.__v2Injected=true</script>':
+     i===9?'Footnote reference[^1].\n\n[^1]: A V1 footnote note':
+     `Paragraph ${i+1}`);
    const segments=[];let markdown='';
    for(let i=0;i<fragments.length;i++){
      if(i)markdown+='\n\n';
@@ -114,7 +121,7 @@ try{
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 1–120 \/ 224/);
    assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),false);
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
-   // WP04 loads this automatically, with two fully blank lines after EVERY
+   // WP04 loads this automatically, with one fully blank line after EVERY
    // block (including the last); no second CM6 editor or SQL document writer.
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,
      null,{timeout:15000});
@@ -127,8 +134,35 @@ try{
    assert.equal(sourceState.blocks.length,224);
    assert.equal(sourceState.blocks[0].markdownText,'# WP04 Chapter 🧪');
    assert.equal(sourceState.blocks[2].markdownText,'');
-   assert.equal(sourceState.text,fragments.map(text=>text+'\n\n\n').join(''));
+   assert.equal(sourceState.text,fragments.map(text=>text+'\n\n').join(''));
    assert.equal(sourceState.state.dirty,false);
+   assert.equal(sourceState.state.separator,'\n\n');
+   // Original V1 Markdown renderer is mounted in the ORIGINAL Frame MD pane.
+   // It projects the live source rather than reparsing SQL on each keystroke.
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getHtml().includes('WP04 Chapter'),null,{timeout:20000});
+   const preview=page.locator('#workspace .ocr-preview-md-scroll');
+   const article=preview.locator('article.ocr-markdown');
+   assert.equal(await article.count(),1,'exact V1 article reading surface');
+   assert.equal(await article.locator('h1').first().textContent(),'WP04 Chapter 🧪');
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.getHtml().includes('V1 Table'),null,{timeout:10000});
+   assert.equal(await article.locator('table td').first().textContent(),'V1 Table');
+   assert.equal(await article.locator('.katex').count()>0,true,'V1 KaTeX math rendering');
+   assert.equal(await article.locator('.ocr-callout').count()>0,true,'V1 Obsidian callout plugin');
+   assert.equal(await article.locator('strong').first().textContent(),'V1 Bold');
+   const footnoteLink=article.locator('sup.footnote-ref a').first();
+   assert.equal(await footnoteLink.count(),1,'V1 footnote renderer');
+   await footnoteLink.click();
+   const popover=page.locator('.ocr-footnote-popover:not([hidden])');
+   assert.equal(await popover.count(),1,'V1 footnote popover');
+   assert.match(await popover.textContent(),/A V1 footnote note/);
+   await page.getByRole('button',{name:'关闭注释'}).click();
+   assert.equal(await article.locator('script').count(),0,'V1 DOMPurify removes unsafe HTML');
+   assert.equal(await page.evaluate(()=>window.__v2Injected),undefined,'XSS script cannot run');
+   assert.equal(await preview.evaluate(el=>getComputedStyle(el.querySelector('article')).backgroundColor),'rgb(47, 56, 62)');
+   assert.equal(await preview.locator('.ocr-markdown h1').evaluate(el=>getComputedStyle(el).color),'rgb(218, 99, 98)');
+   assert.equal(await preview.locator('.ocr-markdown h1').evaluate(el=>el.hasAttribute('data-source-start')),true,
+     'V1 source line coordinate projection exists');
    assert.equal(sourceState.state.undo,0);
    assert.equal(sourceState.state.redo,0);
    assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'true');
@@ -157,6 +191,7 @@ try{
      null,{timeout:10000});
    assert.equal(await page.locator('#workspace #undo').isDisabled(),false);
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),true);
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.getText().includes('WP04 Chapter 🧪 EDIT'),null,{timeout:16000});
    assert.equal(postCount,1,'typing must not post SQL');
    // Replaying the same validated snapshot cannot overwrite unsaved edits.
    assert.equal(await page.locator('#workspace #editor').evaluate((el,snapshot)=>el.v2SourcePort.load(snapshot,'/demo/books/my-book'),mdSnapshot),false);
@@ -165,11 +200,15 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText==='# WP04 Chapter 🧪',
      null,{timeout:12000});
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),false);
+   await page.waitForFunction(()=>!document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getText().includes('WP04 Chapter 🧪 EDIT'),null,{timeout:16000});
    assert.equal(await page.locator('#workspace #redo').isDisabled(),false);
    await page.locator('#workspace #redo').click();
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText.endsWith(' EDIT'),
      null,{timeout:12000});
    assert.equal(postCount,1,'undo/redo must not post SQL');
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getText().includes('WP04 Chapter 🧪 EDIT'),null,{timeout:16000});
    // Structural boundaries are not user text: Ctrl/Meta+A replacement across
    // all blocks must be refused rather than erase identities or blank lines.
    const beforeCross=await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown());

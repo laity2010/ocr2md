@@ -75,8 +75,15 @@ export function mountV2Source(host){
   const onRedo=()=>{if(loaded&&redoDepth(editor.state))redo(editor);refresh();};
   undoButton?.addEventListener('click',onUndo);
   redoButton?.addEventListener('click',onRedo);
+  const locateSourceLine=line=>{
+    if(!loaded||!Number.isInteger(line)||line<1||line>editor.state.doc.lines)return false;
+    const pos=editor.state.doc.line(line).from;
+    editor.dispatch({selection:{anchor:pos},effects:EditorView.scrollIntoView(pos,{y:'center'})});
+    editor.focus();
+    return true;
+  };
   const port=Object.freeze({
-    load,clear,getMarkdown:()=>editor.state.doc.toString(),
+    load,clear,locateSourceLine,getMarkdown:()=>editor.state.doc.toString(),
     getBlocks:()=>logicalTextRows(editor.state.doc.toString(),blocks),
     getIntervals:()=>blocks.map(({logicalId,from,to})=>({logicalId,from,to})),
     getWorkspace:()=>book,
