@@ -30,15 +30,15 @@
 
 ## 业务 API 与窗口
 
-- **单独的 V2 MinerU 业务 API** `/labs/lab-ocr-v2/api/mineru-base/{state,import}`：GET state 支持按 120 行分页；POST import 仅在目录已授权、Origin 合法、带 `confirm=import-mineru-base`、真实 F02 probe 成功后写入；仅对同名 V2 SQLite 做原子覆盖；重复相同输入只读返回现有计数。复用 F02 服务端 `authorized_roots`、`checked_workspace`、`probe`；**不是第二套 Workspace 文件读写 API**，无新监听端口、进程、Tunnel、授权或 Cookie。旧 `/api/v2/` 仍必须 404。
+- **单独的 V2 MinerU 业务 API** `/labs/lab-ocr-v2/api/mineru-base/{state,import}`：GET state 支持 `table` 指定物理表并按 120 行分页，返回 `sqlite_master` 枚举的 `tables`（表名及真实列结构）；POST import 仅在目录已授权、Origin 合法、带 `confirm=import-mineru-base`、真实 F02 probe 成功后写入；仅对同名 V2 SQLite 做原子覆盖；重复相同输入只读返回现有计数。复用 F02 服务端 `authorized_roots`、`checked_workspace`、`probe`；**不是第二套 Workspace 文件读写 API**，无新监听端口、进程、Tunnel、授权或 Cookie。旧 `/api/v2/` 仍必须 404。
 - V2 模块 `ui/v2-mineru-entry.js` **订阅 Frame F02 已验证事件**，仅对已保存目录检查 SQLite。未存在则无损导入，旧 Schema 或逻辑表列结构不兼容则自动重新导入并替换同名库；Schema 合格则加载。返回主工作区不依赖复制另一个 Settings/Navigation。
-- 原生导航下拉在验证导入后，自动添加 `SQL` 组与唯一条目 `基础表 · mineru_base`；从全局设置里点击该条目进入主四窗，AG 采用同一个现有 AG Grid 实例展示基础表的 **18 个 SQLite 列**。BlockID 固定为首列，按整数排序，每页 120 行；顶栏按前/后页切换。
-- 当前仅验收**基础表导航和 AG 字段**；CM6 源码窗、Markdown 预览、PDF 窗仍为 Frame 空壳，未实现 V1 的编辑/预览/同步、逻辑表展示、转换 Markdown。不得把本阶段宣称为完整 V2 或 V1 等价实现。
+- 原生导航下拉在验证导入后自动添加 `SQL` 组：**始终展示当前 SQLite `sqlite_master` 中的所有用户物理表（不包括 SQLite 内部表及 View），不按行数或是否已启用业务功能隐藏表**，不再硬编码唯一「基础表」。WP00 当前两张物理表固定为 `基础表 · mineru_base`、`逻辑表 · logical_block`；后者即使是 0 行，仍能从导航点击并在**原有 AG Grid 实例**显示全部 5 个真实 SQL 字段。`mineru_base` 保持 **18 列**、BlockID 为首列和整数排序，原始归档 `blockid=0` 仅供无损保存不作为业务行展示；所有表均只读，按 120 行分页。导航和 API 通过 SQL 表结构元数据同步，不在导航中增加任何额外应用物理表。
+- 当前验收 SQL 物理表导航及**结构/行数据的只读展示**；空逻辑表只是五列零行，尚未进行 CM6 逻辑块生成或编辑。CM6 源码窗、Markdown 预览、PDF 窗仍为 Frame 空壳，未实现 V1 的编辑/预览/同步和转换 Markdown。不得把本阶段宣称为完整 V2 或 V1 等价实现。
 
 ## 验收与发布（WP00）
 
-1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、重复导入幂等、旧 Schema、九列逻辑表和源变化可安全原子替换。
-2. `node tests/v2-mineru-base.browser.test.mjs`：Chromium/WebKit、Settings 保存权限、自动导入、SQL 原生下拉和 AG 18 列/分页。
+1. `python3 tests/test_v2_mineru_base.py -v`：真实 22 页 MinerU 源文件、全部三类根块、原始字节 SHA256 无损、连续整数 BlockID、唯一两表、`sqlite_master` 枚举与空逻辑表 5 列展示、安全表名校验、重复导入幂等、旧 Schema、九列逻辑表和源变化可安全原子替换。
+2. `node tests/v2-mineru-base.browser.test.mjs`：Chromium/WebKit、Settings 保存权限、自动导入、SQL 原生下拉同时展示两张物理表，空逻辑表五列零行与基础表 18 列/分页。
 3. `node tests/v2-clean-frame-isolation.test.mjs`：逐字节共享 Frame 基线不变；旧 V2 组件不复活。
 4. Frame 独立授权、F02、设置/导航、统一 Lab 发布与网关限制必须回归；未授权请求 HTTP 403，旧 API HTTP 404；没有用户自己的已授权浏览器 Cookie，不可谎称对其真实工作目录已经完成 SQL 创建。
 5. Git 提交完成后 `npm exec vite build -- --config labs/lab-ocr-v2/vite.config.mjs`，使用 `python3 scripts/v2_frame_publish.py --release-root /Users/daisor/AgentDock/ocr2md/release` 发布，核对 `sourceCommit`、所有资源 SHA、其余六 Lab 不变和公网入口 200。

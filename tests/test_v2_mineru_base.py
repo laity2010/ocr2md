@@ -58,6 +58,48 @@ class MineruBaseTest(unittest.TestCase):
         db.close()
         existing=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
         self.assertFalse(existing['created']);self.assertEqual(adapter.calls,1)
+    def test_sql_catalog_reflects_all_physical_tables_including_empty(self):
+        v.new_book(self.book)
+        state=v.existing_state(self.book)
+        self.assertEqual([t['name'] for t in state['tables']],['mineru_base','logical_block'])
+        self.assertEqual(state['tables'][0]['columns'],list(v.COLUMNS))
+        self.assertEqual(state['tables'][1]['columns'],
+            ['logical_id','base_blockid','parent_id','logical_order','markdown_text'])
+        self.assertEqual(state['tableName'],'mineru_base')
+        self.assertEqual(state['rowCount'],539)
+        logical=v.existing_state(self.book,table='logical_block')
+        self.assertEqual(logical['tableName'],'logical_block')
+        self.assertEqual(logical['rowCount'],0)
+        self.assertEqual(logical['rows'],[])
+        self.assertEqual(len(logical['columns']),5)
+        self.assertEqual(logical['tables'],state['tables'])
+        self.assertEqual(logical['blockCount'],539)
+        self.assertEqual(v.dispatch('state','GET',self.book,{},
+            {'table':['logical_block']},StubF02())['rowCount'],0)
+        with self.assertRaisesRegex(v.BaseError,'不存在'):
+            v.dispatch('state','GET',self.book,{},
+                {'table':['mineru_base; DROP TABLE logical_block']},StubF02())
+        with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],0)
+            self.assertEqual(db.execute('SELECT count(*) FROM mineru_base').fetchone()[0],540)
+        self.assertEqual(self.source.read_bytes(),self.original)
+
+    def test_catalog_reflection_uses_sqlite_master_not_a_hardcoded_table_list(self):
+        with closing(sqlite3.connect(':memory:')) as db:
+            db.row_factory=sqlite3.Row
+            db.execute('CREATE TABLE first (x INTEGER PRIMARY KEY, value TEXT)')
+            db.execute('CREATE TABLE "third table" (name TEXT PRIMARY KEY) WITHOUT ROWID')
+            db.execute('CREATE VIEW not_a_table AS SELECT x FROM first')
+            db.execute('INSERT INTO "third table" VALUES ("visible")')
+            self.assertEqual(v.physical_tables(db),['first','third table'])
+            selected=v.read_table(db,'third table',0)
+            self.assertEqual(selected['rowCount'],1)
+            self.assertEqual(selected['rows'],[{'name':'visible'}])
+            with self.assertRaisesRegex(v.BaseError,'不存在'):
+                v.read_table(db,'not_a_table',0)
+            with self.assertRaisesRegex(v.BaseError,'不存在'):
+                v.read_table(db,'first;DROP TABLE first',0)
+
     def test_source_changed_rebuilds_only_v2_sqlite(self):
         v.new_book(self.book)
         with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:

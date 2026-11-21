@@ -7,22 +7,25 @@ import './v2-mineru-base.css';
 const status=createFrameStatus(document.getElementById('status'));
 const API='/labs/lab-ocr-v2/api/mineru-base/';
 const SETTINGS_KEY='ocr2md.lab-ocr-v2-frame.settings.json.v1';
-const NAV_VALUE='sql:mineru-base';
+const NAV_PREFIX='sql:';
+const valueForTable=name=>name==='mineru_base'?'sql:mineru-base':NAV_PREFIX+name;
+const tableForValue=value=>value==='sql:mineru-base'?'mineru_base':value.startsWith(NAV_PREFIX)?value.slice(NAV_PREFIX.length):null;
+const tableLabel=name=>name==='mineru_base'?'基础表':name==='logical_block'?'逻辑表':name;
 const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:'源 SHA-256',
   page_index:'页索引',page_number:'PDF 页',block_group:'块组',page_block_index:'页内索引',
   source_json_path:'JSON 路径',block_type:'原始类型',mineru_index:'MinerU 索引',
   bbox_json:'bbox',angle:'角度',level:'层级',lines_json:'lines',
   blocks_json:'blocks',block_json:'完整原始 Block JSON',record_kind:'记录类型',
   original_bytes:'原文件归档字节'};
-let bound='',pending=null,active=false,offset=0,total=0;
+let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
 const $=selector=>document.querySelector(selector);
 function persistedDirectory(){
   try{return JSON.parse(localStorage.getItem(SETTINGS_KEY))?.settings?.['workspace.dataDirectory']?.value||'';}
   catch{return '';}
 }
 function report(message,kind='info'){status.publish(message,kind);}
-async function request(operation,workspace,{method='GET',offset=0}={}){
-  const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset)})):'');
+async function request(operation,workspace,{method='GET',offset=0,table='mineru_base'}={}){
+  const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset),table})):'');
   const response=await fetch(url,{method,credentials:'same-origin',cache:'no-store',
     ...(method==='POST'?{headers:{'Content-Type':'application/json'},
       body:JSON.stringify({workspace,confirm:'import-mineru-base'})}:{})});
@@ -36,25 +39,33 @@ function wireNav(select){
   if(select.dataset.v2MineruWired)return;
   select.dataset.v2MineruWired='yes';
   select.addEventListener('change',()=>{
-    if(select.value!==NAV_VALUE)return;
+    const table=tableForValue(select.value);
+    if(!table)return;
     const settingPane=Boolean(select.closest('#settings-workspace'));
     if(settingPane){
       document.dispatchEvent(new CustomEvent('v2-show-frame'));
       const workNav=$('#workspace .ocr-source-file-select');
-      if(workNav){workNav.value=NAV_VALUE;workNav.dispatchEvent(new Event('change',{bubbles:true}));}
+      if(workNav){workNav.value=valueForTable(table);workNav.dispatchEvent(new Event('change',{bubbles:true}));}
+      return;
     }
+    selectedTable=table;
     active=true;
     offset=0;
     if(bound)void fetchPage();
   });
 }
-function revealBaseNav(){
+function revealPhysicalTables(tables){
+  if(!Array.isArray(tables))throw Error('SQLite 未返回物理表清单');
+  // The server obtains this list from sqlite_master; never infer from
+  // whether a table has rows or whether a business view exists.
   for(const select of navs()){
     wireNav(select);
-    if(select.querySelector(`option[value="${NAV_VALUE}"]`))continue;
-    const group=document.createElement('optgroup');group.label='SQL';
-    group.append(new Option('基础表 · mineru_base',NAV_VALUE));
-    select.append(group);
+    let group=[...select.querySelectorAll('optgroup')].find(node=>node.label==='SQL');
+    if(!group){group=document.createElement('optgroup');group.label='SQL';select.append(group);}
+    const previous=select.value;
+    group.replaceChildren(...tables.map(({name})=>new Option(
+      `${tableLabel(name)} · ${name}`,valueForTable(name))));
+    if([...select.options].some(option=>option.value===previous))select.value=previous;
   }
 }
 function picker(){return $('#workspace .ocr-ag-toolbar');}
@@ -64,10 +75,10 @@ function pagingControls(){
   if(host)return host;
   host=document.createElement('div');host.className='v2-base-paging';
   const prev=document.createElement('button');prev.type='button';prev.textContent='‹';
-  prev.setAttribute('aria-label','基础表上一页');
+  prev.setAttribute('aria-label','SQL 表上一页');
   const label=document.createElement('span');label.className='v2-base-count';
   const next=document.createElement('button');next.type='button';next.textContent='›';
-  next.setAttribute('aria-label','基础表下一页');
+  next.setAttribute('aria-label','SQL 表下一页');
   prev.addEventListener('click',()=>{offset=Math.max(0,offset-120);void fetchPage();});
   next.addEventListener('click',()=>{offset+=120;void fetchPage();});
   host.append(prev,label,next);bar.append(host);return host;
@@ -75,35 +86,38 @@ function pagingControls(){
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
   if(!port)throw Error('AG 公共数据显示接口尚未就绪');
-  const columns=state.columns.map(key=>({field:key,headerName:sourceHeaders[key]||key,
+  const columns=state.columns.map((key,index)=>({field:key,headerName:sourceHeaders[key]||key,
     headerTooltip:key,tooltipField:key,resizable:true,sortable:true,
     minWidth:key==='block_json'?380:key==='source_json_path'?275:key==='source_sha256'?220:105,
     width:key==='blockid'?100:key==='block_json'?440:key==='original_bytes'?155:undefined,
-    pinned:key==='blockid'?'left':undefined,
+    pinned:index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
   port.setColumns(columns);
   port.setRows(state.rows);
+  const count=Number(state.rowCount??state.blockCount??0);
   const paging=pagingControls();
   if(paging){
-    paging.querySelector('.v2-base-count').textContent=`基础表 ${state.offset+1}–${Math.min(state.blockCount,state.offset+state.rows.length)} / ${state.blockCount}`;
+    const first=count?state.offset+1:0;
+    const last=Math.min(count,state.offset+state.rows.length);
+    paging.querySelector('.v2-base-count').textContent=`${tableLabel(state.tableName)} ${first}–${last} / ${count}`;
     const buttons=paging.querySelectorAll('button');
     buttons[0].disabled=state.offset===0;
-    buttons[1].disabled=state.offset+state.rows.length>=state.blockCount;
+    buttons[1].disabled=state.offset+state.rows.length>=count;
   }
-  // The original Frame toolbar selector is intentionally not reimplemented.
-  report(`SQL 基础表已加载 · ${state.blockCount} 个原始块 · ${state.sourceCount} 份 MinerUJSON · 18 列 · BlockID 为整数`,'ok');
+  const label=tableLabel(state.tableName);
+  report(`SQL ${label}已加载 · ${count} 行 · ${state.columns.length} 列${state.tableName==='mineru_base'?' · BlockID 为整数':''}`,'ok');
 }
 let pageRequest=0;
 async function fetchPage(){
   if(!bound||!active)return;
   const generation=++pageRequest;
   try{
-    const state=await request('state',bound,{offset});
+    const state=await request('state',bound,{offset,table:selectedTable});
     if(generation!==pageRequest)return;
     if(!state.exists)throw Error('SQLite 尚未创建，请先在全局设置验证工作目录');
-    total=state.blockCount;
+    revealPhysicalTables(state.tables);
     renderGrid(state);
-  }catch(error){if(generation===pageRequest)report('基础表读取失败：'+error.message,'error');}
+  }catch(error){if(generation===pageRequest)report('SQL 物理表读取失败：'+error.message,'error');}
 }
 async function ensureBase(path){
   if(!path||persistedDirectory()!==path)return;
@@ -126,9 +140,8 @@ async function ensureBase(path){
     }
     if(!state.exists)throw Error('SQLite 未建立');
     bound=path;
-    total=state.blockCount;
-    revealBaseNav();
-    report(`✓ V2 基础表就绪 · ${state.blockCount} 块 / ${state.sourceCount} 份源文件 · SQL → 基础表`,'ok');
+    revealPhysicalTables(state.tables);
+    report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 · SQL 导航已更新`,'ok');
     if(active)await fetchPage();
   }catch(error){report('V2 基础表初始化失败：'+error.message,'error');}
   finally{pending=null;}

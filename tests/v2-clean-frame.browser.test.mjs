@@ -48,7 +48,9 @@ try{
        return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true})});
      }
      if(op==='state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(imported?
-       {exists:true,blockCount:1,sourceCount:1,offset:0,columns:['blockid'],rows:[{blockid:1}]}:{exists:false})});
+       {exists:true,blockCount:1,sourceCount:1,offset:0,tableName:'mineru_base',rowCount:1,
+        tables:[{name:'mineru_base',columns:['blockid']},{name:'logical_block',columns:['logical_id','base_blockid','parent_id','logical_order','markdown_text']}],
+        columns:['blockid'],rows:[{blockid:1}]}:{exists:false})});
      return route.abort();
    });
    await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({
@@ -86,9 +88,9 @@ try{
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-ocr-v2-frame.settings.json.v1')),null,
     'reading/probing a directory does not implicitly Save');
    await page.locator('#global-save').click();
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 基础表就绪'),null,{timeout:26000});
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪'),null,{timeout:26000});
    assert.equal(posts,1);
-   assert.equal(await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option').count(),1);
+   assert.equal(await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option').count(),2);
    assert.deepEqual(probes,['/demo/books/my-book','/demo/books/my-book']);
    const saved=await page.evaluate(()=>({
     latest:localStorage.getItem('ocr2md.lab-ocr-v2-frame.settings.json.v1'),
@@ -98,7 +100,7 @@ try{
    assert.equal(JSON.parse(saved.latest).settings['workspace.dataDirectory'].value,'/demo/books/my-book');
    assert(saved.old.includes('/old-v2/book'));assert(saved.frame.includes('/old-frame/book'));
    await page.reload({waitUntil:'domcontentloaded'});
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 基础表就绪'),null,{timeout:24000});
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪'),null,{timeout:24000});
    assert.equal(posts,1,'reloading existing SQLite must not reimport');
    assert.equal(probes.length,3,'saved V2 Settings re-probes on reload');
    assert.equal(await page.locator('#workspace').isVisible(),false);

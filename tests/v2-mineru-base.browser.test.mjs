@@ -32,6 +32,8 @@ try{
    const cols=['blockid','source_path','source_sha256','page_index','page_number','block_group',
      'page_block_index','source_json_path','block_type','mineru_index','bbox_json','angle','level',
      'lines_json','blocks_json','block_json','record_kind','original_bytes'];
+   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text'];
+   const tables=[{name:'mineru_base',columns:cols},{name:'logical_block',columns:logicalCols}];
    const rows=Array.from({length:120},(_,i)=>Object.fromEntries(cols.map(k=>[k,k==='blockid'?i+1:k==='block_type'?'text':k==='block_json'?'{"type":"text"}':null])));
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
     const request=route.request();const op=new URL(request.url()).pathname.split('/').at(-1);
@@ -41,9 +43,17 @@ try{
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created:true,blockCount:539,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
     }
     if(op==='state'&&exists==='retired-v2')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'现有 SQLite 不符合 V2 两表结构，拒绝覆盖'})});
-    if(op==='state')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
-      {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,columns:cols,rows,
-      offset:Number(new URL(request.url()).searchParams.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
+    if(op==='state'){
+      const query=new URL(request.url()).searchParams;
+      const table=query.get('table')||'mineru_base';
+      const logical=table==='logical_block';
+      assert(['mineru_base','logical_block'].includes(table));
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(exists?
+        {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,
+        tables,tableName:table,rowCount:logical?0:539,
+        columns:logical?logicalCols:cols,rows:logical?[]:rows,
+        offset:Number(query.get('offset')||0)}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
+    }
     return route.abort();
    });
    await page.route('**/labs/lab-frame/api/workspace-io/session',route=>route.fulfill({
@@ -56,6 +66,25 @@ try{
    assert.equal(await page.locator('#settings-workspace').isVisible(),true);
    const names=await page.locator('#settings-workspace .ocr-source-file-select optgroup').evaluateAll(groups=>groups.map(x=>x.label));
    assert.deepEqual(names,['全局设置','SQL']);
+   const sqlOptions=await page.locator('#settings-workspace .ocr-source-file-select optgroup[label="SQL"] option')
+     .evaluateAll(nodes=>nodes.map(node=>({label:node.textContent,value:node.value})));
+   assert.deepEqual(sqlOptions,[
+     {label:'基础表 · mineru_base',value:'sql:mineru-base'},
+     {label:'逻辑表 · logical_block',value:'sql:logical_block'}
+   ]);
+   // Empty logical_block is still a physical table; choosing it must create
+   // 5 actual AG columns rather than hide the entry or show the MinerU grid.
+   await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
+     select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
+   });
+   await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
+      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===5,
+      null,{timeout:30000});
+   const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
+     .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
+   assert.deepEqual(logicalHeaders,logicalCols);
+   assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 0–0 \/ 0/);
+   assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),true);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:mineru-base';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
@@ -65,11 +94,11 @@ try{
    assert.equal(headers.length,18,JSON.stringify(headers));
    assert.equal(headers[0],'BlockID');
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/1–120 \/ 539/);
-   await page.getByRole('button',{name:'基础表下一页'}).click();
+   await page.getByRole('button',{name:'SQL 表下一页'}).click();
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
    assert.equal(postCount,1);
    assert.deepEqual(errors,[]);
-   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({headers:headers.length,postCount,probeCount}));
+   console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,probeCount}));
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}

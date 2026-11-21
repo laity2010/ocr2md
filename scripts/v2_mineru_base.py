@@ -192,7 +192,46 @@ def new_book(folder:Path,*,overwrite=False):
     finally:os.close(fd_parent)
     return {'created':True,'replaced':current is not None,'blockCount':len(rows),'sourceCount':len(files),'dbFile':DB_NAME}
 
-def existing_state(folder:Path,offset=0):
+def physical_tables(db):
+    """Reflect actual user-defined SQLite tables, including empty tables.
+
+    A table's inclusion is determined by sqlite_master, never its row count
+    or whether an editor/View has been implemented. SQLite's internal tables
+    and views are not SQL business-table navigation entries.
+    """
+    return [row[0] for row in db.execute(
+        "SELECT name FROM sqlite_master "
+        "WHERE type='table' AND substr(name,1,7) != 'sqlite_' "
+        "ORDER BY rowid")]
+
+
+def read_table(db, name, offset):
+    names=physical_tables(db)
+    if name not in names:raise BaseError(404,'指定 SQL 物理表不存在')
+    # Identifier quoted ONLY after exact sqlite_master membership validation.
+    identifier='"'+name.replace('"','""')+'"'
+    info=list(db.execute('PRAGMA table_info('+identifier+')'))
+    cols=[row[1] for row in info]
+    if not cols:raise BaseError(409,'SQL 物理表没有可显示的列')
+    # Source archive is stored in blockid=0 but intentionally omitted from
+    # the business-block grid. Never send its original_bytes to the client.
+    clause=' WHERE blockid>0' if name=='mineru_base' else ''
+    pk=sorted((row[5],row[1]) for row in info if row[5]>0)
+    ordering=(','.join('"'+column.replace('"','""')+'"' for _,column in pk)
+              if pk else 'rowid')
+    order=' ORDER BY '+ordering
+    count=db.execute('SELECT count(*) FROM '+identifier+clause).fetchone()[0]
+    raw=db.execute('SELECT * FROM '+identifier+clause+order+' LIMIT ? OFFSET ?',
+        (PAGE_SIZE,offset)).fetchall()
+    rows=[]
+    for record in raw:
+        row=dict(record)
+        if 'original_bytes' in row:row['original_bytes']=None
+        rows.append(row)
+    return {'name':name,'columns':cols,'rowCount':count,'rows':rows}
+
+
+def existing_state(folder:Path,offset=0,table='mineru_base'):
     db_path=folder/DB_NAME
     if not db_path.exists():return {'exists':False,'dbFile':DB_NAME}
     if db_path.is_symlink():raise BaseError(403,'SQLite 不允许是符号链接')
@@ -204,17 +243,20 @@ def existing_state(folder:Path,offset=0):
     with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
         meta=assert_schema(db)
-        count=db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0]
-        rows=db.execute('SELECT * FROM mineru_base WHERE blockid>0 ORDER BY blockid LIMIT ? OFFSET ?',
-            (PAGE_SIZE,offset)).fetchall()
-        values=[]
-        for row in rows:
-            item=dict(row)
-            item['original_bytes']=None # original archive is never sent to the browser
-            values.append(item)
-        return {'exists':True,'dbFile':DB_NAME,'schema':SCHEMA,'sourceCount':len(meta['sources']),
-            'sources':meta['sources'],'blockCount':count,'offset':offset,'pageSize':PAGE_SIZE,
-            'columns':list(COLUMNS),'rows':values}
+        names=physical_tables(db)
+        chosen=read_table(db,table,offset)
+        catalog=[]
+        for name in names:
+            # SQLite schema is WP00's only authority; metadata is read-only.
+            identifier='"'+name.replace('"','""')+'"'
+            catalog.append({'name':name,'columns':[
+                row[1] for row in db.execute('PRAGMA table_info('+identifier+')')]})
+        block_count=db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0]
+        return {'exists':True,'dbFile':DB_NAME,'schema':SCHEMA,
+            'sourceCount':len(meta['sources']),'sources':meta['sources'],
+            'blockCount':block_count,'offset':offset,'pageSize':PAGE_SIZE,
+            'tables':catalog,'tableName':chosen['name'],
+            'rowCount':chosen['rowCount'],'columns':chosen['columns'],'rows':chosen['rows']}
 
 def dispatch(operation,method,folder,payload,query,common):
     if operation=='state':
@@ -222,7 +264,10 @@ def dispatch(operation,method,folder,payload,query,common):
         try:offset=int(query.get('offset',['0'])[0])
         except (ValueError,TypeError):raise BaseError(422,'分页参数无效')
         if offset<0 or offset>10000000:raise BaseError(422,'分页参数超出范围')
-        return existing_state(folder,offset)
+        table=query.get('table',['mineru_base'])[0]
+        if not isinstance(table,str) or not table or len(table)>128:
+            raise BaseError(422,'SQL 物理表名称无效')
+        return existing_state(folder,offset,table)
     if operation=='import':
         if method!='POST':raise BaseError(405,'导入操作仅可 POST')
         if payload.get('confirm')!='import-mineru-base':raise BaseError(422,'缺少明确导入确认')
