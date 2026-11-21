@@ -126,10 +126,26 @@ try{
         'each of 224 blocks contributes exactly two newline characters, one blank line');
       assert.equal(result.separator,'\n\n');
       assert.equal(result.editorCount,1);
-      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')
-        ?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+      try{
+        await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')
+          ?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+      }catch(error){
+        console.log('V1_EXTERNAL_PDF_HIDDEN_DIAG',name,
+          await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>({
+            state:el.v2PDFPort?.getState(),
+            hasPreview:!!el.v2PDFPort?.getV1Preview(),
+            v1Ready:el.v2PDFPort?.getV1Preview()?.ready,
+            status:el.querySelector('.ocr-pdf-status')?.textContent,
+            nPages:el.v2PDFPort?.getV1Preview()?.pdf?.numPages,
+            scale:el.v2PDFPort?.getViewer()?.currentScale,
+            renderedCanvases:el.querySelectorAll('canvas').length,
+            scrollerWidth:el.querySelector('.ocr-pdf-scroller')?.clientWidth,
+            errors:window.__v2PdfStatuses,
+          })),errors);
+        throw error;
+      }
       if(name==='iPad-WebKit'){
-        await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-zoom')
+        await page.waitForFunction(()=>document.querySelector('#workspace .ocr-pdf-zoom')
           ?.textContent!=='—',null,{timeout:15000});
         const hidden=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState());
         assert.equal(hidden.scrollerWidth,0,'the PDF must initialize in a collapsed pane');
@@ -141,27 +157,66 @@ try{
           return state&&!state.fitPending&&state.scrollerWidth>80&&state.scale>0;
         },null,{timeout:18000});
       }
-      await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-label[data-logical-id="23"]'),
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-pdf-block-cover[data-block-id="p0b0"]>.ocr-pdf-block-ctrl'),
         null,{timeout:30000});
       const pdfState=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState());
       assert.equal(pdfState.pageCount,22);
       assert.equal(pdfState.mappedCount,224);
-      assert.equal(await page.locator('#workspace .v2-pdf-label[data-logical-id="23"]').first().textContent(),'p0b0');
+      assert.equal(pdfState.renderingOwner,'V1 PdfPreview');
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>
+        el.v2PDFPort.getV1Preview()?.constructor.name),'PdfPreview');
+      // Reuse the ORIGINAL V1 instance's coverage, source navigation and
+      // dual-edge collision solver. None of these own a V2 private twin.
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>
+        el.v2PDFPort.getV1Preview()?.blockCoverageRows.length),224);
+      assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>
+        el.v2PDFPort.getV1Preview()?.blockCoverageNodes.size),224);
+      assert.equal(await page.locator('#workspace .v2-pdf-label,#workspace .v2-pdf-cover').count(),0,
+        'V2 handmade PBS overlay code must be entirely absent');
+      assert.equal(await page.locator('#workspace .ocr-pdf-label-leaders').count()>0,true,
+        'V1 native label leader SVG must be present');
+      const rail=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>{
+        const native=el.v2PDFPort.getV1Preview();
+        const first=native.viewer.getPageView(0).div;
+        const labels=[...first.querySelectorAll('.ocr-pdf-rail-label')];
+        const covers=[...first.querySelectorAll('.ocr-pdf-block-cover')];
+        const rect=node=>{
+          const r=node.getBoundingClientRect();
+          return {l:r.left,t:r.top,r:r.right,b:r.bottom,w:r.width,h:r.height};
+        };
+        const overlap=(a,b)=>a.l<b.r-.6&&a.r>b.l+.6&&a.t<b.b-.6&&a.b>b.t+.6;
+        const chips=labels.map(rect),body=covers.map(rect);
+        const chipPairs=[];
+        for(let i=0;i<chips.length;i++)for(let j=i+1;j<chips.length;j++)
+          if(overlap(chips[i],chips[j]))chipPairs.push([i,j]);
+        const overText=[];
+        for(let i=0;i<chips.length;i++)for(let j=0;j<body.length;j++)
+          if(overlap(chips[i],body[j]))overText.push([i,j]);
+        return {labels:labels.length,covers:covers.length,chipPairs,overText,
+          leaders:first.querySelectorAll('.ocr-pdf-parent-leader').length,
+          pageWidth:first.clientWidth};
+      });
+      assert(rail.labels>0&&rail.covers>0&&rail.leaders>0,rail);
+      assert.deepEqual(rail.chipPairs,[],name+' V1 gutter labels must not overlap');
+      assert.deepEqual(rail.overText,[],name+' V1 PBS labels must stay outside original OCR rectangles');
+      assert.equal(await page.locator('#workspace .ocr-pdf-block-cover').count()>0,true,
+        'original V1 native coverage controls must be present');
+      assert.equal(await page.locator('#workspace .ocr-pdf-block-cover[data-block-id="p0b0"]>.ocr-pdf-block-ctrl').first().textContent(),'p0b0');
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host canvas').count()>0,true,'PDF.js original canvas');
-      const coverBefore=await page.locator('#workspace .v2-pdf-cover[data-logical-id="23"]').first().evaluate(el=>({
+      const coverBefore=await page.locator('#workspace .ocr-pdf-block-cover[data-block-id="p0b0"]').first().evaluate(el=>({
         left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,
       }));
       assert(Math.abs(parseFloat(coverBefore.left)-95/634*100)<.001,'original MinerU x0 stays page-relative');
-      await page.locator('#workspace .v2-pdf-plus').click();
-      await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-zoom')
+      await page.locator('#workspace .ocr-pdf-plus').click();
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-pdf-zoom')
         ?.textContent!=='—',null,{timeout:12000});
-      await page.waitForFunction(()=>document.querySelector('#workspace .v2-pdf-cover[data-logical-id="23"]'),null,{timeout:12000});
-      const coverAfter=await page.locator('#workspace .v2-pdf-cover[data-logical-id="23"]').first().evaluate(el=>({
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-pdf-block-cover[data-block-id="p0b0"]'),null,{timeout:12000});
+      const coverAfter=await page.locator('#workspace .ocr-pdf-block-cover[data-block-id="p0b0"]').first().evaluate(el=>({
         left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,
       }));
       assert.deepEqual(coverAfter,coverBefore,'PDF zoom never changes original normalized bbox');
       // Actual PDF V1-style PBS label => original CM6 logical ID and MD focus.
-      await page.locator('#workspace .v2-pdf-label[data-logical-id="23"]').first().click();
+      await page.locator('#workspace .ocr-pdf-block-cover[data-block-id="p0b0"]>.ocr-pdf-block-ctrl').first().click();
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
         ?.v2MarkdownPreviewPort?.getFocusedId()===23,null,{timeout:10000});
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .v2-sync-ag-row')
@@ -222,7 +277,7 @@ try{
       });
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host .ocr-pdf-scroller')?.clientWidth===0,
         null,{timeout:8000});
-      await page.locator('#workspace .v2-pdf-fit').click();
+      await page.locator('#workspace .ocr-pdf-fit').click();
       const hiddenScale=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getViewer().currentScale);
       assert(Number.isFinite(hiddenScale)&&hiddenScale>0,'collapsed PDF panel cannot produce a negative scale: '+hiddenScale);
       await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>{
@@ -233,7 +288,7 @@ try{
         const scroller=host?.querySelector('.ocr-pdf-scroller');
         const scale=host?.v2PDFPort?.getViewer()?.currentScale;
         return scroller?.clientWidth>80&&Number.isFinite(scale)&&scale>0&&
-          Number(document.querySelector('#workspace .v2-pdf-zoom')?.textContent.replace('%',''))>0;
+          Number(document.querySelector('#workspace .ocr-pdf-zoom')?.textContent.replace('%',''))>0;
       },null,{timeout:12000});
       assert(result.headingCount>0,result);
       assert(result.textLength>10000,result);

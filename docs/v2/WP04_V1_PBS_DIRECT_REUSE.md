@@ -1,0 +1,27 @@
+# V2 WP04 · PBS 必须由 V1 原组件绘制和互动
+
+基线 996e56e。上一版错误地在 V2 重写 PDF 的 PBS 标签、覆盖框、SVG 引线及触摸命中。现在全部撤销，改由 ui/pdf-preview.js 的 V1 PdfPreview 原实例处理。
+
+## 核心复用
+
+V1 的 PdfPreview.paintBlockCoverage、updateBlockChip、avoidBlockChipCollisions、selectPDFRegion、onClick、focusLine、highlightParentGroup、armBlockDrag、updateBlockDrag、finishBlockDrag、drawOverlay 均不再由 V2 模仿。V2 不提供标签 DOM、CSS 样式、避让算法或触摸行为的第二实现，所有标签使用 V1 原 CSS。
+
+ui/v2-pdf-viewer.js 现在仅负责原 Frame PDF 宿主中的 V1 PdfPreview 实例生命周期、传输经 F02 验证的书籍 PDF 原文字节，以及上层业务状态接口。V2 CSS 只将 V1 原工具栏适配 Frame 顶栏，不定义 PBS 标签/引线/覆盖框。
+
+ui/v2-pdf-evidence-adapter.js 是唯一的数据适配层（纯函数，无 DOM、SVG、手势）：将 logical_id、PBS、parent_id、base_blockid、原始页码与 bbox 转成 V1 getLayout / setBlockCoverage 格式；从当前 CM6 UTF-16 文本区间生成 V1 使用的 sourceLabelLocations 位置 Map，源码仍不插 CMD 内嵌注释标签。一个物理 OCR bbox 不能无证据重复映射为两个逻辑框；跨页归入子块保留原始物理 PDF 坐标。
+
+V1 PdfPreview 类新增两个可选依赖：createPDFTask 从现有 F02 授权书籍接口获取 PDF 数据；getLabelSources 读取外部逻辑位置信息。原 V1/Main 默认调用方式仍沿用旧 API。immutableGeometry 标记保证纯文字编辑不触发 OCR 原框全页重构。
+
+## iPad 布局门禁
+
+在 Dockview 初始宽度 0 的 PDF pane，外部 PDF 使用临时正缩放并等实际窗口宽度才适宽，不能使 PDF.js 产生 -5%。iPad WebKit 在隐藏 pane 可能不会绘制首张 Canvas，因此只对此可选外部数据模式将加载状态标为“等待 PDF 窗口显示”，直到真正 pagerendered 才报告就绪。默认 Main/V1 实例仍等待真实首屏绘制，不改变其行为。
+
+## 当前互动边界
+
+V1 的标签点击、PDF 原框命中、原生左右边栏避让和引线、父子高亮、触摸长按与拖动落点提示直接工作。当前 WP04 仍只有两张 SQL 应用表，结构编辑和 PDF 文本提取尚未绑定可持久化的 V2 API，因此长按拖动释放不会声称结构修改已生效。正式结构编辑与文本插入须独立验证后续航点，禁止再自建 V2 拖动系统。
+
+## 验收
+
+- node tests/v2-pdf-evidence-adapter.test.mjs 验证真实 22 页/224 块、跨页子块、逻辑/物理身份、拒绝重复。
+- node tests/v2-real-markdown-preview.browser.test.mjs 验证真实构造器 PdfPreview、原 V1 的 224 个覆盖框、PBS 标签及引线，第一页标签之间及与正文框之间无重叠，原几何缩放不变；Chromium 和 iPad-WebKit 四窗定位与初始化 0 宽恢复。
+- V1 PDF 原测试、V2 两表/Frame/CM6/多窗回归、GitHub/公网 SHA；实际 iPad Safari 现场再检查。

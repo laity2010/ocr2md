@@ -62,7 +62,7 @@ export class PdfPreview {
     onPDFBBox=()=>Promise.reject(Error('CMD PDF bbox 尚未准备好')),
     onBlockReparent=()=>Promise.reject(Error('CMD PBS 结构修订尚未准备好')),
     onPromoteChild=()=>Promise.reject(Error('CMD 独立子块功能尚未准备好')),
-    onCurrentPageChange=()=>{},onStatus=()=>{}){
+    onCurrentPageChange=()=>{},onStatus=()=>{},options={}){
     this.host=host;
     this.getMarkdown=getMarkdown;
     this.getLayout=getLayout;
@@ -75,7 +75,10 @@ export class PdfPreview {
     this.onPromoteChild=onPromoteChild;
     this.onCurrentPageChange=onCurrentPageChange;
     this.onStatus=onStatus;
-    this.readOnly=TEXT_BLOCKS_READ_ONLY;
+    // External evidence adapter; V1 owns all labels, rails and gestures.
+    this.options=options;
+    this.labelResolver=options.getLabelSources||sourceLabelLocations;
+    this.readOnly=options.readOnly??TEXT_BLOCKS_READ_ONLY;
     this.blockLabelScale=1;
     this.host.classList.add('ocr-pdf-pane');
     if(this.readOnly)this.host.classList.add('ocr-pdf-readonly');
@@ -183,7 +186,7 @@ export class PdfPreview {
         this.lastGeometrySource=canonical;
         this.anchors=sourceBlocks(source);
         this.subAnchors=sourceSubblocks(source);
-        this.labelSources=sourceLabelLocations(source);
+        this.labelSources=this.labelResolver(source);
         this.updatePromoteButton();
         this.updateChipContentIndicators();
         if(this.selected)void this.prepareSelectedPDFText();
@@ -191,7 +194,7 @@ export class PdfPreview {
         // line offsets but not the original PDF geometry, PDF.js page tree,
         // single focus, A/B comparison, or any other checkbox. The subsequent
         // CMD inventory diff updates only changed labels on its own page.
-        if(!onlyJoinMarks){
+        if(!onlyJoinMarks&&!this.options.immutableGeometry){
           this.clearComparison();
           void this.refreshGeometry();
         }
@@ -215,7 +218,7 @@ export class PdfPreview {
     });
     this.anchors=sourceBlocks(this.getMarkdown());
     this.subAnchors=sourceSubblocks(this.getMarkdown());
-    this.labelSources=sourceLabelLocations(this.getMarkdown());
+    this.labelSources=this.labelResolver(this.getMarkdown());
     this.resizeObserver=new ResizeObserver(()=>this.onResize());
     this.resizeObserver.observe(this.scroller);
   }
@@ -356,7 +359,7 @@ export class PdfPreview {
   refreshAnchors(){
     this.anchors=sourceBlocks(this.getMarkdown());
     this.subAnchors=sourceSubblocks(this.getMarkdown());
-    this.labelSources=sourceLabelLocations(this.getMarkdown());
+    this.labelSources=this.labelResolver(this.getMarkdown());
     this.updateChipContentIndicators();
     this.scheduleOverlay();
   }
@@ -427,8 +430,10 @@ export class PdfPreview {
         // rather than paying a remote round trip for every 64 KB PDF.js range.
         // Large-document adaptive range loading can be added with file-size
         // metadata once this fixed-document viewer supports large files.
-        Promise.resolve(getDocument({url:appPath('/api/pdf'),disableRange:true,
-          disableStream:false,stopAtErrors:true})),
+        this.options.createPDFTask?
+          Promise.resolve().then(()=>this.options.createPDFTask()):
+          Promise.resolve(getDocument({url:appPath('/api/pdf'),disableRange:true,
+            disableStream:false,stopAtErrors:true})),
       ]);
       console.info('[ocr-pdf-init] PDF.js task created');
       stage='pdf-document';
@@ -446,9 +451,24 @@ export class PdfPreview {
         maxCanvasPixels:/(iPad|iPhone|iPod)/i.test(navigator.userAgent)?1_500_000:6_000_000,
         textLayerMode:1,annotationMode:0});
       bus.on('pagesinit',()=>{
-        this.viewer.currentScaleValue=this.zoomMode;
+        this.externalPagesInit=true;
+        if(this.options.createPDFTask&&!this.canFitPageWidth()){
+          this.externalFitPending=true;
+          this.viewer.currentScaleValue=0.75;
+        }else{
+          this.viewer.currentScaleValue=this.zoomMode;
+          this.externalFitPending=false;
+        }
         this.viewer.update();
         this.updateZoom();
+        if(this.options.createPDFTask&&this.externalFitPending){
+          // Hidden Dockview tabs cannot paint their first canvas in WebKit.
+          // The original warmup waits for first paint; an EXTERNAL document
+          // may instead enter a deferred-visible state until it gets width.
+          // No PDF pixels are claimed as rendered before pagerendered.
+          this.externalWarmupDeferred=true;
+          this.finishWarmup?.(true);
+        }
       });
       bus.on('pagechanging',e=>{
         this.pageInput.value=String(e.pageNumber);
@@ -464,7 +484,13 @@ export class PdfPreview {
           if(e.pageNumber===1)this.finishWarmup?.(false);
           return;
         }
-        if(e.pageNumber===1)this.finishWarmup?.(true);
+        if(e.pageNumber===1){
+          this.finishWarmup?.(true);
+          if(this.externalWarmupDeferred){
+            this.externalWarmupDeferred=false;
+            if(this.ready)this.setStatus('就绪');
+          }
+        }
         this.paintBlockCoverage();
         this.scheduleOverlay();
       });
@@ -476,9 +502,10 @@ export class PdfPreview {
       if(this.disposed)return;
       if(!painted)throw Error('PDF 首页渲染失败');
       this.ready=true;
+      if(this.externalFitPending&&this.canFitPageWidth())this.setZoom('page-width');
       this.refreshAnchors();
       this.paintBlockCoverage();
-      this.setStatus('就绪');
+      this.setStatus(this.externalWarmupDeferred?'等待 PDF 窗口显示':'就绪');
       if(this.pendingFocus){
         const request=this.pendingFocus;this.pendingFocus=null;
         await this.focusLine(request.line,request.explicit);
@@ -489,8 +516,14 @@ export class PdfPreview {
       this.setStatus('PDF 失败（'+stage+'）：'+err.message);
     }
   }
+  canFitPageWidth(){
+    return this.scroller.clientWidth>=80&&this.scroller.clientHeight>=50;
+  }
   updateZoom(){
-    if(this.viewer)this.zoomNode.textContent=`${Math.round(this.viewer.currentScale*100)}%`;
+    if(!this.viewer)return;
+    const scale=this.viewer.currentScale;
+    this.zoomNode.textContent=Number.isFinite(scale)&&scale>0?
+      Math.round(scale*100)+'%':'—';
   }
   captureZoomAnchor(){
     const viewport=this.scroller.getBoundingClientRect();
@@ -546,6 +579,13 @@ export class PdfPreview {
   setZoom(mode){
     if(!this.ready)return;
     this.zoomMode=mode;
+    if(this.options.createPDFTask&&mode==='page-width'&&!this.canFitPageWidth()){
+      this.externalFitPending=true;
+      if(!Number.isFinite(this.viewer.currentScale)||this.viewer.currentScale<=0)
+        this.viewer.currentScaleValue=0.75;
+      this.updateZoom();return;
+    }
+    this.externalFitPending=false;
     this.preserveZoomLocation(()=>{
       this.viewer.currentScaleValue=mode;this.viewer.update();
       // Never depend on an eventual canvas-render event to remount original
@@ -565,6 +605,12 @@ export class PdfPreview {
   onResize(){
     if(this.disposed)return;
     const width=this.scroller.clientWidth,height=this.scroller.clientHeight;
+    if(this.options.createPDFTask&&this.zoomMode==='page-width'&&
+      this.ready&&this.canFitPageWidth()&&
+      (this.externalFitPending||width!==this.lastLayoutWidth)){
+      this.lastLayoutWidth=width;this.lastLayoutHeight=height;
+      this.setZoom('page-width');return;
+    }
     if(!width||!height||(width===this.lastLayoutWidth&&height===this.lastLayoutHeight))return;
     const widthChanged=width!==this.lastLayoutWidth;
     this.lastLayoutWidth=width;this.lastLayoutHeight=height;
