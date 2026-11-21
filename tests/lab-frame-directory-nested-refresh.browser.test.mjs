@@ -21,11 +21,11 @@ try{
   try{
    const page=await browser.newPage({viewport:{width:1032,height:768},hasTouch:true});
    const errors=[];page.on('pageerror',error=>errors.push(error.message));
-   let rootsCalls=0, browseCalls=0;
+   let rootsCalls=0, browseCalls=0, extraRoot=false;
    await page.route('**/labs/lab-frame/api/workspace-io/roots',route=>{
     rootsCalls++;
     return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-      allowedRoots:['/demo/docs'],activeBook:'',selectionError:'Old book moved'})});
+      allowedRoots:extraRoot?['/demo/ob-vault','/demo/docs']:['/demo/docs'],activeBook:'',selectionError:'Old book moved'})});
    });
    await page.route('**/labs/lab-frame/api/workspace-io/browse?*',route=>{
     browseCalls++;
@@ -63,7 +63,10 @@ try{
    // Simulate the 5-second polling cycle explicitly. Previously this tried
    // assigning a recursive change result to `const changed`, then cleared tree.
    const callsBefore=rootsCalls;
+   extraRoot=true; // Frame private root list changed after opening the picker.
    await page.getByRole('button',{name:'刷新 Mac 目录'}).click();
+   await page.locator('wa-tree-item[data-path="/demo/ob-vault"]').waitFor({state:'attached',timeout:10000});
+   assert.equal(rootsCalls,callsBefore+1,'Manual refresh must reload Frame authorization root catalogue');
    await page.waitForTimeout(1100);
    assert.equal(await root.count(),1,'The authorized root must survive refresh');
    assert.equal(await alpha.count(),1,'The expanded first-level directory must survive refresh');
@@ -79,7 +82,10 @@ try{
    assert.match(await ownLabel(alpha),/📁 alpha/,'Expanded parent label missing after refresh');
    assert(!String(await page.locator('#status').innerText()).includes('目录同步失败'));
    assert(!String(await page.locator('#status').innerText()).includes('readonly'));
-   assert.equal(rootsCalls,callsBefore,'Periodic content refresh must not recheck unrelated book selection');
+   // Background polling still does not repeatedly fetch the root catalogue.
+   const callsAfterManual=rootsCalls;
+   await page.waitForTimeout(5300);
+   assert.equal(rootsCalls,callsAfterManual,'Background polling must not reload root catalogue');
    assert(browseCalls>=3,'Root and expanded branch must have refreshed');
    assert.deepEqual(errors,[]);
    console.log(name+'_FRAME_NESTED_REFRESH_PASS',JSON.stringify({rootsCalls,browseCalls}));
