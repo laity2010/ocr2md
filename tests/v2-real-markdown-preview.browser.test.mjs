@@ -306,7 +306,7 @@ try{
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
         ?.v2MarkdownPreviewPort?.getFocusedId()===23,null,{timeout:10000});
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .v2-sync-ag-row')
-        ?.querySelector('[col-id="logical_id"]')?.textContent?.includes('23'),null,{timeout:10000});
+        ?.querySelector('[col-id="pbs"]')?.textContent?.includes('p0b0s0'),null,{timeout:10000});
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),23);
       assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),0);
       // WP07 end-to-end: ACTUAL V1 PDF PBS tag pointer gesture, not a
@@ -512,7 +512,14 @@ try{
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),539);
       await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
         ?.textContent.includes('p21'),null,{timeout:10000});
-      const agId=Number(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="logical_id"]').first().textContent());
+      // The logical_id physical column is still present, but with the
+      // user-requested PBS/Type/Raw Txt-first order, AG's horizontal
+      // virtualization can omit its DOM cell. The pinned PBS always exists.
+      const agPBS=(await page.locator(
+        '#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')
+        .first().textContent()).trim();
+      const agId=projection.covers.find(row=>row.pbs===agPBS)?.logicalId;
+      assert(Number.isSafeInteger(agId),'selected AG PBS not found: '+agPBS);
       await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell').first().click();
       await page.waitForFunction(expected=>document.querySelector('#workspace .ocr-preview-pdf-host')
         ?.v2PDFPort?.getState().selectedId===expected,agId,{timeout:10000});

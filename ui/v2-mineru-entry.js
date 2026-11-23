@@ -130,20 +130,28 @@ function renderGrid(state){
         detail:{table:selectedTable,row:event.data,workspace:bound}}));
     });
   }
-  const columns=state.columns.map((key,index)=>({field:key,
-    headerName:key==='block_type'&&state.tableName==='logical_block'?'Block Type（当前）':sourceHeaders[key]||key,
+  const logical=state.tableName==='logical_block';
+  // Only the AG view is reordered. The SQLite nine-column physical schema
+  // and server-returned column inventory stay untouched.
+  const columnKeys=logical
+    ?['block_type','markdown_text',...state.columns.filter(key=>
+      key!=='block_type'&&key!=='markdown_text')]
+    :state.columns;
+  const columns=columnKeys.map((key,index)=>({field:key,
+    headerName:logical&&key==='block_type'?'Type':
+      logical&&key==='markdown_text'?'Raw Txt':sourceHeaders[key]||key,
     headerTooltip:key,tooltipField:key,resizable:true,sortable:true,
-    minWidth:key==='block_json'?380:key==='source_json_path'?275:key==='source_sha256'?220:105,
-    width:key==='blockid'?100:key==='block_json'?440:key==='original_bytes'?155:undefined,
-    pinned:index===0?'left':undefined,
+    minWidth:key==='markdown_text'&&logical?320:key==='block_json'?380:
+      key==='source_json_path'?275:key==='source_sha256'?220:105,
+    width:key==='markdown_text'&&logical?420:key==='blockid'?100:
+      key==='block_json'?440:key==='original_bytes'?155:undefined,
+    pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
-  if(state.tableName==='logical_block'){
+  if(logical){
     // PBS is the user-facing identity. Retain all nine physical fields in AG.
     columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
       minWidth:125,width:135,pinned:'left',resizable:true,sortable:true});
-    for(const column of columns)if(column.field==='logical_id')column.pinned=undefined;
   }
-  const logical=state.tableName==='logical_block';
   const controls=logicalControls();
   let view=null;
   if(controls){
@@ -157,7 +165,7 @@ function renderGrid(state){
     if(controls)controls.indicator.textContent=showAllLogical?
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
   }else visibleLogicalP=null;
-  const schema=state.tableName+':'+state.columns.join(',');
+  const schema=state.tableName+':'+columns.map(column=>column.field).join(',');
   if(schema!==renderedSchema){port.setColumns(columns);renderedSchema=schema;}
   port.setRows(logical
     ?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`}))

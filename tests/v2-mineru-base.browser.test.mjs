@@ -119,7 +119,7 @@ try{
      {label:'逻辑表 · logical_block',value:'sql:logical_block'}
    ]);
    // Both physical tables are populated atomically during initial import;
-   // choosing logical_block must open its 6-column AG view without a click.
+   // choosing logical_block must open its nine-field+PBS AG view without a click.
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
@@ -128,17 +128,22 @@ try{
       null,{timeout:30000});
    const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
      .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
-   assert.deepEqual(logicalHeaders,['pbs',...logicalCols]);
+   assert.deepEqual(logicalHeaders,['pbs','block_type','markdown_text',
+     ...logicalCols.filter(key=>key!=='block_type'&&key!=='markdown_text')],
+     'logical AG view puts PBS, Type, Raw Txt first; retains all nine SQLite fields');
    const derivedPBS=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
      const columns=el.v2BaseGridPort.getColumns();
      const row=el.querySelector('.ag-row[row-index="0"]');
      return {pinned:columns[0].pinned,field:columns[0].field,
-       rendered:row?.querySelector('[col-id="pbs"]')?.textContent?.trim()};
+       rendered:row?.querySelector('[col-id="pbs"]')?.textContent?.trim(),
+       headers:columns.slice(0,3).map(column=>column.headerName),
+       rawWidth:columns[2].width,otherPinned:columns.slice(1).some(column=>column.pinned)};
    });
-   assert.deepEqual(derivedPBS,{pinned:'left',field:'pbs',rendered:'p0b0s0'});
+   assert.deepEqual(derivedPBS,{pinned:'left',field:'pbs',rendered:'p0b0s0',
+     headers:['PBS','Type','Raw Txt'],rawWidth:420,otherPinned:false});
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
      el=>el.v2BaseGridPort.getColumns().find(column=>column.field==='block_type').headerName),
-     'Block Type（当前）');
+     'Type');
    const all=page.getByRole('checkbox',{name:'全部逻辑块'});
    assert.equal(await all.isVisible(),true,'全部必须在逻辑表顶栏');
    assert.equal(await all.isChecked(),false,'默认按焦点 PBS p 过滤');
@@ -325,6 +330,9 @@ try{
    const headers=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.headerName));
    assert.equal(headers.length,18,JSON.stringify(headers));
    assert.equal(headers[0],'BlockID');
+   assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(el=>
+     el.v2BaseGridPort.getColumns().find(column=>column.field==='block_type').headerName),
+     '原始类型','base table header must remain original after logical view reorder');
    // After switching tables, the active four-pane CM6 focus may navigate AG
    // to the currently selected logical block (e.g. its base row 121–240).
    // Verify the real base-table count, then explicitly go to its first page
