@@ -91,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp12-ag-pbs-type-fit-manual-resize-f02',
+        stage:'wp13-child-single-newline',
       })+'\n'});
     },
   }],
