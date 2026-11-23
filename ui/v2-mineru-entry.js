@@ -256,12 +256,26 @@ function renderGrid(state){
     ?['block_type','md_block',...state.columns.filter(key=>
       key!=='block_type'&&key!=='md_block'),'raw_block']
     :state.columns;
-  const fitting=values=>Math.ceil(Math.max(55,...values.map(value=>
-    String(value??'').length*8+20)));
-  const pbsWidth=Math.min(155,Math.max(80,fitting(state.rows.map(row=>
-    `p${row.p}b${row.b}s${row.s}`))));
-  const types=[...new Set(state.rows.map(row=>row.block_type).filter(Boolean))].sort();
-  const typeWidth=Math.min(220,Math.max(96,fitting(types)+35));
+  // WP12: fit the ACTUAL displayed PBS and Type cell text in the current
+  // AG font. Never use all hidden pages to inflate the current Type column.
+  // The minimum is deliberately smaller than the fitted width: AG Grid's
+  // native resize handle must allow both shrinking and expanding.
+  const page=logical?filterLogicalAG(state.rows,currentLogicalId(),showAllLogical):null;
+  const visibleRows=page?.rows||state.rows;
+  const gridHost=$('#workspace .ocr-outline-grid');
+  const cell=gridHost?.querySelector('.ag-cell');
+  const measuredStyle=getComputedStyle(cell||gridHost);
+  const canvas=document.createElement('canvas');
+  const ctx=canvas.getContext('2d');
+  if(ctx)ctx.font=measuredStyle.font||'13px "OCR2MD Sarasa",monospace';
+  const px=text=>ctx?ctx.measureText(String(text??'')).width:
+    String(text??'').length*8;
+  const fit=(values,header,min,max)=>Math.max(min,Math.min(max,Math.ceil(Math.max(
+    px(header)+54, // AG native filter icon, header padding and resize handle
+    ...values.map(value=>px(value)+30) // real text and AG cell horizontal padding
+  ))));
+  const pbsWidth=logical?fit(visibleRows.map(row=>`p${row.p}b${row.b}s${row.s}`),'PBS',80,180):80;
+  const typeWidth=logical?fit(visibleRows.map(row=>row.block_type),'Type',82,240):105;
   const columns=columnKeys.map((key,index)=>({field:key,
     headerName:logical&&key==='block_type'?'Type':
       logical&&key==='md_block'?'MD Block':
@@ -273,7 +287,7 @@ function renderGrid(state){
     filterValueGetter:params=>params.data?String(params.data[key]??''):'',
     suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     sortable:!(logical&&key==='block_type'),
-    minWidth:logical&&key==='block_type'?typeWidth:
+    minWidth:logical&&key==='block_type'?76:
       key==='md_block'&&logical?290:key==='block_json'?380:
       key==='source_json_path'?275:key==='source_sha256'?220:105,
     width:logical&&key==='block_type'?typeWidth:key==='md_block'&&logical?420:
@@ -284,7 +298,7 @@ function renderGrid(state){
   if(logical){
     // PBS is the sole pinned column, sized to its displayed values.
     columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
-      minWidth:pbsWidth,width:pbsWidth,pinned:'left',resizable:true,sortable:false,
+      minWidth:72,width:pbsWidth,pinned:'left',resizable:true,sortable:false,
       filter:EnumCheckboxFilter,filterValueGetter:params=>params.data?
         `p${params.data.p}b${params.data.b}s${params.data.s}`:'',
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false});
@@ -297,17 +311,17 @@ function renderGrid(state){
     controls.label.querySelector('input').checked=showAllLogical;
   }
   if(logical){
-    const page=filterLogicalAG(state.rows,currentLogicalId(),showAllLogical);
     view=page;
     visibleLogicalP=view.p;
     if(controls)controls.indicator.textContent=showAllLogical?
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
   }else visibleLogicalP=null;
   const schema=state.tableName+':'+columns.map(column=>column.field).join(',');
-  if(schema!==renderedSchema){port.setColumns(columns);renderedSchema=schema;}
+  if(schema!==renderedSchema){port.setColumns(columns,state.tableName);renderedSchema=schema;}
   port.setRows(logical
     ?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`}))
     :state.rows);
+  if(logical)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
   if(lastFocus){
     port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
       state.tableName==='logical_block'?lastFocus.logicalId:lastFocus.baseBlockId);

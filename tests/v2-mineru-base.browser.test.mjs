@@ -112,7 +112,7 @@ try{
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
           Array.from({length:224},(_,i)=>({
             logical_id:i+1,base_blockid:i+1,parent_id:null,
-            logical_order:i+1,md_block:fragments[i],block_type:i===0?'title':'text',raw_path:'$',raw_block:'ORIGINAL '+i,
+            logical_order:i+1,md_block:fragments[i],block_type:i===0?'title':i===22?'interline_equation':'text',raw_path:'$',raw_block:'ORIGINAL '+i,
             p:Math.floor(i/10),b:i%10,s:0})):[]):
           Array.from({length:Math.max(0,Math.min(120,539-pageOffset))},(_,i)=>({
             ...rows[0],blockid:pageOffset+i+1})),
@@ -220,8 +220,58 @@ try{
    assert.equal(agRules.pbsSort,false);assert.equal(agRules.pbsPin,'left');
    assert.equal(agRules.typeSort,false);
    assert(agRules.pbsWidth>=80&&agRules.pbsWidth<=155);
-   assert(agRules.typeWidth>=96&&agRules.typeWidth<=220);
+   assert(agRules.typeWidth>=82&&agRules.typeWidth<=125,
+     'Type initial width fits visible page, not hidden 224-row inventory');
    assert.equal(agRules.md,'md_block');assert.equal(agRules.raw,'raw_block');
+   const gridWidths=()=>page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
+     const state=el.v2BaseGridPort.getColumnState();
+     return Object.fromEntries(state.map(c=>[c.colId,c.width]));
+   });
+   const initialWidths=await gridWidths();
+   assert(initialWidths.pbs>=80&&initialWidths.pbs<=130,
+     'PBS should be compact and fit the visible PBS values');
+   assert(initialWidths.block_type>=82&&initialWidths.block_type<=125,
+     'Type should initially fit visible Type cells');
+   // A longer Type exists on hidden p2. Auto-fit must respond to the
+   // current-page/all scope, without hand-built filters or changing SQLite.
+   const scopeAll=page.getByRole('checkbox',{name:'全部逻辑块'});
+   await scopeAll.check();
+   const expandedWidths=await gridWidths();
+   assert(expandedWidths.block_type>=initialWidths.block_type+30,
+     'scope 全部 reveals a longer Type and should auto-fit wider');
+   await scopeAll.uncheck();
+   const collapsedWidths=await gridWidths();
+   assert(Math.abs(collapsedWidths.block_type-initialWidths.block_type)<=8,
+     'returning to current page restores compact Type fit after fonts settle');
+   // WP12: physical AG header handles allow BOTH directions. Preserve what
+   // the user chose when the current-page/all checkbox rerenders AG rows.
+   const dragResize=async(field,delta)=>{
+     const resize=page.locator(`#workspace .ag-header-cell[col-id="${field}"] .ag-header-cell-resize`);
+     const rect=await resize.boundingBox();
+     assert(rect&&rect.width>0,`${field} native column-resize handle missing`);
+     const x=rect.x+rect.width/2,y=rect.y+rect.height/2;
+     await page.mouse.move(x,y);await page.mouse.down();
+     await page.mouse.move(x+delta,y,{steps:8});await page.mouse.up();
+   };
+   for(const field of ['pbs','block_type']){
+     const before=(await gridWidths())[field];
+     await dragResize(field,60);
+     await page.waitForFunction(({field,before})=>{
+       const state=document.querySelector('#workspace .ocr-outline-grid')
+         ?.v2BaseGridPort?.getColumnState();
+       return state?.find(c=>c.colId===field)?.width>=before+30;
+     },{field,before},{timeout:12000});
+     const wider=(await gridWidths())[field];
+     await dragResize(field,-65);
+     const narrower=(await gridWidths())[field];
+     assert(narrower<wider-10,`${field} cannot be dragged narrower`);
+     const definition=await page.locator('#workspace .ocr-outline-grid').evaluate((el,field)=>
+       el.v2BaseGridPort.getColumns().find(c=>c.field===field),field);
+     assert(definition.minWidth<before,`${field} minWidth locks the original fit width`);
+     if(field==='block_type')assert(narrower<before,
+       'Type can be reduced below its initial fitted width');
+   }
+   const customWidths=await gridWidths();
    // WP11: V1 native AG filter icon/checkboxes, not a handmade select.
    assert.equal(await page.locator('#workspace .v2-type-value-filter').count(),0);
    const typeButton=page.locator('#workspace .ag-header-cell[col-id="block_type"] .ag-header-cell-filter-button');
@@ -257,6 +307,9 @@ try{
    assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/全部 · 224 行/);
    await all.uncheck();
    assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/p0 · 10 \/ 224/);
+   const widthsAfterRefresh=await gridWidths();
+   for(const field of ['pbs','block_type'])assert.equal(widthsAfterRefresh[field],customWidths[field],
+     `manual ${field} width must survive switching 全部 checkbox`);
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    // WP08 loads into one CM6 document, with one blank only at each group's
    // last child. This fixture initially has 224 separate parent groups.
