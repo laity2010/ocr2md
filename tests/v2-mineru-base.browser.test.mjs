@@ -395,6 +395,22 @@ try{
    });
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
      ?.textContent.includes('p0 · 10 / 224'),null,{timeout:12000});
+   // WP19: explicit source selection owns the highlighted logical block.
+   // Scrolling either CM6 or Markdown may move VIEWPORTS in sync, but may
+   // NEVER move the CM6 caret, active AG row/page or PDF/Markdown highlight.
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getFocusedId()===1,null,{timeout:12000});
+   await page.evaluate(()=>{
+     window.__wp19FocusEvents=[];
+     document.addEventListener('v2-sync-focus',e=>window.__wp19FocusEvents.push(e.detail?.logicalId));
+   });
+   const stableFocus=await page.locator('#workspace').evaluate(el=>({
+     caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
+     focused:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
+     page:el.querySelector('.v2-logical-page')?.textContent,
+     ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+   }));
+   assert.equal(stableFocus.focused,1);
    // The exact V1 scroll-sync coordinator must have installed source-line
    // anchors for real two-way scrolling (not percentage-only linking).
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
@@ -408,6 +424,15 @@ try{
      ?.v2MarkdownPreviewPort?.getScrollDriver()==='preview',null,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort
      ?.getEditorView().scrollDOM.scrollTop>200,null,{timeout:12000});
+   const afterPreviewScroll=await page.locator('#workspace').evaluate(el=>({
+     caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
+     focused:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
+     page:el.querySelector('.v2-logical-page')?.textContent,
+     ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+     events:window.__wp19FocusEvents,
+   }));
+   assert.deepEqual({...afterPreviewScroll,events:[]},{...stableFocus,events:[]},
+     'scrolling Markdown can synchronize scroll positions, not logical selection');
    await page.locator('#workspace #editor').evaluate(el=>{
      const src=el.v2SourcePort.getEditorView().scrollDOM;
      src.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:-350}));
@@ -417,6 +442,25 @@ try{
      ?.v2MarkdownPreviewPort?.getScrollDriver()==='cm6',null,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
      ?.scrollTop<500,null,{timeout:12000});
+   const afterSourceScroll=await page.locator('#workspace').evaluate(el=>({
+     caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
+     focused:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
+     page:el.querySelector('.v2-logical-page')?.textContent,
+     ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+     events:window.__wp19FocusEvents,
+   }));
+   assert.deepEqual({...afterSourceScroll,events:[]},{...stableFocus,events:[]},
+     'scrolling CM6 can synchronize scroll positions, not logical selection');
+   // Actual clicks still change focus and AG, so this is NOT a disabled
+   // multi-pane selection system, only a separation of scroll from focus.
+   await page.locator('#workspace .ocr-outline-grid .ag-row[row-index="1"] .ag-cell').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getFocusedId()===2,null,{timeout:12000});
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+     el.v2SourcePort.getEditorView().state.selection.main.head),sourceState.intervals[1].from);
+   await article.locator('h1').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
+     ?.v2MarkdownPreviewPort?.getFocusedId()===1,null,{timeout:12000});
    assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'true');
    const computed=await page.locator('#workspace #editor .cm-editor').evaluate(el=>({
      background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,

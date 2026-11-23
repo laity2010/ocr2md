@@ -57,11 +57,11 @@ export function mountV2PaneFocus(previewPane,previewBody){
       const row=logicalAtSourceLine(source.getIntervals(),source.getDoc(),target.sourceLine);
       if(row){lastId=row.logicalId;emit(row,target.origin);}
     }
-    if(state.scrollTarget!==prev.scrollTarget && state.scrollTarget){
-      const source=sourcePort();if(!source?.getState().loaded)return;
-      const row=logicalAtSourceLine(source.getIntervals(),source.getDoc(),state.scrollTarget.sourceLine);
-      if(row&&row.logicalId!==lastId){lastId=row.logicalId;emit(row,state.scrollTarget.origin);}
-    }
+    // WP19: scrollTarget means VIEWPORT POSITION, never selection.
+    // ScrollSync still moves CM6/Markdown panes together, but only the
+    // explicit focusTarget/click path above may update the logical highlight.
+    // Otherwise simply swiping a pane silently moves AG/PDF selection and
+    // can change the selected logical page without any click or caret move.
   });
   document.addEventListener('v2-cm-session',onSession);
   document.addEventListener('v2-ag-row-click',onAG);

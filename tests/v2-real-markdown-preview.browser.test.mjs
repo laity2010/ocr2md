@@ -389,6 +389,28 @@ try{
         ?.querySelector('[col-id="pbs"]')?.textContent?.includes('p0b0s0'),null,{timeout:10000});
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),23);
       assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),0);
+      // WP19: PDF viewport scrolling is NOT a new selection. Keep the
+      // explicit label-click logical ID across page movement, and ensure the
+      // linked AG/Markdown/CM6 highlight and caret stay on that same block.
+      const pdfScrollBefore=await page.locator('#workspace .lab-ocr-pdf-scroller').evaluate(el=>el.scrollTop);
+      await page.locator('#workspace .lab-ocr-pdf-scroller').evaluate(el=>{
+        el.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:850}));
+        el.scrollTop=Math.min(el.scrollHeight-el.clientHeight,el.scrollTop+850);
+        el.dispatchEvent(new Event('scroll'));
+      });
+      await sleep(350);
+      const afterPDFScroll=await page.locator('#workspace').evaluate(el=>({
+        pdf:el.querySelector('.ocr-preview-pdf-host').v2PDFPort.getState().selectedId,
+        markdown:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
+        caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
+        ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+      }));
+      assert.deepEqual(afterPDFScroll,{pdf:23,markdown:23,caret:0,ag:'p0b0s0'},
+        'scrolling a PDF page must not automatically move the highlighted logical block');
+      await page.locator('#workspace .lab-ocr-pdf-scroller').evaluate((el,scroll)=>{
+        el.scrollTop=scroll;
+      },pdfScrollBefore);
+      await sleep(250);
       // WP07 end-to-end: ACTUAL V1 PDF PBS tag pointer gesture, not a
       // fabricated structural event. The cover geometry and PDF.js instance
       // must stay stable while CM6, AG and PBS tags reflect the change.

@@ -91,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp18-cm6-prefix-ownership',
+        stage:'wp19-scroll-focus-decoupling',
       })+'\n'});
     },
   }],
