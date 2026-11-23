@@ -157,8 +157,8 @@ try{
    await all.uncheck();
    assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/p0 · 10 \/ 224/);
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
-   // WP04 loads this automatically, with one fully blank line after EVERY
-   // block (including the last); no second CM6 editor or SQL document writer.
+   // WP08 loads into one CM6 document, with one blank only at each group's
+   // last child. This fixture initially has 224 separate parent groups.
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,
      null,{timeout:15000});
    const sourceState=await page.locator('#workspace #editor').evaluate(el=>({
@@ -172,7 +172,8 @@ try{
    assert.equal(sourceState.blocks[2].markdownText,'');
    assert.equal(sourceState.text,fragments.map(text=>text+'\n\n').join(''));
    assert.equal(sourceState.state.dirty,false);
-   assert.equal(sourceState.state.separator,'\n\n');
+   assert.equal(sourceState.state.separator,'');
+   assert.equal(sourceState.state.groupEndMinimum,'\n\n');
    // Original V1 Markdown renderer is mounted in the ORIGINAL Frame MD pane.
    // It projects the live source rather than reparsing SQL on each keystroke.
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
@@ -292,6 +293,12 @@ try{
      const row=el.v2SourcePort.getBlocks().find(row=>row.logicalId===2);
      return [row.p,row.b,row.s,row.parentId,row.markdownText];
    }),[0,0,1,1,'Original text']);
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>{
+     const rows=el.v2SourcePort.getIntervals(),doc=el.v2SourcePort.getMarkdown();
+     const a=rows.find(r=>r.logicalId===1),b=rows.find(r=>r.logicalId===2);
+     return doc.slice(a.from,b.to);
+   }),fragments[0]+fragments[1]+'\n\n',
+   'joined root/child must concatenate with NO synthetic blank between');
    assert.equal(postCount,1,'structural drag cannot re-import SQL');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
      null,{timeout:12000});

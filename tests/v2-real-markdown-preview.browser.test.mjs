@@ -137,7 +137,7 @@ try{
       assert.equal(result.blockCount,224);
       assert.equal(result.sourceLength,snapshot.markdown.length+2,
         'each of 224 blocks contributes exactly two newline characters, one blank line');
-      assert.equal(result.separator,'\n\n');
+      assert.equal(result.separator,'','WP08 has no inter-block separator');
       assert.equal(result.editorCount,1);
       if(name==='iPad-WebKit'){
         await page.waitForFunction(()=>{
@@ -374,6 +374,21 @@ try{
         return {logicalId:r.logicalId,baseBlockId:r.baseBlockId,p:r.p,b:r.b,s:r.s,parentId:r.parentId};
       });
       assert.deepEqual(movedRow,{logicalId:24,baseBlockId:24,p:0,b:0,s:1,parentId:23});
+      const groupedText=await page.locator('#workspace #editor').evaluate(el=>{
+        const port=el.v2SourcePort,intervals=port.getIntervals();
+        const head=intervals.find(row=>row.logicalId===23);
+        const child=intervals.find(row=>row.logicalId===24);
+        return {text:port.getMarkdown().slice(head.from,child.to),
+          headPadding:head.groupEndPad,childPadding:child.groupEndPad,
+          contiguous:head.to===child.from};
+      });
+      const firstRaw=snapshot.markdown.slice(snapshot.segments[0].startUtf16,
+        snapshot.segments[0].endUtf16);
+      const secondRaw=snapshot.markdown.slice(snapshot.segments[1].startUtf16,
+        snapshot.segments[1].endUtf16);
+      assert.deepEqual(groupedText,{text:firstRaw+secondRaw+'\n\n',
+        headPadding:0,childPadding:2,contiguous:true},
+      'WP08 actual V1 drag must merge child texts with NO inter-block separator');
       await page.waitForFunction(()=>document.querySelector('#workspace #editor')
         ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
       assert.equal(structurePosts,1,'V1 drag must idle-commit one SQL transaction');
@@ -391,6 +406,22 @@ try{
       await page.waitForFunction(()=>document.querySelector('#workspace #editor')
         ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
       assert.equal(structurePosts,3,'redo must persist SQL again');
+      assert.equal(await page.locator('#workspace #editor').evaluate(el=>{
+        const port=el.v2SourcePort,rows=port.getIntervals();
+        const a=rows.find(r=>r.logicalId===23),b=rows.find(r=>r.logicalId===24);
+        return port.getMarkdown().slice(a.from,b.to);
+      }),groupedText.text,'Undo/Redo must restore group-end blank ownership exactly');
+      // Isolated WP08 gate is available when unrelated later PDF page/zoom
+      // gestures are intermittently unstable in headless WebKit. The FULL
+      // original test below remains intact for WP07/PDF regression.
+      if(process.env.V2_TEST_WP08_ONLY){
+        assert.deepEqual(errors,[]);
+        console.log('WP08_REAL_V1_PDF_CHILD_GROUP_BLANK_PASS',name,
+          JSON.stringify({groupedTextLength:groupedText.text.length,
+            headPadding:groupedText.headPadding,childPadding:groupedText.childPadding,
+            structurePosts}));
+        continue;
+      }
       // Reproduce the user's exact failing operation on ORIGINAL PDF page 2:
       // p1b3s0 (logicalId 63) AFTER p1b4s0 (logicalId 64), preserving
       // target b4 while assigning source b5 and shifting ALL later b values.

@@ -1,46 +1,83 @@
 import assert from 'node:assert/strict';
 import {EditorState} from '@codemirror/state';
-import {composeBlockSource,canEditBlocks,mapEditedBlocks,logicalTextRows,BLOCK_END} from '../ui/v2-block-source.js';
-function snapshot(texts){
- let markdown='',segments=[];
- texts.forEach((text,index)=>{
-   if(index)markdown+='\n\n';
-   const from=markdown.length;
-   markdown+=text;
-   segments.push({logicalId:11+index*3,baseBlockId:100+index,
-     parentId:null,logicalOrder:index+1,blockType:index===0?'title':'text',
-     startUtf16:from,endUtf16:markdown.length});
- });
- return {schema:'v2-logical-md/v2',markdown,rowCount:texts.length,segments};
+import {composeBlockSource,composeLogicalSource,groupEndPadding,
+  canEditBlocks,mapEditedBlocks,logicalTextRows,BLOCK_END} from '../ui/v2-block-source.js';
+import {logicalAtOffset} from '../ui/v2-focus-map.js';
+
+function snapshot(texts,groups){
+  let markdown='';const segments=[];
+  texts.forEach((text,index)=>{
+    if(index)markdown+='\n\n'; // backend transport only, NOT CM6 text
+    const startUtf16=markdown.length;markdown+=text;
+    const [b,s,parentId]=groups[index];
+    segments.push({logicalId:11+index*3,baseBlockId:100+index,
+      parentId,logicalOrder:index+1,blockType:index===0?'title':'text',
+      p:0,b,s,startUtf16,endUtf16:markdown.length});
+  });
+  return {schema:'v2-logical-md/v2',markdown,rowCount:texts.length,segments};
 }
 const originals=['# 章节🧪','','第二段\n第三行','A\n\nB','末尾🙂\n'];
-const result=composeBlockSource(snapshot(originals));
+const groups=[[0,0,null],[0,1,11],[1,0,null],[1,1,17],[2,0,null]];
+const result=composeBlockSource(snapshot(originals,groups));
 assert.equal(BLOCK_END,'\n\n');
-assert.equal(result.blocks.length,originals.length);
-assert.equal(result.source,originals.map(text=>text+BLOCK_END).join(''));
+assert.equal(groupEndPadding('Text'),'\n\n');
+assert.equal(groupEndPadding('Text\n'),'\n');
+assert.equal(groupEndPadding('Text\n\n'),'');
+assert.equal(groupEndPadding('Text\n\n\n'),'');
+assert.equal(result.blocks.length,5);
+assert.equal(result.source,'# 章节🧪\n\n第二段\n第三行A\n\nB\n\n末尾🙂\n\n');
 assert(result.source.endsWith('\n\n'));
-assert.deepEqual(logicalTextRows(result.source,result.blocks).map(r=>r.markdownText),originals);
-assert.equal(result.blocks[1].from,result.blocks[1].to,'empty block retains identity');
-assert.equal(result.blocks[0].to,'# 章节🧪'.length,'offsets are UTF-16');
-assert.equal(result.blocks[2].from,result.blocks[1].to+BLOCK_END.length);
-let blocks=result.blocks,state=EditorState.create({doc:result.source});
-const first=state.update({changes:{from:blocks[0].to,to:blocks[0].to,insert:' NEW'}});
-assert.equal(canEditBlocks(blocks,first.changes),true);
-blocks=mapEditedBlocks(blocks,first.changes);state=first.state;
-assert.equal(logicalTextRows(state.doc.toString(),blocks)[0].markdownText,'# 章节🧪 NEW');
-assert.equal(logicalTextRows(state.doc.toString(),blocks)[1].markdownText,'');
-const insertEmpty=state.update({changes:{from:blocks[1].from,to:blocks[1].from,insert:'EMPTY NOW'}});
-assert.equal(canEditBlocks(blocks,insertEmpty.changes),true);
-blocks=mapEditedBlocks(blocks,insertEmpty.changes);state=insertEmpty.state;
-assert.equal(logicalTextRows(state.doc.toString(),blocks)[1].markdownText,'EMPTY NOW');
-const violating=state.update({changes:{from:blocks[0].to,to:blocks[1].from,insert:''}});
-assert.equal(canEditBlocks(blocks,violating.changes),false,'separator deletion is denied');
-const all=state.update({changes:{from:0,to:state.doc.length,insert:'X'}});
-assert.equal(canEditBlocks(blocks,all.changes),false,'cross-block replace denied');
-const last=blocks.at(-1);
-const deleteSuffix=state.update({changes:{from:last.to,to:last.to+2,insert:''}});
-assert.equal(canEditBlocks(blocks,deleteSuffix.changes),false,'last block still ends with one blank line');
-assert.throws(()=>composeBlockSource({...snapshot(originals),rowCount:10}),/invalid/);
-assert.throws(()=>composeBlockSource({...snapshot(originals),segments:snapshot(originals).segments.map((x,i)=>i===1?{...x,startUtf16:x.startUtf16+1}:x)}),/invalid|inconsistent/);
-assert.throws(()=>composeBlockSource(snapshot(originals).segments.map(()=>{})),/invalid/);
-console.log('WP04_BLOCK_SOURCE_PURE_PASS','5 blocks; empty; emoji UTF16; 1 blank line after every block; protected separators; edit remapping');
+assert.deepEqual(logicalTextRows(result.source,result.blocks).map(r=>r.markdownText),originals,
+  'all user/OCR newlines are owned by their original block, never trimmed');
+assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[0,2,0,2,1]);
+assert.equal(result.blocks[0].to,'# 章节🧪'.length,'UTF16 emoji content, no child separator');
+assert.equal(result.blocks[0].to,result.blocks[1].from,'children concatenate exactly');
+assert.equal(result.blocks[1].to,result.blocks[2].from,'group end blank belongs to s1');
+assert.equal(result.blocks[2].to,result.blocks[3].from,'two siblings have no separator');
+assert.equal(logicalAtOffset(result.blocks,result.blocks[1].from).logicalId,14,
+  'at an immediate child boundary, the child owns its first position');
+assert.equal(logicalAtOffset(result.blocks,result.blocks[1].to-1).logicalId,14,
+  'the visible empty line belongs to the LAST child');
+assert.equal(logicalAtOffset(result.blocks,result.blocks[3].from).logicalId,20);
+assert.equal(logicalAtOffset(result.blocks,result.blocks.at(-1).to).logicalId,23);
+
+// A blank line entered into any child (even a non-last child) is RAW content,
+// and is never trimmed or reclassified as a structural separator.
+const amended=logicalTextRows(result.source,result.blocks).map(row=>({
+  ...row,markdownText:row.logicalId===11?row.markdownText+'\n\n':row.markdownText,
+}));
+const edited=composeLogicalSource(amended);
+assert.equal(edited.blocks[0].groupEndPad,0);
+assert.equal(edited.source.slice(0,edited.blocks[0].to),'# 章节🧪\n\n');
+assert.equal(logicalTextRows(edited.source,edited.blocks)[0].markdownText,'# 章节🧪\n\n');
+
+// Test position-only helpers on a simulated CM transaction. UI remains
+// read-only in WP08; this is NOT an authorization to edit in production.
+const cm=EditorState.create({doc:result.source});
+const row=result.blocks[2],point=row.from+3;
+const local=cm.update({changes:{from:point,to:point,insert:' NEW'}});
+assert.equal(canEditBlocks(result.blocks,local.changes),true);
+const mapped=mapEditedBlocks(result.blocks,local.changes);
+assert.equal(logicalTextRows(local.state.doc.toString(),mapped)[2].markdownText,'第二段 NEW\n第三行');
+const emptyTail=result.blocks[1];
+const typingAtBlank=cm.update({changes:{
+  from:emptyTail.to-1,to:emptyTail.to-1,insert:'手工加行'}});
+assert.equal(canEditBlocks(result.blocks,typingAtBlank.changes),true);
+const promoted=mapEditedBlocks(result.blocks,typingAtBlank.changes);
+assert.equal(promoted[1].groupEndPad,0,'typing in the blank promotes its display LF into owned text');
+assert.equal(logicalTextRows(typingAtBlank.state.doc.toString(),promoted)[1].markdownText,
+  '\n手工加行\n','future edit must not be lost by stripping the old virtual pad');
+const cross=cm.update({changes:{
+  from:result.blocks[2].to-1,to:result.blocks[3].to,insert:'X'}});
+assert.equal(canEditBlocks(result.blocks,cross.changes),false,'cannot replace across block IDs');
+const all=cm.update({changes:{from:0,to:cm.doc.length,insert:'X'}});
+assert.equal(canEditBlocks(result.blocks,all.changes),false);
+
+// WP03 backend positions are separately validated; no Markdown delimiter
+// is allowed to be confused with a CM6 logical block boundary.
+assert.throws(()=>composeBlockSource({...snapshot(originals,groups),rowCount:10}),/invalid/);
+assert.throws(()=>composeBlockSource({...snapshot(originals,groups),
+  segments:snapshot(originals,groups).segments.map((x,i)=>
+    i===1?{...x,startUtf16:x.startUtf16+1}:x)}),/invalid|inconsistent/);
+assert.throws(()=>composeBlockSource(snapshot(originals,groups).segments.map(()=>{})),/invalid/);
+console.log('WP08_BLOCK_SOURCE_GROUP_END_PASS');

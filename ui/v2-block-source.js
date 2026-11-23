@@ -1,17 +1,39 @@
-/** WP04: pure logical Markdown -> editable CM6 source projection.
- * No SQL, filesystem, HTML CMD tags, or additional editor states.
- * In a V2 source view every logical block is followed by ONE blank line.
- * The separate segment inventory, not the visible blank lines, owns IDs.
+/** WP08: one CM6 document from raw SQL logical rows, WITHOUT separators.
+ * An unfinished group-ending block owns the minimum display tail needed for
+ * one visible blank line. Every other newline belongs to its real text.
+ * Position IDs come ONLY from the segment inventory, never blank lines.
  */
 export const BLOCK_END='\n\n';
 const BACKEND_SEP='\n\n';
+const groupKey=row=>String(row.p)+'/'+String(row.b);
+/** Minimal LF tail that makes a blank source line after the group.
+ * No original character is modified or trimmed. The missing tail is a
+ * CM6-owned projection until text editing/persistence is enabled later.
+ */
+export function groupEndPadding(text){
+  if(typeof text!=='string')throw Error('逻辑文本无效');
+  return text.endsWith('\n\n')?'':text.endsWith('\n')?'\n':BLOCK_END;
+}
+export function composeLogicalSource(rows){
+  if(!Array.isArray(rows))throw Error('逻辑块无效');
+  let source='';
+  const blocks=rows.map((row,i)=>{
+    if(typeof row?.markdownText!=='string')throw Error('逻辑文本无效');
+    const lastInGroup=i===rows.length-1||groupKey(row)!==groupKey(rows[i+1]);
+    const padding=lastInGroup?groupEndPadding(row.markdownText):'';
+    const from=source.length;
+    source+=row.markdownText+padding;
+    return {...row,from,to:source.length,groupEndPad:padding.length};
+  });
+  return {source,blocks};
+}
 export function composeBlockSource(snapshot){
   if(!snapshot||snapshot.schema!=='v2-logical-md/v2'||
     typeof snapshot.markdown!=='string'||!Array.isArray(snapshot.segments)||
     snapshot.rowCount!==snapshot.segments.length)
     throw Error('WP04: invalid logical Markdown snapshot');
   const original=snapshot.markdown;
-  let offset=0,source='',blocks=[];
+  let offset=0,blocks=[];
   const ids=new Set();
   for(const [i,part] of snapshot.segments.entries()){
     if(!part||!Number.isInteger(part.logicalId)||part.logicalId<=0||
@@ -29,20 +51,18 @@ export function composeBlockSource(snapshot){
     if(offset!==part.startUtf16||part.endUtf16>original.length)
       throw Error('WP04: source position manifest is inconsistent');
     const text=original.slice(part.startUtf16,part.endUtf16);
-    const from=source.length;source+=text;
     blocks.push({logicalId:part.logicalId,baseBlockId:part.baseBlockId,
       parentId:part.parentId,logicalOrder:part.logicalOrder,blockType:part.blockType,
-      p:part.p,b:part.b,s:part.s,
-      from,to:source.length});
-    source+=BLOCK_END;offset=part.endUtf16;
+      p:part.p,b:part.b,s:part.s,markdownText:text});
+    offset=part.endUtf16;
   }
   if(offset!==original.length)throw Error('WP04: unmapped backend Markdown tail');
-  return {source,blocks};
+  return composeLogicalSource(blocks);
 }
 
-/** CM6 change coordinates are UTF-16, exactly as document strings. A change
- * must stay WITHIN one block's editable text (including its insertion edges),
- * never consume the invariant blank-line suffix or cross logical blocks.
+/** CM6 change coordinates are UTF-16, exactly as document strings. Each
+ * block owns its trailing blank lines; changes must not span block IDs.
+ * WP08 still keeps the actual source view read-only.
  */
 export function canEditBlocks(blocks,changes){
   let allowed=true;
@@ -52,19 +72,31 @@ export function canEditBlocks(blocks,changes){
   return allowed;
 }
 
-/** Map only the mutable text interval through a real CodeMirror transaction.
- * Protect all suffixes and persistent IDs, including zero-length logical rows.
+/** Map one block's current coordinates through a CodeMirror transaction.
+ * Preserved for a future separately authorized text-editing WP.
  */
 export function mapEditedBlocks(blocks,changes){
+  const changed=[];
+  changes.iterChanges((fromA,toA)=>changed.push({fromA,toA}));
   return blocks.map(row=>({
     ...row,
     from:changes.mapPos(row.from,-1),
     to:changes.mapPos(row.to,1),
+    // Future text-editing WP: when someone types into a currently virtual
+    // blank line, promote the WHOLE display tail into this block's real text
+    // before persistence. Otherwise slicing off groupEndPad would silently
+    // discard text entered by the user. WP08's editor stays read-only.
+    groupEndPad:(row.groupEndPad??0)>0&&changed.some(({fromA,toA})=>
+      fromA<row.to&&(
+        toA>row.to-row.groupEndPad||
+        fromA===toA&&fromA>=row.to-row.groupEndPad))
+      ?0:row.groupEndPad??0,
   }));
 }
 export function logicalTextRows(source,blocks){
   return blocks.map(row=>({logicalId:row.logicalId,baseBlockId:row.baseBlockId,
     parentId:row.parentId,logicalOrder:row.logicalOrder,
     p:row.p,b:row.b,s:row.s,
-    blockType:row.blockType,markdownText:source.slice(row.from,row.to)}));
+    blockType:row.blockType,
+    markdownText:source.slice(row.from,row.to-(row.groupEndPad??0))}));
 }

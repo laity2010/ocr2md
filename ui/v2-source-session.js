@@ -182,11 +182,12 @@ export function mountV2Source(host){
     getLineAtOffset:pos=>editor.state.doc.lineAt(Math.min(Math.max(pos,0),editor.state.doc.length)).number,
     getMarkdown:()=>editor.state.doc.toString(),
     getBlocks:()=>logicalTextRows(editor.state.doc.toString(),blocks),
-    getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to})=>({
-      logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to})),
+    getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})=>({
+      logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})),
     getWorkspace:()=>book,
     getState:()=>({book,loaded,dirty,readOnly:true,blockCount:blocks.length,
-      undo:undoDepth(editor.state),redo:redoDepth(editor.state),separator:BLOCK_END}),
+      undo:undoDepth(editor.state),redo:redoDepth(editor.state),
+      separator:'',groupEndMinimum:BLOCK_END}),
     undo:onUndo,redo:onRedo,
   });
   host.v2SourcePort=port;

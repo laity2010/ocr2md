@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {moveLogicalBlocks} from '../ui/v2-structure-move.js';
+import {composeLogicalSource,logicalTextRows} from '../ui/v2-block-source.js';
 const rows=[
   [11,0,0,0,null,'A'],[12,0,1,0,null,'B'],[13,0,2,0,null,'C'],
   [21,1,0,0,null,'D'],[22,1,1,0,null,'E'],
@@ -12,7 +13,11 @@ assert.deepEqual(join.blocks.map(r=>[r.logicalId,r.p,r.b,r.s]),[
   [11,0,0,0],[12,0,1,0],[13,0,1,1],[21,1,0,0],[22,1,1,0]]);
 assert.equal(join.changes.length,1);
 assert.equal(join.blocks[2].parentId,12);
-assert.equal(join.source,'A\n\nB\n\nC\n\nD\n\nE\n\n');
+assert.equal(join.source,'A\n\nBC\n\nD\n\nE\n\n',
+  'child has no inserted separator, group last child owns the one blank line');
+assert.deepEqual(join.blocks.slice(1,3).map(r=>r.groupEndPad),[0,2]);
+assert.deepEqual(logicalTextRows(join.source,join.blocks).map(r=>r.markdownText),
+  ['A','B','C','D','E'],'no raw text changed by parent-child reparent');
 const reorder=moveLogicalBlocks(rows,{sourceBlockId:13,targetBlockId:11,placement:'before'});
 assert.deepEqual(reorder.blocks.map(r=>r.logicalId),[13,11,12,21,22]);
 assert.deepEqual(reorder.blocks.map(r=>r.b),[0,1,2,0,1],
@@ -81,7 +86,7 @@ const fixLabelsOnly=moveLogicalBlocks(invertedFamily,{
 assert.deepEqual(fixLabelsOnly.blocks.map(r=>[r.logicalId,r.p,r.b,r.s]),[
   [303,1,4,0],[304,1,4,1],[301,1,5,0],[302,1,5,1],
   [305,1,6,0],[306,1,6,2],[307,2,0,0]]);
-assert.equal(fixLabelsOnly.source,invertedFamily.map(r=>r.markdownText+'\n\n').join(''),
+assert.equal(fixLabelsOnly.source,composeLogicalSource(invertedFamily).source,
   'CM6 document text must remain byte-identical during PBS-only corrections');
 assert.deepEqual(fixLabelsOnly.changes.map(r=>r.logicalId).sort((a,b)=>a-b),
   [301,302,305,306],'only affected PBS changes, no logicalOrder difference');

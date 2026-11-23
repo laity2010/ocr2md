@@ -2,7 +2,7 @@
 
 > **接手前必读**：先读本工作树的 `AGENTS.md`，再读本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
 >
-> **WP07 当前范围：PDF 拖放调整逻辑块结构 → CM6 内存历史 → 空闲增量写入 SQLite；源码窗只读，禁止正文编辑。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；唯一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。仅通过独立测试及本 WP 发布验收后，才能称为已上线。
+> **WP08 当前范围：CM6 父块组末尾空行归属、同组子块无分隔拼接及拖动后重组；保留 WP07 PDF 拖放 → CM6 内存历史 → 空闲增量写入 SQLite 的已有闭环。源码窗仍只读，禁止正文编辑。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；唯一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。仅通过独立测试及本 WP 发布验收后，才能称为已上线。
 
 ## 1. 版本身份、框架和边界
 
@@ -28,11 +28,13 @@
 | `logical_block` | **9 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`markdown_text`、`block_type`、`p`、`b`、`s` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，当前类型以 `logical_block.block_type` 为准 |
 
 - **初始化现状**：只从最终 `para_blocks` 初始化逻辑行，不把前处理和丢弃块当正文；真实 22 页样本为 539 个原始基础块 / 224 条初始逻辑行。初始化时两表一起生成；已兼容的空逻辑表可按受控导入补全，同源兼容的非空逻辑状态应保留。原始源文件逐字节归档于基础表的 `blockid=0` 记录，可验证、恢复。
-- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表。AG 基础表仍每次从 SQL 读取 120 行分页；**AG 逻辑表取消翻页，完整加载当前逻辑表供视图过滤**，默认按 CM6/Markdown/PDF 当前焦点逻辑块的 **PBS `p` 值**只显示同一逻辑页，AG 工具栏最左端「全部」checkbox 勾选时显示全部逻辑块，取消勾选恢复当前焦点 `p`。这里的 `p` 是逻辑归属页，不是跨页块的原始 PDF 物理页；过滤不修改 SQL，列由数据库元数据提供，横向虚拟化不等于字段缺失。**逻辑表 AG 显示列序固定以 `PBS`、`Type`（`block_type`）、`Raw Txt`（`markdown_text`）开头**，其余九列中的其他物理字段全部保留在后；只改变视图，不调整 SQLite 表结构，基础表原有列序保持不变。源码窗为**唯一 CM6 文档，只读显示，暂不允许文字编辑**；逻辑块仍按 `\n\n` 隔出一个空行，位置映射在内存、不插 CMD 注释。**仅 PDF 逻辑块拖动可修改 CM6 内存中的块序与父子关系；CM6 原生 Undo/Redo 管结构历史，850ms 空闲后增量更新 SQL 逻辑表**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 同步高亮定位和结构；PDF 原始几何只读，但 PBS 拖动关系可编辑。
+- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表。AG 基础表仍每次从 SQL 读取 120 行分页；**AG 逻辑表取消翻页，完整加载当前逻辑表供视图过滤**，默认按 CM6/Markdown/PDF 当前焦点逻辑块的 **PBS `p` 值**只显示同一逻辑页，AG 工具栏最左端「全部」checkbox 勾选时显示全部逻辑块，取消勾选恢复当前焦点 `p`。这里的 `p` 是逻辑归属页，不是跨页块的原始 PDF 物理页；过滤不修改 SQL，列由数据库元数据提供，横向虚拟化不等于字段缺失。**逻辑表 AG 显示列序固定以 `PBS`、`Type`（`block_type`）、`Raw Txt`（`markdown_text`）开头**，其余九列中的其他物理字段全部保留在后；只改变视图，不调整 SQLite 表结构，基础表原有列序保持不变。源码窗为**唯一 CM6 文档，只读显示，暂不允许文字编辑**；WP08 起**块与块直接拼接，没有任何固定分隔符**，仅父块组的最后子块末尾保障至少一个可见空行，全部空行归属具体逻辑块（见下述 WP08 约定）。位置映射在 CM6 内存、不插 CMD 注释。**仅 PDF 逻辑块拖动可修改 CM6 内存中的块序与父子关系；CM6 原生 Undo/Redo 管结构历史，850ms 空闲后增量更新 SQL 逻辑表**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 同步高亮定位和结构；PDF 原始几何只读，但 PBS 拖动关系可编辑。
 - **V1 PDF 现状**：直接复用 V1 `lab-ocr` 的 `mountLabOcrPdf` 和 `layoutPbsLabels` 原版动态多轨、引线、手势与 PDF.js。三窗时预览下拉可选 PDF/Markdown；四窗切分时同一个 PDFViewer 和工具栏 DOM 移入独立面板，恢复也不重新建立 PDF 实例。原始 PDF 位置只取基础表的真实 bbox，失配/多来源/无 PDF 时不伪造覆盖框。
 - **PBS 三列现状**：`scripts/v2_pdf_projection.py` 从持久化 `p、b、s` 生成 `p0b0s0` 等两层标签，禁止孙块，不从 `logical_order` 全页重编号。WP07 复用 V1 PDF 拖动可调整根块组前后顺序、归入为子块、调整同组子块前后顺序（含 V1 支持的相邻跨页归入）；**插槽处及其后所有同级编号统一顺延，不跳过空号**；结构经 CM6 内存事务、AG/PDF 即时显示和空闲 SQL 增量更新。**源码编辑、手工拆分子块、任意脱离父组操作仍未开放**。
 
-## 3. PBS 两层逻辑块：[WP07 结构拖放及增量写回已实现；文本拆分待实现]
+## 3. PBS 两层逻辑块：[WP07 结构拖放；WP08 组末空行拼接；文本编辑和拆分未开放]
+
+- **WP08 空行归属与 CM6 拼接 [代码及定向测试已实现]**：在唯一 CM6 文档中直接拼接每个 `logical_block.markdown_text`，**不在块间插入换行或分隔符**。只有父块组最后的逻辑子块（无其他子块时为 `s0`）负责组末可见空行：若原文不以双换行结尾，则仅在 CM6 投影中补足到 `\n\n`；原文已含足够空行则不额外添加。所有原有的空行（包括同组非末子块内部和末尾）保留且属于各自文本块。补足的最小尾部空行归属组末块的 CM6 显示区间，保留 `groupEndPad` 长度以和原始 SQL 文本严格区分，**本航点不改写 SQL 的 `markdown_text`，不能将视图补全误当 SQL 已保存**。拖动归入/移出时依据新的末块重算这段仅用于显示的尾部，保证旧自动空行不会继续夹在同组子块之间；原文已有空行不裁剪。未来独立开放源码编辑时，在该空行输入的文本应归于末块，并按编辑事务将改动连同空行写入逻辑表，不得凭空行拆分块；WP08 仍只读。
 
 **用途**：修正 OCR 块识别时的张冠李戴、跨栏/跨页归属错误、拆分、归入和重组；**只允许“父块分组 → 子块”两层，禁止孙块、递归多层和复杂树结构**。
 
@@ -55,13 +57,14 @@
 
 - **按 AGENTS.md 执行**：任务开始先读本 README，查受影响源码、公开 API 和独立测试；先固定可回退 Git 点；在隔离夹具上实验，不以推测修补未定位故障；任何新的结构 Schema 必须有明确迁移与数据恢复测试。README 只记录当前项目契约，开发历史放 `docs/v2/`。
 - **Frame/F02**：`ui/frame/*` 基线一致性和 Settings 保存、权限验证、两表导航；旧 `/api/v2/` 不得复活。V2 的业务 API 为 `/labs/lab-ocr-v2/api/mineru-base/{state,import,markdown,pdf-map,pdf,structure-commit}`；最后一个仅允许带 Frame 会话/同源来源/旧值校验的 POST 结构字段提交，只处理本书籍的授权数据；不新设端口、Tunnel、认证或平行文件管理器。V2 的 F03 自动更新在 CM6 结构未保存时延后执行，不依赖 iOS 的离开页面弹窗。
-- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`、**`python3 tests/test_v2_structure_commit.py -q`**；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/v2-logical-ag-filter.test.mjs`、**`node tests/v2-structure-move.test.mjs`**、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。浏览器回归包括 Chromium 和 iPad-WebKit，重点检查真实 V1 PDF 标签拖放、CM6 源码只读、Undo/Redo 后 SQL 再次写入、PDFViewer 不换实例、不重复下载及原 bbox 不变；**实机 iPad Safari 仍须单独验收**。
+- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`、**`python3 tests/test_v2_structure_commit.py -q`**；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/v2-focus-map.test.mjs`、`node tests/v2-logical-ag-filter.test.mjs`、**`node tests/v2-structure-move.test.mjs`**、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。WP08 重点手势回归可用 `V2_TEST_WP08_ONLY=1 node tests/v2-real-markdown-preview.browser.test.mjs`，保留不加标志的全量 WP07 PDF 手势测试。浏览器回归包括 Chromium 和 iPad-WebKit，重点检查真实 V1 PDF 标签拖放、CM6 源码只读、Undo/Redo 后 SQL 再次写入、PDFViewer 不换实例、不重复下载及原 bbox 不变；**实机 iPad Safari 仍须单独验收**。
 - **Git/发布**：变更经过有依据的定向回归与审计、commit/push 后，按 `AGENTS.md` 第 9 节的唯一 `release/`+manifest 网关发布同一 `lab-ocr-v2` 入口，核对 Git SHA、静态文件 SHA256 和其余 Lab 不变。WP07 修改 SQLite 写入接口，发布后必须通过既有 V2 发布脚本同步刷新常驻 Gateway 的 Python 业务模块。
 - **V2 后端运行版本同步**：Gateway 使用常驻 Python 进程导入 V2 模块；静态资源发布不等于更新其 `sys.modules` 缓存。V2 的正式发布脚本 `scripts/v2_frame_publish.py` 对比上次发布 SHA 与本次 Git SHA，若 V2 五个 Python 业务模块发生变化，发布后只通过既有 `launchctl kickstart -k` 刷新 **同一个统一 Gateway**，并核验 `/labs/healthz` 的发布 ID；纯静态变更不重启。禁止清理用户书籍 SQLite 或建立第二个 Gateway。直接测试：`python3 tests/test_v2_gateway_publish_sync.py -q`。
 
 ## 6. 既有航点文档（历史证据与模块说明；不得覆盖本 README）
 
 - 当前航点：[WP07 PDF 拖放、CM6 结构历史与 SQLite 空闲写回](docs/v2/WP07_PDF_DRAG_CM6_STRUCTURE_IDLE_SQL.md)。
+- 当前 WP08：[CM6 父块组末尾空行与无分隔拼接](docs/v2/WP08_CM6_GROUP_END_BLANK_LINE.md)。
 - 本轮 PBS 实施：[PBS 三列直接升级](docs/v2/WP05_PBS_THREE_COLUMNS.md)。
 - PBS 三列升级：[PBS 直接升级与两层规则](docs/v2/WP05_PBS_THREE_COLUMNS.md)。
 - 两表和 Markdown：[WP01 逻辑契约](docs/v2/WP01_LOGICAL_CONTRACT.md)、[WP02 初始化](docs/v2/WP02_LOGICAL_INITIALIZATION.md)、[WP03 无损往返](docs/v2/WP03_MARKDOWN_ROUNDTRIP.md)、[WP03 类型列](docs/v2/WP03_BLOCK_TYPE_CONTRACT.md)；当时的文字可编辑 CM6 属于历史，**WP07 起 CM6 只读文本、只允许结构事务**。

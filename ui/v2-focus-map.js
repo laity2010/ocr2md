@@ -4,9 +4,14 @@
 export function logicalAtOffset(rows,pos){
   if(!Number.isInteger(pos)||pos<0)return null;
   let previous=null;
-  for(const row of rows){
+  for(let i=0;i<rows.length;i++){
+    const row=rows[i];
     if(pos<row.from)break;
-    if(pos<=row.to)return row;
+    // Intervals are half-open. At a no-separator child boundary, the exact
+    // offset belongs to the next child, NOT the preceding one. At the end of
+    // the entire document, let the last block own the caret.
+    if(pos<row.to||pos===row.to&&(i===rows.length-1||
+      rows[i+1].from>pos))return row;
     previous=row;
   }
   return previous;

@@ -15,6 +15,13 @@ assert.equal(logicalAtOffset(rows,17).logicalId,405,'empty block retains identit
 assert.equal(logicalAtOffset(rows,23).logicalId,502);
 assert.equal(logicalAtSourceLine(rows,doc,3).logicalId,301);
 assert.equal(logicalAtOffset(rows,-1),null);
+const adjacent=[{logicalId:1,from:0,to:3},{logicalId:2,from:3,to:7},
+  {logicalId:3,from:7,to:10}];
+assert.equal(logicalAtOffset(adjacent,2).logicalId,1);
+assert.equal(logicalAtOffset(adjacent,3).logicalId,2,
+  'no extra delimiter: the exact boundary belongs to the NEXT child');
+assert.equal(logicalAtOffset(adjacent,6).logicalId,2);
+assert.equal(logicalAtOffset(adjacent,10).logicalId,3);
 assert.equal(logicalForAG(rows,'logical_block',{logical_id:301}).baseBlockId,57);
 assert.equal(logicalForAG(rows,'mineru_base',{blockid:140}).logicalId,502);
 assert.equal(logicalForAG(rows,'mineru_base',{blockid:2}),null);

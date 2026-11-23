@@ -3,6 +3,7 @@
  * and history; this pure projection changes only affected logical rows.
  * Stable logical/base IDs, text and PDF geometry are never regenerated.
  */
+import {composeLogicalSource} from './v2-block-source.js';
 export function moveLogicalBlocks(rows,intent){
   if(!Array.isArray(rows)||!rows.length)throw Error('逻辑块尚未加载');
   const ids=new Map(rows.map(r=>[r.logicalId,r]));
@@ -70,17 +71,12 @@ export function moveLogicalBlocks(rows,intent){
     ?src.p===dst.p&&(placement==='before'?src.b<dst.b:src.b>dst.b)
     :sameGroup&&(placement==='before'?src.s<dst.s:src.s>dst.s);
   if(sequenceUnchanged&&placement!=='child'&&numberedCorrectly){
-    return {blocks:rows,source:rows.map(r=>r.markdownText+'\n\n').join(''),
+    return {...composeLogicalSource(rows),
       changes:[],unchanged:true};
   }
-  let pos=0;
-  const blocks=reordered.map((r,i)=>{
-    const text=r.markdownText;
-    if(typeof text!=='string')throw Error('逻辑文本无效');
-    const from=pos;pos+=text.length;const to=pos;pos+=2;
-    return {...r,logicalOrder:i+1,from,to};
-  });
-  const source=blocks.map(r=>r.markdownText+'\n\n').join('');
+  const {blocks,source}=composeLogicalSource(reordered.map((r,i)=>({
+    ...r,logicalOrder:i+1,
+  })));
   const before=new Map(rows.map(r=>[r.logicalId,r]));
   const fields=['parentId','logicalOrder','p','b','s'];
   const changes=blocks.filter(r=>fields.some(key=>before.get(r.logicalId)?.[key]!==r[key]))
