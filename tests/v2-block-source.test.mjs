@@ -19,20 +19,20 @@ function snapshot(texts,groups){
 const originals=['# 章节🧪','','第二段\n第三行','A\n\nB','末尾🙂\n'];
 const groups=[[0,0,null],[0,1,11],[1,0,null],[1,1,17],[2,0,null]];
 const result=composeBlockSource(snapshot(originals,groups));
-assert.equal(BLOCK_END,'\n');
-assert.equal(groupEndPadding('Text'),'\n');
-assert.equal(groupEndPadding('Text\n'),'');
+assert.equal(BLOCK_END,'\n\n');
+assert.equal(groupEndPadding('Text'),'\n\n');
+assert.equal(groupEndPadding('Text\n'),'\n');
 assert.equal(groupEndPadding('Text\n\n'),'');
 assert.equal(groupEndPadding('Text\n\n\n'),'');
 assert.equal(childLinePadding('Text'),'\n');
 assert.equal(childLinePadding('Text\n'),'');
 assert.equal(childLinePadding('Text\n\n'),'');
 assert.equal(result.blocks.length,5);
-assert.equal(result.source,'# 章节🧪\n\n第二段\n第三行\nA\n\nB\n末尾🙂\n');
+assert.equal(result.source,'# 章节🧪\n\n\n第二段\n第三行\nA\n\nB\n\n末尾🙂\n\n');
 assert(result.source.endsWith('\n'),'legacy original last block has its own ending LF');
 assert.deepEqual(logicalTextRows(result.source,result.blocks).map(r=>r.markdownText),originals,
   'all user/OCR newlines are owned by their original block, never trimmed');
-assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[1,1,1,1,0]);
+assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[1,2,1,2,1]);
 assert.equal(result.blocks[0].to,'# 章节🧪\n'.length,'UTF16 emoji content plus virtual child-line LF');
 assert.equal(result.blocks[0].to,result.blocks[1].from,'child starts on its own CM6 line');
 assert.equal(result.blocks[1].to,result.blocks[2].from,'empty s1 still owns one CM6 physical source line');
@@ -50,20 +50,20 @@ const oneLine=composeLogicalSource([
   {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块'},
   {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
 ]);
-assert.equal(oneLine.source,'父块\n子块');
-assert.equal(oneLine.source.split('\n').length,2,'two logical blocks occupy exactly two CM6 lines');
+assert.equal(oneLine.source,'父块\n子块\n\n');
+assert.equal(oneLine.source.split('\n')[1],'子块','both blocks have one text line');
 assert.deepEqual(logicalTextRows(oneLine.source,oneLine.blocks).map(r=>r.markdownText),['父块','子块']);
 const rawLine=composeLogicalSource([
   {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块\n'},
   {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
 ]);
-assert.equal(rawLine.source,'父块\n子块');
+assert.equal(rawLine.source,'父块\n子块\n\n');
 assert.equal(rawLine.blocks[0].groupEndPad,0,'no extra LF when raw parent already ends in LF');
 const rawBlank=composeLogicalSource([
   {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块\n\n'},
   {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
 ]);
-assert.equal(rawBlank.source,'父块\n\n子块','do not silently modify legacy edited MD Block');
+assert.equal(rawBlank.source,'父块\n\n子块\n\n','do not silently modify legacy edited MD Block');
 
 // A blank line entered into any child (even a non-last child) is RAW content,
 // and is never trimmed or reclassified as a structural separator.
@@ -90,7 +90,7 @@ assert.equal(canEditBlocks(result.blocks,typingAtBlank.changes),true);
 const promoted=mapEditedBlocks(result.blocks,typingAtBlank.changes);
 assert.equal(promoted[1].groupEndPad,0,'typing in the blank promotes its display LF into owned text');
 assert.equal(logicalTextRows(typingAtBlank.state.doc.toString(),promoted)[1].markdownText,
-  '手工加行\n','a programmatic edit of the LF must be owned by the same block');
+  '\n手工加行\n','a programmatic edit of the LF must be owned by the same block');
 const cross=cm.update({changes:{
   from:result.blocks[2].to-1,to:result.blocks[3].to,insert:'X'}});
 assert.equal(canEditBlocks(result.blocks,cross.changes),false,'cannot replace across block IDs');

@@ -14,9 +14,10 @@ const rows=['标题','段落🙂','', '$x^2$'].map((markdownText,i)=>({
   parentId:null,blockType:'text',markdownText,
 }));
 const one=composeLogicalSource(rows);
-assert.equal(one.source,'标题\n段落🙂\n\n$x^2$');
-assert.equal(EditorState.create({doc:one.source}).doc.lines,rows.length);
-assert.deepEqual(one.blocks.map(x=>x.groupEndPad),[1,1,1,0]);
+assert.equal(one.source,'标题\n\n段落🙂\n\n\n\n$x^2$\n\n');
+assert.equal(EditorState.create({doc:one.source}).doc.lines,9,
+  'one text line per logical row, with independent blank group separators');
+assert.deepEqual(one.blocks.map(x=>x.groupEndPad),[2,2,2,2]);
 assert.deepEqual(logicalTextRows(one.source,one.blocks).map(r=>r.markdownText),
   rows.map(r=>r.markdownText));
 const projection=previewLineProjection(rows,id=>rows.findIndex(r=>r.logicalId===id)+1);
@@ -24,8 +25,9 @@ assert.equal(projection.source,'标题\n\n段落🙂\n\n\n\n$x^2$');
 assert.deepEqual(projection.map(3,4),{start:2,end:3});
 assert.deepEqual(projection.map(7,8),{start:4,end:5});
 const drag=moveLogicalBlocks(rows,{sourceBlockId:13,targetBlockId:12,placement:'child'});
-assert.equal(drag.source,one.source,'reparenting does not insert blank lines');
-assert.equal(EditorState.create({doc:drag.source}).doc.lines,rows.length);
+assert.equal(drag.source,'标题\n\n段落🙂\n\n\n$x^2$\n\n',
+  'child removes only the redundant blank line, never the text-line LF');
+assert.equal(EditorState.create({doc:drag.source}).doc.lines,8);
 assert.deepEqual(logicalTextRows(drag.source,drag.blocks).map(r=>r.markdownText),
   rows.map(r=>r.markdownText));
 console.log('WP14_ONE_LOGICAL_BLOCK_PER_SOURCE_LINE_PASS');

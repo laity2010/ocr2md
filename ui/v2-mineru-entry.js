@@ -111,11 +111,11 @@ function sqlActionsDialog(){
   importBtn.className='v2-sql-action-import';importBtn.textContent='导入基础表';
   importBtn.title='使用当前工作目录的 MinerUJSON；同源已有数据保持不变';
   const rebuildBtn=document.createElement('button');rebuildBtn.type='button';
-  rebuildBtn.className='v2-sql-action-rebuild';rebuildBtn.textContent='重建逻辑表';
-  rebuildBtn.title='仅覆盖当前逻辑表（PBS、类型、Raw Txt），绝不改基础表';
+  rebuildBtn.className='v2-sql-action-rebuild';rebuildBtn.textContent='重建逻辑表（覆盖编辑）';
+  rebuildBtn.title='危险：从原始 para_blocks 重新生成逻辑表，覆盖当前 MD Block 和 PBS 关系；基础表及原件不变';
   const normalizeBtn=document.createElement('button');normalizeBtn.type='button';
   normalizeBtn.className='v2-sql-action-normalize';
-  normalizeBtn.textContent='整理逻辑块为单行';
+  normalizeBtn.textContent='仅整理正文断行（不重建）';
   normalizeBtn.title='仅修改当前 MD Block 正文；不重建基础表、PBS 或原件，使用 CM6 原生 Undo';
   normalizeBtn.addEventListener('click',()=>{
     const source=$('#workspace #editor')?.v2SourcePort;
@@ -137,7 +137,7 @@ function sqlActionsDialog(){
     }catch(error){report('单行整理未完成：'+error.message,'error');}
   });
   const warning=document.createElement('p');warning.className='v2-sql-actions-warning';
-  warning.textContent='导入基础表会验证 MinerU 来源；重建逻辑表将覆盖现有逻辑块及 PBS，原始基础表、PDF 和 MinerUJSON 不变。';
+  warning.textContent='「重建逻辑表」会丢失当前 MD Block 修改及 PBS 关系；「仅整理正文断行」不重建、不修改 PBS。基础表、PDF、MinerUJSON 均保持不变。';
   const close=document.createElement('button');close.type='button';
   close.className='v2-sql-action-close';close.textContent='取消';
   close.addEventListener('click',()=>dialog.close());
@@ -145,6 +145,12 @@ function sqlActionsDialog(){
     dialog.close();void importBaseFromMineru();
   });
   rebuildBtn.addEventListener('click',()=>{
+    if(rebuildBtn.dataset.confirm!=='yes'){
+      rebuildBtn.dataset.confirm='yes';
+      rebuildBtn.textContent='确认覆盖重建逻辑表';
+      info.textContent='危险操作：将从原始 para_blocks 重建全部逻辑块，丢失现有 MD Block 修改和 PBS 拖动关系。只想清除正文断行，请使用「仅整理正文断行（不重建）」。';
+      return;
+    }
     dialog.close();void rebuildLogicalOnly();
   });
   const buttons=document.createElement('div');buttons.className='v2-sql-actions-buttons';
@@ -157,7 +163,9 @@ function openSQLActions(){
   const dialog=sqlActionsDialog();
   const workspace=bound&&bound===persistedDirectory()?bound:'';
   const normal=dialog.querySelector('.v2-sql-action-normalize');
-  normal.dataset.confirm='';normal.textContent='整理逻辑块为单行';
+  normal.dataset.confirm='';normal.textContent='仅整理正文断行（不重建）';
+  const rebuild=dialog.querySelector('.v2-sql-action-rebuild');
+  rebuild.dataset.confirm='';rebuild.textContent='重建逻辑表（覆盖编辑）';
   dialog.querySelector('.v2-sql-actions-info').textContent=workspace?
     '当前工作目录：'+workspace:'请先在全局设置中绑定并验证工作目录';
   const busy=rebuilding||saving||Boolean(pending)||

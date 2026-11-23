@@ -91,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp14-one-logical-block-one-source-line',
+        stage:'wp14b-group-blank-and-distinct-sql-actions',
       })+'\n'});
     },
   }],

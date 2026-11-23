@@ -87,18 +87,17 @@ export function mountV2Source(host){
     EditorState.transactionFilter.of(tr=>{
       if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect))||
         !canEditBlocks(tr.startState.field(structureField),tr.changes))return tr;
-      // Each group must still visibly end with a blank line WHILE editing,
-      // not only after the next reload. Add the minimum display LF in the
-      // same native CM6 history transaction, even when typing in the old
-      // virtual blank or deleting its original trailing LF.
+      // Preserve WP13 display spacing on EVERY edit: one LF within a parent
+      // group, one blank line (two LF) at each parent-group end. WP14's
+      // single-line MD Block normalization concerns TEXT, not these gaps.
       const before=tr.startState.field(structureField);
       const pads=[];
       for(let i=0;i<before.length;i++){
         const row=before[i],next=before[i+1];
-        if(!next)continue; // final block has no trailing source LF
-        const end=tr.changes.mapPos(row.to,-1);
-        const suffix=tr.newDoc.sliceString(Math.max(0,end-1),end);
-        const padding=childLinePadding(suffix);
+        const sameGroup=next&&row.p===next.p&&row.b===next.b;
+        const end=tr.changes.mapPos(row.to,next?-1:1);
+        const suffix=tr.newDoc.sliceString(Math.max(0,end-2),end);
+        const padding=sameGroup?childLinePadding(suffix):groupEndPadding(suffix);
         if(padding)pads.push({logicalId:row.logicalId,length:padding.length,
           from:end,insert:padding});
       }

@@ -146,7 +146,9 @@ try{
    const sqlActions=page.locator('#v2-sql-actions-dialog');
    assert.equal(await sqlActions.isVisible(),true,'clicking SQL group opens modal');
    assert.equal(await sqlActions.getByRole('button',{name:'导入基础表'}).isEnabled(),true);
-   assert.equal(await sqlActions.getByRole('button',{name:'重建逻辑表'}).isEnabled(),true);
+   assert.equal(await sqlActions.getByRole('button',{name:'重建逻辑表（覆盖编辑）'}).isEnabled(),true);
+   assert.equal(await sqlActions.getByRole('button',{name:'仅整理正文断行（不重建）'}).isDisabled(),true,
+     'single-line cleanup is only applicable to the loaded logical table');
    assert.equal(await page.locator('#workspace .v2-logical-rebuild').count(),0,
      'rebuild must not exist in the AG toolbar');
    await sqlActions.getByRole('button',{name:'取消'}).click();
@@ -324,10 +326,10 @@ try{
    assert.equal(sourceState.blocks.length,224);
    assert.equal(sourceState.blocks[0].markdownText,'# WP04 Chapter 🧪');
    assert.equal(sourceState.blocks[2].markdownText,'');
-   assert.equal(sourceState.text,fragments.map((text,i)=>text+(i===fragments.length-1||text.endsWith('\n')?'':'\n')).join(''));
+   assert.equal(sourceState.text,fragments.map(text=>text+(text.endsWith('\n\n')?'':text.endsWith('\n')?'\n':'\n\n')).join(''));
    assert.equal(sourceState.state.dirty,false);
-   assert.equal(sourceState.state.separator,'\n');
-   assert.equal(sourceState.state.groupEndMinimum,'\n');
+   assert.equal(sourceState.state.separator,'\n\n');
+   assert.equal(sourceState.state.groupEndMinimum,'\n\n');
    // Original V1 Markdown renderer is mounted in the ORIGINAL Frame MD pane.
    // It projects the live source rather than reparsing SQL on each keystroke.
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
@@ -461,14 +463,14 @@ try{
      editor.dispatch({changes:{from:first.to-1,to:first.to-1,insert:'New line'}});
      const next=port.getIntervals()[0];
      return {raw:port.getBlocks()[0].markdownText,
-       suffix:editor.state.doc.sliceString(next.to-1,next.to),
+       suffix:editor.state.doc.sliceString(next.to-2,next.to),
        continued:next.to===port.getIntervals()[1].from,
        pad:next.groupEndPad};
    });
    assert(blankEdit.raw.includes('New line'));
    assert.deepEqual({suffix:blankEdit.suffix,continued:blankEdit.continued},
-     {suffix:'\n',continued:true});
-   assert.equal(blankEdit.pad,0,'editing a virtual boundary promotes its LF into real MD Block');
+     {suffix:'\n\n',continued:true});
+   assert.equal(blankEdit.pad,1,'editing a virtual blank promotes text but retains one group-end LF');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
    assert.equal(mdCommitPosts,blankBeforePosts+1);
@@ -498,7 +500,7 @@ try{
      const rows=el.v2SourcePort.getIntervals(),doc=el.v2SourcePort.getMarkdown();
      const a=rows.find(r=>r.logicalId===1),b=rows.find(r=>r.logicalId===2);
      return doc.slice(a.from,b.to);
-   }),fragments[0]+'\n'+fragments[1]+'\n',
+   }),fragments[0]+'\n'+fragments[1]+'\n\n',
    'joined root/child must occupy separate lines without an empty line');
    assert.equal(postCount,1,'structural drag cannot re-import SQL');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
@@ -676,7 +678,9 @@ try{
    else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
      .filter({hasText:/^SQL$/}).first().click();
    const beforeMD=mdRequests;
-   await dialog.getByRole('button',{name:'重建逻辑表'}).click();
+   await dialog.getByRole('button',{name:'重建逻辑表（覆盖编辑）'}).click();
+   assert.equal(rebuildPosts,0,'first click must not overwrite the logical table');
+   await dialog.getByRole('button',{name:'确认覆盖重建逻辑表'}).click();
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().loaded&&document.querySelector('#status')
      ?.textContent.includes('逻辑表已从原始 para_blocks 重建'),null,{timeout:15000});
@@ -697,7 +701,7 @@ try{
      .filter({hasText:/^SQL$/}).first().tap();
    else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
      .filter({hasText:/^SQL$/}).first().click();
-   const normalizeBtn=dialog.getByRole('button',{name:'整理逻辑块为单行'});
+   const normalizeBtn=dialog.getByRole('button',{name:'仅整理正文断行（不重建）'});
    assert.equal(await normalizeBtn.isEnabled(),true);
    await normalizeBtn.click();
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>
@@ -712,8 +716,8 @@ try{
      rows:el.v2SourcePort.getBlocks().length,
    }));
    assert.equal(afterNormalize.count,0);
-   assert.equal(afterNormalize.lines,afterNormalize.rows,
-     'exactly one CM6 physical line number for every logical ID');
+   assert.equal(afterNormalize.lines,afterNormalize.rows*2+1,
+     'one text row per logical ID plus one blank separator after each independent parent group');
    assert.equal(afterNormalize.rows,224);
    await page.locator('#workspace #undo').click();
    await page.waitForFunction(before=>document.querySelector('#workspace #editor')
@@ -722,7 +726,7 @@ try{
      ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
    await page.locator('#workspace #redo').click();
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
-     ?.v2SourcePort?.getDoc().lines===224,null,{timeout:12000});
+     ?.v2SourcePort?.getDoc().lines===449,null,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
    // Neither Enter nor multi-line paste may introduce an unowned source line.
@@ -731,7 +735,7 @@ try{
      port.getEditorView().dispatch({changes:{from:r.from+2,insert:'\nILLEGAL'}});
    });
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>
-     el.v2SourcePort.getDoc().lines),224,'newline insertion was rejected');
+     el.v2SourcePort.getDoc().lines),449,'newline insertion was rejected');
 
 
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);

@@ -1,6 +1,6 @@
 # WP08 · CM6 逻辑块拼接与空行归属
 
-> **历史记录 · WP14 已完全替换组末双 LF 规则（WP13 已修订同组拼接规则）**：本文件记载 WP08 原设计，其“同组无任何自动 LF、允许父子合为同一行”已不再适用。当前 V2 以 [`README.md`](../../README.md) 第 3 节及 [`WP13_CHILD_SINGLE_NEWLINE.md`](WP13_CHILD_SINGLE_NEWLINE.md) 为准：父子同组至少隔一个换行，不插空白行；真实原文空行不裁剪。
+> **历史记录 · WP14B 恢复组末双 LF，WP13 已修订同组拼接规则**：本文件记载 WP08 原设计，其“同组无任何自动 LF、允许父子合为同一行”已不再适用。当前 V2 以 [`README.md`](../../README.md) 第 3 节及 [`WP13_CHILD_SINGLE_NEWLINE.md`](WP13_CHILD_SINGLE_NEWLINE.md) 为准：父子同组至少隔一个换行，不插空白行；真实原文空行不裁剪。
 
 ## 目标与边界
 

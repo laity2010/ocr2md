@@ -138,7 +138,7 @@ try{
       assert.equal(result.blockCount,267);
       assert.equal(result.sourceLength,composeBlockSource(snapshot).source.length,
         'WP09 typed children concatenate without invented text or separators');
-      assert.equal(result.separator,'\n','WP14 exactly one physical LF separates logical blocks');
+      assert.equal(result.separator,'\n\n','WP14B keeps one blank line after each independent parent group');
       assert.equal(result.editorCount,1);
       if(name==='iPad-WebKit'){
         await page.waitForFunction(()=>{
@@ -427,8 +427,8 @@ try{
       const secondRaw=snapshot.markdown.slice(snapshot.segments[1].startUtf16,
         snapshot.segments[1].endUtf16);
       const headLinePad=firstRaw.endsWith('\n')?'':'\n';
-      assert.deepEqual(groupedText,{text:firstRaw+headLinePad+secondRaw+'\n',
-        headPadding:headLinePad.length,childPadding:1,contiguous:true},
+      assert.deepEqual(groupedText,{text:firstRaw+headLinePad+secondRaw+'\n\n',
+        headPadding:headLinePad.length,childPadding:2,contiguous:true},
       'actual V1 drag must display child on next line without synthetic blank line');
       await page.waitForFunction(()=>document.querySelector('#workspace #editor')
         ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});

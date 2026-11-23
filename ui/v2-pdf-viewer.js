@@ -17,8 +17,10 @@ export function mountV2PDF(host,{toolbar}={}){
   if(!toolbar)throw Error('Frame PDF toolbar missing');
   let native=null,projection=null,workspace='',disposed=false,generation=0;
   let ready=false,selectedId=null,lastPdfPage=1,pendingMeasure=null;
+  let reparentRepaintTimer=null;
   const source=()=>$('#workspace #editor')?.v2SourcePort;
   const clear=()=>{
+    if(reparentRepaintTimer!==null){clearTimeout(reparentRepaintTimer);reparentRepaintTimer=null;}
     ++generation;
     pendingMeasure?.(false);pendingMeasure=null;
     const old=native;native=null;projection=null;workspace='';ready=false;selectedId=null;
@@ -167,6 +169,18 @@ export function mountV2PDF(host,{toolbar}={}){
         if(!disposed&&stamp===generation&&ready&&native){
           native.relayout();
           native.repaintOverlayPage(lastPdfPage);
+          // WebKit may replace a rendered PDF.js page AFTER the two RAFs
+          // when the same viewer DOM moves between split/unsplit panes.
+          // Recover via V1's own public repaint API only if its labels are
+          // actually absent after geometry settles; never fork PBS drawing.
+          if(reparentRepaintTimer!==null)clearTimeout(reparentRepaintTimer);
+          reparentRepaintTimer=setTimeout(()=>{
+            reparentRepaintTimer=null;
+            if(disposed||stamp!==generation||!ready||!native)return;
+            const page=host.querySelector(`.page[data-page-number="${lastPdfPage}"]`);
+            if(page?.clientWidth>=80&&!page.querySelector('.lab-ocr-pdf-pbs-tag'))
+              native.repaintOverlayPage(lastPdfPage);
+          },500);
         }
       }));
     },

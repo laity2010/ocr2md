@@ -1,26 +1,32 @@
-/** WP14: one physical CM6 source line per logical block. Original OCR
- * line wraps are normalized when initializing md_block, NOT in mineru_base.
- * Historical edited multiline MD Blocks must be explicitly normalized via
- * a native CM6 text edit; never silently strip them at load or drag time.
+/** WP14 preserves one PHYSICAL TEXT line per logical MD Block, not one
+ * CM6 document line including structural blank separators. WP13 remains
+ * authoritative for DISPLAY SPACING: one LF inside a (p,b) parent group;
+ * two LF at the end of each independent parent group. Existing SQL text is
+ * never trimmed during projection, dragging, or loading an edited book.
  */
-export const BLOCK_END='\n';
+export const BLOCK_END='\n\n';
 export const CHILD_LINE_END='\n';
 const BACKEND_SEP='\n\n';
+const groupKey=row=>String(row.p)+'/'+String(row.b);
 export function groupEndPadding(text){
   if(typeof text!=='string')throw Error('逻辑文本无效');
-  return text.endsWith('\n')?'':BLOCK_END;
+  return text.endsWith(BLOCK_END)?'':text.endsWith(CHILD_LINE_END)?CHILD_LINE_END:BLOCK_END;
 }
-export function childLinePadding(text){return groupEndPadding(text);}
+export function childLinePadding(text){
+  if(typeof text!=='string')throw Error('逻辑文本无效');
+  return text.endsWith(CHILD_LINE_END)?'':CHILD_LINE_END;
+}
 export function composeLogicalSource(rows){
   if(!Array.isArray(rows))throw Error('逻辑块无效');
   let source='';
   const blocks=rows.map((row,i)=>{
     if(typeof row?.markdownText!=='string')throw Error('逻辑文本无效');
-    // No extra final LF: N single-line MD blocks have exactly N CM6 lines.
-    const padding=i===rows.length-1?'':groupEndPadding(row.markdownText);
+    const next=rows[i+1];
+    const sameGroup=next&&groupKey(row)===groupKey(next);
+    const padding=sameGroup?childLinePadding(row.markdownText):groupEndPadding(row.markdownText);
     const from=source.length;
     source+=row.markdownText+padding;
-    // Historic public name: number of ephemeral LF characters at this end.
+    // Compatibility name: count of virtual LF at the end of THIS block.
     return {...row,from,to:source.length,groupEndPad:padding.length};
   });
   return {source,blocks};

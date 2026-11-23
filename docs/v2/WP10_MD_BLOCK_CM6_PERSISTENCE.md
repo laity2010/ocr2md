@@ -10,7 +10,7 @@
 
 ## CM6/Undo/Redo 与写回
 
-唯一 CM6 源码窗允许文字编辑。每个逻辑块的 MD Block 依逻辑顺序直接拼接、保留 WP08 原有空行归属：（经 WP14 修订）所有逻辑块无论父子关系均只隔一个 LF，末块不新增尾部空行；原始 Raw 不受文字编辑影响。位置映射依据逻辑 ID 和 UTF-16 偏移，不依赖空行断块。单次跨逻辑块整体替换/删除拒绝；普通文字输入在当前逻辑块，块的开始位置相邻时归后块。单击、选中、PDF 拖动和 Undo/Redo 仍使用现有 CM6 StateEffect/history 和四窗同步，不另建 CM 或历史表。
+唯一 CM6 源码窗允许文字编辑。每个逻辑块的 MD Block 依逻辑顺序直接拼接、保留 WP08 原有空行归属：（经 WP14B 纠偏）每个 md_block 正文单行，同组块间一 LF、独立父组间与末组补齐双 LF；原始 Raw 不受文字编辑影响。位置映射依据逻辑 ID 和 UTF-16 偏移，不依赖空行断块。单次跨逻辑块整体替换/删除拒绝；普通文字输入在当前逻辑块，块的开始位置相邻时归后块。单击、选中、PDF 拖动和 Undo/Redo 仍使用现有 CM6 StateEffect/history 和四窗同步，不另建 CM 或历史表。
 
 850ms 空闲时从同一 CM6 文档取得结构和文本差量：`structure-commit` 仅更新 PBS/parent/order；新 `md-commit` 只传 `{logicalId,before,after}` 的逐行 MD Block，使用 SQLite BEGIN IMMEDIATE 和 before 乐观冲突验证，确认成功才更新已保存签名。撤销/重做是新的反向 SQL 差量，不重写整个文档。失败保留 CM6 内存状态并显示全局错误、拒绝覆盖其他会话。当前 SQL 事务分结构、正文两次提交，若两类同时改动可能一类成功另一类失败，后续统一事务可另行补强；它们都不允许修改 `mineru_base` 或 Raw Block。
 
