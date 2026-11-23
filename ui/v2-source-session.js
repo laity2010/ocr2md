@@ -84,6 +84,29 @@ export function mountV2Source(host){
         detail:{text:'已删除当前行正文，逻辑块及 PBS 保留 · CM6 可撤销',kind:'ok'},
       }));
     },
+    getPdfText:async logicalId=>{
+      const activeBook=book;
+      if(!loaded||!activeBook)return {text:'',workspace:activeBook};
+      const pdf=document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort;
+      const text=pdf?.getState().workspace===activeBook?
+        await pdf.getNativeTextForLogicalId(logicalId):'';
+      return {text:loaded&&book===activeBook?text:'',workspace:activeBook};
+    },
+    onPdfText:(logicalId,mode,text,expectedBook)=>{
+      try{
+        if(!loaded||!expectedBook||book!==expectedBook)
+          throw Error('原工作目录已经变更，拒绝使用旧 PDF 文字层');
+        const count=insertPdfText({blockId:logicalId,mode,text});
+        const row=blocks.find(item=>item.logicalId===logicalId);
+        document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{
+          text:`PDF 原文${mode==='replace'?'替换':'插入'} · p${row?.p}b${row?.b}s${row?.s} · ${count} 字符 · CM6 可撤销`,kind:'ok',
+        }}));
+      }catch(error){
+        document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{
+          text:'PDF 原文操作失败：'+error.message,kind:'error',
+        }}));
+      }
+    },
   });
   // V1 Frame replaces only the stock first line-number extension.
   // Preserve CM6's remaining setup, native iPad selection and history.
@@ -228,7 +251,8 @@ export function mountV2Source(host){
   };
   // V1's PDF.js callback contains ONLY text collected from its currently
   // highlighted bbox; V2 restores one physical text row per logical block.
-  const insertPdfText=({blockId,text})=>{
+  const insertPdfText=({blockId,text,mode='insert'})=>{
+    if(!['insert','replace'].includes(mode))throw Error('PDF 文本操作类型无效');
     if(!loaded||typeof text!=='string'||!text.trim())
       throw Error('尚未加载正文或 PDF 文字层无可提取文本');
     const id=Number(blockId);
@@ -243,8 +267,10 @@ export function mountV2Source(host){
     const pos=head>=from&&head<=to?head:from;
     const raw=textRows.find(r=>r.logicalId===id)?.markdownText;
     if(typeof raw!=='string')throw Error('PDF 目标逻辑正文不存在');
-    const offset=pos-from;
-    const nextText=raw.slice(0,offset)+inserted+raw.slice(offset);
+    const offset=mode==='replace'?0:pos-from;
+    const nextText=mode==='replace'?inserted:
+      raw.slice(0,offset)+inserted+raw.slice(offset);
+    if(nextText===raw)return 0; // no second SQL commit for identical content
     const planned=composeLogicalSource(textRows.map(item=>item.logicalId===id?
       {...item,markdownText:nextText}:item));
     const target=planned.blocks.find(item=>item.logicalId===id);

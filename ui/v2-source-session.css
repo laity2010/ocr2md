@@ -64,3 +64,6 @@
   text-align:left;font:inherit;cursor:pointer;
 }
 .ocr-cm-line-menu button:is(:hover,:focus-visible){background:#465748;color:#f0d3ad}
+
+/* WP20: native PDF options stay visibly unavailable without real PDF text. */
+.ocr-cm-line-menu button:disabled{color:#8b9690;opacity:.65;cursor:not-allowed;}

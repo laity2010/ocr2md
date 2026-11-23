@@ -78,6 +78,35 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{},pdfUrlPrefix='/l
     const key=JSON.stringify([revision,selectedPage,selectedBlockId,source.pageSize,item.bbox]);
     return {key,page:selectedPage,bbox:item.bbox,pageSize:source.pageSize};
   };
+  /** V2-adapter extension of V1's PDF.js text-layer API: read a specific
+   * bbox without changing the PDF viewer's selected block or scroll state.
+   * The original PDF.js document remains the ONE text authority.
+   * Never substitute OCR/Markdown when the native text layer is missing.
+   */
+  async function readNativeTextInBox({page,bbox,pageSize}={}){
+    if(disposed||!ready||!pdf||!Number.isInteger(page)||page<1||
+       page>pdf.numPages||!Array.isArray(pageSize)||pageSize.length!==2||
+       !Array.isArray(bbox)||bbox.length!==4||
+       !bbox.every(Number.isFinite)||bbox[2]<=bbox[0]||bbox[3]<=bbox[1])return '';
+    const doc=pdf,token=revision;
+    let pending=nativePageTexts.get(page);
+    if(!pending){
+      pending=doc.getPage(page).then(async originalPage=>({
+        viewport:originalPage.getViewport({scale:1}),
+        content:await originalPage.getTextContent(),
+      }));
+      nativePageTexts.set(page,pending);
+    }
+    try{
+      const {viewport,content}=await pending;
+      if(disposed||doc!==pdf||token!==revision)return '';
+      return pdfTextInBox(content,viewport,pageSize,bbox);
+    }catch{
+      // Unavailable text layer is not a permission to fall back to OCR.
+      if(nativePageTexts.get(page)===pending)nativePageTexts.delete(page);
+      return '';
+    }
+  }
   const updateExtractButton=()=>{
     const target=selectedBox();
     const text=target?nativeBoxTexts.get(target.key):null;
@@ -1083,7 +1112,7 @@ export function mountLabOcrPdf({surface,toolbar,onStatus=()=>{},pdfUrlPrefix='/l
   }
   readyControls();
   return Object.freeze({loadPdf,setOverlays,setFormulaHighlights,setReviewPair,setEmptyMdBlocks,
-    focusBlock,focusFormula,renderFormulaCrop,clearFocus,invalidateOverlayPage,
+    focusBlock,focusFormula,renderFormulaCrop,readNativeTextInBox,clearFocus,invalidateOverlayPage,
     repaintOverlayPage,relayout,dispose(){
     if(disposed)return;
     disposed=true;revision++;overlayRevision++;overlayCache.clear();resizeObserver.disconnect();

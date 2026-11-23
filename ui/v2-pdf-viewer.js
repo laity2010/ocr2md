@@ -62,6 +62,23 @@ export function mountV2PDF(host,{toolbar}={}){
     native.setEmptyMdBlocks(emptyLogicalIds(rows));
     return true;
   };
+  // WP20: the SOURCE GUTTER logical ID is authoritative, not an old PDF
+  // selection. Read V1 PDF.js at that exact logical ID's original bbox.
+  // No PDF viewer focus/reveal, SQL, or original-file writes occur here.
+  const getNativeTextForLogicalId=async logicalId=>{
+    const id=Number(logicalId),port=source();
+    if(!Number.isSafeInteger(id)||!ready||disposed||!native||!projection||
+      !port?.getState().loaded||port.getWorkspace()!==workspace)return '';
+    const row=projection.byId.get(id);
+    if(!row||row.absorbedIntoBlockId!=null)return '';
+    const page=row.physicalPageIndex+1;
+    const size=projection.map.pageSizes[row.physicalPageIndex];
+    const original=projection;
+    const text=await native.readNativeTextInBox({page,bbox:row.bbox,pageSize:size});
+    if(disposed||!ready||original!==projection||port.getWorkspace()!==workspace||
+      !port.getBlocks().some(item=>item.logicalId===id))return '';
+    return text;
+  };
   const updateStructure=rows=>{
     if(!projection||!native||!Array.isArray(rows))return false;
     const byId=new Map(rows.map(r=>[r.logicalId,r]));
@@ -177,7 +194,7 @@ export function mountV2PDF(host,{toolbar}={}){
     load,clear,getState:state,
     getCovers:()=>projection?.map.covers||[],
     getV1Preview:()=>native,
-    focusId,updateStructure,syncTextEmpty,
+    focusId,updateStructure,syncTextEmpty,getNativeTextForLogicalId,
   });
   host.v2PDFPort=port;
   return {

@@ -152,8 +152,82 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0]?.markdownText==='Synthetic PDF page 1',null,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,null,{timeout:15000});
    assert.equal(mdCommits,5);assert.equal(structurePosts,0);assert.equal(pdfGets,1);
+   // WP20: line 12 (Second row) has NO PDF native text. Its two extra
+   // actions must remain disabled even though OCR/Markdown has text.
+   await source.evaluate(el=>el.v2SourcePort.locateLogicalId(12));
+   await source.locator('.ocr-cm-line-number-button').click();
+   const noTextMenu=page.getByRole('menu',{name:/第 \d+ 行操作/});
+   assert.equal(await noTextMenu.getByRole('menuitem',{name:'提取文本插入'}).count(),1);
+   assert.equal(await noTextMenu.getByRole('menuitem',{name:'提取文本替换'}).count(),1);
+   await sleep(350);
+   assert.equal(await noTextMenu.getByRole('menuitem',{name:'提取文本插入'}).isDisabled(),true);
+   assert.equal(await noTextMenu.getByRole('menuitem',{name:'提取文本替换'}).isDisabled(),true);
+   await page.keyboard.press('Escape');
+   // Leave PDF selected on *12*, a different block. The LINE-11 menu must
+   // still fetch ONLY the original bbox of logicalId 11, without changing
+   // the PDF selection or scrolling to an unrelated page.
+   await pdfHost.evaluate(el=>el.v2PDFPort.focusId(12,false));
+   await source.evaluate(el=>{
+     el.v2SourcePort.locateLogicalId(11);
+     const view=el.v2SourcePort.getEditorView();
+     view.dispatch({selection:{anchor:el.v2SourcePort.getIntervals()[0].from+10}});
+   });
+   assert.equal(await pdfHost.evaluate(el=>el.v2PDFPort.getState().selectedId),12);
+   await source.locator('.ocr-cm-line-number-button').click();
+   const pdfMenu=page.getByRole('menu',{name:/第 \d+ 行操作/});
+   await page.waitForFunction(()=>{
+     const btn=document.querySelector('.ocr-cm-line-pdf-insert');
+     return !!btn&&!btn.disabled;
+   },null,{timeout:15000});
+   assert.equal(await pdfMenu.getByRole('menuitem',{name:'提取文本替换'}).isEnabled(),true);
+   await pdfMenu.getByRole('menuitem',{name:'提取文本插入'}).click();
+   const repeated='Synthetic Synthetic PDF page 1PDF page 1';
+   await page.waitForFunction(txt=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getBlocks()[0]?.markdownText===txt,repeated,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:15000});
+   assert.equal(mdCommits,6);assert.equal(rows[0].md_block,repeated);
+   assert.equal(rows[1].md_block,'Second row');
+   assert.equal(await pdfHost.evaluate(el=>el.v2PDFPort.getState().selectedId),12,
+     'line-menu extraction cannot silently steal focus from selected PDF block');
+   // Reselect another PDF block AFTER the source's first edit, then REPLACE
+   // only row 11 from its own original native text, not the PDF selection.
+   await pdfHost.evaluate(el=>el.v2PDFPort.focusId(12,false));
+   await source.locator('.ocr-cm-line-number-button').click();
+   const replace=page.getByRole('menuitem',{name:'提取文本替换'});
+   await page.waitForFunction(()=>{
+     const btn=document.querySelector('.ocr-cm-line-pdf-replace');
+     return !!btn&&!btn.disabled;
+   },null,{timeout:15000});
+   await replace.click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getBlocks()[0]?.markdownText==='Synthetic PDF page 1',null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:15000});
+   assert.equal(mdCommits,7);assert.equal(rows[1].md_block,'Second row');
+   await page.locator('#workspace #undo').click();
+   await page.waitForFunction(txt=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getBlocks()[0]?.markdownText===txt,repeated,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:15000});
+   assert.equal(mdCommits,8);
+   await page.locator('#workspace #redo').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getBlocks()[0]?.markdownText==='Synthetic PDF page 1',null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:15000});
+   assert.equal(mdCommits,9);assert.equal(structurePosts,0);assert.equal(pdfGets,1);
+   assert.deepEqual(await source.evaluate(el=>el.v2SourcePort.getBlocks().map(r=>r.logicalId)),[11,12,13]);
+   await source.evaluate(el=>el.v2SourcePort.locateLogicalId(11));
+   await source.locator('.ocr-cm-line-number-button').click();
+   assert.equal(await page.getByRole('menuitem',{name:'提取文本替换'}).count(),1);
+   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('v2-cm-session',{detail:{kind:'clear'}})));
+   assert.equal(await page.getByRole('menuitem',{name:'提取文本替换'}).count(),0,
+     'source lifecycle switch must invalidate any pending menu');
+   assert.equal(mdCommits,9);
    assert.deepEqual(errors,[]);
-   console.log('WP17_V1_GUTTER_NATIVE_PDF_TEXT_PASS',name,JSON.stringify({mdCommits,pdfGets,structurePosts}));
+   console.log('WP20_GUTTER_NATIVE_PDF_INSERT_REPLACE_PASS',name,
+     JSON.stringify({mdCommits,pdfGets,structurePosts}));
   }finally{await browser.close();}
  }
 }finally{server.kill('SIGTERM');}
