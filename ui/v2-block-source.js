@@ -1,38 +1,26 @@
-/** V2 CM6 projects immutable SQL MD blocks with minimal display newlines.
- * Adjacent siblings in a (p,b) group occupy SEPARATE lines (one LF), while
- * distinct groups retain a visible blank line (two LF). Existing raw text is
- * never trimmed or silently saved; positions use stable segment IDs only.
+/** WP14: one physical CM6 source line per logical block. Original OCR
+ * line wraps are normalized when initializing md_block, NOT in mineru_base.
+ * Historical edited multiline MD Blocks must be explicitly normalized via
+ * a native CM6 text edit; never silently strip them at load or drag time.
  */
-export const BLOCK_END='\n\n';
+export const BLOCK_END='\n';
 export const CHILD_LINE_END='\n';
 const BACKEND_SEP='\n\n';
-const groupKey=row=>String(row.p)+'/'+String(row.b);
-/** Minimal LF tail that makes a blank source line after the group.
- * No original character is modified or trimmed. The missing tail is a
- * CM6-only projection, unless the user explicitly edits this display tail.
- */
 export function groupEndPadding(text){
   if(typeof text!=='string')throw Error('逻辑文本无效');
-  return text.endsWith('\n\n')?'':text.endsWith('\n')?'\n':BLOCK_END;
+  return text.endsWith('\n')?'':BLOCK_END;
 }
-/** Minimum display LF separating two blocks in the same parent group.
- * Original newlines (including intentionally blank lines) stay in MD Block.
- */
-export function childLinePadding(text){
-  if(typeof text!=='string')throw Error('逻辑文本无效');
-  return text.endsWith(CHILD_LINE_END)?'':CHILD_LINE_END;
-}
+export function childLinePadding(text){return groupEndPadding(text);}
 export function composeLogicalSource(rows){
   if(!Array.isArray(rows))throw Error('逻辑块无效');
   let source='';
   const blocks=rows.map((row,i)=>{
     if(typeof row?.markdownText!=='string')throw Error('逻辑文本无效');
-    const lastInGroup=i===rows.length-1||groupKey(row)!==groupKey(rows[i+1]);
-    const padding=lastInGroup?groupEndPadding(row.markdownText):childLinePadding(row.markdownText);
+    // No extra final LF: N single-line MD blocks have exactly N CM6 lines.
+    const padding=i===rows.length-1?'':groupEndPadding(row.markdownText);
     const from=source.length;
     source+=row.markdownText+padding;
-    // groupEndPad is retained as a public/CM6 mapping field name: it now
-    // tracks ANY virtual trailing LF (one in-group, up to two at group end).
+    // Historic public name: number of ephemeral LF characters at this end.
     return {...row,from,to:source.length,groupEndPad:padding.length};
   });
   return {source,blocks};

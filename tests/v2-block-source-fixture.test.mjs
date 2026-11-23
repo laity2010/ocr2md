@@ -19,7 +19,8 @@ const before=full.markdown;
 assert.equal(full.rowCount,267);
 const {source,blocks}=composeBlockSource(full);
 assert.equal(blocks.length,267);
-assert(source.endsWith(BLOCK_END));
+assert.equal(source.split(BLOCK_END).length,267,'267 logical blocks = 267 CM6 physical lines');
+assert(!source.endsWith(BLOCK_END),'no trailing empty CM6 line');
 const edits=logicalTextRows(source,blocks);
 assert.equal(edits.length,267);
 for(let i=0;i<blocks.length;i++){
@@ -28,33 +29,30 @@ for(let i=0;i<blocks.length;i++){
  assert.equal(block.blockType,full.segments[i].blockType);
  const raw=full.markdown.slice(full.segments[i].startUtf16,full.segments[i].endUtf16);
  const next=blocks[i+1];
- const groupEnd=!next||block.p!==next.p||block.b!==next.b;
- const expected=groupEnd?(raw.endsWith('\n\n')?0:raw.endsWith('\n')?1:2):
-   (raw.endsWith('\n')?0:1);
+ const expected=i===blocks.length-1?0:(raw.endsWith('\n')?0:1);
  assert.equal(block.groupEndPad,expected,
-   'in-group requires one visible LF; group end has one blank line');
- if(groupEnd)assert.equal(source.slice(block.to-BLOCK_END.length,block.to),BLOCK_END);
+   'all logical rows use one LF, even between parent groups');
+ if(next)assert.equal(source.slice(block.to-1,block.to),'\n');
  if(i<blocks.length-1)assert.equal(block.to,blocks[i+1].from,
    'block boundaries use offsets, NOT injected separators');
  assert.equal(edits[i].markdownText,full.markdown.slice(
    full.segments[i].startUtf16,full.segments[i].endUtf16));
 }
 assert.equal(full.markdown,before,'no backend mutation');
+assert(edits.every(block=>!/[\r\n]/.test(block.markdownText)),'all initial MD Block values are single-line');
 const originalEmpty=edits.filter(block=>block.markdownText==='');
 assert(originalEmpty.length>0,'real fixture contains OCR empty SQL text');
 assert(blocks.every((block,i)=>block.to-block.from>=
   (edits[i].markdownText?.length||0)),
   'empty SQL blocks still own their CM6 group-end display blanks');
-// Real blocks p0b0/s0 and p0b1/s0 can be reparented in memory. Their SQL
-// content remains byte-for-byte equal, but the old virtual end blank goes
-// away and only the last child owns the new empty line.
+// A reparent changes PBS hierarchy, never the one-line source row inventory.
 const joined=edits.map((row,i)=>i===1
   ?{...row,p:edits[0].p,b:edits[0].b,s:1,parentId:edits[0].logicalId}:row);
 const next=composeLogicalSource(joined);
-const firstChildPad=edits[0].markdownText.endsWith('\n')?0:1;
+const firstChildPad=1;
 assert.equal(next.blocks[0].groupEndPad,firstChildPad);
-assert.equal(next.blocks[1].groupEndPad,2);
-assert.equal(next.source.length,source.length-2+firstChildPad);
+assert.equal(next.blocks[1].groupEndPad,1);
+assert.equal(next.source,source,'reparent does not change CM6 source line count');
 assert.deepEqual(logicalTextRows(next.source,next.blocks).map(r=>r.markdownText),
   edits.map(r=>r.markdownText),'no PDF/SQL text altered by child regrouping');
 assert(edits.some(row=>row.blockType==='table_caption'));

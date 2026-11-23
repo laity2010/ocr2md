@@ -324,10 +324,10 @@ try{
    assert.equal(sourceState.blocks.length,224);
    assert.equal(sourceState.blocks[0].markdownText,'# WP04 Chapter 🧪');
    assert.equal(sourceState.blocks[2].markdownText,'');
-   assert.equal(sourceState.text,fragments.map(text=>text+'\n\n').join(''));
+   assert.equal(sourceState.text,fragments.map((text,i)=>text+(i===fragments.length-1||text.endsWith('\n')?'':'\n')).join(''));
    assert.equal(sourceState.state.dirty,false);
-   assert.equal(sourceState.state.separator,'');
-   assert.equal(sourceState.state.groupEndMinimum,'\n\n');
+   assert.equal(sourceState.state.separator,'\n');
+   assert.equal(sourceState.state.groupEndMinimum,'\n');
    // Original V1 Markdown renderer is mounted in the ORIGINAL Frame MD pane.
    // It projects the live source rather than reparsing SQL on each keystroke.
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
@@ -461,14 +461,14 @@ try{
      editor.dispatch({changes:{from:first.to-1,to:first.to-1,insert:'New line'}});
      const next=port.getIntervals()[0];
      return {raw:port.getBlocks()[0].markdownText,
-       suffix:editor.state.doc.sliceString(next.to-2,next.to),
+       suffix:editor.state.doc.sliceString(next.to-1,next.to),
        continued:next.to===port.getIntervals()[1].from,
        pad:next.groupEndPad};
    });
    assert(blankEdit.raw.includes('New line'));
    assert.deepEqual({suffix:blankEdit.suffix,continued:blankEdit.continued},
-     {suffix:'\n\n',continued:true});
-   assert.equal(blankEdit.pad,1,'new final LF remains virtual; typed line becomes MD');
+     {suffix:'\n',continued:true});
+   assert.equal(blankEdit.pad,0,'editing a virtual boundary promotes its LF into real MD Block');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
    assert.equal(mdCommitPosts,blankBeforePosts+1);
@@ -498,7 +498,7 @@ try{
      const rows=el.v2SourcePort.getIntervals(),doc=el.v2SourcePort.getMarkdown();
      const a=rows.find(r=>r.logicalId===1),b=rows.find(r=>r.logicalId===2);
      return doc.slice(a.from,b.to);
-   }),fragments[0]+'\n'+fragments[1]+'\n\n',
+   }),fragments[0]+'\n'+fragments[1]+'\n',
    'joined root/child must occupy separate lines without an empty line');
    assert.equal(postCount,1,'structural drag cannot re-import SQL');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
@@ -683,6 +683,56 @@ try{
    assert.equal(rebuildPosts,1);
    assert.equal(mdRequests,beforeMD+1,'single CM6 refreshed after rebuild');
    assert.equal(postCount,3,'logic-only rebuild must NOT import the original base');
+   // WP14: one logical row/one real CM6 source line, legacy imported data
+   // is never silently changed. Existing line breaks require two explicit
+   // SQL-group clicks and one native CM6 Undo/Redo transaction.
+   const beforeNormalize=await page.locator('#workspace #editor').evaluate(el=>({
+     count:el.v2SourcePort.countMultiline(),
+     text:el.v2SourcePort.getMarkdown(),
+     rows:el.v2SourcePort.getBlocks().length,
+   }));
+   assert(beforeNormalize.count>0,'legacy mock includes some multiline SQL MD blocks');
+   await page.locator('#workspace .ts-wrapper.ocr-navigation-files .ts-control').click();
+   if(kind==='webkit')await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().tap();
+   else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().click();
+   const normalizeBtn=dialog.getByRole('button',{name:'整理逻辑块为单行'});
+   assert.equal(await normalizeBtn.isEnabled(),true);
+   await normalizeBtn.click();
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+     el.v2SourcePort.getMarkdown()),beforeNormalize.text,
+   'first click is only confirmation, not a destructive edit');
+   await dialog.getByRole('button',{name:/确认整理/}).click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   const afterNormalize=await page.locator('#workspace #editor').evaluate(el=>({
+     lines:el.v2SourcePort.getDoc().lines,
+     count:el.v2SourcePort.countMultiline(),
+     rows:el.v2SourcePort.getBlocks().length,
+   }));
+   assert.equal(afterNormalize.count,0);
+   assert.equal(afterNormalize.lines,afterNormalize.rows,
+     'exactly one CM6 physical line number for every logical ID');
+   assert.equal(afterNormalize.rows,224);
+   await page.locator('#workspace #undo').click();
+   await page.waitForFunction(before=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getMarkdown()===before,beforeNormalize.text,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   await page.locator('#workspace #redo').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getDoc().lines===224,null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   // Neither Enter nor multi-line paste may introduce an unowned source line.
+   await page.locator('#workspace #editor').evaluate(el=>{
+     const port=el.v2SourcePort,r=port.getIntervals()[0];
+     port.getEditorView().dispatch({changes:{from:r.from+2,insert:'\nILLEGAL'}});
+   });
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+     el.v2SourcePort.getDoc().lines),224,'newline insertion was rejected');
+
 
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    assert.deepEqual(errors,[]);

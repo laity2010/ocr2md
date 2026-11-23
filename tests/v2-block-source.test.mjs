@@ -19,28 +19,28 @@ function snapshot(texts,groups){
 const originals=['# 章节🧪','','第二段\n第三行','A\n\nB','末尾🙂\n'];
 const groups=[[0,0,null],[0,1,11],[1,0,null],[1,1,17],[2,0,null]];
 const result=composeBlockSource(snapshot(originals,groups));
-assert.equal(BLOCK_END,'\n\n');
-assert.equal(groupEndPadding('Text'),'\n\n');
-assert.equal(groupEndPadding('Text\n'),'\n');
+assert.equal(BLOCK_END,'\n');
+assert.equal(groupEndPadding('Text'),'\n');
+assert.equal(groupEndPadding('Text\n'),'');
 assert.equal(groupEndPadding('Text\n\n'),'');
 assert.equal(groupEndPadding('Text\n\n\n'),'');
 assert.equal(childLinePadding('Text'),'\n');
 assert.equal(childLinePadding('Text\n'),'');
 assert.equal(childLinePadding('Text\n\n'),'');
 assert.equal(result.blocks.length,5);
-assert.equal(result.source,'# 章节🧪\n\n\n第二段\n第三行\nA\n\nB\n\n末尾🙂\n\n');
-assert(result.source.endsWith('\n\n'));
+assert.equal(result.source,'# 章节🧪\n\n第二段\n第三行\nA\n\nB\n末尾🙂\n');
+assert(result.source.endsWith('\n'),'legacy original last block has its own ending LF');
 assert.deepEqual(logicalTextRows(result.source,result.blocks).map(r=>r.markdownText),originals,
   'all user/OCR newlines are owned by their original block, never trimmed');
-assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[1,2,1,2,1]);
+assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[1,1,1,1,0]);
 assert.equal(result.blocks[0].to,'# 章节🧪\n'.length,'UTF16 emoji content plus virtual child-line LF');
 assert.equal(result.blocks[0].to,result.blocks[1].from,'child starts on its own CM6 line');
-assert.equal(result.blocks[1].to,result.blocks[2].from,'group end blank belongs to s1');
+assert.equal(result.blocks[1].to,result.blocks[2].from,'empty s1 still owns one CM6 physical source line');
 assert.equal(result.blocks[2].to,result.blocks[3].from,'adjacent siblings have one visible line break');
 assert.equal(logicalAtOffset(result.blocks,result.blocks[1].from).logicalId,14,
   'at an immediate child boundary, the child owns its first position');
 assert.equal(logicalAtOffset(result.blocks,result.blocks[1].to-1).logicalId,14,
-  'the visible empty line belongs to the LAST child');
+  'empty child owns its virtual line ending');
 assert.equal(logicalAtOffset(result.blocks,result.blocks[3].from).logicalId,20);
 assert.equal(logicalAtOffset(result.blocks,result.blocks.at(-1).to).logicalId,23);
 
@@ -50,19 +50,20 @@ const oneLine=composeLogicalSource([
   {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块'},
   {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
 ]);
-assert.equal(oneLine.source,'父块\n子块\n\n');
+assert.equal(oneLine.source,'父块\n子块');
+assert.equal(oneLine.source.split('\n').length,2,'two logical blocks occupy exactly two CM6 lines');
 assert.deepEqual(logicalTextRows(oneLine.source,oneLine.blocks).map(r=>r.markdownText),['父块','子块']);
 const rawLine=composeLogicalSource([
   {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块\n'},
   {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
 ]);
-assert.equal(rawLine.source,'父块\n子块\n\n');
+assert.equal(rawLine.source,'父块\n子块');
 assert.equal(rawLine.blocks[0].groupEndPad,0,'no extra LF when raw parent already ends in LF');
 const rawBlank=composeLogicalSource([
   {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块\n\n'},
   {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
 ]);
-assert.equal(rawBlank.source,'父块\n\n子块\n\n','do not delete a user-owned blank line');
+assert.equal(rawBlank.source,'父块\n\n子块','do not silently modify legacy edited MD Block');
 
 // A blank line entered into any child (even a non-last child) is RAW content,
 // and is never trimmed or reclassified as a structural separator.
@@ -89,7 +90,7 @@ assert.equal(canEditBlocks(result.blocks,typingAtBlank.changes),true);
 const promoted=mapEditedBlocks(result.blocks,typingAtBlank.changes);
 assert.equal(promoted[1].groupEndPad,0,'typing in the blank promotes its display LF into owned text');
 assert.equal(logicalTextRows(typingAtBlank.state.doc.toString(),promoted)[1].markdownText,
-  '\n手工加行\n','future edit must not be lost by stripping the old virtual pad');
+  '手工加行\n','a programmatic edit of the LF must be owned by the same block');
 const cross=cm.update({changes:{
   from:result.blocks[2].to-1,to:result.blocks[3].to,insert:'X'}});
 assert.equal(canEditBlocks(result.blocks,cross.changes),false,'cannot replace across block IDs');
@@ -103,4 +104,4 @@ assert.throws(()=>composeBlockSource({...snapshot(originals,groups),
   segments:snapshot(originals,groups).segments.map((x,i)=>
     i===1?{...x,startUtf16:x.startUtf16+1}:x)}),/invalid|inconsistent/);
 assert.throws(()=>composeBlockSource(snapshot(originals,groups).segments.map(()=>{})),/invalid/);
-console.log('WP08_BLOCK_SOURCE_GROUP_END_PASS');
+console.log('WP14_ONE_LINE_PER_LOGICAL_BLOCK_PASS');

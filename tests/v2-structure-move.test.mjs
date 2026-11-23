@@ -13,9 +13,9 @@ assert.deepEqual(join.blocks.map(r=>[r.logicalId,r.p,r.b,r.s]),[
   [11,0,0,0],[12,0,1,0],[13,0,1,1],[21,1,0,0],[22,1,1,0]]);
 assert.equal(join.changes.length,1);
 assert.equal(join.blocks[2].parentId,12);
-assert.equal(join.source,'A\n\nB\nC\n\nD\n\nE\n\n',
+assert.equal(join.source,'A\nB\nC\nD\nE',
   'reparent removes blank line but keeps a single LF before the child');
-assert.deepEqual(join.blocks.slice(1,3).map(r=>r.groupEndPad),[1,2]);
+assert.deepEqual(join.blocks.slice(1,3).map(r=>r.groupEndPad),[1,1]);
 assert.deepEqual(logicalTextRows(join.source,join.blocks).map(r=>r.markdownText),
   ['A','B','C','D','E'],'no raw text changed by parent-child reparent');
 const reorder=moveLogicalBlocks(rows,{sourceBlockId:13,targetBlockId:11,placement:'before'});

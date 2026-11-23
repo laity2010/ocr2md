@@ -3,6 +3,7 @@
  * The existing Frame preview scroll pane stays the sole preview owner.
  */
 import {renderMarkdown} from './markdown-preview.js';
+import {previewLineProjection} from './v2-preview-line-projection.js';
 import morphdom from 'morphdom';
 import {createFootnotePopover} from './footnote-popover.js';
 import {mountV2PaneFocus,focusSourceLine} from './v2-pane-focus.js';
@@ -59,7 +60,10 @@ export function mountV2MarkdownPreview(scroller){
     // Markdown-it/KaTeX/footnote/Obsidian plugins and DOMPurify sanitation.
     // Render first, then update the DOM, so malformed input doesn't clear it.
     const location=coordinator.port.beforeRender();
-    const html=source?renderMarkdown(source):'';
+    const rows=port.getBlocks();
+    const intervals=new Map(port.getIntervals().map(row=>[row.logicalId,row]));
+    const render=previewLineProjection(rows,id=>port.getLineAtOffset(intervals.get(id)?.from??0));
+    const html=source?renderMarkdown(render.source):'';
     footnotes.close();
     const ratio=scroller.scrollHeight>scroller.clientHeight
       ?scroller.scrollTop/(scroller.scrollHeight-scroller.clientHeight):0;
@@ -68,7 +72,15 @@ export function mountV2MarkdownPreview(scroller){
       folds.set(detail.dataset.sourceStart+':'+detail.dataset.callout,detail.open);
     const fresh=article.cloneNode(false);
     fresh.innerHTML=html;
-    if(article.innerHTML!==html) morphdom(article,fresh,{childrenOnly:true,
+    // Markdown-it offsets are PREVIEW lines, not the single-LF CM6 lines.
+    // Convert before coordinator/highlight sees them; no parallel document.
+    for(const el of fresh.querySelectorAll('[data-source-start][data-source-end]')){
+      const line=render.map(el.dataset.sourceStart,el.dataset.sourceEnd);
+      el.dataset.sourceStart=String(line.start);
+      el.dataset.sourceEnd=String(line.end);
+    }
+    const mappedHtml=fresh.innerHTML;
+    if(article.innerHTML!==mappedHtml) morphdom(article,fresh,{childrenOnly:true,
       onBeforeElUpdated:(from,to)=>!from.isEqualNode(to)});
     for(const detail of article.querySelectorAll('details.ocr-callout[data-source-start]')){
       const key=detail.dataset.sourceStart+':'+detail.dataset.callout;

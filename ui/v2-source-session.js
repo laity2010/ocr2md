@@ -15,6 +15,7 @@ import {composeBlockSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEn
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
+import {singleLineMD} from './v2-single-line.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
@@ -94,12 +95,10 @@ export function mountV2Source(host){
       const pads=[];
       for(let i=0;i<before.length;i++){
         const row=before[i],next=before[i+1];
-        const sameGroup=next&&next.p===row.p&&next.b===row.b;
-        const end=tr.changes.mapPos(row.to,next?-1:1);
-        const suffix=tr.newDoc.sliceString(Math.max(0,end-2),end);
-        // Keep one LF between family members even if the user edits or
-        // deletes the virtual LF; only the final member gets a blank line.
-        const padding=sameGroup?childLinePadding(suffix):groupEndPadding(suffix);
+        if(!next)continue; // final block has no trailing source LF
+        const end=tr.changes.mapPos(row.to,-1);
+        const suffix=tr.newDoc.sliceString(Math.max(0,end-1),end);
+        const padding=childLinePadding(suffix);
         if(padding)pads.push({logicalId:row.logicalId,length:padding.length,
           from:end,insert:padding});
       }
@@ -118,7 +117,11 @@ export function mountV2Source(host){
       // it is NOT permission to cross block boundaries. Only an actual PDF
       // structure drag (and its native inverse history) has dragEffect.
       if(tr.effects.some(effect=>effect.is(dragEffect)))return true;
-      const allowed=canEditBlocks(blocks,tr.changes);
+      let insertedLineBreak=false;
+      tr.changes.iterChanges((a,b,c,d,inserted)=>{
+        if(/[\r\n]/.test(inserted.toString()))insertedLineBreak=true;
+      });
+      const allowed=!insertedLineBreak&&canEditBlocks(blocks,tr.changes);
       if(!allowed)document.dispatchEvent(new Event('v2-cm-protected-separator'));
       return allowed;
     }),
@@ -185,6 +188,20 @@ export function mountV2Source(host){
       selection:{anchor:result.blocks.find(r=>r.logicalId===intent.sourceBlockId)?.from??0}});
     return {changed:result.changes,unchanged:false,sourceBlockId:intent.sourceBlockId};
   };
+  const countMultiline=()=>actualText().filter(r=>singleLineMD(r.markdownText)!==r.markdownText).length;
+  const normalizeLines=()=>{
+    if(!loaded||dirty)throw Error('请先保存当前正文或结构');
+    const changes=blocks.map(row=>{
+      const raw=editor.state.doc.sliceString(row.from,row.to-(row.groupEndPad??0));
+      const after=singleLineMD(raw);
+      return after!==raw?{from:row.from,to:row.to-(row.groupEndPad??0),insert:after}:null;
+    }).filter(Boolean);
+    if(!changes.length)return 0;
+    // Native CM6 history (one transaction): old edits remain undoable and
+    // SQL commits only per-logical-id optimistic text differences.
+    editor.dispatch({changes});
+    return changes.length;
+  };
   undoButton?.addEventListener('click',onUndo);
   redoButton?.addEventListener('click',onRedo);
   const setFocused=row=>{
@@ -219,7 +236,7 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
-    applyDrag,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
+    applyDrag,countMultiline,normalizeLines,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
       logicalId,parentId,logicalOrder,p,b,s})),
     markPersisted:rows=>{
       if(!loaded)return;
@@ -240,7 +257,7 @@ export function mountV2Source(host){
     getWorkspace:()=>book,
     getState:()=>({book,loaded,dirty,readOnly:false,blockCount:blocks.length,
       undo:undoDepth(editor.state),redo:redoDepth(editor.state),
-      separator:'',groupEndMinimum:BLOCK_END}),
+      separator:BLOCK_END,groupEndMinimum:BLOCK_END}),
     undo:onUndo,redo:onRedo,
   });
   host.v2SourcePort=port;

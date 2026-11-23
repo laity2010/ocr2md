@@ -113,6 +113,29 @@ function sqlActionsDialog(){
   const rebuildBtn=document.createElement('button');rebuildBtn.type='button';
   rebuildBtn.className='v2-sql-action-rebuild';rebuildBtn.textContent='重建逻辑表';
   rebuildBtn.title='仅覆盖当前逻辑表（PBS、类型、Raw Txt），绝不改基础表';
+  const normalizeBtn=document.createElement('button');normalizeBtn.type='button';
+  normalizeBtn.className='v2-sql-action-normalize';
+  normalizeBtn.textContent='整理逻辑块为单行';
+  normalizeBtn.title='仅修改当前 MD Block 正文；不重建基础表、PBS 或原件，使用 CM6 原生 Undo';
+  normalizeBtn.addEventListener('click',()=>{
+    const source=$('#workspace #editor')?.v2SourcePort;
+    if(!source?.getState().loaded||source.getState().dirty||saving||rebuilding||pending){
+      report('请先进入逻辑表并保存当前修改','warning');return;
+    }
+    const count=source.countMultiline();
+    if(!count){report('当前逻辑块已是单行，不需要整理','ok');dialog.close();return;}
+    if(normalizeBtn.dataset.confirm!=='yes'){
+      normalizeBtn.dataset.confirm='yes';
+      normalizeBtn.textContent='确认整理 '+count+' 个逻辑块';
+      info.textContent='即将修改 '+count+' 行 MD Block 的断行。包含手工编辑的换行也会整理；可用 CM6 撤销，并按原 SQL 旧值增量保存。不影响基础表、PBS 或 PDF。';
+      return;
+    }
+    dialog.close();
+    try{
+      const count=source.normalizeLines();
+      report('已将 '+count+' 个逻辑块整理为单行；SQL 将按原规则增量保存，CM6 可撤销','ok');
+    }catch(error){report('单行整理未完成：'+error.message,'error');}
+  });
   const warning=document.createElement('p');warning.className='v2-sql-actions-warning';
   warning.textContent='导入基础表会验证 MinerU 来源；重建逻辑表将覆盖现有逻辑块及 PBS，原始基础表、PDF 和 MinerUJSON 不变。';
   const close=document.createElement('button');close.type='button';
@@ -125,7 +148,7 @@ function sqlActionsDialog(){
     dialog.close();void rebuildLogicalOnly();
   });
   const buttons=document.createElement('div');buttons.className='v2-sql-actions-buttons';
-  buttons.append(importBtn,rebuildBtn);
+  buttons.append(importBtn,rebuildBtn,normalizeBtn);
   dialog.append(heading,info,buttons,warning,close);
   document.body.append(dialog);
   return dialog;
@@ -133,6 +156,8 @@ function sqlActionsDialog(){
 function openSQLActions(){
   const dialog=sqlActionsDialog();
   const workspace=bound&&bound===persistedDirectory()?bound:'';
+  const normal=dialog.querySelector('.v2-sql-action-normalize');
+  normal.dataset.confirm='';normal.textContent='整理逻辑块为单行';
   dialog.querySelector('.v2-sql-actions-info').textContent=workspace?
     '当前工作目录：'+workspace:'请先在全局设置中绑定并验证工作目录';
   const busy=rebuilding||saving||Boolean(pending)||
@@ -140,6 +165,8 @@ function openSQLActions(){
   for(const selector of ['.v2-sql-action-import','.v2-sql-action-rebuild']){
     dialog.querySelector(selector).disabled=!workspace||busy;
   }
+  normal.disabled=!workspace||busy||selectedTable!=='logical_block'||
+    !$('#workspace #editor')?.v2SourcePort?.getState().loaded;
   if(!dialog.open)dialog.showModal();
 }
 async function importBaseFromMineru(){

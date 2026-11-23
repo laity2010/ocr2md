@@ -42,33 +42,29 @@ def raw_at(block_json,path):
     return None
 
 
+def single_line_md(text):
+    """Only MD Block is normalized; original MinerU source stays byte exact."""
+    if not isinstance(text,str):raise ValueError('OCR 文本类型无效')
+    import re
+    return re.sub(r'[ \t]*[\r\n]+[ \t]*',' ',text).strip()
+
+
 def initial_md(raw,kind,element):
-    """Render a single original element; never merge sibling OCR elements."""
+    """A single original OCR element produces exactly one editable MD line."""
     if not isinstance(raw,str) or not isinstance(kind,str):raise ValueError('OCR 文本类型无效')
+    raw=single_line_md(raw)
     if not raw:return ''
     if kind=='title':
         level=element.get('level',1)
         level=level if isinstance(level,int) and 1<=level<=6 else 1
         return '#'*level+' '+raw
     if kind in ('image_body','image'):
-        # Raw paths may contain spaces or closing brackets: angle brackets
-        # keep the value stable, backslashes must not change its meaning.
         return '![](<'+raw.replace('>','%3E')+'>)'
     if kind=='interline_equation':
-        return '$$\n'+raw+'\n$$'
+        # V1 Markdown renderer recognizes a whole-line $$formula$$ token.
+        return '$$'+raw+'$$'
     if kind=='inline_equation':
         return '$'+raw+'$'
-    if kind in ('table_caption','table_body','chart_caption','chart_body',
-                'image_caption','image_body_caption'):
-        # Each typed child owns its own Markdown syntax newline. WP08 never
-        # injects a separator between children: without this LF, adjacent
-        # caption text and a <table> would concatenate on one source line and
-        # prevent the V1 Markdown renderer from recognizing block HTML.
-        return raw if raw.endswith('\n') else raw+'\n'
-    if kind in ('table_footnote','chart_footnote'):
-        # A single leading LF belongs to THIS child. It terminates the
-        # preceding block-HTML parser before the human-readable footnote.
-        return raw if raw.startswith('\n') else '\n'+raw
-    # Table captions, original HTML, footnotes and paragraphs are distinct
-    # logical rows. No synthetic heading/content merge or extra separators.
+    # Table/html/footnote content uses its own logical line. No leading or
+    # trailing LF is embedded; CM6 supplies exactly one LF between rows.
     return raw
