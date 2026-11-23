@@ -113,6 +113,17 @@ export function mountV2PDF(host,{toolbar}={}){
         const row=source()?.getIntervals().find(item=>item.logicalId===id);
         if(row)focusLogical(row,'pdf');
       },
+      // V1 PDF owns native getTextContent() + exact bbox availability. V2
+      // only maps the chosen logical ID to its single-line CM6 MD Block.
+      onExtractText:({blockId,text})=>{
+        const port=source(),id=Number(blockId);
+        if(!port?.getState().loaded||port.getWorkspace()!==workspace||
+          !projection?.byId.has(id)||selectedId!==id)
+          throw Error('当前高亮 PDF 逻辑块或已授权源码未就绪');
+        const count=port.insertPdfText({blockId:id,text});
+        const label=projection.byId.get(id)?.pbs??String(id);
+        notify(`PDF · 已提取 ${label} 原生文字层 ${count} 字符到 CM6；可撤销`, 'ok');
+      },
       onBlockDragIntent:async intent=>{
         const port=source();
         if(!port?.getState().loaded||port.getWorkspace()!==workspace)

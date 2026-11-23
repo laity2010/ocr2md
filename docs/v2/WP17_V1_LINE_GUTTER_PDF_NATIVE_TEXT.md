@@ -1,0 +1,13 @@
+# WP17 · 复刻 V1 焦点行号按钮与 PDF 高亮框原生文字层提取
+
+## 复用基线与边界
+
+- **行号**：真实 V1 `/labs/lab-ocr/ui/frame/md-line-gutter.js` 原件，V2 `ui/v2-md-line-gutter.js` **逐字节相同**。V2 仅以该公开 `createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete})` 接入本版本唯一 CM6，替换标准/iOS `basicSetup` **第一个**原生 `lineNumbers()` 扩展，其余 editing/CodeMirror history/iOS 选择扩展维持原版。按钮/弹层采用 V1 `/labs/lab-ocr/ui/frame/frame.css` 对应段落的原始样式和高度；点击高亮行号打开 `删除当前行`，点击其他行仍是原始数字，不新增 AG/源码独立工具栏。
+- **V2 SQL 特殊语义**：一个逻辑块正好一个持久化 `logical_block` 行，有唯一 `logical_id` 和 PBS，SQL 无删除逻辑块/撤销重排 API。因此 V2 的“删除当前行”**仅删除该逻辑行的文本 `md_block`**，实际源码行保留为空白（不误删覆盖框、PBS、其他子块或跨组虚拟 LF）；如已空则 no-op。与 V1 直接删除物理源码行的差异必须持续明示，不能把它称为 SQL 删除逻辑块。原生 CM6 History + 850ms SQL 文本 `md-commit` 乐观差量提交。
+- **PDF 文本层**：完全复用 V1 `ui/lab-ocr/pdf-viewer.js`（本 V2 已复用原版），它仅在选中目标的原 PDF.js `page.getTextContent()` 和 bbox 区域交集 `pdfTextInBox()` 返回非空文本后启用 V1 `.lab-ocr-pdf-extract-text`。V2 只通过 V1 `onExtractText({blockId,text})` 订阅，在当前工作目录/高亮 logical_id/CM6 验证后调用新的 `v2SourcePort.insertPdfText()`，按 WP14 将 PDF 物理断行转单一 `md_block` 正文行。针对空块插入，必须使用 WP15 类型化 **同一 CM6 文档重投影事务**（不是新编辑器/并行文档），严格保留所有虚拟 LF 的 `groupEndPad` 权属。
+- 任何缺少 PDF 文本层、真实 bbox、选中块、授权绑定或当前 CM6 的情况禁用/拒绝，不能拿 `mineru_base`、OCR 或当前 Markdown 凑数。PDF 原始坐标保持不变、状态只写全局顶栏、`logical_id/PBS` 不变、SQL 只写正文。用户先点击 PDF PBS 标签选中，再点「提取文本」；光标位于该块时按当前光标插入，否则插入该块开头。无自动保存原文以外的文件。
+
+## 真实验收
+
+- `cmp ui/v2-md-line-gutter.js ../lab-ocr/ui/frame/md-line-gutter.js` 字节一致；使用 V1 公共 CSS。`node tests/v2-line-pdf-extract.browser.test.mjs` 在 Chromium/iPad-WebKit 的真实 V2 + V1 PDF.js，使用含 PDF text layer 的**有效合成 PDF**与当前块 bbox，验证 V1 按钮只跟随焦点、弹层删除文本保留 3 个 logical_id、V1 PDF 无字块按钮禁用，选中有字块使其可用、提取内容确实来自 PDF.js 而非 mock OCR，正文不含虚拟 LF；Undo/Redo 共计 5 次按 SQL 旧值递进的文本提交且 0 PBS 提交。
+- 原始 `tests/v2-mineru-base.browser.test.mjs`、`tests/v2-real-markdown-preview.browser.test.mjs`、`tests/v2-table-recovery.browser.test.mjs` 和跨版本 AG 过滤门禁均必须继续通过。若真实 iPad Safari UI 与测试差异应列出证据后调整，不可掩盖。

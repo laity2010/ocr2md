@@ -16,3 +16,51 @@
 #workspace .ocr-cm-source.v2-source-session .cm-line.v2-sync-source-focus{
   background:rgba(235,163,82,.20);
 }
+
+/* WP17: V1 Frame md-line-gutter visual contract, exact button/menu rules. */
+/* CM6 physical line number buttons. Only the first/basic gutter is replaced;
+   folding gutter and native iOS selection keep their existing behavior. */
+#workspace .ocr-cm-line-button-gutter .cm-gutterElement{padding:0 2px}
+#workspace .ocr-cm-line-number-label,
+#workspace .ocr-cm-line-number-button{
+  display:inline-flex;align-items:center;justify-content:flex-end;
+  box-sizing:border-box;min-width:2ch;height:1.5em;
+  margin:0;padding:0 3px;border:0;border-radius:3px;
+  background:transparent;color:inherit;line-height:inherit;
+  font:inherit;font-variant-numeric:tabular-nums;text-align:right;cursor:pointer;
+}
+/* A highlighted line must look like a button BEFORE hover or keyboard focus.
+   iPad Safari has neither reliable hover nor a visible mouse cursor; the old
+   transparent at-rest style looked identical to an ordinary line number. */
+#workspace .ocr-cm-line-number-button{
+  min-width:36px;min-height:27px;height:27px;
+  padding:0 5px;gap:3px;justify-content:center;
+  border:1px solid #edc476;border-radius:5px;
+  background:#516548;color:#fff2c7;
+  box-shadow:inset 0 0 0 1px rgba(255,225,156,.13);
+  font-weight:700;touch-action:manipulation;
+}
+#workspace .ocr-cm-line-number-button::after{
+  content:'▾';font-size:10px;line-height:1;color:#f6db9f;
+}
+#workspace .ocr-cm-line-number-button:is(:hover,:focus-visible,:active){
+  background:#667e53;color:#fff5d5;
+  outline:1px solid #ffe3a0;outline-offset:1px;
+}
+#workspace .ocr-cm-line-number-label{cursor:default}
+#workspace .ocr-cm-line-number-label[data-spacer="true"]{
+  visibility:hidden;pointer-events:none;
+}
+.ocr-cm-line-menu{
+  position:fixed;z-index:15000;min-width:135px;max-width:calc(100vw - 16px);
+  padding:4px;border:1px solid #697a6b;border-radius:5px;
+  background:#2b373a;color:#e5ddc7;
+  box-shadow:0 5px 16px rgba(0,0,0,.36);
+  font:13px/1.5 "OCR2MD Sarasa",monospace;
+}
+.ocr-cm-line-menu button{
+  display:block;width:100%;min-height:32px;padding:5px 10px;border:0;
+  border-radius:3px;background:transparent;color:inherit;
+  text-align:left;font:inherit;cursor:pointer;
+}
+.ocr-cm-line-menu button:is(:hover,:focus-visible){background:#465748;color:#f0d3ad}

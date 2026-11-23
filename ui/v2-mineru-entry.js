@@ -606,6 +606,10 @@ document.addEventListener('v2-sync-focus',event=>{
 });
 // Editing is an in-memory-only event; Frame's global Save remains Settings-only.
 // Repeated verified workspace events must never reset the live CM6 history.
+document.addEventListener('v2-cm-status',event=>{
+  const {text,kind}=event.detail||{};
+  if(text)report(text,kind||'info');
+});
 document.addEventListener('v2-pdf-status',event=>{
   const {text,kind}=event.detail||{};
   if(text)report(text,kind||'info');

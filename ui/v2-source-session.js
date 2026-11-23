@@ -16,6 +16,8 @@ import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
 import {singleLineMD} from './v2-single-line.js';
+// Byte-identical V1 Frame source gutter, adapted only via callbacks.
+import {createMdLineGutter} from './v2-md-line-gutter.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
@@ -23,7 +25,7 @@ export function mountV2Source(host){
   let persistedStructureSignature='',persistedTextSignature='';
   const structureEffect=StateEffect.define();
   const dragEffect=StateEffect.define();
-  const tableRepairEffect=StateEffect.define();
+  const blockTextEffect=StateEffect.define();
   const autoblanks=Annotation.define();
   const structureField=StateField.define({
     create:()=>[],
@@ -69,8 +71,25 @@ export function mountV2Source(host){
     if(redoButton){redoButton.disabled=!loaded||!redoDepth(editor.state);
       redoButton.title=loaded?'重做内存修改':'没有绑定文档';}
   };
+  let editor;
+  const lineGutter=createMdLineGutter({
+    isMarkdown:state=>Boolean(state.field(structureField).length),
+    focusLineAt:state=>state.doc.lineAt(state.selection.main.head).number,
+    lineIdAt:lineNo=>{
+      const line=editor?.state.doc.line(lineNo);
+      return line?blocks.find(row=>row.from===line.from)?.logicalId??null:null;
+    },
+    onDelete:logicalId=>{
+      if(deleteLogicalLine(logicalId))document.dispatchEvent(new CustomEvent('v2-cm-status',{
+        detail:{text:'已删除当前行正文，逻辑块及 PBS 保留 · CM6 可撤销',kind:'ok'},
+      }));
+    },
+  });
+  // V1 Frame replaces only the stock first line-number extension.
+  // Preserve CM6's remaining setup, native iPad selection and history.
+  const base=native?nativeIOSBasicSetup:basicSetup;
   const extensions=[
-    native?nativeIOSBasicSetup:basicSetup,
+    lineGutter.extension,...base.slice(1),
     // The native CM6 document is editable. Every textual transaction owns a
     // single logical block (or several independent changes, one each); cross-
     // block deletion/replacement remains forbidden to protect stable IDs.
@@ -84,10 +103,10 @@ export function mountV2Source(host){
       ...(tr.effects.some(e=>e.is(structureEffect))?
         [structureEffect.of(tr.startState.field(structureField))]:[]),
       ...(tr.effects.some(e=>e.is(dragEffect))?[dragEffect.of(true)]:[]),
-      ...(tr.effects.some(e=>e.is(tableRepairEffect))?[tableRepairEffect.of(true)]:[]),
+      ...(tr.effects.some(e=>e.is(blockTextEffect))?[blockTextEffect.of(true)]:[]),
     ]),
     EditorState.transactionFilter.of(tr=>{
-      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect)||e.is(tableRepairEffect))||
+      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect)||e.is(blockTextEffect))||
         !canEditBlocks(tr.startState.field(structureField),tr.changes))return tr;
       // Preserve WP13 display spacing on EVERY edit: one LF within a parent
       // group, one blank line (two LF) at each parent-group end. WP14's
@@ -117,7 +136,7 @@ export function mountV2Source(host){
       // A mapped structureEffect is also attached to ordinary text edits;
       // it is NOT permission to cross block boundaries. Only an actual PDF
       // structure drag (and its native inverse history) has dragEffect.
-      if(tr.effects.some(effect=>effect.is(dragEffect)||effect.is(tableRepairEffect)))return true;
+      if(tr.effects.some(effect=>effect.is(dragEffect)||effect.is(blockTextEffect)))return true;
       let insertedLineBreak=false;
       tr.changes.iterChanges((a,b,c,d,inserted)=>{
         if(/[\r\n]/.test(inserted.toString()))insertedLineBreak=true;
@@ -155,7 +174,7 @@ export function mountV2Source(host){
       }
     }),
   ];
-  const editor=new EditorView({state:EditorState.create({doc:'',extensions}),parent:host});
+  editor=new EditorView({state:EditorState.create({doc:'',extensions}),parent:host});
   const load=(snapshot,workspace)=>{
     if(!workspace||typeof workspace!=='string')throw Error('WP04: missing authorized workspace');
     if(loaded&&book===workspace)return false; // never discard unsaved edits during refresh
@@ -203,6 +222,52 @@ export function mountV2Source(host){
     editor.dispatch({changes});
     return changes.length;
   };
+  // WP17: V1 physically deletes a source row. V2 owns a stable SQL
+  // logical_id for EACH line; clearing only its MD text is the safe analogue.
+  // The virtual LF, logical order, PBS identity and PDF geometry never move.
+  const deleteLogicalLine=logicalId=>{
+    if(!loaded||!Number.isSafeInteger(logicalId))return false;
+    const row=blocks.find(r=>r.logicalId===logicalId);
+    if(!row)return false;
+    const from=row.from,to=row.to-row.groupEndPad;
+    if(to<=from||!editor.state.doc.sliceString(from,to))return false;
+    editor.dispatch({changes:{from,to,insert:''},
+      selection:{anchor:from},annotations:Transaction.userEvent.of('delete.line')});
+    return actualText().find(r=>r.logicalId===logicalId)?.markdownText==='';
+  };
+  // V1's PDF.js callback contains ONLY text collected from its currently
+  // highlighted bbox; V2 restores one physical text row per logical block.
+  const insertPdfText=({blockId,text})=>{
+    if(!loaded||typeof text!=='string'||!text.trim())
+      throw Error('尚未加载正文或 PDF 文字层无可提取文本');
+    const id=Number(blockId);
+    if(!Number.isSafeInteger(id)||id<1)throw Error('PDF 目标逻辑块无效');
+    const textRows=actualText();
+    const row=blocks.find(r=>r.logicalId===id);
+    if(!row)throw Error('当前 PDF 高亮块不存在于 CM6 逻辑表');
+    const inserted=singleLineMD(text);
+    if(!inserted)throw Error('PDF 覆盖框没有可用文字');
+    const head=editor.state.selection.main.head;
+    const from=row.from,to=row.to-row.groupEndPad;
+    const pos=head>=from&&head<=to?head:from;
+    const raw=textRows.find(r=>r.logicalId===id)?.markdownText;
+    if(typeof raw!=='string')throw Error('PDF 目标逻辑正文不存在');
+    const offset=pos-from;
+    const nextText=raw.slice(0,offset)+inserted+raw.slice(offset);
+    const planned=composeLogicalSource(textRows.map(item=>item.logicalId===id?
+      {...item,markdownText:nextText}:item));
+    const target=planned.blocks.find(item=>item.logicalId===id);
+    // V1 native text-layer extraction can target a V2 EMPTY SQL row. A
+    // small insertion at its zero-length CM range would accidentally turn
+    // synthetic trailing LF into persisted text. WP15's proven one-history
+    // recompose preserves every block ID and the virtual separator metadata.
+    editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:planned.source},
+      effects:[structureEffect.of(planned.blocks),blockTextEffect.of(true)],
+      selection:{anchor:target.from+offset+inserted.length}});
+    if(actualText().find(item=>item.logicalId===id)?.markdownText!==nextText)
+      throw Error('PDF 文本回写未与逻辑块精确对齐');
+    return inserted.length;
+  };
   const applyTableRecovery=candidates=>{
     if(!loaded||dirty)throw Error('请先保存正文或结构后再恢复表格');
     if(!Array.isArray(candidates)||!candidates.length||candidates.length>10000)
@@ -229,7 +294,7 @@ export function mountV2Source(host){
     // Whole-document replacement maintains ownership of all synthetic LF:
     // inserting at an empty block's left boundary must NOT promote its pads.
     editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:planned.source},
-      effects:[structureEffect.of(planned.blocks),tableRepairEffect.of(true)]});
+      effects:[structureEffect.of(planned.blocks),blockTextEffect.of(true)]});
     if(!dirty)throw Error('表格恢复未进入 CM6 历史');
     return replacement.size;
   };
@@ -267,7 +332,8 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
-    applyDrag,countMultiline,normalizeLines,applyTableRecovery,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
+    applyDrag,countMultiline,normalizeLines,applyTableRecovery,
+    deleteLogicalLine,insertPdfText,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
       logicalId,parentId,logicalOrder,p,b,s})),
     markPersisted:rows=>{
       if(!loaded)return;
@@ -294,6 +360,7 @@ export function mountV2Source(host){
   host.v2SourcePort=port;
   refresh();
   return {dispose(){undoButton?.removeEventListener('click',onUndo);
-    redoButton?.removeEventListener('click',onRedo);delete host.v2SourcePort;editor.destroy();},
+    redoButton?.removeEventListener('click',onRedo);lineGutter.dispose();
+    delete host.v2SourcePort;editor.destroy();},
     layout:()=>editor.requestMeasure()};
 }
