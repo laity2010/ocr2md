@@ -32,6 +32,7 @@ export function composeBlockSource(snapshot){
     const from=source.length;source+=text;
     blocks.push({logicalId:part.logicalId,baseBlockId:part.baseBlockId,
       parentId:part.parentId,logicalOrder:part.logicalOrder,blockType:part.blockType,
+      p:part.p,b:part.b,s:part.s,
       from,to:source.length});
     source+=BLOCK_END;offset=part.endUtf16;
   }
@@ -64,5 +65,6 @@ export function mapEditedBlocks(blocks,changes){
 export function logicalTextRows(source,blocks){
   return blocks.map(row=>({logicalId:row.logicalId,baseBlockId:row.baseBlockId,
     parentId:row.parentId,logicalOrder:row.logicalOrder,
+    p:row.p,b:row.b,s:row.s,
     blockType:row.blockType,markdownText:source.slice(row.from,row.to)}));
 }

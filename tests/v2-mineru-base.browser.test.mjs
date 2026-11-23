@@ -18,7 +18,7 @@ try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
      hasTouch:true,...(kind==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,logicalReady=false,mdRequests=0,probeCount=0;const requestedPages=[];
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0;const requestedPages=[];
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -53,11 +53,19 @@ try{
      const startUtf16=markdown.length;
      markdown+=fragments[i];
      segments.push({logicalId:i+1,baseBlockId:i+1,parentId:null,logicalOrder:i+1,
-       blockType:i===0?'title':'text',startUtf16,endUtf16:markdown.length});
+       blockType:i===0?'title':'text',p:Math.floor(i/10),b:i%10,s:0,
+       startUtf16,endUtf16:markdown.length});
    }
    const mdSnapshot={schema:'v2-logical-md/v2',markdown,rowCount:224,segments};
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
     const request=route.request();const op=new URL(request.url()).pathname.split('/').at(-1);
+    if(op==='structure-commit'){
+      structurePosts++;
+      const changes=request.postDataJSON().changes;
+      assert.equal(request.postDataJSON().confirm,'commit-v2-structure');
+      return route.fulfill({status:200,contentType:'application/json',
+        body:JSON.stringify({saved:true,changedRows:changes.length,logicalCount:224})});
+    }
     if(op==='import'){
       postCount++;assert.equal(request.postDataJSON().confirm,'import-mineru-base');
       const created=exists==='retired-v2';
@@ -247,7 +255,7 @@ try{
      ?.v2MarkdownPreviewPort?.getScrollDriver()==='cm6',null,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
      ?.scrollTop<500,null,{timeout:12000});
-   assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'true');
+   assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'false');
    const computed=await page.locator('#workspace #editor .cm-editor').evaluate(el=>({
      background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,
      family:getComputedStyle(el).fontFamily,gutters:el.querySelectorAll('.cm-gutters').length,
@@ -265,38 +273,40 @@ try{
    assert.equal(mdRequests,1,'auto load should fetch Markdown once');
    assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
    assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
-   // The first DOM .cm-line is the first *virtualized visible* line, not
-   // necessarily logical block 1 after WebKit's asynchronous scroll sync.
-   // Place the native CM6 caret at that block's end before keyboard input.
+   // WP07 source is read-only, including programmatic unapproved changes.
    await page.locator('#workspace #editor').evaluate(el=>{
-     const port=el.v2SourcePort;
-     port.getEditorView().dispatch({selection:{anchor:port.getIntervals()[0].to},
-       scrollIntoView:true});
-     port.getEditorView().focus();
+     el.v2SourcePort.getEditorView().dispatch({changes:{from:0,to:0,insert:'ILLEGAL'}});
    });
-   await page.keyboard.type(' EDIT');
-   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText.endsWith(' EDIT'),
-     null,{timeout:10000});
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown()),sourceState.text);
+   // A genuine PDF drag intent enters CM6 structure and native history.
+   await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.applyDrag({
+     sourceBlockId:2,targetBlockId:1,placement:'child'}));
    assert.equal(await page.locator('#workspace #undo').isDisabled(),false);
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),true);
-   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.getText().includes('WP04 Chapter 🧪 EDIT'),null,{timeout:16000});
-   assert.equal(postCount,1,'typing must not post SQL');
-   // Replaying the same validated snapshot cannot overwrite unsaved edits.
-   assert.equal(await page.locator('#workspace #editor').evaluate((el,snapshot)=>el.v2SourcePort.load(snapshot,'/demo/books/my-book'),mdSnapshot),false);
-   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getBlocks()[0].markdownText.endsWith(' EDIT')),true);
-   await page.locator('#workspace #undo').click();
-   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText==='# WP04 Chapter 🧪',
+   assert.deepEqual(await page.locator('#workspace #editor').evaluate(el=>{
+     const row=el.v2SourcePort.getBlocks().find(row=>row.logicalId===2);
+     return [row.p,row.b,row.s,row.parentId,row.markdownText];
+   }),[0,0,1,1,'Original text']);
+   assert.equal(postCount,1,'structural drag cannot re-import SQL');
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
      null,{timeout:12000});
-   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),false);
-   await page.waitForFunction(()=>!document.querySelector('#workspace .ocr-preview-md-scroll')
-     ?.v2MarkdownPreviewPort?.getText().includes('WP04 Chapter 🧪 EDIT'),null,{timeout:16000});
+   assert.equal(structurePosts,1,'idle commit once for affected logical row');
+   assert.equal(await page.locator('#workspace #editor').evaluate((el,snapshot)=>el.v2SourcePort.load(snapshot,'/demo/books/my-book'),mdSnapshot),false);
+   await page.locator('#workspace #undo').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[1].s===0,
+     null,{timeout:12000});
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),true);
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
+     null,{timeout:12000});
+   assert.equal(structurePosts,2,'undo is a new incremental SQL transaction');
    assert.equal(await page.locator('#workspace #redo').isDisabled(),false);
    await page.locator('#workspace #redo').click();
-   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText.endsWith(' EDIT'),
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[1].s===1,
      null,{timeout:12000});
-   assert.equal(postCount,1,'undo/redo must not post SQL');
-   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
-     ?.v2MarkdownPreviewPort?.getText().includes('WP04 Chapter 🧪 EDIT'),null,{timeout:16000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
+     null,{timeout:12000});
+   assert.equal(structurePosts,3,'redo is also saved');
+   assert.equal(postCount,1,'undo/redo cannot import SQL');
    // Structural boundaries are not user text: Ctrl/Meta+A replacement across
    // all blocks must be refused rather than erase identities or blank lines.
    const beforeCross=await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown());
@@ -331,9 +341,15 @@ try{
        ?.textContent!==before,label,{timeout:12000});
    }
    assert.match(await page.locator('#workspace .v2-base-count').textContent(),/1–120 \/ 539/);
+   const beforeNext=requestedPages.length;
    await page.getByRole('button',{name:'SQL 表下一页'}).click();
    try{
-     await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')?.textContent.includes('121–240'),null,{timeout:12000});
+     // WebKit may asynchronously re-focus AG to the current CM6 block after
+     // manual paging. Check the actual 120-offset request instead of assuming
+     // a transient counter must remain visible despite that focus event.
+     for(let tries=0;tries<80&&requestedPages.length===beforeNext;tries++)await sleep(100);
+     assert(requestedPages.slice(beforeNext).some(p=>p.table==='mineru_base'&&p.pageOffset===120),
+       'base-table next page must request SQL offset 120');
    }catch(error){
      console.log('V2_SQL_PAGING_DIAG',kind,{requestedPages:requestedPages.slice(-18),
        counter:await page.locator('#workspace .v2-base-count').textContent(),

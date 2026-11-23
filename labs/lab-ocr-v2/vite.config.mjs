@@ -37,7 +37,15 @@ export default defineConfig({
           "await frameWorkspaceIO.probe(selected);document.dispatchEvent(new CustomEvent('v2-workspace-verified',{detail:{path:selected,afterSave,uncommitted}}));",
           'verified F02 workspace event');
         return "import '../v2-mineru-entry.js';\n"+exact(code,'startFrameAutoUpdate({version:build,report:topStatus});',
-          "document.addEventListener('v2-show-frame',()=>void showModule('frame'));startFrameAutoUpdate({version:build,report:topStatus});",
+          "document.addEventListener('v2-show-frame',()=>void showModule('frame'));"+
+          // Frame F03 reloads unconditionally. In V2 only, defer auto-update
+          // while a structural transaction is dirty; WebKit may ignore
+          // beforeunload prompts, so never use them as the sole protection.
+          "startFrameAutoUpdate({version:build,report:topStatus,fetchVersion:async()=>{"+
+          "const r=await fetch(new URL('release-version.json',location.href),{cache:'no-store'});"+
+          "if(!r.ok)throw Error('HTTP '+r.status);const remote=await r.json();"+
+          "return document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty?"+
+          "{...remote,version:build}:remote;}});",
           'Frame module switch event');
       }
       if(id.endsWith('/ui/frame/layout.js')){
@@ -83,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp06-ag-logical-p-focus-filter-all-f02',
+        stage:'wp07-pdf-drag-cm6-structure-idle-sql-readonly-f02',
       })+'\n'});
     },
   }],

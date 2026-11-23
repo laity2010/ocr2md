@@ -50,6 +50,29 @@ export function mountV2PDF(host,{toolbar}={}){
     selectedId=row.logicalId;
     return native.focusBlock({id:String(id),page:row.physicalPageIndex+1,reveal});
   };
+  const updateStructure=rows=>{
+    if(!projection||!native||!Array.isArray(rows))return false;
+    const byId=new Map(rows.map(r=>[r.logicalId,r]));
+    if(byId.size!==rows.length||rows.length!==projection.map.logicalCount)
+      throw Error('PDF 与 CM6 逻辑块数量不一致');
+    const touched=new Set();
+    const nextCovers=projection.map.covers.map(old=>{
+      const row=byId.get(old.logicalId);
+      if(!row)throw Error('PDF 原始逻辑块身份丢失');
+      const pbs=`p${row.p}b${row.b}s${row.s}`;
+      const parentId=row.parentId;
+      if(old.pbs!==pbs||old.parentId!==parentId)
+        touched.add(old.physicalPageIndex+1);
+      return {...old,pbs,parentId,rootLogicalId:parentId??old.logicalId,
+        logicalOrder:row.logicalOrder};
+    });
+    projection=projectV2PDFEvidence({...projection.map,covers:nextCovers});
+    // V1 keeps its original PDF.js instance. Only re-fetch changed overlay
+    // pages from this in-memory projection; geometry never comes from CM6.
+    for(const page of touched)native.invalidateOverlayPage(page);
+    if(selectedId!==null)focusId(selectedId,false);
+    return true;
+  };
   const load=async (path,evidence)=>{
     if(disposed||!path)return false;
     if(native&&workspace===path)return ready;
@@ -70,7 +93,7 @@ export function mountV2PDF(host,{toolbar}={}){
     });
     viewer.setOverlays({
       level:'block',allowSpan:false,blockGroups:['para_blocks'],
-      loadPage:(page,level)=>data.page(page,level),
+      loadPage:(page,level)=>projection.page(page,level),
       onPageChange:page=>{lastPdfPage=page;},
       onBlockSelect:({blockId})=>{
         const id=Number(blockId);
@@ -78,8 +101,16 @@ export function mountV2PDF(host,{toolbar}={}){
         const row=source()?.getIntervals().find(item=>item.logicalId===id);
         if(row)focusLogical(row,'pdf');
       },
-      onBlockDragIntent:async()=>{throw Error(
-        'V2 结构关系尚未开放持久化事务；本次只展示 V1 拖动预演，不修改逻辑表');},
+      onBlockDragIntent:async intent=>{
+        const port=source();
+        if(!port?.getState().loaded||port.getWorkspace()!==workspace)
+          throw Error('CM6 工作目录未就绪');
+        const result=port.applyDrag(intent);
+        const row=port.getIntervals().find(item=>item.logicalId===intent.sourceBlockId);
+        if(row)focusLogical(row,'pdf');
+        notify(`Block 手势 · 已调整 ${result.changed.length} 行 · CM6 已更新，等待空闲写入 SQL`,'ok');
+        return true;
+      },
     });
     if(!await measurable()||disposed||stamp!==generation)return false;
     const url=PDF_URL+new URLSearchParams({workspace:path});
@@ -95,7 +126,11 @@ export function mountV2PDF(host,{toolbar}={}){
     const id=event.detail?.logicalId;
     if(Number.isSafeInteger(id))focusId(id,true);
   };
-  const onSession=event=>{if(event.detail?.kind==='clear')clear();};
+  const onSession=event=>{
+    if(event.detail?.kind==='clear')clear();
+    if(event.detail?.kind==='structure'&&event.detail.book===workspace)
+      updateStructure(source()?.getStructureRows());
+  };
   document.addEventListener('v2-sync-focus',onFocus);
   document.addEventListener('v2-cm-session',onSession);
   const state=()=>({
@@ -113,7 +148,7 @@ export function mountV2PDF(host,{toolbar}={}){
     load,clear,getState:state,
     getCovers:()=>projection?.map.covers||[],
     getV1Preview:()=>native,
-    focusId,
+    focusId,updateStructure,
   });
   host.v2PDFPort=port;
   return {

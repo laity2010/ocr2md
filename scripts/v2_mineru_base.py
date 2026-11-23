@@ -487,8 +487,94 @@ def existing_pdf_map(folder:Path):
         try:return project_pdf(db)
         except PDFProjectionError as err:raise BaseError(409,str(err)) from err
 
+STRUCTURE_FIELDS=('parentId','logicalOrder','p','b','s')
+def commit_structure(folder:Path,payload,common):
+    """WP07: optimistic, changed-rows-only SQL transaction. Never write text/base.
+
+    The client sends the last acknowledged values as 'before', not the
+    current focus view; another editor/session cannot be silently overwritten.
+    """
+    if payload.get('confirm')!='commit-v2-structure':
+        raise BaseError(422,'缺少 V2 结构事务确认')
+    changes=payload.get('changes')
+    if not isinstance(changes,list) or not 1<=len(changes)<=10000:
+        raise BaseError(422,'结构修改行数无效')
+    ids=set()
+    for item in changes:
+        if not isinstance(item,dict) or set(item)!={'logicalId','before','after'}:
+            raise BaseError(422,'结构事务字段无效')
+        lid=item['logicalId']
+        if type(lid) is not int or lid<1 or lid in ids:raise BaseError(422,'结构行 ID 无效或重复')
+        ids.add(lid)
+        for key in ('before','after'):
+            v=item[key]
+            if not isinstance(v,dict) or set(v)!=set(STRUCTURE_FIELDS):
+                raise BaseError(422,'结构行快照字段不完整')
+            if any(type(v[c]) is not int or v[c]<0 for c in ('logicalOrder','p','b','s')):
+                raise BaseError(422,'结构行序号必须为非负整数')
+            if v['logicalOrder']<1 or (v['parentId'] is not None and
+                (type(v['parentId']) is not int or v['parentId']<1)):
+                raise BaseError(422,'结构父节点或顺序无效')
+        if item['before']==item['after']:
+            raise BaseError(422,'结构事务不能提交没有变化的行')
+    dbpath=folder/DB_NAME
+    if dbpath.is_symlink():raise BaseError(403,'V2 SQLite 禁止符号链接')
+    fd=os.open(dbpath,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+    try:
+        st=os.fstat(fd)
+        if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
+            raise BaseError(422,'V2 SQLite 必须是单一普通文件')
+    finally:os.close(fd)
+    common.probe(folder)
+    with closing(sqlite3.connect('file:'+str(dbpath)+'?mode=rw',uri=True,timeout=5)) as db:
+        db.row_factory=sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        db.execute('BEGIN IMMEDIATE')
+        assert_schema(db)
+        old={r['logical_id']:dict(r) for r in db.execute(
+            'SELECT logical_id,parent_id,logical_order,p,b,s FROM logical_block')}
+        if len(old)<len(changes):raise BaseError(409,'逻辑块数量已变化，禁止覆盖')
+        for item in changes:
+            row=old.get(item['logicalId'])
+            if not row:raise BaseError(409,'原逻辑块已不存在')
+            original={k:(row['parent_id'] if k=='parentId' else
+                row['logical_order'] if k=='logicalOrder' else row[k])
+                for k in STRUCTURE_FIELDS}
+            if original!=item['before']:
+                raise BaseError(409,'SQL 已被其他会话修改，保留当前 CM6 状态，不覆盖')
+        # First park changed PBS coordinates in private, never-used temporary
+        # groups, so a local sibling swap cannot violate the UNIQUE index.
+        max_p=max((r['p'] for r in old.values()),default=0)+1
+        for i,item in enumerate(changes):
+            db.execute('UPDATE logical_block SET p=?,b=?,s=0 WHERE logical_id=?',
+                (max_p,i,item['logicalId']))
+        for item in changes:
+            v=item['after']
+            updated=db.execute('UPDATE logical_block SET parent_id=?,logical_order=?,p=?,b=?,s=? '
+                'WHERE logical_id=?',(v['parentId'],v['logicalOrder'],v['p'],
+                v['b'],v['s'],item['logicalId']))
+            if updated.rowcount!=1:raise BaseError(409,'结构写入过程中逻辑块消失')
+        records=[dict(r) for r in db.execute(
+            'SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s '
+            'FROM logical_block ORDER BY logical_order')]
+        try:
+            groups=validate_pbs(records)
+            from_sql_rows(records)
+            for row in records:
+                root=groups[(row['p'],row['b'])][0]
+                if row['parent_id']!=(None if row['s']==0 else root):
+                    raise ValueError('PBS 父子层级与 parent_id 不一致')
+        except ValueError as err:raise BaseError(409,'结构事务被拒绝：'+str(err)) from err
+        if list(db.execute('PRAGMA foreign_key_check')):
+            raise BaseError(409,'结构事务破坏基础块引用')
+        db.commit()
+        return {'saved':True,'changedRows':len(changes),'logicalCount':len(records)}
+
 
 def dispatch(operation,method,folder,payload,query,common):
+    if operation=='structure-commit':
+        if method!='POST':raise BaseError(405,'结构修改只能 POST')
+        return commit_structure(folder,payload,common)
     if operation=='pdf':
         if method!='GET':raise BaseError(405,'PDF 原文只能只读 GET')
         return read_verified_pdf(folder)
@@ -559,7 +645,8 @@ def handle(handler,operation,parsed,common):
             if handler.headers.get('Transfer-Encoding'):raise BaseError(400,'不支持 chunked 请求')
             try:n=int(handler.headers.get('Content-Length','-1'))
             except ValueError:n=-1
-            if not 2<=n<=8192:raise BaseError(413,'请求大小不合法')
+            limit=512*1024 if operation=='structure-commit' else 8192
+            if not 2<=n<=limit:raise BaseError(413,'请求大小不合法')
             raw=handler.rfile.read(n)
             if len(raw)!=n:raise BaseError(400,'请求数据不完整')
             try:payload=json.loads(raw)

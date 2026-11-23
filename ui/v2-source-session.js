@@ -1,11 +1,11 @@
-/** WP04: V2-only CM6 mount into the EXISTING Frame editor host.
- * Same V1 CodeMirror Markdown extensions/palette, no second EditorView,
- * no SQL writes. Undo/Redo use native CodeMirror history only.
+/** WP07: CM6 is the ONLY document+structure memory owner, but source text
+ * is read-only. PDF drag generates an auditable structure transaction which
+ * CodeMirror history can undo/redo. SQL writes live in the outer adapter.
  */
-import {EditorState,StateField,StateEffect} from '@codemirror/state';
+import {EditorState,StateField,StateEffect,Transaction} from '@codemirror/state';
 import {EditorView,Decoration} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
-import {undo,redo,undoDepth,redoDepth} from '@codemirror/commands';
+import {undo,redo,undoDepth,redoDepth,invertedEffects} from '@codemirror/commands';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
@@ -13,13 +13,24 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,canEditBlocks,mapEditedBlocks,logicalTextRows,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,logicalTextRows,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
+import {moveLogicalBlocks} from './v2-structure-move.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
-  let book='',loaded=false,initial='',blocks=[],dirty=false,programmatic=false;
+  let book='',loaded=false,blocks=[],dirty=false,programmatic=false,persistedSignature='';
+  const structureEffect=StateEffect.define();
+  const structureField=StateField.define({
+    create:()=>[],
+    update(value,tr){
+      const change=tr.effects.find(effect=>effect.is(structureEffect));
+      return change?change.value:value;
+    },
+  });
+  const signature=rows=>JSON.stringify(rows.map(r=>[
+    r.logicalId,r.logicalOrder,r.parentId,r.p,r.b,r.s]));
   const focusEffect=StateEffect.define();
   const focusField=StateField.define({
     create:()=>Decoration.none,
@@ -53,23 +64,30 @@ export function mountV2Source(host){
   };
   const extensions=[
     native?nativeIOSBasicSetup:basicSetup,
+    // The DOM is noneditable; a changeFilter rejects every non-structural
+    // change. CM6's state.readOnly must remain false for native undo/redo:
+    // @codemirror/commands intentionally disables history on readOnly state.
+    EditorView.editable.of(false),
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),obsidianMarkdown,
     syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
-    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,
+    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,structureField,
+    invertedEffects.of(tr=>tr.effects.some(e=>e.is(structureEffect))?
+      [structureEffect.of(tr.startState.field(structureField))]:[]),
     EditorState.changeFilter.of(tr=>{
       if(!tr.docChanged||!loaded)return true;
-      const allowed=canEditBlocks(blocks,tr.changes);
-      if(!allowed)document.dispatchEvent(new Event('v2-cm-protected-separator'));
+      const allowed=tr.effects.some(effect=>effect.is(structureEffect));
+      if(!allowed)document.dispatchEvent(new Event('v2-cm-source-readonly'));
       return allowed;
     }),
     EditorView.updateListener.of(update=>{
-      if(update.docChanged&&loaded){
-        blocks=mapEditedBlocks(blocks,update.changes);
-        dirty=update.state.doc.toString()!==initial;
+      const structural=update.transactions.some(tr=>tr.effects.some(e=>e.is(structureEffect)));
+      if(loaded&&structural){
+        blocks=update.state.field(structureField);
+        dirty=signature(blocks)!==persistedSignature;
         documentChanged(); // V1 revision rejects stale multi-pane focus/scroll
-        refresh();emit('edit');
+        refresh();emit('structure');
       }else if(update.transactions.length&&loaded){refresh();}
       if(loaded&&!programmatic&&(update.selectionSet||update.docChanged)){
         const pos=update.state.selection.main.head;
@@ -94,18 +112,28 @@ export function mountV2Source(host){
     const next=EditorState.create({doc:created.source,extensions});
     loaded=false; // state replacement is not a user edit/history step
     editor.setState(next);
-    book=workspace;blocks=created.blocks;initial=created.source;
+    editor.dispatch({effects:structureEffect.of(created.blocks),
+      annotations:Transaction.addToHistory.of(false)});
+    book=workspace;blocks=created.blocks;persistedSignature=signature(blocks);
     loaded=true;dirty=false;selectedId=null;documentChanged();refresh();emit('load');
     return true;
   };
   const clear=()=>{
     if(!loaded&&!book)return;
-    loaded=false;book='';blocks=[];initial='';dirty=false;selectedId=null;
+    loaded=false;book='';blocks=[];persistedSignature='';dirty=false;selectedId=null;
     editor.setState(EditorState.create({doc:'',extensions}));
     documentChanged();refresh();emit('clear');
   };
   const onUndo=()=>{if(loaded&&undoDepth(editor.state))undo(editor);refresh();};
   const onRedo=()=>{if(loaded&&redoDepth(editor.state))redo(editor);refresh();};
+  const applyDrag=intent=>{
+    if(!loaded)throw Error('工作目录未绑定');
+    const result=moveLogicalBlocks(logicalTextRows(editor.state.doc.toString(),blocks),intent);
+    editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:result.source},
+      effects:structureEffect.of(result.blocks),
+      selection:{anchor:result.blocks.find(r=>r.logicalId===intent.sourceBlockId)?.from??0}});
+    return {changed:result.changes,sourceBlockId:intent.sourceBlockId};
+  };
   undoButton?.addEventListener('click',onUndo);
   redoButton?.addEventListener('click',onRedo);
   const setFocused=row=>{
@@ -140,13 +168,21 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
+    applyDrag,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
+      logicalId,parentId,logicalOrder,p,b,s})),
+    markPersisted:rows=>{
+      if(!loaded)return;
+      persistedSignature=signature(rows);
+      dirty=signature(blocks)!==persistedSignature;refresh();emit('saved');
+    },
     getEditorView:()=>editor,getDoc:()=>editor.state.doc,
     getLineAtOffset:pos=>editor.state.doc.lineAt(Math.min(Math.max(pos,0),editor.state.doc.length)).number,
     getMarkdown:()=>editor.state.doc.toString(),
     getBlocks:()=>logicalTextRows(editor.state.doc.toString(),blocks),
-    getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,from,to})=>({logicalId,baseBlockId,logicalOrder,blockType,from,to})),
+    getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to})=>({
+      logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to})),
     getWorkspace:()=>book,
-    getState:()=>({book,loaded,dirty,blockCount:blocks.length,
+    getState:()=>({book,loaded,dirty,readOnly:true,blockCount:blocks.length,
       undo:undoDepth(editor.state),redo:redoDepth(editor.state),separator:BLOCK_END}),
     undo:onUndo,redo:onRedo,
   });

@@ -16,7 +16,7 @@ import v6_frame_publish as base
 
 base.NAME='lab-ocr-v2'
 base.CARD='''      <article id="lab-ocr-v2"><div class="kind">09 · OCR V2 · 两表 PBS</div><h2>lab-ocr-v2 · PBS 两层逻辑块</h2>
-        <p>复用 Lab-Frame 四窗与权限，无损导入 MinerUJSON；逻辑表按焦点 PBS p 页过滤，可勾选「全部」，基础表保留分页；CM6 内存编辑、Markdown 与 V1 PDF 多轨标签联动。PDF 结构编辑尚未开放。</p>
+        <p>复用 Lab-Frame 四窗与权限；AG 逻辑表按焦点 PBS p 过滤，可选「全部」；原版 V1 PDF 标签拖动实时修改 CM6 内存结构，Undo/Redo 与空闲增量 SQL 写回。源码窗仅只读，不开放文本编辑。</p>
         <a class="open" href="/labs/lab-ocr-v2/">进入 V2 工作台</a></article>
 '''
 

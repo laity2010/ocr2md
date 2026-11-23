@@ -73,10 +73,20 @@ try{
         'lines_json','blocks_json','block_json','record_kind','original_bytes'];
       const logicCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'];
       const tables=[{name:'mineru_base',columns:baseCols},{name:'logical_block',columns:logicCols}];
-      let sqlPosts=0,markdownGets=0,pdfGets=0;
+      let sqlPosts=0,structurePosts=0,markdownGets=0,pdfGets=0;
       await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
         const req=route.request();const op=new URL(req.url()).pathname.split('/').at(-1);
         if(op==='import'){sqlPosts++;return route.fulfill({status:500,contentType:'application/json',body:'{"error":"No DB import in WP04"}'});}
+        if(op==='structure-commit'){
+          const body=req.postDataJSON();
+          assert.equal(body.confirm,'commit-v2-structure');
+          assert.equal(body.workspace,folder);
+          assert(body.changes.length>0&&body.changes.every(change=>
+            Number.isInteger(change.logicalId)&&change.before&&change.after));
+          structurePosts++;
+          return route.fulfill({status:200,contentType:'application/json',
+            body:JSON.stringify({saved:true,changedRows:body.changes.length,logicalCount:224})});
+        }
         if(op==='pdf-map')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(projection)});
         if(op==='pdf'){pdfGets++;return route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes});}
         if(op==='markdown'){markdownGets++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(snapshot)});}
@@ -299,6 +309,88 @@ try{
         ?.querySelector('[col-id="logical_id"]')?.textContent?.includes('23'),null,{timeout:10000});
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),23);
       assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),0);
+      // WP07 end-to-end: ACTUAL V1 PDF PBS tag pointer gesture, not a
+      // fabricated structural event. The cover geometry and PDF.js instance
+      // must stay stable while CM6, AG and PBS tags reflect the change.
+      const sourceTag=page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]').first();
+      // PDF.js legitimately replaces tag DOM while zoom/scroll settles.
+      // Read both live rectangles from one animation frame; never ask
+      // Playwright to wait for a particular replaced tag to remain stable.
+      await page.waitForFunction(()=>document.querySelector(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]')?.isConnected,null,{timeout:12000});
+      await sourceTag.evaluate(el=>el.scrollIntoView({block:'center',inline:'nearest'}));
+      await sleep(250);
+      const beforeTag=await sourceTag.textContent();
+      assert.equal(beforeTag,'p0b1s0');
+      const {sourceRect,targetRect,scrollerRect}=await page.evaluate(()=>{
+        const src=document.querySelector('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]');
+        const dst=document.querySelector('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="23"]');
+        const scroll=document.querySelector('#workspace .lab-ocr-pdf-scroller');
+        const box=node=>{const r=node?.getBoundingClientRect();
+          return r?{x:r.x,y:r.y,width:r.width,height:r.height}:null;};
+        return {sourceRect:box(src),targetRect:box(dst),scrollerRect:box(scroll)};
+      });
+      assert(sourceRect&&targetRect,'V1 PDF gesture needs visible tag and cover');
+      assert(sourceRect.x>scrollerRect.x&&sourceRect.x+sourceRect.width<scrollerRect.x+scrollerRect.width,
+        'drag source must be inside the visible PDF scroller');
+      assert(targetRect.x>scrollerRect.x&&targetRect.x+targetRect.width<scrollerRect.x+scrollerRect.width,
+        'drag target must be inside the visible PDF scroller');
+      await page.mouse.move(sourceRect.x+sourceRect.width/2,sourceRect.y+sourceRect.height/2);
+      await page.mouse.down();
+      await sleep(460); // V1 long-press arm delay is 370ms
+      await page.mouse.move(targetRect.x+targetRect.width/2,
+        targetRect.y+targetRect.height/2,{steps:8});
+      await page.waitForFunction(()=>document.querySelector(
+        '.lab-ocr-pdf-drop-guide [data-placement="child"]'),null,{timeout:4000});
+      const childSlot=await page.evaluate(()=>{
+        const r=document.querySelector('.lab-ocr-pdf-drop-guide [data-placement="child"]').getBoundingClientRect();
+        return {x:r.x+r.width/2,y:r.y+r.height/2};
+      });
+      await page.mouse.move(childSlot.x,childSlot.y,{steps:6});
+      await page.mouse.up();
+      try{
+        await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort
+          ?.getBlocks().find(row=>row.logicalId===24)?.s===1,null,{timeout:5000});
+      }catch(error){
+        console.log('WP07_GESTURE_DIAG',name,await page.evaluate(()=>({
+          statuses:window.__v2PdfStatuses.slice(-15),
+          source:document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks().find(r=>r.logicalId===24),
+          dragged:document.querySelectorAll('.lab-ocr-pdf-drag-arrow').length,
+        })));
+        throw error;
+      }
+      await page.waitForFunction(()=>[...document.querySelectorAll(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]')]
+        .some(node=>node.textContent==='p0b0s1'),null,{timeout:18000});
+      assert.equal(await page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]')
+        .first().getAttribute('data-child'),'true','V1 family tag must update as a child');
+      assert.equal(await livePdf().evaluate(el=>el.v2PDFPort.getV1Preview()===window.__v2PreviewInstance),true);
+      const coverMoved=await page.locator(boxSelector).first().evaluate(el=>({
+        left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height,
+      }));
+      assert.deepEqual(coverMoved,coverBefore,'WP07 must never move original PDF bbox');
+      const movedRow=await page.locator('#workspace #editor').evaluate(el=>{
+        const r=el.v2SourcePort.getBlocks().find(row=>row.logicalId===24);
+        return {logicalId:r.logicalId,baseBlockId:r.baseBlockId,p:r.p,b:r.b,s:r.s,parentId:r.parentId};
+      });
+      assert.deepEqual(movedRow,{logicalId:24,baseBlockId:24,p:0,b:0,s:1,parentId:23});
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+      assert.equal(structurePosts,1,'V1 drag must idle-commit one SQL transaction');
+      await page.locator('#workspace #undo').click();
+      await page.waitForFunction(()=>[...document.querySelectorAll(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]')]
+        .some(node=>node.textContent==='p0b1s0'),null,{timeout:12000});
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+      assert.equal(structurePosts,2,'undo must restore SQL PBS');
+      await page.locator('#workspace #redo').click();
+      await page.waitForFunction(()=>[...document.querySelectorAll(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]')]
+        .some(node=>node.textContent==='p0b0s1'),null,{timeout:12000});
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+      assert.equal(structurePosts,3,'redo must persist SQL again');
       await page.locator('#workspace #editor').evaluate((el,last)=>{
         const port=el.v2SourcePort;
         const interval=port.getIntervals().find(row=>row.logicalId===last);
@@ -336,7 +428,7 @@ try{
       assert(result.headingCount>0,result);
       assert(result.textLength>10000,result);
       assert.equal(sqlPosts,0);
-      assert.equal(markdownGets,1);
+      assert.equal(markdownGets,1,'the Markdown document must be fetched once per book');
       const renderFailures=await page.evaluate(()=>window.__v2PdfStatuses.filter(x=>x.includes('页面渲染错误')));
       assert.deepEqual(renderFailures,[],name+' should not report PDF canvas errors, even when panes start at zero width');
       assert.deepEqual(errors,[]);

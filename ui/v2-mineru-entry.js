@@ -21,21 +21,26 @@ const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:
   original_bytes:'原文件归档字节'};
 let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
 let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
-let logicalState=null,showAllLogical=false,visibleLogicalP=null;
+let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
+let acknowledged=null,saveTimer=null,saving=false,saveBlocked=false;
+const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
+const structureCopy=rows=>rows.map(r=>({
+  logicalId:r.logicalId,parentId:r.parentId??null,
+  logicalOrder:r.logicalOrder,p:r.p,b:r.b,s:r.s}));
 const $=selector=>document.querySelector(selector);
 function persistedDirectory(){
   try{return JSON.parse(localStorage.getItem(SETTINGS_KEY))?.settings?.['workspace.dataDirectory']?.value||'';}
   catch{return '';}
 }
 function report(message,kind='info'){status.publish(message,kind);}
-async function request(operation,workspace,{method='GET',offset=0,table='mineru_base'}={}){
+async function request(operation,workspace,{method='GET',offset=0,table='mineru_base',payload=null}={}){
   const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset),table})):'');
   const response=await fetch(url,{method,credentials:'same-origin',cache:'no-store',
     ...(method==='POST'?{headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({workspace,confirm:'import-mineru-base'})}:{})});
-  let payload=null;try{payload=await response.json();}catch{}
-  if(!response.ok){const error=Error(payload?.error||'HTTP '+response.status);error.status=response.status;throw error;}
-  return payload;
+      body:JSON.stringify(payload??{workspace,confirm:'import-mineru-base'})}:{})});
+  let result=null;try{result=await response.json();}catch{}
+  if(!response.ok){const error=Error(result?.error||'HTTP '+response.status);error.status=response.status;throw error;}
+  return result;
 }
 function navs(){return [...document.querySelectorAll('.ocr-source-file-select')]
     .filter(el=>el.closest('#workspace,#settings-workspace'));}
@@ -152,7 +157,8 @@ function renderGrid(state){
     if(controls)controls.indicator.textContent=showAllLogical?
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
   }else visibleLogicalP=null;
-  port.setColumns(columns);
+  const schema=state.tableName+':'+state.columns.join(',');
+  if(schema!==renderedSchema){port.setColumns(columns);renderedSchema=schema;}
   port.setRows(logical
     ?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`}))
     :state.rows);
@@ -192,9 +198,58 @@ async function fetchPage(){
       // Full inventory is read once. Focus/checkbox updates are client-side only.
       if(state.rows.length!==state.rowCount)throw Error('逻辑表返回了不完整的分页数据');
       logicalState=state;
+      overlayCMStructure();
     }
     renderGrid(state);
   }catch(error){if(generation===pageRequest)report('SQL 物理表读取失败：'+error.message,'error');}
+}
+function overlayCMStructure(){
+  const source=$('#workspace #editor')?.v2SourcePort;
+  if(!logicalState||!source?.getState().loaded||source.getWorkspace()!==bound)return;
+  const live=new Map(source.getStructureRows().map(row=>[row.logicalId,row]));
+  logicalState.rows=logicalState.rows.map(record=>{
+    const row=live.get(record.logical_id);
+    return row?{...record,parent_id:row.parentId,logical_order:row.logicalOrder,
+      p:row.p,b:row.b,s:row.s}:record;
+  }).sort((a,b)=>a.logical_order-b.logical_order);
+}
+function scheduleStructureSave(){
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(()=>{saveTimer=null;void flushStructure();},850);
+}
+async function flushStructure(){
+  if(saving||saveBlocked||!acknowledged||!bound)return;
+  const source=$('#workspace #editor')?.v2SourcePort;
+  if(!source?.getState().loaded||source.getWorkspace()!==bound)return;
+  const current=structureCopy(source.getStructureRows());
+  const original=new Map(acknowledged.map(r=>[r.logicalId,r]));
+  if(current.length!==original.size){report('CM6 结构数量改变，拒绝 SQL 写入','error');saveBlocked=true;return;}
+  const changes=current.flatMap(row=>{
+    const old=original.get(row.logicalId);
+    if(!old)throw Error('CM6 结构出现未知 ID');
+    const before=Object.fromEntries(STRUCT_FIELDS.map(key=>[key,old[key]]));
+    const after=Object.fromEntries(STRUCT_FIELDS.map(key=>[key,row[key]]));
+    return STRUCT_FIELDS.some(key=>before[key]!==after[key])?
+      [{logicalId:row.logicalId,before,after}]:[];
+  });
+  if(!changes.length){source.markPersisted(acknowledged);return;}
+  const workspace=bound;
+  saving=true;
+  try{
+    const result=await request('structure-commit',workspace,{method:'POST',
+      payload:{workspace,confirm:'commit-v2-structure',changes}});
+    if(!result?.saved||result.changedRows!==changes.length)throw Error('SQL 结构写入回执不完整');
+    if(bound!==workspace||source.getWorkspace()!==workspace)return;
+    acknowledged=current;
+    source.markPersisted(current);
+    report(`✓ WP07 SQLite 已增量保存 ${result.changedRows} 行 · 原始基础表未修改`,'ok');
+  }catch(error){
+    saveBlocked=true;
+    report('WP07 SQL 写回失败，CM6 内存已保留：'+error.message+' · 下次拖动/撤销时重试','error');
+  }finally{
+    saving=false;
+    if(!saveBlocked&&bound===workspace&&source.getState().dirty)scheduleStructureSave();
+  }
 }
 async function ensureBase(path){
   if(!path||persistedDirectory()!==path)return;
@@ -229,6 +284,8 @@ async function ensureBase(path){
     const port=$('#workspace #editor')?.v2SourcePort;
     if(!port)throw Error('现有 CM6 源码接口未就绪');
     if(port.getWorkspace()!==path){
+      if(port.getState().dirty||saving)
+        throw Error('当前 CM6 结构尚未写入 SQL，禁止切换工作目录以免丢失编辑');
       // Never retain an old book's source after switching verified workspaces.
       port.clear();
       if(state.logicalCount>0){
@@ -237,8 +294,10 @@ async function ensureBase(path){
         port.load(snapshot,path);
       }
     }
-    if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;}
+    if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
+      renderedSchema='';clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
+    acknowledged=structureCopy(port.getStructureRows());
     // PDF evidence is separate and strictly read-only; never discard live
     // CM6 edits or verified SQL because a PDF is absent or ambiguous.
     const pdfPort=$('#workspace .ocr-preview-pdf-host')?.v2PDFPort;
@@ -293,9 +352,23 @@ document.addEventListener('v2-cm-protected-separator',()=>
   report('WP04：逻辑块之间的空行是结构边界，暂不允许跨块删除或合并','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
-  if(kind==='clear')lastFocus=null;
-  if(kind==='edit')report(dirty?`● WP04 内存修改 · ${blocks} 逻辑块 · 尚未写入 SQL`:
-    `✓ WP04 撤销至原始内容 · ${blocks} 逻辑块 · SQL 未修改`,dirty?'warning':'ok');
+  if(kind==='clear'){lastFocus=null;acknowledged=null;clearTimeout(saveTimer);saveTimer=null;}
+  if(kind==='load')acknowledged=structureCopy(
+    $('#workspace #editor')?.v2SourcePort?.getStructureRows()||[]);
+  if(kind==='structure'){
+    overlayCMStructure();
+    if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);
+    saveBlocked=false;scheduleStructureSave();
+    report(`● WP07 CM6 结构已改变 · ${blocks} 逻辑块 · ${dirty?'待写 SQL':'已与 SQL 一致'}`,
+      dirty?'warning':'ok');
+  }
+});
+document.addEventListener('v2-cm-source-readonly',()=>
+  report('WP07 源码窗只读；仅允许 PDF 拖动修改逻辑块结构','warning'));
+window.addEventListener('beforeunload',event=>{
+  if($('#workspace #editor')?.v2SourcePort?.getState().dirty){
+    event.preventDefault();event.returnValue='';
+  }
 });
 // This event is issued ONLY after the original F02 probe returned readable,
 // writable and verified. Ignore unsaved directory adoptions explicitly.
