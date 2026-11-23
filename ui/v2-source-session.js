@@ -1,6 +1,6 @@
 /** WP10: one editable CM6 text+structure history. SQL persists MD Block;
  * Raw Block is external reference only and never modified from this pane. */
-import {EditorState,StateField,StateEffect,Transaction,Annotation} from '@codemirror/state';
+import {EditorState,StateField,StateEffect,Transaction} from '@codemirror/state';
 import {EditorView,Decoration} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth,invertedEffects} from '@codemirror/commands';
@@ -11,7 +11,7 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,composeLogicalSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEndPadding,childLinePadding,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,composeLogicalSource,logicalTextRows,planOwnedTextEdit,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
@@ -26,7 +26,7 @@ export function mountV2Source(host){
   const structureEffect=StateEffect.define();
   const dragEffect=StateEffect.define();
   const blockTextEffect=StateEffect.define();
-  const autoblanks=Annotation.define();
+
   const structureField=StateField.define({
     create:()=>[],
     update(value,tr){
@@ -105,45 +105,35 @@ export function mountV2Source(host){
       ...(tr.effects.some(e=>e.is(dragEffect))?[dragEffect.of(true)]:[]),
       ...(tr.effects.some(e=>e.is(blockTextEffect))?[blockTextEffect.of(true)]:[]),
     ]),
+    // WP18 gate: ordinary edits may affect ONLY their logical MD text.
+    // Structural LF and boundaries are immutable display padding. A valid
+    // transaction's exact projected source and positions must both agree
+    // BEFORE CM6 accepts the edit; otherwise its SQL could lose all later
+    // blocks' first two characters (observed real p1b11+ live incident).
     EditorState.transactionFilter.of(tr=>{
-      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect)||e.is(blockTextEffect))||
-        !canEditBlocks(tr.startState.field(structureField),tr.changes))return tr;
-      // Preserve WP13 display spacing on EVERY edit: one LF within a parent
-      // group, one blank line (two LF) at each parent-group end. WP14's
-      // single-line MD Block normalization concerns TEXT, not these gaps.
-      const before=tr.startState.field(structureField);
-      const pads=[];
-      for(let i=0;i<before.length;i++){
-        const row=before[i],next=before[i+1];
-        const sameGroup=next&&row.p===next.p&&row.b===next.b;
-        const end=tr.changes.mapPos(row.to,next?-1:1);
-        const suffix=tr.newDoc.sliceString(Math.max(0,end-2),end);
-        const padding=sameGroup?childLinePadding(suffix):groupEndPadding(suffix);
-        if(padding)pads.push({logicalId:row.logicalId,length:padding.length,
-          from:end,insert:padding});
+      if(!loaded||!tr.docChanged||tr.effects.some(e=>
+        e.is(dragEffect)||e.is(blockTextEffect)))return tr;
+      const plan=planOwnedTextEdit(tr.startState.doc.toString(),
+        tr.startState.field(structureField),tr.changes);
+      if(!plan||plan.source!==tr.newDoc.toString()){
+        document.dispatchEvent(new Event('v2-cm-protected-separator'));
+        return [];
       }
-      if(!pads.length)return tr;
-      return [tr,{changes:pads.map(p=>({from:p.from,insert:p.insert})),
-        sequential:true,annotations:autoblanks.of(pads)}];
+      return tr;
     }),
     EditorState.transactionExtender.of(tr=>{
       if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(structureEffect)))return null;
-      return {effects:structureEffect.of(mapEditedBlocks(
-        tr.startState.field(structureField),tr.changes,tr.annotation(autoblanks)||[]))};
+      const plan=planOwnedTextEdit(tr.startState.doc.toString(),
+        tr.startState.field(structureField),tr.changes);
+      if(!plan||plan.source!==tr.newDoc.toString())return null;
+      return {effects:structureEffect.of(plan.blocks)};
     }),
     EditorState.changeFilter.of(tr=>{
-      if(!tr.docChanged||!loaded)return true;
-      // A mapped structureEffect is also attached to ordinary text edits;
-      // it is NOT permission to cross block boundaries. Only an actual PDF
-      // structure drag (and its native inverse history) has dragEffect.
-      if(tr.effects.some(effect=>effect.is(dragEffect)||effect.is(blockTextEffect)))return true;
-      let insertedLineBreak=false;
-      tr.changes.iterChanges((a,b,c,d,inserted)=>{
-        if(/[\r\n]/.test(inserted.toString()))insertedLineBreak=true;
-      });
-      const allowed=!insertedLineBreak&&canEditBlocks(blocks,tr.changes);
-      if(!allowed)document.dispatchEvent(new Event('v2-cm-protected-separator'));
-      return allowed;
+      if(!loaded||!tr.docChanged||tr.effects.some(e=>
+        e.is(dragEffect)||e.is(blockTextEffect)))return true;
+      const plan=planOwnedTextEdit(tr.startState.doc.toString(),
+        tr.startState.field(structureField),tr.changes);
+      return !!plan&&plan.source===tr.newDoc.toString();
     }),
     EditorView.updateListener.of(update=>{
       const changedEffect=update.transactions.some(tr=>tr.effects.some(e=>e.is(structureEffect)));
@@ -211,16 +201,17 @@ export function mountV2Source(host){
   const countMultiline=()=>actualText().filter(r=>singleLineMD(r.markdownText)!==r.markdownText).length;
   const normalizeLines=()=>{
     if(!loaded||dirty)throw Error('请先保存当前正文或结构');
-    const changes=blocks.map(row=>{
-      const raw=editor.state.doc.sliceString(row.from,row.to-(row.groupEndPad??0));
-      const after=singleLineMD(raw);
-      return after!==raw?{from:row.from,to:row.to-(row.groupEndPad??0),insert:after}:null;
-    }).filter(Boolean);
-    if(!changes.length)return 0;
-    // Native CM6 history (one transaction): old edits remain undoable and
-    // SQL commits only per-logical-id optimistic text differences.
-    editor.dispatch({changes});
-    return changes.length;
+    const rows=actualText();
+    const next=rows.map(row=>({...row,markdownText:singleLineMD(row.markdownText)}));
+    const count=next.filter((row,i)=>row.markdownText!==rows[i].markdownText).length;
+    if(!count)return 0;
+    // Explicit SQL-group normalization owns a typed ONE-history transaction.
+    // Ordinary single-line typing never edits synthetic LF. No programmatic
+    // source-map fallback can silently shift the rest of the book.
+    const planned=composeLogicalSource(next);
+    editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:planned.source},
+      effects:[structureEffect.of(planned.blocks),blockTextEffect.of(true)]});
+    return count;
   };
   // WP17: V1 physically deletes a source row. V2 owns a stable SQL
   // logical_id for EACH line; clearing only its MD text is the safe analogue.

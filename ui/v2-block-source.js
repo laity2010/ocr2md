@@ -120,3 +120,54 @@ export function logicalTextRows(source,blocks){
     blockType:row.blockType,
     markdownText:source.slice(row.from,row.to-(row.groupEndPad??0))}));
 }
+
+/** WP18: project an ordinary CM6 edit using ACTUAL MD text ownership.
+ *
+ * A virtual LF is not part of md_block, even when a user types adjacent to
+ * it. Never guess new block intervals via ChangeDesc.mapPos at a shared
+ * boundary: the wrong association can shift every following logical block
+ * by two UTF-16 units and persist prefixes from their next sibling.
+ *
+ * Callers accept this projection only when its source exactly equals the
+ * proposed CM6 document. If it doesn't, the transaction is not a safe
+ * one-line text edit; explicit typed block replacement/normalization handles
+ * more complex changes with its own Undo/Redo history.
+ */
+export function planOwnedTextEdit(source,blocks,changes){
+  if(typeof source!=='string'||!Array.isArray(blocks)||!changes?.iterChanges)
+    return null;
+  const original=logicalTextRows(source,blocks);
+  if(!blocks.length||blocks[0].from!==0||blocks.at(-1).to!==source.length||
+     blocks.some((row,i)=>!Number.isSafeInteger(row.logicalId)||
+       !Number.isInteger(row.groupEndPad)||row.groupEndPad<0||
+       row.from<0||row.to<row.from+row.groupEndPad||
+       i>0&&row.from!==blocks[i-1].to))return null;
+  const byId=new Map();let valid=true,affected=0;
+  changes.iterChanges((fromA,toA,fromB,toB,inserted)=>{
+    if(!valid)return;
+    const content=inserted.toString();
+    if(/[\r\n]/.test(content)){valid=false;return;}
+    // Prefer the next row for a zero-width edit at an actual block start.
+    // The display-only LF tail is NEVER part of the editable MD Block.
+    const candidates=blocks.filter(row=>fromA>=row.from&&
+      toA<=row.to-row.groupEndPad);
+    const owner=candidates.find(row=>fromA===row.from)||candidates[0];
+    if(!owner){valid=false;return;}
+    if(!byId.has(owner.logicalId))byId.set(owner.logicalId,[]);
+    byId.get(owner.logicalId).push({from:fromA-owner.from,to:toA-owner.from,insert:content});
+    affected++;
+  });
+  if(!valid||!affected)return null;
+  const updates=original.map(row=>{
+    const edits=byId.get(row.logicalId);
+    if(!edits)return row;
+    const old=row.markdownText;let cursor=0,result='';
+    for(const edit of edits){
+      if(edit.from<cursor||edit.from>edit.to||edit.to>old.length){valid=false;break;}
+      result+=old.slice(cursor,edit.from)+edit.insert;
+      cursor=edit.to;
+    }
+    return {...row,markdownText:result+old.slice(cursor)};
+  });
+  return valid?composeLogicalSource(updates):null;
+}

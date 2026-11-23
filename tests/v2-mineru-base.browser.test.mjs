@@ -455,8 +455,9 @@ try{
    assert.equal(mdCommitPosts,beforeTextPosts+2,'CM6 Undo persists original MD Block');
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>
      el.v2SourcePort.getBlocks()[0].markdownText),fragments[0]);
-   // WP08+WP10: typing in the group-ending virtual blank must belong to
-   // this MD Block, and the rendered group must STILL end with one blank.
+   // WP18: virtual group-ending LF is NOT editable MD text. Former WP10
+   // allowed typing there and promoted a display-only LF into SQL, which can
+   // shift all later logical blocks' first two UTF-16 chars. Refuse it.
    const blankBeforePosts=mdCommitPosts;
    const blankEdit=await page.locator('#workspace #editor').evaluate(el=>{
      const port=el.v2SourcePort,first=port.getIntervals()[0],editor=port.getEditorView();
@@ -465,12 +466,29 @@ try{
      return {raw:port.getBlocks()[0].markdownText,
        suffix:editor.state.doc.sliceString(next.to-2,next.to),
        continued:next.to===port.getIntervals()[1].from,
-       pad:next.groupEndPad};
+       pad:next.groupEndPad,dirty:port.getState().dirty};
    });
-   assert(blankEdit.raw.includes('New line'));
-   assert.deepEqual({suffix:blankEdit.suffix,continued:blankEdit.continued},
-     {suffix:'\n\n',continued:true});
-   assert.equal(blankEdit.pad,1,'editing a virtual blank promotes text but retains one group-end LF');
+   assert.equal(blankEdit.raw,fragments[0]);
+   assert.deepEqual({suffix:blankEdit.suffix,continued:blankEdit.continued,pad:blankEdit.pad,dirty:blankEdit.dirty},
+     {suffix:'\n\n',continued:true,pad:2,dirty:false});
+   assert.equal(mdCommitPosts,blankBeforePosts,'typing in a protected virtual LF cannot commit anything');
+   // Ordinary typing at the actual END of a logical MD row remains valid;
+   // neither the synthetic LF nor a single character of the next row may be
+   // transferred into SQL, including after its native Undo transaction.
+   const typedEnd=await page.locator('#workspace #editor').evaluate(el=>{
+     const port=el.v2SourcePort,first=port.getIntervals()[0],editor=port.getEditorView();
+     editor.dispatch({changes:{from:first.to-first.groupEndPad,
+       to:first.to-first.groupEndPad,insert:'New line'}});
+     const next=port.getIntervals()[0];
+     return {raw:port.getBlocks()[0].markdownText,
+       neighbor:port.getBlocks()[1].markdownText,
+       suffix:editor.state.doc.sliceString(next.to-2,next.to),
+       continued:next.to===port.getIntervals()[1].from,pad:next.groupEndPad};
+   });
+   assert.equal(typedEnd.raw,fragments[0]+'New line');
+   assert.equal(typedEnd.neighbor,fragments[1]);
+   assert.deepEqual({suffix:typedEnd.suffix,continued:typedEnd.continued,pad:typedEnd.pad},
+     {suffix:'\n\n',continued:true,pad:2});
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
    assert.equal(mdCommitPosts,blankBeforePosts+1);
@@ -479,7 +497,7 @@ try{
      ?.v2SourcePort?.getMarkdown()===original,sourceState.text,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
-   assert.equal(mdCommitPosts,blankBeforePosts+2,'blank-line edit undo persists to MD Block');
+   assert.equal(mdCommitPosts,blankBeforePosts+2,'line-end text undo persists to the original MD Block');
    // One edit spanning two logical IDs is forbidden, even though CM6 is open.
    await page.locator('#workspace #editor').evaluate(el=>{
      const port=el.v2SourcePort,rows=port.getIntervals();
