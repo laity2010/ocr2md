@@ -28,3 +28,12 @@
 2. 新版本自己的 `README.md` 只写**组件适配位置、当前通过/未通过状态和明确的例外**，不复制改写这里的通用规则。
 3. 如需偏离已登记的强制一致性要求，先提交差异证据和影响测试供用户批准；不得以“V2 崩溃”“V3 从零重做”为由悄悄换组件。
 4. 完成组件时核对直接测试、跨版本外观/交互和不同浏览器行为；未验收的功能必须标明 **未完成**，不能因为 README 已引用本规范就当作已修复。
+
+## 4. 自动执行的跨版本验收门禁（程序证据，而非仅文字要求）
+
+- **工程布局与规范继承**：执行 `python3 .ops/verify-unified-layout.py`。本入口委托 Main Git 中 `main/scripts/verify_unified_layout.py`，不再硬编码当前六／七个 Lab 名称或硬链接数；自动检查所有活动 Lab 的共用 `AGENTS.md`、本版本 `README.md`、根目录的跨版本规范和动态发布清单。新建 V3 时自动纳入，未发布的 V3 不会因不在 release manifest 误报。专用夹具测试：`python3 main/tests/test_verify_unified_layout.py`，含 V3 添加／宪法硬链接断开／缺 README／清单篡改。
+- **V1 表头过滤原组件的直接行为**：执行 `node main/tests/cross_version_enum_filter.browser.test.mjs`，在 Chromium 与 iPad-WebKit 用 V1 真实 `EnumCheckboxFilter` 执行 all、勾选／取消、多值组合、模型恢复、临时空表后保留选择；再执行 V1 原 `labs/lab-ocr/tests/enum-checkbox-filter-transient-empty.test.mjs` 等已有回归。
+- **针对每个使用 AG Type 列的 Lab 的自动放行**：执行 `python3 main/scripts/verify_cross_version_components.py --target <lab-id> --browser`。程序先检查 V1 源码及接线证据、目标 UI 是否用 `filter: EnumCheckboxFilter` 与 AG 原生过滤图标、是否仍存在自制 Type 单选；然后运行 V1 浏览器行为测试及目标 Lab 的 `tests/cross-version-ag-filter.browser.test.mjs`（该测试必须在目标 AG 真实界面上点击原生过滤图标、验证 all/多值复选）。若尚未实现 AG Type，则报告 `NOT_IMPLEMENTED`，不把空白框架伪称为通过 Type 过滤验收；若已实现但缺目标浏览器测试或采用自制过滤器，**非零退出并阻止发布**。检查器自己的误判测试：`python3 main/tests/test_verify_cross_version_components.py`。
+- **V2 当前状态**：截至 WP10，V2 Type 仍使用自制 `TypeHeader` 单选，故这个发布门禁**当前应当失败**，并在 `labs/lab-ocr-v2/scripts/v2_frame_publish.py` 的任何发布读写动作前执行。它仅阻止违规的新发布，不自动回退现有已发布 V2，也不修改 SQLite、V1 源码或其他 Lab；待按 V1 组件修复 V2 UI、补齐真实目标浏览器测试并全部通过后才可继续正常发布。以后创建 V3 时必须在其发布器加入相同入口，不得绕过。
+
+> 这些检查是第一阶段的 AG 过滤器门禁；导航、设置、PDF、CM6 的更细交互尚未全部自动化，**不能宣称“所有跨版本组件测试已完成”**。静态源码检查不是唯一证据，所以还必须运行真实的浏览器过滤交互。
