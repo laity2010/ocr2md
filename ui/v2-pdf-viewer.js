@@ -3,7 +3,7 @@
  * by mountLabOcrPdf()/layoutPbsLabels from copied V1 files.
  */
 import {mountLabOcrPdf} from './lab-ocr/pdf-viewer.js';
-import {projectV2PDFEvidence} from './v2-pdf-evidence-adapter.js';
+import {projectV2PDFEvidence,emptyLogicalIds} from './v2-pdf-evidence-adapter.js';
 import {focusLogical} from './v2-pane-focus.js';
 import './v2-pdf-viewer.css';
 
@@ -51,6 +51,16 @@ export function mountV2PDF(host,{toolbar}={}){
     if(!row||!native)return false;
     selectedId=row.logicalId;
     return native.focusBlock({id:String(id),page:row.physicalPageIndex+1,reveal});
+  };
+  // V1 exposes a public visual-only API. V2 passes CURRENT CM6 empty IDs,
+  // preserving the old PDF-map sourceEmpty snapshot and never refetching PDF.
+  const syncTextEmpty=()=>{
+    const port=source();
+    if(!ready||!native||!port?.getState().loaded||port.getWorkspace()!==workspace)return false;
+    const rows=port.getBlocks();
+    if(rows.length!==projection?.map.logicalCount)return false;
+    native.setEmptyMdBlocks(emptyLogicalIds(rows));
+    return true;
   };
   const updateStructure=rows=>{
     if(!projection||!native||!Array.isArray(rows))return false;
@@ -123,6 +133,7 @@ export function mountV2PDF(host,{toolbar}={}){
     const result=await viewer.loadPdf(url);
     if(disposed||stamp!==generation)return false;
     ready=Boolean(result);
+    if(ready)syncTextEmpty();
     notify('V1 原版动态多轨 PBS · '+evidence.pageCount+' 页 · '+
       evidence.mappedCount+' 个逻辑框','ok');
     return ready;
@@ -134,8 +145,9 @@ export function mountV2PDF(host,{toolbar}={}){
   };
   const onSession=event=>{
     if(event.detail?.kind==='clear')clear();
-    if(event.detail?.kind==='structure'&&event.detail.book===workspace)
-      updateStructure(source()?.getStructureRows());
+    if(event.detail?.book!==workspace)return;
+    if(event.detail?.kind==='structure')updateStructure(source()?.getStructureRows());
+    if(['load','edit','structure','saved'].includes(event.detail?.kind))syncTextEmpty();
   };
   document.addEventListener('v2-sync-focus',onFocus);
   document.addEventListener('v2-cm-session',onSession);
@@ -154,7 +166,7 @@ export function mountV2PDF(host,{toolbar}={}){
     load,clear,getState:state,
     getCovers:()=>projection?.map.covers||[],
     getV1Preview:()=>native,
-    focusId,updateStructure,
+    focusId,updateStructure,syncTextEmpty,
   });
   host.v2PDFPort=port;
   return {

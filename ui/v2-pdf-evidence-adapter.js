@@ -41,3 +41,24 @@ export function projectV2PDFEvidence(map){
     },
   });
 }
+
+/** WP16: current writable CM6 text decides dashed state, NOT stale pdf-map
+ * sourceEmpty. Keep that old cached flag for audit. A table/figure
+ * wrapper is solid if any child in its (p,b) group owns readable text.
+ * No geometry, SQL field or PBS is changed by this read-only projection.
+ */
+export function emptyLogicalIds(rows){
+  if(!Array.isArray(rows))throw Error('PDF 逻辑正文清单无效');
+  const activeGroups=new Set(),seen=new Set();
+  for(const row of rows){
+    if(!Number.isSafeInteger(row?.logicalId)||row.logicalId<1||seen.has(row.logicalId)||
+      !Number.isInteger(row.p)||!Number.isInteger(row.b)||
+      !Number.isInteger(row.s)||typeof row.markdownText!=='string')
+      throw Error('PDF 空块判断缺少有效 logicalId/PBS/MD');
+    seen.add(row.logicalId);
+    if(row.s>0&&row.markdownText.trim())activeGroups.add(`${row.p}/${row.b}`);
+  }
+  return rows.filter(row=>!row.markdownText.trim()&&
+    !(row.s===0&&activeGroups.has(`${row.p}/${row.b}`)))
+    .map(row=>row.logicalId);
+}

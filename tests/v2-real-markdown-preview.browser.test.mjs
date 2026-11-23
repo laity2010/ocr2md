@@ -190,6 +190,32 @@ try{
       assert.equal(await firstTag.textContent(),'p0b0s0');
       assert.equal(await firstTag.getAttribute('data-lane'),'0');
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host canvas').count()>0,true,'original V1 PDF.js canvas');
+      // WP16: the recovered Table 1 has an empty para container s0, but
+      // visible typed caption/body/note. V1 OCR source-empty provenance stays
+      // true; CURRENT CM6 child text must make the PDF wrapper a SOLID box.
+      const recoveredRoot=snapshot.segments.find(r=>r.p===4&&r.b===0&&r.s===0);
+      assert(recoveredRoot,'real page 5 continued table root');
+      await page.locator('#workspace .ocr-preview-pdf-host').evaluate((el,id)=>
+        el.v2PDFPort.focusId(id,true),recoveredRoot.logicalId);
+      await page.waitForFunction(id=>{
+        const label=document.querySelector(`#workspace .lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
+        return !!label&&label.dataset.mdEmpty==='false';
+      },recoveredRoot.logicalId,{timeout:18000});
+      const recoveredVisual=await page.locator('#workspace .ocr-preview-pdf-host').evaluate((el,id)=>{
+        const label=el.querySelector(`.lab-ocr-pdf-pbs-tag[data-block-id="${id}"]`);
+        const box=[...el.querySelectorAll('.lab-ocr-pdf-overlay-box')].find(node=>
+          node.dataset.blockIds.split(' ').includes(String(id)));
+        return {ocrSourceEmpty:label?.dataset.sourceEmpty,liveMdEmpty:label?.dataset.mdEmpty,
+          labelBorder:label&&getComputedStyle(label).borderStyle,
+          boxBorder:box&&getComputedStyle(box).borderStyle};
+      },recoveredRoot.logicalId);
+      assert.deepEqual(recoveredVisual,{ocrSourceEmpty:'true',liveMdEmpty:'false',
+        labelBorder:'solid',boxBorder:'none'},
+      'OCR history must remain visible without incorrectly dashing recovered table');
+      await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.focusId(23,true));
+      await page.waitForFunction(()=>document.querySelector(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="23"]'),null,{timeout:18000});
+
       if(process.env.V2_TEST_WP09_ONLY){
       // WP09 integration gate: real table subtypes have independent logical
       // rows, their own Raw Txt and SOURCE PDF geometry; they are not merged

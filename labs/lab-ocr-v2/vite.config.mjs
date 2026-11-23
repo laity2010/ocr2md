@@ -91,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp15-page-local-table-recovery',
+        stage:'wp16-pdf-live-empty-state',
       })+'\n'});
     },
   }],
