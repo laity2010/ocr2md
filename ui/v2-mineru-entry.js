@@ -6,6 +6,9 @@ import {createFrameStatus} from './frame/global-status.js';
 import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
+// Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
+import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
+import './ag-enum-filter-shared.css';
 const status=createFrameStatus(document.getElementById('status'));
 const API='/labs/lab-ocr-v2/api/mineru-base/';
 const SETTINGS_KEY='ocr2md.lab-ocr-v2-frame.settings.json.v1';
@@ -21,7 +24,7 @@ const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:
   original_bytes:'原文件归档字节'};
 let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
 let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
-let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='',typeFilter='';
+let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
 let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBlocked=false;
 let rebuilding=false;
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
@@ -247,7 +250,7 @@ function renderGrid(state){
     });
   }
   const logical=state.tableName==='logical_block';
-  // Only the AG view is reordered. The SQLite nine-column physical schema
+  // Only the AG view is reordered. The SQLite ten-column physical schema
   // and server-returned column inventory stay untouched.
   const columnKeys=logical
     ?['block_type','md_block',...state.columns.filter(key=>
@@ -259,31 +262,17 @@ function renderGrid(state){
     `p${row.p}b${row.b}s${row.s}`))));
   const types=[...new Set(state.rows.map(row=>row.block_type).filter(Boolean))].sort();
   const typeWidth=Math.min(220,Math.max(96,fitting(types)+35));
-  class TypeHeader{
-    init(){
-    const header=document.createElement('div');header.className='v2-type-header';
-    const label=document.createElement('span');label.textContent='Type';
-    const select=document.createElement('select');select.className='v2-type-value-filter';
-    select.setAttribute('aria-label','Type 列值筛选');
-    select.add(new Option('全部类型',''));
-    for(const value of types)select.add(new Option(value,value));
-    select.value=typeFilter;
-    select.addEventListener('click',event=>event.stopPropagation());
-    select.addEventListener('change',event=>{
-      event.stopPropagation();typeFilter=select.value;
-      if(logicalState&&selectedTable==='logical_block')renderGrid(logicalState);
-    });
-    header.append(label,select);this.gui=header;
-    }
-    getGui(){return this.gui;}
-  }
   const columns=columnKeys.map((key,index)=>({field:key,
     headerName:logical&&key==='block_type'?'Type':
       logical&&key==='md_block'?'MD Block':
       logical&&key==='raw_block'?'Raw Block (只读)':sourceHeaders[key]||key,
     headerTooltip:key,tooltipField:key,resizable:true,
+    // V1 source: ui/enum-checkbox-filter.js. AG owns the native icon,
+    // popup, multi-checkbox model and onNewRowsLoaded lifecycle.
+    filter:EnumCheckboxFilter,
+    filterValueGetter:params=>params.data?String(params.data[key]??''):'',
+    suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     sortable:!(logical&&key==='block_type'),
-    headerComponent:logical&&key==='block_type'?TypeHeader:undefined,
     minWidth:logical&&key==='block_type'?typeWidth:
       key==='md_block'&&logical?290:key==='block_json'?380:
       key==='source_json_path'?275:key==='source_sha256'?220:105,
@@ -295,7 +284,10 @@ function renderGrid(state){
   if(logical){
     // PBS is the sole pinned column, sized to its displayed values.
     columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
-      minWidth:pbsWidth,width:pbsWidth,pinned:'left',resizable:true,sortable:false});
+      minWidth:pbsWidth,width:pbsWidth,pinned:'left',resizable:true,sortable:false,
+      filter:EnumCheckboxFilter,filterValueGetter:params=>params.data?
+        `p${params.data.p}b${params.data.b}s${params.data.s}`:'',
+      suppressHeaderMenuButton:true,suppressHeaderFilterButton:false});
   }
   const controls=logicalControls();
   let view=null;
@@ -306,7 +298,7 @@ function renderGrid(state){
   }
   if(logical){
     const page=filterLogicalAG(state.rows,currentLogicalId(),showAllLogical);
-    view={...page,rows:typeFilter?page.rows.filter(row=>row.block_type===typeFilter):page.rows};
+    view=page;
     visibleLogicalP=view.p;
     if(controls)controls.indicator.textContent=showAllLogical?
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
@@ -469,7 +461,7 @@ async function ensureBase(path){
         port.load(snapshot,path);
       }
     }
-    if(bound!==path){logicalState=null;showAllLogical=false;typeFilter='';lastFocus=null;
+    if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
       renderedSchema='';clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());

@@ -23,6 +23,13 @@ class V2GatewayPublishTests(unittest.TestCase):
             self.assertEqual(args[:3],['launchctl','kickstart','-k'])
             self.assertEqual(args[3],f'gui/{pub.os.getuid()}/{pub.GATEWAY_LABEL}')
             self.assertIn('/labs/healthz',fetch.call_args.args[0])
+    def test_v2_filter_and_css_are_exact_v1_original_files(self):
+        # No second hand-made implementation: V2 must use the V1 code bytes.
+        root=Path(__file__).parents[1]
+        v1=root.parent/'lab-ocr'/'ui'
+        for name in ('enum-checkbox-filter.js','ag-enum-filter-shared.css'):
+            self.assertEqual((root/'ui'/name).read_bytes(),(v1/name).read_bytes(),
+                             'V2 AG filter or style drifted from the V1 validated source')
     def test_cross_version_filter_gate_is_mandatory_before_release(self):
         with patch.object(pub.subprocess,'run') as run:
             pub.require_cross_version_component_gate()

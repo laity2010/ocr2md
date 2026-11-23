@@ -1,6 +1,6 @@
 # OCR2MD · V2 工程契约（当前事实、PBS 目标与开发门禁）
 
-> **接手前必读**：先读本工作树的 `AGENTS.md`，再读本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
+> **接手前必读**：先读本工作树的 `AGENTS.md`、工程根目录 `CROSS_VERSION_COMPONENTS.md`，再读本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
 >
 > **WP10 当前范围：MD Block 成为唯一可写正文、CM6 文本编辑与原生 Undo/Redo 增量回写 SQLite；Raw Block 从基础表外联只读。保留 WP09 原始父子元素和 SQL 组重建入口、WP08 空行归属、WP07 拖动历史。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；唯一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。仅通过独立测试及本 WP 发布验收后，才能称为已上线。
 
@@ -24,7 +24,7 @@
 
 **强制发布门禁（已接入）**：`scripts/v2_frame_publish.py` 发布前执行 Main Git 的 `scripts/verify_cross_version_components.py --target lab-ocr-v2 --browser`，包含 V1 真实组件测试和 V2 真实 AG 浏览器测试；只要 Type 仍是单选，自检就非零退出并阻止发布，不触碰用户 SQL 或旧发布资源。
 
-**当前实际差异（尚未修复）**：V2 `ui/v2-mineru-entry.js` 的 Type 列仍存在自制 `TypeHeader` 与单选 `<select class="v2-type-value-filter">`，不符合 V1 原生表头过滤器契约。后续应移除临时替代实现，复用 `EnumCheckboxFilter`，并用 V1 直接测试与 Chromium/iPad-WebKit 浏览器测试验收；本规范登记**不等于程序已修复**。
+**WP11 修复现状 [定向跨版本门禁已通过]**：V2 `ui/v2-mineru-entry.js` 已撤除自制 `TypeHeader` 和 `<select>`，直接导入本工作树与 V1 **SHA256 逐字节一致**的 `ui/enum-checkbox-filter.js` / `ui/ag-enum-filter-shared.css`；AG 各列使用 `filter:EnumCheckboxFilter`、原生过滤图标、V1 的 all/多值 checkbox 模型和 AG Grid 自身过滤生命周期。Type 保持列值适配宽度、`sortable:false`；PBS 仍左固定、适配宽度、`sortable:false`；MD Block/其他列序不变。原 `typeFilter` 独立状态和自行删行逻辑完全删除，SQL/CM6/PDF 数据不改。真实 V2 Chromium/iPad-WebKit 原生 Type 过滤测试、V1 原组件行为测试与 `scripts/verify_cross_version_components.py` 发布门禁均已通过；详情见 `docs/v2/WP11_V1_AG_FILTER.md`。
 
 ## 2. 数据唯一权威：[已实现]
 

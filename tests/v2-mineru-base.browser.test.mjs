@@ -175,13 +175,16 @@ try{
      assert.equal(await checkbox('text').count(),1);
      await checkbox('all').uncheck();
      await checkbox('title').check();
-     const titleOnly=await page.locator('#workspace .ocr-outline-grid .ag-row [col-id="block_type"]')
-       .allTextContents();
-     assert(titleOnly.length>0&&titleOnly.every(text=>text.trim()==='title'),
-       'V1 Type filter does not project only title rows');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows()?.length===1,null,{timeout:12000});
+     const titleOnly=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>
+       el.v2BaseGridPort.getDisplayedRows().map(row=>row.block_type));
+     assert.deepEqual(titleOnly,['title'],'V1 Type filter must project only title rows');
      await checkbox('text').check();
-     const both=await page.locator('#workspace .ocr-outline-grid .ag-row [col-id="block_type"]')
-       .allTextContents();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows()?.length===10,null,{timeout:12000});
+     const both=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>
+       el.v2BaseGridPort.getDisplayedRows().map(row=>row.block_type));
      assert(both.includes('title')&&both.includes('text'),'V1 multiple Type options must be combinable');
      await checkbox('all').check();
      assert.equal(await checkbox('all').isChecked(),true);
@@ -219,10 +222,29 @@ try{
    assert(agRules.pbsWidth>=80&&agRules.pbsWidth<=155);
    assert(agRules.typeWidth>=96&&agRules.typeWidth<=220);
    assert.equal(agRules.md,'md_block');assert.equal(agRules.raw,'raw_block');
-   const typeFilter=page.locator('#workspace .v2-type-value-filter');
-   await typeFilter.selectOption('title');
-   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/1 \/ 224/);
-   await typeFilter.selectOption('');
+   // WP11: V1 native AG filter icon/checkboxes, not a handmade select.
+   assert.equal(await page.locator('#workspace .v2-type-value-filter').count(),0);
+   const typeButton=page.locator('#workspace .ag-header-cell[col-id="block_type"] .ag-header-cell-filter-button');
+   await typeButton.waitFor({timeout:12000});
+   if(kind==='webkit')await typeButton.tap();else await typeButton.click();
+   const popup=page.locator('.ocr-enum-filter[aria-label="Type 筛选"]:visible');
+   await popup.waitFor({timeout:12000});
+   const checkbox=value=>popup.locator(`[data-filter-value="${value}"] input`);
+   assert.equal(await checkbox('all').isChecked(),true);
+   await checkbox('all').uncheck();
+   assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(el=>
+     el.v2BaseGridPort.getDisplayedRows().length),0);
+   await checkbox('title').check();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+     ?.v2BaseGridPort?.getDisplayedRows()?.length===1,null,{timeout:12000});
+   assert.deepEqual(await page.locator('#workspace .ocr-outline-grid').evaluate(el=>
+     el.v2BaseGridPort.getDisplayedRows().map(x=>x.block_type)),['title']);
+   await checkbox('text').check();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+     ?.v2BaseGridPort?.getDisplayedRows()?.length===10,null,{timeout:12000});
+   await checkbox('all').check();
+   assert.equal(await checkbox('all').isChecked(),true);
+   await page.locator('#workspace .ocr-source-file-toolbar').click();
    const all=page.getByRole('checkbox',{name:'全部逻辑块'});
    assert.equal(await all.isVisible(),true,'全部必须在逻辑表顶栏');
    assert.equal(await all.isChecked(),false,'默认按焦点 PBS p 过滤');
