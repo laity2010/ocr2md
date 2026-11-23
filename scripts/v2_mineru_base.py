@@ -268,8 +268,14 @@ def read_table(db, name, offset):
               if pk else 'rowid')
     order=' ORDER BY '+ordering
     count=db.execute('SELECT count(*) FROM '+identifier+clause).fetchone()[0]
-    raw=db.execute('SELECT * FROM '+identifier+clause+order+' LIMIT ? OFFSET ?',
-        (PAGE_SIZE,offset)).fetchall()
+    # Logical rows are one CM6-owned document, not a paginated SQL screen.
+    # Return the complete logical inventory; AG filters it by the focused PBS p.
+    # Keep the original 120-row paging for the immutable mineru_base inspector.
+    if name=='logical_block':
+        raw=db.execute('SELECT * FROM '+identifier+clause+order).fetchall()
+    else:
+        raw=db.execute('SELECT * FROM '+identifier+clause+order+' LIMIT ? OFFSET ?',
+            (PAGE_SIZE,offset)).fetchall()
     rows=[]
     for record in raw:
         row=dict(record)
@@ -291,6 +297,7 @@ def existing_state(folder:Path,offset=0,table='mineru_base'):
         db.row_factory=sqlite3.Row
         meta=assert_schema(db)
         names=physical_tables(db)
+        if table=='logical_block':offset=0
         chosen=read_table(db,table,offset)
         catalog=[]
         for name in names:

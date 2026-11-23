@@ -3,6 +3,13 @@
 #workspace .v2-base-paging button{border:1px solid #60766b;background:#293b3c;color:#d3c6aa;border-radius:4px;height:25px;min-width:25px;cursor:pointer}
 #workspace .v2-base-paging button:disabled{opacity:.4;cursor:default}
 #workspace .v2-base-count{font-size:calc(11px * var(--ocr-frame-scale));white-space:nowrap}
+#workspace .v2-logical-all{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;
+  cursor:pointer;flex:none;font-size:calc(12px * var(--ocr-frame-scale))}
+#workspace .v2-logical-all[hidden],#workspace .v2-base-paging[hidden]{display:none!important}
+#workspace .v2-logical-all input{accent-color:#83c092;width:17px;height:17px;margin:0}
+#workspace .v2-logical-page{font-size:calc(11px * var(--ocr-frame-scale));white-space:nowrap;
+  margin-left:auto;color:#a7c080}
+#workspace .v2-logical-page[hidden]{display:none!important}
 
 /* V1-style AG focus follows a stable logical ID, never the physical row index. */
 #workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell{

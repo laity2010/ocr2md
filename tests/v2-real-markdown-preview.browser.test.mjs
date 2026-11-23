@@ -85,7 +85,7 @@ try{
           const table=query.get('table')||'mineru_base';
           const offset=Number(query.get('offset')||0);
           const rows=table==='logical_block'
-            ? projection.covers.slice(offset,offset+120).map(item=>({logical_id:item.logicalId,
+            ? projection.covers.map(item=>({logical_id:item.logicalId,
                 base_blockid:item.baseBlockId,parent_id:item.parentId,
                 p:Number(item.pbs.match(/^p(\d+)/)?.[1]),b:Number(item.pbs.match(/b(\d+)/)?.[1]),
                 s:Number(item.pbs.match(/s(\d+)$/)?.[1]),
@@ -307,8 +307,8 @@ try{
       await page.waitForFunction(()=>document.querySelector('#workspace .lab-ocr-pdf-page')?.value==='22',
         null,{timeout:18000});
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),539);
-      await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
-        ?.textContent.includes('121–224'),null,{timeout:10000});
+      await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
+        ?.textContent.includes('p21'),null,{timeout:10000});
       const agId=Number(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="logical_id"]').first().textContent());
       await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell').first().click();
       await page.waitForFunction(expected=>document.querySelector('#workspace .ocr-preview-pdf-host')

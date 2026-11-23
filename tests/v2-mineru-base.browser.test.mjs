@@ -84,9 +84,10 @@ try{
         {exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,sourceCount:1,
         tables,tableName:table,paraBlockCount:224,logicalCount:logicalReady?224:0,rowCount:logical?(logicalReady?224:0):539,
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
-          Array.from({length:Math.max(0,Math.min(120,224-pageOffset))},(_,i)=>({
-            logical_id:pageOffset+i+1,base_blockid:pageOffset+i+1,parent_id:null,
-            logical_order:pageOffset+i+1,markdown_text:'reconstructed',block_type:'text',p:0,b:pageOffset+i,s:0})):[]):
+          Array.from({length:224},(_,i)=>({
+            logical_id:i+1,base_blockid:i+1,parent_id:null,
+            logical_order:i+1,markdown_text:'reconstructed',block_type:'text',
+            p:Math.floor(i/10),b:i%10,s:0})):[]):
           Array.from({length:Math.max(0,Math.min(120,539-pageOffset))},(_,i)=>({
             ...rows[0],blockid:pageOffset+i+1})),
         offset:pageOffset}:{exists:false,dbFile:'ocr2md.v2.sqlite'})});
@@ -130,8 +131,18 @@ try{
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
      el=>el.v2BaseGridPort.getColumns().find(column=>column.field==='block_type').headerName),
      'Block Type（当前）');
-   assert.match(await page.locator('#workspace .v2-base-count').textContent(),/逻辑表 1–120 \/ 224/);
-   assert.equal(await page.getByRole('button',{name:'SQL 表下一页'}).isDisabled(),false);
+   const all=page.getByRole('checkbox',{name:'全部逻辑块'});
+   assert.equal(await all.isVisible(),true,'全部必须在逻辑表顶栏');
+   assert.equal(await all.isChecked(),false,'默认按焦点 PBS p 过滤');
+   assert.equal(await page.locator('#workspace .v2-logical-all').evaluate(el=>el===el.parentElement.firstElementChild),true,
+     '全部 checkbox 位于 AG 工具栏最左端');
+   assert.equal(await page.locator('#workspace .v2-base-paging').isVisible().catch(()=>false),false,
+     '逻辑表不显示 SQL 翻页');
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/p0 · 10 \/ 224/);
+   await all.check();
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/全部 · 224 行/);
+   await all.uncheck();
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/p0 · 10 \/ 224/);
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    // WP04 loads this automatically, with one fully blank line after EVERY
    // block (including the last); no second CM6 editor or SQL document writer.
@@ -189,20 +200,31 @@ try{
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
      ?.v2MarkdownPreviewPort?.getFocusedId()===1,null,{timeout:10000});
    assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
-   // Source/CM6 selection in a distant block -> AG automatic page 121-224.
+   // Source/CM6 selection in a distant block -> AG follows persistent PBS p.
    await page.locator('#workspace #editor').evaluate(el=>{
      const p=el.v2SourcePort;const row=p.getIntervals().find(b=>b.logicalId===130);
      p.getEditorView().dispatch({selection:{anchor:row.from}});
    });
-   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
-     ?.textContent.includes('121–224'),null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
+     ?.textContent.includes('p12 · 10 / 224'),null,{timeout:12000});
    assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   // A PDF-origin focus uses the same logical p, independent of physical page.
+   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('v2-sync-focus',{
+     detail:{logicalId:213,baseBlockId:213,logicalOrder:213,origin:'pdf'}})));
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
+     ?.textContent.includes('p21 · 10 / 224'),null,{timeout:12000});
+   await all.check();
+   await page.evaluate(()=>document.dispatchEvent(new CustomEvent('v2-sync-focus',{
+     detail:{logicalId:130,baseBlockId:130,logicalOrder:130,origin:'preview'}})));
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/全部 · 224 行/);
+   await all.uncheck();
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/p12 · 10 \/ 224/);
    // Navigate back to the first page for the remaining CM6 edit regression.
    await page.locator('#workspace #editor').evaluate(el=>{
      const p=el.v2SourcePort;p.getEditorView().dispatch({selection:{anchor:p.getIntervals()[0].from}});
    });
-   await page.waitForFunction(()=>document.querySelector('#workspace .v2-base-count')
-     ?.textContent.includes('1–120'),null,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
+     ?.textContent.includes('p0 · 10 / 224'),null,{timeout:12000});
    // The exact V1 scroll-sync coordinator must have installed source-line
    // anchors for real two-way scrolling (not percentage-only linking).
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
@@ -243,9 +265,15 @@ try{
    assert.equal(mdRequests,1,'auto load should fetch Markdown once');
    assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
    assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
-   // Type directly through the existing native CM6 DOM. No SQL POST is sent.
-   await page.locator('#workspace #editor .cm-line').first().click();
-   await page.keyboard.press('End');
+   // The first DOM .cm-line is the first *virtualized visible* line, not
+   // necessarily logical block 1 after WebKit's asynchronous scroll sync.
+   // Place the native CM6 caret at that block's end before keyboard input.
+   await page.locator('#workspace #editor').evaluate(el=>{
+     const port=el.v2SourcePort;
+     port.getEditorView().dispatch({selection:{anchor:port.getIntervals()[0].to},
+       scrollIntoView:true});
+     port.getEditorView().focus();
+   });
    await page.keyboard.type(' EDIT');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[0].markdownText.endsWith(' EDIT'),
      null,{timeout:10000});

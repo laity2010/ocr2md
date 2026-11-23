@@ -28,7 +28,7 @@
 | `logical_block` | **9 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`markdown_text`、`block_type`、`p`、`b`、`s` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，当前类型以 `logical_block.block_type` 为准 |
 
 - **初始化现状**：只从最终 `para_blocks` 初始化逻辑行，不把前处理和丢弃块当正文；真实 22 页样本为 539 个原始基础块 / 224 条初始逻辑行。初始化时两表一起生成；已兼容的空逻辑表可按受控导入补全，同源兼容的非空逻辑状态应保留。原始源文件逐字节归档于基础表的 `blockid=0` 记录，可验证、恢复。
-- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表；AG Grid 原生实例按 120 行分页，列由数据库元数据提供，横向虚拟化不等于字段缺失。源码窗为唯一 CM6 文档，逻辑块按 `\n\n` 隔出一个空行，位置映射在内存、不插 CMD 注释。CM6 可编辑、Undo/Redo、保护块间边界，**当前修改仅留在内存，尚未持久化 SQL；刷新后消失**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 在有唯一、获授权且坐标可验证的 PDF 时同步高亮和定位；PDF 仍**只读**，拖动仅预演，不写逻辑关系。
+- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表。AG 基础表仍每次从 SQL 读取 120 行分页；**AG 逻辑表取消翻页，完整加载当前逻辑表供视图过滤**，默认按 CM6/Markdown/PDF 当前焦点逻辑块的 **PBS `p` 值**只显示同一逻辑页，AG 工具栏最左端「全部」checkbox 勾选时显示全部逻辑块，取消勾选恢复当前焦点 `p`。这里的 `p` 是逻辑归属页，不是跨页块的原始 PDF 物理页；过滤不修改 SQL，列由数据库元数据提供，横向虚拟化不等于字段缺失。源码窗为唯一 CM6 文档，逻辑块按 `\n\n` 隔出一个空行，位置映射在内存、不插 CMD 注释。CM6 可编辑、Undo/Redo、保护块间边界，**当前修改仅留在内存，尚未持久化 SQL；刷新后消失**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 在有唯一、获授权且坐标可验证的 PDF 时同步高亮和定位；PDF 仍**只读**，拖动仅预演，不写逻辑关系。
 - **V1 PDF 现状**：直接复用 V1 `lab-ocr` 的 `mountLabOcrPdf` 和 `layoutPbsLabels` 原版动态多轨、引线、手势与 PDF.js。三窗时预览下拉可选 PDF/Markdown；四窗切分时同一个 PDFViewer 和工具栏 DOM 移入独立面板，恢复也不重新建立 PDF 实例。原始 PDF 位置只取基础表的真实 bbox，失配/多来源/无 PDF 时不伪造覆盖框。
 - **PBS 三列现状**：`scripts/v2_pdf_projection.py` 已直接读取持久化的 `p、b、s` 生成 `p0b0s0` 等两层标签，禁止孙块，不再从 `logical_order` 连续重算；归入、拆分及其事务写回**尚未实现**。
 
@@ -54,7 +54,7 @@
 
 - **按 AGENTS.md 执行**：任务开始先读本 README，查受影响源码、公开 API 和独立测试；先固定可回退 Git 点；在隔离夹具上实验，不以推测修补未定位故障；任何新的结构 Schema 必须有明确迁移与数据恢复测试。README 只记录当前项目契约，开发历史放 `docs/v2/`。
 - **Frame/F02**：`ui/frame/*` 基线一致性和 Settings 保存、权限验证、两表导航；旧 `/api/v2/` 不得复活。V2 的业务 API 为 `/labs/lab-ocr-v2/api/mineru-base/{state,import,markdown,pdf-map,pdf}`，只处理本书籍的授权数据；不新设端口、Tunnel、认证或平行文件管理器。
-- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。浏览器回归包括 Chromium 和 iPad-WebKit，特别验证三窗↔四窗两轮切换中 PDFViewer 不换实例、不重复下载、原 PBS 标签恢复；**实机 iPad Safari 仍须单独验收**。
+- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/v2-logical-ag-filter.test.mjs`、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。浏览器回归包括 Chromium 和 iPad-WebKit，特别验证三窗↔四窗两轮切换中 PDFViewer 不换实例、不重复下载、原 PBS 标签恢复；**实机 iPad Safari 仍须单独验收**。
 - **Git/发布**：变更经过有依据的定向回归与审计、commit/push 后，按 `AGENTS.md` 第 9 节的唯一 `release/`+manifest 网关发布同一 `lab-ocr-v2` 入口，核对 Git SHA、静态文件 SHA256 和其余 Lab 不变。本轮修改 SQL、投影和 AG，需重新构建、发布并校验同一 V2 入口。
 
 ## 6. 既有航点文档（历史证据与模块说明；不得覆盖本 README）

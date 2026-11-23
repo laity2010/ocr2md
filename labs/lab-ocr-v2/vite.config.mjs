@@ -83,7 +83,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp05-pbs-9cols-fixed-two-level-f02',
+        stage:'wp06-ag-logical-p-focus-filter-all-f02',
       })+'\n'});
     },
   }],
