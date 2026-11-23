@@ -36,12 +36,13 @@ class Upgrade(unittest.TestCase):
         logical=v.existing_state(self.folder,table='logical_block')
         self.assertEqual(logical['columns'],list(v.LOGICAL_COLS))
         self.assertEqual(len(logical['columns']),9)
-        self.assertEqual(logical['rowCount'],224)
+        self.assertEqual(logical['rowCount'],267)
         with closing(sqlite3.connect(self.path)) as db:
             coords=db.execute('SELECT p,b,s FROM logical_block ORDER BY logical_order').fetchall()
             self.assertEqual(coords[0],(0,0,0))
             self.assertEqual(coords[-1],(21,20,0))
-            self.assertTrue(all(s==0 for _,_,s in coords))
+            self.assertEqual(sum(s==0 for _,_,s in coords),224)
+            self.assertEqual(sum(s>0 for _,_,s in coords),43)
             self.assertEqual(len(coords),len(set(coords)))
             self.assertEqual({r[0] for r in db.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'")},{'mineru_base','logical_block'})
@@ -64,7 +65,7 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(rows[second['logicalId']]['physicalPageIndex'],second['physicalPageIndex'])
         self.assertEqual(rows[second['logicalId']]['rootLogicalId'],first['logicalId'])
         self.assertEqual(rows[second['logicalId']]['parentId'],first['logicalId'])
-        self.assertEqual(len({r['pbs'] for r in after['covers']}),224)
+        self.assertEqual(len({r['pbs'] for r in after['covers']}),267)
         self.assertEqual(self.source.read_bytes(),self.original)
 
     def test_invalid_duplicate_rejected_and_grandchild_assignment_rejected(self):
@@ -115,7 +116,7 @@ class Upgrade(unittest.TestCase):
             self.assertEqual(db.execute('SELECT p,b,s FROM logical_block WHERE logical_id=?',
                 (first,)).fetchone(),(0,0,0))
             self.assertEqual(list(db.execute('SELECT * FROM mineru_base ORDER BY blockid')),before_base)
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],267)
         self.assertEqual(self.source.read_bytes(),self.original)
         self.assertFalse(v.dispatch('import','POST',self.folder,
             {'confirm':'import-mineru-base'},{},probe)['replaced'])

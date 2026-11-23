@@ -18,9 +18,9 @@ with tempfile.TemporaryDirectory() as td:
 const projection=JSON.parse(execFileSync('python3',['-c',py],{encoding:'utf8'}));
 const evidence=projectV2PDFEvidence(projection);
 assert.equal(projection.pageCount,22);
-assert.equal(projection.mappedCount,224);
-assert.equal(evidence.byId.size,224);
-assert.equal(Array.from({length:22},(_,i)=>evidence.page(i+1).boxes.length).reduce((a,b)=>a+b,0),224);
+assert.equal(projection.mappedCount,267);
+assert.equal(evidence.byId.size,267);
+assert.equal(Array.from({length:22},(_,i)=>evidence.page(i+1).boxes.length).reduce((a,b)=>a+b,0),267);
 assert.equal(evidence.page(1).level,'block');
 assert.equal(evidence.page(1).boxes[0].pbs,'p0b0s0');
 assert.equal(evidence.page(1).boxes[0].blockId,'23');
@@ -60,4 +60,4 @@ const labels=[
 const lanes=layoutPbsLabels(labels,650,800);
 assert.deepEqual(lanes.filter(x=>x.side==='left').map(x=>x.lane),[0,1,2,0]);
 assert.deepEqual(lanes.filter(x=>x.side==='right').map(x=>x.lane),[0,1]);
-console.log('V2_TO_LABOCR_V1_MULTILANE_DATA_AND_LAYOUT_PASS 22 pages 224 blocks 3 outward lanes and nearest-lane reuse');
+console.log('V2_TO_LABOCR_V1_MULTILANE_DATA_AND_LAYOUT_PASS 22 pages 267 blocks 3 outward lanes and nearest-lane reuse');

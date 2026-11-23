@@ -7,6 +7,7 @@ import {spawn,execFileSync} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 import {makePDF} from './v2-pdf-fixture.mjs';
+import {composeBlockSource} from '../ui/v2-block-source.js';
 const python=String.raw`
 import sys,json,shutil,tempfile
 from pathlib import Path
@@ -22,8 +23,8 @@ with tempfile.TemporaryDirectory(prefix='wp04-reader-') as td:
 const evidence=JSON.parse(execFileSync('python3',['-c',python],{encoding:'utf8'}));
 const snapshot=evidence.source,projection=evidence.pdf;
 const pdfBytes=makePDF(projection.pageSizes);
-assert.equal(snapshot.rowCount,224);
-assert.equal(projection.mappedCount,224);
+assert.equal(snapshot.rowCount,267);
+assert.equal(projection.mappedCount,267);
 const port=5427,url=`http://127.0.0.1:${port}/labs/lab-ocr-v2/`;
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
   '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -85,7 +86,7 @@ try{
             Number.isInteger(change.logicalId)&&change.before&&change.after));
           structurePosts++;
           return route.fulfill({status:200,contentType:'application/json',
-            body:JSON.stringify({saved:true,changedRows:body.changes.length,logicalCount:224})});
+            body:JSON.stringify({saved:true,changedRows:body.changes.length,logicalCount:267})});
         }
         if(op==='pdf-map')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(projection)});
         if(op==='pdf'){pdfGets++;return route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes});}
@@ -99,12 +100,12 @@ try{
                 base_blockid:item.baseBlockId,parent_id:item.parentId,
                 p:Number(item.pbs.match(/^p(\d+)/)?.[1]),b:Number(item.pbs.match(/b(\d+)/)?.[1]),
                 s:Number(item.pbs.match(/s(\d+)$/)?.[1]),
-                logical_order:item.logicalOrder,markdown_text:'original logic',block_type:'text'}))
+                logical_order:item.logicalOrder,markdown_text:(()=>{const r=snapshot.segments.find(s=>s.logicalId===item.logicalId);return snapshot.markdown.slice(r.startUtf16,r.endUtf16)})(),block_type:snapshot.segments.find(s=>s.logicalId===item.logicalId).blockType}))
             : projection.covers.slice(offset,offset+120).map(item=>({blockid:item.baseBlockId,
                 page_index:item.physicalPageIndex,block_type:'text'}));
           return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
-            exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,paraBlockCount:224,logicalCount:224,
-            sourceCount:1,tables,tableName:table,rowCount:table==='logical_block'?224:539,
+            exists:true,dbFile:'ocr2md.v2.sqlite',blockCount:539,paraBlockCount:224,logicalCount:267,
+            sourceCount:1,tables,tableName:table,rowCount:table==='logical_block'?267:539,
             columns:table==='logical_block'?logicCols:baseCols,rows,offset,
           })});
         }
@@ -134,9 +135,9 @@ try{
           textLength:article.textContent.length,
           editorCount:el.querySelectorAll('#editor .cm-editor').length};
       });
-      assert.equal(result.blockCount,224);
-      assert.equal(result.sourceLength,snapshot.markdown.length+2,
-        'each of 224 blocks contributes exactly two newline characters, one blank line');
+      assert.equal(result.blockCount,267);
+      assert.equal(result.sourceLength,composeBlockSource(snapshot).source.length,
+        'WP09 typed children concatenate without invented text or separators');
       assert.equal(result.separator,'','WP08 has no inter-block separator');
       assert.equal(result.editorCount,1);
       if(name==='iPad-WebKit'){
@@ -164,7 +165,7 @@ try{
         '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="23"]'),null,{timeout:20000});
       const pdfState=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState());
       assert.equal(pdfState.pageCount,22);
-      assert.equal(pdfState.mappedCount,224);
+      assert.equal(pdfState.mappedCount,267);
       assert.equal(pdfState.renderingOwner,'V1 lab-ocr mountLabOcrPdf');
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>
         ['loadPdf','setOverlays','focusBlock','relayout'].every(name=>
@@ -175,6 +176,45 @@ try{
       assert.equal(await firstTag.textContent(),'p0b0s0');
       assert.equal(await firstTag.getAttribute('data-lane'),'0');
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host canvas').count()>0,true,'original V1 PDF.js canvas');
+      if(process.env.V2_TEST_WP09_ONLY){
+      // WP09 integration gate: real table subtypes have independent logical
+      // rows, their own Raw Txt and SOURCE PDF geometry; they are not merged
+      // into the single parent table row.
+      const rawSub=snapshot.segments.find(row=>row.blockType==='table_caption'&&
+        snapshot.markdown.slice(row.startUtf16,row.endUtf16).includes('Table 1.'));
+      assert(rawSub,'real MinerU contains independently typed caption');
+      const rawParent=snapshot.segments.find(row=>row.logicalId===rawSub.parentId);
+      const rawBody=snapshot.segments.find(row=>row.parentId===rawSub.parentId&&
+        row.blockType==='table_body');
+      assert(rawParent&&rawBody,'parent table retains both typed children');
+      assert.equal(rawParent.blockType,'table');
+      assert.equal(snapshot.markdown.slice(rawParent.startUtf16,rawParent.endUtf16),'',
+        'parent table has no own span text; do not duplicate its children');
+      assert(snapshot.markdown.slice(rawBody.startUtf16,rawBody.endUtf16).startsWith('<table>'));
+      assert.equal(projection.covers.find(c=>c.logicalId===rawSub.logicalId).pbs.endsWith('s1'),true);
+      await page.locator('#workspace .ocr-preview-pdf-host').evaluate((el,id)=>
+        el.v2PDFPort.focusId(id,true),rawSub.logicalId);
+      await page.waitForFunction(id=>document.querySelector(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="'+id+'"]'),rawSub.logicalId,{timeout:18000});
+      // Public V1 label click emits the real focus event that updates AG's
+      // page filter. Calling focusId alone only scrolls the PDF viewer.
+      await page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="'+rawSub.logicalId+'"]')
+        .first().evaluate(el=>el.click());
+      await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
+        ?.textContent.includes('p3 ·'),null,{timeout:12000});
+      assert.equal(await page.locator('#workspace #editor').evaluate((el,id)=>
+        el.v2SourcePort.getBlocks().find(r=>r.logicalId===id)?.blockType,rawSub.logicalId),
+        'table_caption');
+      await page.waitForFunction(()=>[...document.querySelectorAll(
+        '#workspace .ocr-outline-grid .ag-row [col-id="block_type"]')]
+        .some(el=>el.textContent==='table_caption'),null,{timeout:12000});
+        assert.deepEqual(errors,[]);
+        console.log('WP09_REAL_PDF_TYPED_SUBELEMENTS_PASS',name,
+          JSON.stringify({blocks:result.blockCount,rawCaptionId:rawSub.logicalId,
+            rawBodyId:rawBody.logicalId,pdfMapped:pdfState.mappedCount}));
+        continue;
+      }
+
       const density=await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>{
         const host=el.querySelector('.page[data-page-number="1"]');
         const labels=[...host.querySelectorAll('.lab-ocr-pdf-pbs-tag')];
@@ -574,7 +614,7 @@ try{
         ?.clientWidth>80,null,{timeout:12000});
       assert.equal(await zoomSelect.inputValue(),'page-width');
       console.log('LAB_OCR_NATIVE_MULTILANE_FIRST_PAGE',name,JSON.stringify(density));
-      assert(result.headingCount>0,result);
+      assert.equal(result.headingCount,0,'Raw Txt must not fabricate Markdown headings');
       assert(result.textLength>10000,result);
       assert.equal(sqlPosts,0);
       assert.equal(markdownGets,1,'the Markdown document must be fetched once per book');

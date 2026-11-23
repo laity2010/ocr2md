@@ -42,7 +42,22 @@ def project_pdf(db:sqlite3.Connection):
         if page.get('page_idx',i)!=i:
             raise PDFProjectionError('MinerU 页序不是连续原始 PDF 页序，不能假定坐标对应')
         page_sizes.append(size)
-    base={r['blockid']:r for r in db.execute('SELECT blockid,page_index,block_group,page_block_index,bbox_json FROM mineru_base WHERE blockid>0')}
+    base={r['blockid']:r for r in db.execute(
+        'SELECT blockid,page_index,block_group,page_block_index,bbox_json,block_json '
+        'FROM mineru_base WHERE blockid>0')}
+    # WP09: the stable IDs of original immediate child elements start above
+    # ALL base IDs (same deterministic assignment as initial_rows). Use each
+    # child's OWN original bbox where provided, never the aggregated table
+    # rectangle for a caption/body/footnote. Rows created by future manual
+    # splitting safely fall back to their original base rectangle.
+    child_boxes={}
+    next_child=max(base,default=0)+1
+    for record in base.values():
+        if record['block_group']!='para_blocks':continue
+        block=json.loads(record['block_json'])
+        for child in block.get('blocks',[]) or []:
+            child_boxes[next_child]=child.get('bbox')
+            next_child+=1
     logical=[dict(r) for r in db.execute(
         'SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s '
         'FROM logical_block ORDER BY logical_order,logical_id')]
@@ -62,6 +77,8 @@ def project_pdf(db:sqlite3.Connection):
             unmapped.append(lid);continue
         try:bbox=json.loads(original['bbox_json'])
         except (TypeError,ValueError):bbox=None
+        specific=child_boxes.get(lid)
+        if valid_bbox(specific,page_sizes[page]):bbox=specific
         if not valid_bbox(bbox,page_sizes[page]):
             unmapped.append(lid);continue
         covers.append({'logicalId':lid,'baseBlockId':row['base_blockid'],

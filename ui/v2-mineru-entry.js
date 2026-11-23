@@ -23,6 +23,7 @@ let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
 let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
 let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
 let acknowledged=null,saveTimer=null,saving=false,saveBlocked=false;
+let rebuilding=false;
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
 const structureCopy=rows=>rows.map(r=>({
   logicalId:r.logicalId,parentId:r.parentId??null,
@@ -97,7 +98,47 @@ function logicalControls(){
     indicator=document.createElement('span');indicator.className='v2-logical-page';
     bar.append(indicator);
   }
-  return {label,indicator};
+  let rebuild=bar.querySelector('.v2-logical-rebuild');
+  if(!rebuild){
+    rebuild=document.createElement('button');rebuild.type='button';
+    rebuild.className='v2-logical-rebuild';
+    rebuild.textContent='重建逻辑表';
+    rebuild.title='仅从原始 para_blocks 重新生成逻辑表，覆盖以前的 PBS 和逻辑文本；不改基础表';
+    rebuild.addEventListener('click',()=>void rebuildLogicalOnly());
+    bar.append(rebuild);
+  }
+  rebuild.disabled=rebuilding||saving||!bound;
+  return {label,indicator,rebuild};
+}
+async function rebuildLogicalOnly(){
+  const path=bound;
+  if(!path||path!==persistedDirectory()){report('请先在全局设置中绑定并验证工作目录','error');return;}
+  if(rebuilding||saving||pending){report('当前数据库或工作区正在处理，请避免重入重建','warning');return;}
+  // User-authorized destructive replacement of LOGICAL DATA ONLY. Remove the
+  // stale debounce before the POST so it cannot race an old CM6 structure
+  // commit into the freshly replaced logical table.
+  rebuilding=true;clearTimeout(saveTimer);saveTimer=null;
+  acknowledged=null;saveBlocked=true;
+  report('正在仅从 para_blocks 重建逻辑表（覆盖旧逻辑行；原始基础表不变）…','warning');
+  try{
+    const result=await request('logical-rebuild',path,{method:'POST',
+      payload:{workspace:path,confirm:'rebuild-v2-logical-only'}});
+    if(!result?.rebuilt||result.baseChanged!==false)throw Error('重建回执不完整');
+    const source=$('#workspace #editor')?.v2SourcePort;
+    source?.clear();
+    bound='';lastFocus=null;logicalState=null;renderedSchema='';
+    await ensureBase(path);
+    report('✓ 逻辑表已从原始 para_blocks 重建 · '+result.previousLogicalCount+
+      ' → '+result.logicalCount+' 行 · 基础表与原件未修改','ok');
+  }catch(error){
+    report('逻辑表重建未完成：'+error.message+' · 原始基础表未修改','error');
+    // Failure after the server commit may leave stale CM6 state. Reset the
+    // session and require re-opening the verified workspace, not stale writes.
+    acknowledged=null;saveBlocked=true;
+  }finally{
+    rebuilding=false;
+    picker()?.querySelector('.v2-logical-rebuild')?.removeAttribute('disabled');
+  }
 }
 function currentLogicalId(){
   if(Number.isSafeInteger(lastFocus?.logicalId))return lastFocus.logicalId;
@@ -157,6 +198,7 @@ function renderGrid(state){
   if(controls){
     controls.label.hidden=!logical;
     controls.indicator.hidden=!logical;
+    controls.rebuild.hidden=!logical;
     controls.label.querySelector('input').checked=showAllLogical;
   }
   if(logical){
@@ -226,7 +268,7 @@ function scheduleStructureSave(){
   saveTimer=setTimeout(()=>{saveTimer=null;void flushStructure();},850);
 }
 async function flushStructure(){
-  if(saving||saveBlocked||!acknowledged||!bound)return;
+  if(rebuilding||saving||saveBlocked||!acknowledged||!bound)return;
   const source=$('#workspace #editor')?.v2SourcePort;
   if(!source?.getState().loaded||source.getWorkspace()!==bound)return;
   const current=structureCopy(source.getStructureRows());
@@ -357,7 +399,7 @@ document.addEventListener('v2-pdf-status',event=>{
   if(text)report(text,kind||'info');
 });
 document.addEventListener('v2-cm-protected-separator',()=>
-  report('WP04：逻辑块之间的空行是结构边界，暂不允许跨块删除或合并','warning'));
+  report('WP08：空行属于逻辑块；当前源码仍只读，暂不允许跨块编辑','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
   if(kind==='clear'){lastFocus=null;acknowledged=null;clearTimeout(saveTimer);saveTimer=null;}

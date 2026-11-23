@@ -11,13 +11,13 @@ class PdfProjectionTests(unittest.TestCase):
   self.folder=Path(self.temp.name);(self.folder/'minerujson').mkdir();shutil.copy(FIXTURE,self.folder/'minerujson'/FIXTURE.name)
   v.new_book(self.folder)
  def tearDown(self):self.temp.cleanup()
- def test_original_22_pages_224_mapped_and_pbs_immutable_original(self):
+ def test_original_22_pages_267_mapped_and_pbs_immutable_original(self):
   m=v.existing_pdf_map(self.folder)
-  self.assertEqual((m['pageCount'],m['mappedCount'],m['logicalCount']),(22,224,224))
+  self.assertEqual((m['pageCount'],m['mappedCount'],m['logicalCount']),(22,267,267))
   self.assertEqual(len(m['unmappedLogicalIds']),0)
   self.assertEqual(m['covers'][0]['pbs'],'p0b0s0')
   self.assertEqual(m['covers'][-1]['pbs'],'p21b20s0')
-  self.assertEqual(len({c['pbs'] for c in m['covers']}),224)
+  self.assertEqual(len({c['pbs'] for c in m['covers']}),267)
   self.assertTrue(all(valid_bbox(c['bbox'],c['pageSize']) for c in m['covers']))
   with closing(sqlite3.connect(self.folder/v.DB_NAME)) as db:
    self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}, {'mineru_base','logical_block'})
@@ -56,7 +56,7 @@ class PdfProjectionTests(unittest.TestCase):
    row=db.execute('SELECT base_blockid FROM logical_block ORDER BY logical_order LIMIT 1').fetchone()
    db.execute('UPDATE mineru_base SET bbox_json=? WHERE blockid=?',('[9999,0,10000,1]',row[0]));db.commit()
   m=v.existing_pdf_map(self.folder)
-  self.assertEqual(m['mappedCount'],223);self.assertEqual(len(m['unmappedLogicalIds']),1)
+  self.assertEqual(m['mappedCount'],266);self.assertEqual(len(m['unmappedLogicalIds']),1)
  def test_authored_pdf_mapping_never_touches_files(self):
   original=(self.folder/'minerujson'/FIXTURE.name).read_bytes()
   first=v.existing_pdf_map(self.folder);second=v.existing_pdf_map(self.folder)

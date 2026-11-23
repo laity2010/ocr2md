@@ -38,7 +38,7 @@ class MineruBaseTest(unittest.TestCase):
         db=sqlite3.connect(self.book/v.DB_NAME)
         self.assertEqual({row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
             {'mineru_base','logical_block'})
-        self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+        self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],267)
         blocks=db.execute('SELECT blockid,block_group,source_json_path,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid').fetchall()
         self.assertEqual(len(blocks),539)
         self.assertEqual([r[0] for r in blocks],list(range(1,540)))
@@ -69,20 +69,20 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual(state['rowCount'],539)
         logical=v.existing_state(self.book,table='logical_block')
         self.assertEqual(logical['tableName'],'logical_block')
-        self.assertEqual(logical['rowCount'],224)
-        self.assertEqual(len(logical['rows']),224)
+        self.assertEqual(logical['rowCount'],267)
+        self.assertEqual(len(logical['rows']),267)
         self.assertEqual(v.existing_state(self.book,offset=120,table='logical_block')['offset'],0)
-        self.assertEqual(len(v.existing_state(self.book,offset=120,table='logical_block')['rows']),224)
+        self.assertEqual(len(v.existing_state(self.book,offset=120,table='logical_block')['rows']),267)
         self.assertEqual(len(logical['columns']),9)
         self.assertEqual(logical['tables'],state['tables'])
         self.assertEqual(logical['blockCount'],539)
         self.assertEqual(v.dispatch('state','GET',self.book,{},
-            {'table':['logical_block']},StubF02())['rowCount'],224)
+            {'table':['logical_block']},StubF02())['rowCount'],267)
         with self.assertRaisesRegex(v.BaseError,'不存在'):
             v.dispatch('state','GET',self.book,{},
                 {'table':['mineru_base; DROP TABLE logical_block']},StubF02())
         with closing(sqlite3.connect(self.book/v.DB_NAME)) as db:
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],267)
             self.assertEqual(db.execute('SELECT count(*) FROM mineru_base').fetchone()[0],540)
         self.assertEqual(self.source.read_bytes(),self.original)
 

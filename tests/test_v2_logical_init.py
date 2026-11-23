@@ -32,7 +32,7 @@ class LogicalInitTest(unittest.TestCase):
         result=base.dispatch('import','POST',self.folder,
             {'confirm':'import-mineru-base'},{},adapter)
         self.assertTrue(result['created'])
-        self.assertEqual((result['blockCount'],result['logicalCount']),(539,224))
+        self.assertEqual((result['blockCount'],result['logicalCount']),(539,267))
         self.assertEqual(adapter.probes,1)
         with closing(sqlite3.connect(self.db_path)) as db:
             db.row_factory=sqlite3.Row
@@ -42,12 +42,12 @@ class LogicalInitTest(unittest.TestCase):
             originals=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
             expected=initial_rows(originals)
             actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type FROM logical_block ORDER BY logical_order')]
-            self.assertEqual(len(actual),224)
+            self.assertEqual(len(actual),267)
             self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text,r.block_type) for r in expected])
             self.assertFalse(list(db.execute('PRAGMA foreign_key_check')))
         self.assertEqual(self.source.read_bytes(),self.original)
         self.assertFalse(list(self.folder.glob('.ocr2md-v2-*.tmp')))
-        self.assertEqual(self.import_book()['logicalCount'],224)
+        self.assertEqual(self.import_book()['logicalCount'],267)
         for suf in ('-wal','-shm','-journal'):self.assertFalse((self.folder/(base.DB_NAME+suf)).exists())
     def test_previous_empty_logical_table_is_auto_backfilled_without_base_change(self):
         base.new_book(self.folder)
@@ -58,13 +58,13 @@ class LogicalInitTest(unittest.TestCase):
         adapter=StubF02()
         result=base.dispatch('import','POST',self.folder,{'confirm':'import-mineru-base'},{},adapter)
         self.assertFalse(result['created']);self.assertFalse(result['replaced'])
-        self.assertTrue(result['backfilled']);self.assertEqual(result['logicalCount'],224)
+        self.assertTrue(result['backfilled']);self.assertEqual(result['logicalCount'],267)
         self.assertEqual(adapter.probes,1)
         with closing(sqlite3.connect(self.db_path)) as db:
             self.assertEqual(list(db.execute('SELECT * FROM mineru_base ORDER BY blockid')),before)
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],267)
         repeat=self.import_book()
-        self.assertFalse(repeat['backfilled']);self.assertEqual(repeat['logicalCount'],224)
+        self.assertFalse(repeat['backfilled']);self.assertEqual(repeat['logicalCount'],267)
     def test_reopen_preserves_latest_user_edited_logic(self):
         self.import_book()
         with closing(sqlite3.connect(self.db_path)) as db:
@@ -103,7 +103,7 @@ class LogicalInitTest(unittest.TestCase):
         # when there is no latest logical state to preserve; it is not an
         # in-place backfill of obsolete source rows.
         outcome=self.import_book()
-        self.assertTrue(outcome['replaced']);self.assertEqual(outcome['logicalCount'],224)
+        self.assertTrue(outcome['replaced']);self.assertEqual(outcome['logicalCount'],267)
         self.assertNotEqual(self.db_path.read_bytes(),before)
     def test_valid_empty_paragraph_source_is_a_valid_zero_row_logical_table(self):
         import json
@@ -147,7 +147,7 @@ class LogicalInitTest(unittest.TestCase):
 
     def test_migrate_populated_five_columns_preserves_edits_and_original(self):
         old,baseline=self.make_five_column_database()
-        self.assertEqual(len(old),224)
+        self.assertEqual(len(old),267)
         with self.assertRaisesRegex(base.BaseError,'不兼容'):
             base.existing_state(self.folder)
         adapter=StubF02()
@@ -156,7 +156,7 @@ class LogicalInitTest(unittest.TestCase):
         self.assertEqual(adapter.probes,1)
         self.assertTrue(upgraded['migrated'])
         self.assertFalse(upgraded['created']);self.assertFalse(upgraded['replaced'])
-        self.assertEqual(upgraded['logicalCount'],224)
+        self.assertEqual(upgraded['logicalCount'],267)
         with closing(sqlite3.connect(self.db_path)) as db:
             rows=[tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')]
             self.assertEqual([row[:5] for row in rows],old)
@@ -174,7 +174,7 @@ class LogicalInitTest(unittest.TestCase):
         self.assertEqual(state['columns'],list(base.LOGICAL_COLS))
         self.assertEqual(state['rows'][0]['block_type'],current_type)
         second=self.import_book()
-        self.assertEqual(second['logicalCount'],224)
+        self.assertEqual(second['logicalCount'],267)
         with closing(sqlite3.connect(self.db_path)) as db:
             self.assertEqual(db.execute('SELECT block_type FROM logical_block WHERE logical_order=1').fetchone()[0],current_type)
             self.assertEqual(db.execute('SELECT block_type FROM mineru_base WHERE blockid=?',(rows[0][1],)).fetchone()[0],original_type)
@@ -189,7 +189,7 @@ class LogicalInitTest(unittest.TestCase):
         self.assertEqual(len(old),0)
         upgraded=self.import_book()
         self.assertTrue(upgraded['migrated'])
-        self.assertEqual(upgraded['logicalCount'],224)
+        self.assertEqual(upgraded['logicalCount'],267)
         with closing(sqlite3.connect(self.db_path)) as db:
             self.assertEqual(tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)')),base.LOGICAL_COLS)
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
@@ -243,5 +243,5 @@ class LogicalInitTest(unittest.TestCase):
             self.assertFalse(self.db_path.exists())
             result=call('yes','https://ocr2md.laity.bid','import-mineru-base')
             self.assertEqual(result[0],200)
-            self.assertEqual(result[1]['logicalCount'],224)
+            self.assertEqual(result[1]['logicalCount'],267)
 if __name__=='__main__':unittest.main()

@@ -16,18 +16,23 @@ with tempfile.TemporaryDirectory(prefix='wp04-fixture-') as root:
 `;
 const full=JSON.parse(execFileSync('python3',['-c',py],{encoding:'utf8'}));
 const before=full.markdown;
-assert.equal(full.rowCount,224);
+assert.equal(full.rowCount,267);
 const {source,blocks}=composeBlockSource(full);
-assert.equal(blocks.length,224);
+assert.equal(blocks.length,267);
 assert(source.endsWith(BLOCK_END));
 const edits=logicalTextRows(source,blocks);
-assert.equal(edits.length,224);
+assert.equal(edits.length,267);
 for(let i=0;i<blocks.length;i++){
  const block=blocks[i];
  assert.equal(block.logicalId,full.segments[i].logicalId);
  assert.equal(block.blockType,full.segments[i].blockType);
- assert.equal(block.groupEndPad,2,'fixture initially has 224 single-block parent groups');
- assert.equal(source.slice(block.to-BLOCK_END.length,block.to),BLOCK_END);
+ const raw=full.markdown.slice(full.segments[i].startUtf16,full.segments[i].endUtf16);
+ const next=blocks[i+1];
+ const groupEnd=!next||block.p!==next.p||block.b!==next.b;
+ const expected=groupEnd?(raw.endsWith('\n\n')?0:raw.endsWith('\n')?1:2):0;
+ assert.equal(block.groupEndPad,expected,
+   'no synthetic separator between typed parent/child; group end has minimum LF');
+ if(groupEnd)assert.equal(source.slice(block.to-BLOCK_END.length,block.to),BLOCK_END);
  if(i<blocks.length-1)assert.equal(block.to,blocks[i+1].from,
    'block boundaries use offsets, NOT injected separators');
  assert.equal(edits[i].markdownText,full.markdown.slice(
@@ -50,5 +55,7 @@ assert.equal(next.blocks[1].groupEndPad,2);
 assert.equal(next.source.length,source.length-2);
 assert.deepEqual(logicalTextRows(next.source,next.blocks).map(r=>r.markdownText),
   edits.map(r=>r.markdownText),'no PDF/SQL text altered by child regrouping');
-console.log('WP08_REAL_MINERU_224_BLOCK_SOURCE_PASS',blocks.length,source.length,'UTF16 characters',
+assert(edits.some(row=>row.blockType==='table_caption'));
+assert(edits.some(row=>row.blockType==='table_footnote'));
+console.log('WP09_REAL_MINERU_267_BLOCK_SOURCE_PASS',blocks.length,source.length,'UTF16 characters',
  originalEmpty.length,'empty SQL logical blocks');

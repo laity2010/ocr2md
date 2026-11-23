@@ -272,7 +272,8 @@ def read_table(db, name, offset):
     # Return the complete logical inventory; AG filters it by the focused PBS p.
     # Keep the original 120-row paging for the immutable mineru_base inspector.
     if name=='logical_block':
-        raw=db.execute('SELECT * FROM '+identifier+clause+order).fetchall()
+        raw=db.execute('SELECT * FROM '+identifier+
+                       ' ORDER BY logical_order,logical_id').fetchall()
     else:
         raw=db.execute('SELECT * FROM '+identifier+clause+order+' LIMIT ? OFFSET ?',
             (PAGE_SIZE,offset)).fetchall()
@@ -444,6 +445,54 @@ def backfill_empty_logical(folder: Path, common):
         return {'created':True,'preserved':False,'logicalCount':count,
                 'dbFile':DB_NAME,'baseChanged':False}
 
+def rebuild_logical_only(folder:Path,payload,common):
+    """Explicit WP09 one-table data reset. MinerU/base stays byte-identical.
+
+    The DELETE and INSERT use a single transaction. Failure restores all
+    previous logical rows. Never replace the complete SQLite file.
+    """
+    if payload.get('confirm')!='rebuild-v2-logical-only' or set(payload)!={'workspace','confirm'}:
+        raise BaseError(422,'缺少仅覆盖逻辑表的明确确认')
+    path=folder/DB_NAME
+    if path.is_symlink():raise BaseError(403,'V2 SQLite 不允许符号链接')
+    try:st=path.stat()
+    except FileNotFoundError:raise BaseError(409,'尚未建立 V2 SQLite，不可重建逻辑表')
+    if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
+        raise BaseError(422,'V2 SQLite 不是独立普通文件')
+    common.probe(folder)
+    sources=mineru_sources(folder)
+    with closing(sqlite3.connect('file:'+str(path)+'?mode=rw',uri=True,timeout=5)) as db:
+        db.row_factory=sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        try:
+            db.execute('BEGIN IMMEDIATE')
+            meta=assert_schema(db)
+            expected=[(item['path'],item['sha256']) for item in meta['sources']]
+            if [(rel,sha(raw)) for rel,raw,_ in sources]!=expected:
+                raise BaseError(409,'原始 MinerU 文件与基础表档案不一致，拒绝覆盖逻辑表')
+            base_snapshot=[tuple(row) for row in db.execute(
+                'SELECT * FROM mineru_base ORDER BY blockid')]
+            previous=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+            db.execute('DELETE FROM logical_block')
+            rebuilt=write_initial_logical(db)
+            assert_schema(db)
+            records=db.execute('SELECT * FROM logical_block ORDER BY logical_order').fetchall()
+            from_sql_rows(records)
+            if [tuple(row) for row in db.execute(
+                    'SELECT * FROM mineru_base ORDER BY blockid')]!=base_snapshot:
+                raise BaseError(409,'重建过程中原始基础表发生变化，已回滚')
+            if list(db.execute('PRAGMA foreign_key_check')):
+                raise BaseError(409,'重建后的逻辑块引用失败，已回滚')
+            if [(rel,sha(require_regular(folder/rel))) for rel,_,_ in sources]!=expected:
+                raise BaseError(409,'重建期间源 MinerU 改变，已回滚')
+            db.commit()
+            return {'rebuilt':True,'previousLogicalCount':previous,
+                    'logicalCount':rebuilt,'blockCount':len(base_snapshot)-1,
+                    'baseChanged':False,'dbFile':DB_NAME}
+        except BaseException:
+            db.rollback()
+            raise
+
 def read_verified_pdf(folder:Path):
     """Return the one PDF directly under an F02-authorized book folder.
 
@@ -572,6 +621,9 @@ def commit_structure(folder:Path,payload,common):
 
 
 def dispatch(operation,method,folder,payload,query,common):
+    if operation=='logical-rebuild':
+        if method!='POST':raise BaseError(405,'逻辑表重建只能 POST')
+        return rebuild_logical_only(folder,payload,common)
     if operation=='structure-commit':
         if method!='POST':raise BaseError(405,'结构修改只能 POST')
         return commit_structure(folder,payload,common)

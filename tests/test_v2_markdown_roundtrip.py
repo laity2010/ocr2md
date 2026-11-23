@@ -25,8 +25,8 @@ class MarkdownRoundtripTest(unittest.TestCase):
     def tearDown(self):self.tmp.cleanup()
     def initialize(self):
         # Auto-generated in the same staged database import as mineru_base.
-        self.assertEqual(base.existing_state(self.book)['logicalCount'],224)
-    def test_full_224_roundtrip_and_no_sql_or_mineru_mutation(self):
+        self.assertEqual(base.existing_state(self.book)['logicalCount'],267)
+    def test_full_267_roundtrip_and_no_sql_or_mineru_mutation(self):
         self.initialize()
         with closing(sqlite3.connect(self.book/base.DB_NAME)) as db:
             db.row_factory=sqlite3.Row
@@ -34,20 +34,24 @@ class MarkdownRoundtripTest(unittest.TestCase):
             base_before=[tuple(r) for r in db.execute('SELECT * FROM mineru_base ORDER BY blockid')]
         result=base.dispatch('markdown','GET',self.book,{}, {},StubF02())
         self.assertEqual(result['schema'],'v2-logical-md/v2')
-        self.assertEqual(result['rowCount'],224)
+        self.assertEqual(result['rowCount'],267)
         self.assertTrue(all(isinstance(segment['blockType'],str) for segment in result['segments']))
-        self.assertEqual(len(result['segments']),224)
+        self.assertEqual(len(result['segments']),267)
         self.assertEqual(from_markdown(result),before)
         self.assertEqual(result,base.existing_markdown(self.book))
         self.assertTrue(any(x['startChar']==x['endChar'] for x in result['segments']))
         self.assertIn('<table',result['markdown'])
-        self.assertIn('![](',result['markdown'])
-        self.assertIn('$$',result['markdown'])
+        self.assertNotIn('![](',result['markdown'],
+            'Raw Txt does not fabricate Markdown image-link syntax')
+        self.assertIn('https://cdn-mineru.openxlab.org.cn/',result['markdown'],
+            'the original OCR media path survives unchanged')
+        self.assertTrue(any(s['blockType']=='table_caption' for s in result['segments']))
+        self.assertTrue(any(s['blockType']=='table_footnote' for s in result['segments']))
         self.assertNotIn('<!-- cmd:block:',result['markdown'])
         self.assertNotIn('<!-- minerujson:source:',result['markdown'])
         with closing(sqlite3.connect(self.book/base.DB_NAME)) as db:
             self.assertEqual([tuple(r) for r in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],base_before)
-            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],224)
+            self.assertEqual(db.execute('SELECT count(*) FROM logical_block').fetchone()[0],267)
             self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},{'mineru_base','logical_block'})
         self.assertEqual(self.source.read_bytes(),self.original)
     def test_missing_init_and_tampering_fail_closed(self):
@@ -105,6 +109,6 @@ class MarkdownRoundtripTest(unittest.TestCase):
             self.assertEqual(request('no')[0],403)
             self.assertEqual(request('yes','POST')[0],405)
             code,body=request('yes')
-            self.assertEqual(code,200);self.assertEqual(body['rowCount'],224)
-            self.assertEqual(len(body['segments']),224)
+            self.assertEqual(code,200);self.assertEqual(body['rowCount'],267)
+            self.assertEqual(len(body['segments']),267)
 if __name__=='__main__':unittest.main()

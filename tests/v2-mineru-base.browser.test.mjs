@@ -18,7 +18,7 @@ try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
      hasTouch:true,...(kind==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0;const requestedPages=[];
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0,rebuildPosts=0;const requestedPages=[];
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -65,6 +65,16 @@ try{
       assert.equal(request.postDataJSON().confirm,'commit-v2-structure');
       return route.fulfill({status:200,contentType:'application/json',
         body:JSON.stringify({saved:true,changedRows:changes.length,logicalCount:224})});
+    }
+    if(op==='logical-rebuild'){
+      rebuildPosts++;
+      assert.deepEqual(request.postDataJSON(),
+        {workspace:books,confirm:'rebuild-v2-logical-only'},
+        'only the verified current workspace may trigger a logic-only reset');
+      assert.equal(request.method(),'POST');
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        rebuilt:true,baseChanged:false,previousLogicalCount:224,
+        logicalCount:224,blockCount:539,dbFile:'ocr2md.v2.sqlite'})});
     }
     if(op==='import'){
       postCount++;assert.equal(request.postDataJSON().confirm,'import-mineru-base');
@@ -449,6 +459,22 @@ try{
      throw error;
    }
    assert.equal(postCount,2,'previous empty logical table should auto-backfill once');
+   // WP09 UI: actual user click posts explicit logical-only rebuild, then
+   // invalidates stale CM6 and refreshes the same book without re-import.
+   await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
+     select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
+   });
+   await page.waitForFunction(()=>{const el=document.querySelector('#workspace .v2-logical-rebuild');
+     return !!el&&!el.disabled&&!el.hidden;},null,{timeout:15000});
+   const beforeMD=mdRequests;
+   await page.locator('#workspace .v2-logical-rebuild').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().loaded&&document.querySelector('#status')
+     ?.textContent.includes('逻辑表已从原始 para_blocks 重建'),null,{timeout:15000});
+   assert.equal(rebuildPosts,1);
+   assert.equal(mdRequests,beforeMD+1,'single CM6 refreshed after rebuild');
+   assert.equal(postCount,2,'logic-only rebuild must NOT import the original base');
+
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    assert.deepEqual(errors,[]);
    console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,mdRequests,probeCount}));

@@ -87,18 +87,20 @@ class StructureCommit(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM sqlite_master WHERE type="table"').fetchone()[0],2)
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],self.raw)
     def test_wp07_p1b3_after_p1b4_shifts_every_later_b_and_undo(self):
-        """The real 224-row book persists all shifts in ONE SQL transaction."""
+        """A parent carries all original typed children in ONE transaction."""
         a=next(row for row in self.original if (row['p'],row['b'],row['s'])==(1,3,0))
         b=next(row for row in self.original if (row['p'],row['b'],row['s'])==(1,4,0))
         tail=[row for row in self.original if row['p']==1 and row['b']>=5]
         self.assertGreater(len(tail),1)
-        moved=[row for row in self.original if row['logical_id']!=a['logical_id']]
-        slot=next(i for i,row in enumerate(moved) if row['logical_id']==b['logical_id'])+1
-        moved.insert(slot,a)
+        family=[row for row in self.original if row['p']==1 and row['b']==3]
+        family_ids={row['logical_id'] for row in family}
+        moved=[row for row in self.original if row['logical_id'] not in family_ids]
+        slot=max(i for i,row in enumerate(moved) if row['p']==b['p'] and row['b']==b['b'])+1
+        moved[slot:slot]=family
         orders={row['logical_id']:i+1 for i,row in enumerate(moved)}
         changes=[]
         for row in self.original:
-            new_b=5 if row['logical_id']==a['logical_id'] else (
+            new_b=5 if row['logical_id'] in family_ids else (
                 row['b']+1 if row['p']==1 and row['b']>=5 else row['b'])
             proposal=self.change(row,b=new_b,logicalOrder=orders[row['logical_id']])
             if proposal['before']!=proposal['after']:changes.append(proposal)
