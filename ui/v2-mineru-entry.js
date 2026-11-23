@@ -136,6 +136,47 @@ function sqlActionsDialog(){
       report('已将 '+count+' 个逻辑块整理为单行；SQL 将按原规则增量保存，CM6 可撤销','ok');
     }catch(error){report('单行整理未完成：'+error.message,'error');}
   });
+  const repairBtn=document.createElement('button');repairBtn.type='button';
+  repairBtn.className='v2-sql-action-table-repair';
+  repairBtn.textContent='恢复跨页表格正文（不重建）';
+  repairBtn.title='预览并恢复确证的跨页表格缺失内容，仅写入未经人工编辑的 MD Block，保留 PBS 与基础表';
+  repairBtn.addEventListener('click',async()=>{
+    const source=$('#workspace #editor')?.v2SourcePort;
+    const path=bound;
+    if(!path||path!==persistedDirectory()||selectedTable!=='logical_block'||
+      !source?.getState().loaded||source.getWorkspace()!==path||
+      source.getState().dirty||saving||rebuilding||pending){
+      report('请进入逻辑表并先保存当前编辑后，再恢复跨页表格','warning');return;
+    }
+    if(repairBtn.dataset.confirm!=='yes'){
+      repairBtn.disabled=true;
+      try{
+        const plan=await request('table-repair-preview',path);
+        if(path!==bound||source.getState().dirty||source.getWorkspace()!==path)
+          throw Error('预览期间工作目录或源码发生变化，请重新打开菜单');
+        if(plan?.schema!=='v2-table-repair/v1'||!Array.isArray(plan.candidates)||
+          plan.changeCount!==plan.candidates.length)throw Error('表格预览结构不合法');
+        if(!plan.changeCount){
+          report(plan.skippedEdited?
+            `没有可安全恢复的表格行；${plan.skippedEdited} 行已被人工编辑，不能覆盖`:
+            '没有需要恢复的表格正文','ok');dialog.close();return;
+        }
+        repairBtn._candidatePlan=plan;
+        repairBtn.dataset.confirm='yes';
+        repairBtn.textContent=`确认恢复 ${plan.changeCount} 行表格正文`;
+        info.textContent=`将按页恢复 ${plan.changeCount} 个已验证的表格子块；另外跳过 ${plan.skippedEdited} 个已编辑的块。含跨页合并/重复脚注调整，先核对原值、可 Undo，使用现有 SQL MD Block 差量提交；PBS、PDF、基础表不变。`;
+      }catch(error){report('表格恢复预览失败：'+error.message,'error');}
+      finally{repairBtn.disabled=false;}
+      return;
+    }
+    try{
+      const plan=repairBtn._candidatePlan;
+      if(!plan||!Array.isArray(plan.candidates))throw Error('表格恢复清单已失效');
+      const count=source.applyTableRecovery(plan.candidates);
+      dialog.close();
+      report(`已从原始预处理块恢复 ${count} 行表格内容 · 使用 CM6 撤销/重做，SQLite 随后差量保存`, 'ok');
+    }catch(error){report('表格恢复被拒绝：'+error.message,'error');}
+  });
   const warning=document.createElement('p');warning.className='v2-sql-actions-warning';
   warning.textContent='「重建逻辑表」会丢失当前 MD Block 修改及 PBS 关系；「仅整理正文断行」不重建、不修改 PBS。基础表、PDF、MinerUJSON 均保持不变。';
   const close=document.createElement('button');close.type='button';
@@ -154,7 +195,7 @@ function sqlActionsDialog(){
     dialog.close();void rebuildLogicalOnly();
   });
   const buttons=document.createElement('div');buttons.className='v2-sql-actions-buttons';
-  buttons.append(importBtn,rebuildBtn,normalizeBtn);
+  buttons.append(importBtn,rebuildBtn,normalizeBtn,repairBtn);
   dialog.append(heading,info,buttons,warning,close);
   document.body.append(dialog);
   return dialog;
@@ -164,6 +205,9 @@ function openSQLActions(){
   const workspace=bound&&bound===persistedDirectory()?bound:'';
   const normal=dialog.querySelector('.v2-sql-action-normalize');
   normal.dataset.confirm='';normal.textContent='仅整理正文断行（不重建）';
+  const tableRepair=dialog.querySelector('.v2-sql-action-table-repair');
+  tableRepair.dataset.confirm='';tableRepair._candidatePlan=null;
+  tableRepair.textContent='恢复跨页表格正文（不重建）';
   const rebuild=dialog.querySelector('.v2-sql-action-rebuild');
   rebuild.dataset.confirm='';rebuild.textContent='重建逻辑表（覆盖编辑）';
   dialog.querySelector('.v2-sql-actions-info').textContent=workspace?
@@ -175,6 +219,7 @@ function openSQLActions(){
   }
   normal.disabled=!workspace||busy||selectedTable!=='logical_block'||
     !$('#workspace #editor')?.v2SourcePort?.getState().loaded;
+  tableRepair.disabled=normal.disabled;
   if(!dialog.open)dialog.showModal();
 }
 async function importBaseFromMineru(){

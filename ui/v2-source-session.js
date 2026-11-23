@@ -11,7 +11,7 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEndPadding,childLinePadding,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,composeLogicalSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEndPadding,childLinePadding,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
@@ -23,6 +23,7 @@ export function mountV2Source(host){
   let persistedStructureSignature='',persistedTextSignature='';
   const structureEffect=StateEffect.define();
   const dragEffect=StateEffect.define();
+  const tableRepairEffect=StateEffect.define();
   const autoblanks=Annotation.define();
   const structureField=StateField.define({
     create:()=>[],
@@ -83,9 +84,10 @@ export function mountV2Source(host){
       ...(tr.effects.some(e=>e.is(structureEffect))?
         [structureEffect.of(tr.startState.field(structureField))]:[]),
       ...(tr.effects.some(e=>e.is(dragEffect))?[dragEffect.of(true)]:[]),
+      ...(tr.effects.some(e=>e.is(tableRepairEffect))?[tableRepairEffect.of(true)]:[]),
     ]),
     EditorState.transactionFilter.of(tr=>{
-      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect))||
+      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect)||e.is(tableRepairEffect))||
         !canEditBlocks(tr.startState.field(structureField),tr.changes))return tr;
       // Preserve WP13 display spacing on EVERY edit: one LF within a parent
       // group, one blank line (two LF) at each parent-group end. WP14's
@@ -115,7 +117,7 @@ export function mountV2Source(host){
       // A mapped structureEffect is also attached to ordinary text edits;
       // it is NOT permission to cross block boundaries. Only an actual PDF
       // structure drag (and its native inverse history) has dragEffect.
-      if(tr.effects.some(effect=>effect.is(dragEffect)))return true;
+      if(tr.effects.some(effect=>effect.is(dragEffect)||effect.is(tableRepairEffect)))return true;
       let insertedLineBreak=false;
       tr.changes.iterChanges((a,b,c,d,inserted)=>{
         if(/[\r\n]/.test(inserted.toString()))insertedLineBreak=true;
@@ -201,6 +203,36 @@ export function mountV2Source(host){
     editor.dispatch({changes});
     return changes.length;
   };
+  const applyTableRecovery=candidates=>{
+    if(!loaded||dirty)throw Error('请先保存正文或结构后再恢复表格');
+    if(!Array.isArray(candidates)||!candidates.length||candidates.length>10000)
+      throw Error('表格恢复清单无效');
+    const textRows=actualText();
+    const live=new Map(textRows.map(r=>[r.logicalId,r]));
+    const seen=new Set(),replacement=new Map();
+    // Validate EVERY requested logical ID before touching the CM6 document.
+    for(const item of candidates){
+      if(!Number.isSafeInteger(item.logicalId)||seen.has(item.logicalId)||
+        typeof item.before!=='string'||typeof item.after!=='string'||
+        /[\r\n]/.test(item.after))throw Error('表格恢复值不合法');
+      seen.add(item.logicalId);
+      const row=live.get(item.logicalId);
+      if(!row||!['table_body','table_caption','table_footnote'].includes(row.blockType)||
+        row.markdownText!==item.before||item.before===item.after)
+        throw Error('表格行已编辑或来源已变化，拒绝覆盖');
+      replacement.set(item.logicalId,item.after);
+    }
+    const planned=composeLogicalSource(textRows.map(row=>replacement.has(row.logicalId)?
+      {...row,markdownText:replacement.get(row.logicalId)}:row));
+    // Use the same typed one-document/StateEffect history contract as a PDF
+    // structure move, but emit the normal TEXT-change signal (not structure).
+    // Whole-document replacement maintains ownership of all synthetic LF:
+    // inserting at an empty block's left boundary must NOT promote its pads.
+    editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:planned.source},
+      effects:[structureEffect.of(planned.blocks),tableRepairEffect.of(true)]});
+    if(!dirty)throw Error('表格恢复未进入 CM6 历史');
+    return replacement.size;
+  };
   undoButton?.addEventListener('click',onUndo);
   redoButton?.addEventListener('click',onRedo);
   const setFocused=row=>{
@@ -235,7 +267,7 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
-    applyDrag,countMultiline,normalizeLines,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
+    applyDrag,countMultiline,normalizeLines,applyTableRecovery,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
       logicalId,parentId,logicalOrder,p,b,s})),
     markPersisted:rows=>{
       if(!loaded)return;

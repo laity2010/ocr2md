@@ -8,6 +8,9 @@ sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 import v2_frame_publish as pub
 
 class V2GatewayPublishTests(unittest.TestCase):
+    def test_new_table_recovery_backend_is_tracked_for_reload(self):
+        self.assertIn('scripts/v2_table_recovery.py',pub.V2_BACKEND_FILES)
+
     def test_backend_change_between_actual_v2_commits_requires_reload(self):
         self.assertTrue(pub.backend_changed('dc92269','a9abaf3'))
         self.assertFalse(pub.backend_changed('a9abaf3','a9abaf3'))

@@ -16,6 +16,7 @@ import stat
 from urllib.parse import parse_qs
 from v2_logical_contract import initial_rows, validate_initial, raw_element_text
 from v2_md_block import initial_md, raw_bindings, raw_at
+from v2_table_recovery import table_overrides
 from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown
 from v2_pdf_projection import project_pdf, PDFProjectionError
 from v2_pbs import initial_pbs, validate_pbs
@@ -159,7 +160,7 @@ def write_initial_logical(db):
     """
     if db.execute('SELECT count(*) FROM logical_block').fetchone()[0]:
         raise BaseError(409,'逻辑表已有状态，禁止初始化覆盖')
-    source=db.execute('SELECT blockid,block_group,block_json,block_type,page_index FROM mineru_base '
+    source=db.execute('SELECT blockid,block_group,block_json,block_type,page_index,source_path FROM mineru_base '
                       'WHERE blockid>0 ORDER BY blockid').fetchall()
     rows=initial_rows(source)
     para_ids={row['blockid'] for row in source if row['block_group']=='para_blocks'}
@@ -168,11 +169,16 @@ def write_initial_logical(db):
                         parent_id=r.parent_id,logical_order=r.logical_order) for r in rows],
                        {r['blockid']:r['page_index'] for r in source})
     bindings=raw_bindings(source)
+    # A final para table can intentionally contain lines_deleted=True after
+    # MinerU cross-page merging. Keep para's ID/structure but recover the
+    # corresponding page-local table text from immutable preproc originals.
+    recovered=table_overrides(source)
     db.executemany('INSERT INTO logical_block('
                    'logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s,raw_path) '
                    'VALUES (?,?,?,?,?,?,?,?,?,?)',[
                    (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,
-                    initial_md(r.markdown_text,r.block_type,bindings[r.logical_id][2]),
+                    initial_md(recovered.get((r.base_blockid,bindings[r.logical_id][1]),
+                        (r.markdown_text,''))[0],r.block_type,bindings[r.logical_id][2]),
                     r.block_type,*coords[r.logical_id],bindings[r.logical_id][1]) for r in rows])
     inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
     if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
@@ -352,6 +358,52 @@ def existing_markdown(folder:Path):
         except ValueError as error:
             raise BaseError(409,'逻辑表无法无损重构：'+str(error)) from error
         return result
+
+
+def table_repair_preview(folder:Path):
+    """Read-only per-logical-ID candidate list for existing edited books.
+
+    Plan ONLY when the persisted MD Block is byte-for-byte equal to the
+    original para text at the matching base path. Modified blocks are skipped,
+    not replaced. A separate user-confirmed CM6 transaction persists via
+    existing optimistic md-commit; no new backend write operation is added.
+    """
+    db_path=folder/DB_NAME
+    if db_path.is_symlink():raise BaseError(403,'SQLite 文件不允许是符号链接')
+    try:fd=os.open(db_path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+    except FileNotFoundError:raise BaseError(409,'请先初始化 V2 SQLite')
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:
+            raise BaseError(422,'SQLite 文件类型不合法')
+    finally:os.close(fd)
+    with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
+        db.row_factory=sqlite3.Row
+        assert_schema(db)
+        base=db.execute('SELECT blockid,block_group,source_path,page_index,block_json '
+                        'FROM mineru_base WHERE blockid>0 ORDER BY blockid').fetchall()
+        planned=table_overrides(base)
+        originals={r['blockid']:r['block_json'] for r in base}
+        rows=db.execute('SELECT logical_id,base_blockid,raw_path,md_block,block_type '
+                        'FROM logical_block ORDER BY logical_order').fetchall()
+        result=[];skipped=0
+        for row in rows:
+            key=(row['base_blockid'],row['raw_path'])
+            if key not in planned:continue
+            source=originals.get(row['base_blockid'])
+            element=raw_at(source,row['raw_path']) if source else None
+            if element is None:
+                skipped+=1;continue
+            original_md=initial_md(raw_element_text(element),row['block_type'],element)
+            desired_raw,reason=planned[key]
+            updated_md=initial_md(desired_raw,row['block_type'],element)
+            if row['md_block']==updated_md:continue
+            if row['md_block']!=original_md:
+                skipped+=1;continue
+            result.append({'logicalId':row['logical_id'],
+                'before':row['md_block'],'after':updated_md,'reason':reason})
+        return {'schema':'v2-table-repair/v1','candidates':result,
+                'changeCount':len(result),'skippedEdited':skipped}
 
 
 def migrate_legacy_type_column(folder: Path, common):
@@ -717,6 +769,9 @@ def dispatch(operation,method,folder,payload,query,common):
     if operation=='markdown':
         if method!='GET':raise BaseError(405,'Markdown 重构仅可 GET')
         return existing_markdown(folder)
+    if operation=='table-repair-preview':
+        if method!='GET':raise BaseError(405,'表格恢复预览仅可 GET')
+        return table_repair_preview(folder)
     if operation=='state':
         if method!='GET':raise BaseError(405,'基础表状态仅可 GET')
         try:offset=int(query.get('offset',['0'])[0])

@@ -135,6 +135,20 @@ try{
           textLength:article.textContent.length,
           editorCount:el.querySelectorAll('#editor .cm-editor').length};
       });
+      // WP15: the physical PDF page 5 continued Table 1 is NOT empty just
+      // because final para_blocks marked its three children lines_deleted.
+      // preproc_blocks from the same page restores caption/HTML/note; page 4
+      // receives its own (non-merged) Table 1-B portion without duplicate.
+      const getTablePart=(p,b,type)=>{
+        const seg=snapshot.segments.find(row=>row.p===p&&row.b===b&&row.blockType===type);
+        assert(seg,`missing ${p}/${b}/${type}`);
+        return snapshot.markdown.slice(seg.startUtf16,seg.endUtf16);
+      };
+      assert(getTablePart(4,0,'table_caption').includes('continued'));
+      assert(getTablePart(4,0,'table_body').startsWith('<table>'));
+      assert(getTablePart(4,0,'table_footnote').includes('Notes:'));
+      assert.notEqual(getTablePart(3,1,'table_body'),getTablePart(4,0,'table_body'));
+      assert.equal(getTablePart(3,1,'table_footnote'),'','transferred note must not duplicate on the previous page');
       assert.equal(result.blockCount,267);
       assert.equal(result.sourceLength,composeBlockSource(snapshot).source.length,
         'WP09 typed children concatenate without invented text or separators');
