@@ -498,8 +498,8 @@ try{
      const rows=el.v2SourcePort.getIntervals(),doc=el.v2SourcePort.getMarkdown();
      const a=rows.find(r=>r.logicalId===1),b=rows.find(r=>r.logicalId===2);
      return doc.slice(a.from,b.to);
-   }),fragments[0]+fragments[1]+'\n\n',
-   'joined root/child must concatenate with NO synthetic blank between');
+   }),fragments[0]+'\n'+fragments[1]+'\n\n',
+   'joined root/child must occupy separate lines without an empty line');
    assert.equal(postCount,1,'structural drag cannot re-import SQL');
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
      null,{timeout:12000});

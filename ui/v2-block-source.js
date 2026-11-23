@@ -1,18 +1,26 @@
-/** WP08: one CM6 document from raw SQL logical rows, WITHOUT separators.
- * An unfinished group-ending block owns the minimum display tail needed for
- * one visible blank line. Every other newline belongs to its real text.
- * Position IDs come ONLY from the segment inventory, never blank lines.
+/** V2 CM6 projects immutable SQL MD blocks with minimal display newlines.
+ * Adjacent siblings in a (p,b) group occupy SEPARATE lines (one LF), while
+ * distinct groups retain a visible blank line (two LF). Existing raw text is
+ * never trimmed or silently saved; positions use stable segment IDs only.
  */
 export const BLOCK_END='\n\n';
+export const CHILD_LINE_END='\n';
 const BACKEND_SEP='\n\n';
 const groupKey=row=>String(row.p)+'/'+String(row.b);
 /** Minimal LF tail that makes a blank source line after the group.
  * No original character is modified or trimmed. The missing tail is a
- * CM6-owned projection until text editing/persistence is enabled later.
+ * CM6-only projection, unless the user explicitly edits this display tail.
  */
 export function groupEndPadding(text){
   if(typeof text!=='string')throw Error('逻辑文本无效');
   return text.endsWith('\n\n')?'':text.endsWith('\n')?'\n':BLOCK_END;
+}
+/** Minimum display LF separating two blocks in the same parent group.
+ * Original newlines (including intentionally blank lines) stay in MD Block.
+ */
+export function childLinePadding(text){
+  if(typeof text!=='string')throw Error('逻辑文本无效');
+  return text.endsWith(CHILD_LINE_END)?'':CHILD_LINE_END;
 }
 export function composeLogicalSource(rows){
   if(!Array.isArray(rows))throw Error('逻辑块无效');
@@ -20,9 +28,11 @@ export function composeLogicalSource(rows){
   const blocks=rows.map((row,i)=>{
     if(typeof row?.markdownText!=='string')throw Error('逻辑文本无效');
     const lastInGroup=i===rows.length-1||groupKey(row)!==groupKey(rows[i+1]);
-    const padding=lastInGroup?groupEndPadding(row.markdownText):'';
+    const padding=lastInGroup?groupEndPadding(row.markdownText):childLinePadding(row.markdownText);
     const from=source.length;
     source+=row.markdownText+padding;
+    // groupEndPad is retained as a public/CM6 mapping field name: it now
+    // tracks ANY virtual trailing LF (one in-group, up to two at group end).
     return {...row,from,to:source.length,groupEndPad:padding.length};
   });
   return {source,blocks};
@@ -62,7 +72,7 @@ export function composeBlockSource(snapshot){
 
 /** CM6 change coordinates are UTF-16, exactly as document strings. Each
  * block owns its trailing blank lines; changes must not span block IDs.
- * WP08 still keeps the actual source view read-only.
+ * WP10 permits one-block edits with native CM6 Undo/Redo.
  */
 export function editOwner(blocks,from,to){
   // A zero-width insertion at a shared boundary belongs to the NEXT block.
@@ -81,8 +91,8 @@ export function canEditBlocks(blocks,changes){
   return allowed;
 }
 
-/** Map one block's current coordinates through a CodeMirror transaction.
- * Preserved for a future separately authorized text-editing WP.
+/** Map a single-block CodeMirror text transaction; virtual LF edits are
+ * promoted to real text only when actually touched by the user.
  */
 export function mapEditedBlocks(blocks,changes,autopads=[]){
   const added=new Map(autopads.map(({logicalId,length})=>[logicalId,length]));
@@ -97,10 +107,10 @@ export function mapEditedBlocks(blocks,changes,autopads=[]){
       change.fromA===row.from&&change.owner===row.logicalId)?-1:1),
     to:changes.mapPos(row.to,added.has(row.logicalId)?1:changed.some(change=>change.fromA===row.to&&
       change.toA===row.to&&change.owner!==row.logicalId)?-1:1),
-    // Future text-editing WP: when someone types into a currently virtual
+    // WP10: when someone types into a currently virtual
     // blank line, promote the WHOLE display tail into this block's real text
     // before persistence. Otherwise slicing off groupEndPad would silently
-    // discard text entered by the user. WP08's editor stays read-only.
+    // discard text entered by the user.
     groupEndPad:added.has(row.logicalId)?added.get(row.logicalId):
       (row.groupEndPad??0)>0&&changed.some(({fromA,toA})=>
       fromA<row.to&&(

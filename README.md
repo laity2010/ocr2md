@@ -38,13 +38,14 @@
 | `logical_block` | **10 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`md_block`、`block_type`、`p`、`b`、`s`、`raw_path` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，当前类型以 `logical_block.block_type` 为准 |
 
 - **WP09 初始化现状**：仅取最终 `para_blocks` 作为逻辑来源，不把前处理和丢弃块当正文；每个顶层 para 为 s0 原始父块，原始 `blocks[]` 内每个 caption/body/footnote 等直系元素生成独立 s1+ 子行。真实 22 页样本为 539 个原始基础块 / 224 个 para 根 + 43 个直系子元素 = **267 条逻辑行**。Raw Block 只读外联该元素自身 span 的 `content/html/image_path` 与原有行结构，Raw Block 保留原样不生成 Markdown 标题/围栏/媒体标记、不合并不同类型；原始 JSON 字节归档于基础表 `blockid=0`。新书初始化产生新结构；同源非空旧库不会自动覆盖，仅在导航下拉点击 SQL 组标题，弹窗提供「导入基础表」和「重建逻辑表」两个操作，AG 顶栏不放数据操作按钮。
-- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表。AG 基础表仍每次从 SQL 读取 120 行分页；**AG 逻辑表取消翻页，完整加载当前逻辑表供视图过滤**，默认按 CM6/Markdown/PDF 当前焦点逻辑块的 **PBS `p` 值**只显示同一逻辑页，AG 工具栏最左端「全部」checkbox 勾选时显示全部逻辑块，取消勾选恢复当前焦点 `p`。这里的 `p` 是逻辑归属页，不是跨页块的原始 PDF 物理页；过滤不修改 SQL，列由数据库元数据提供，横向虚拟化不等于字段缺失。**逻辑表 AG 显示列序以 `PBS`（左固定、当前可见文本最适宽度、可拖动列宽、不可排序）、`Type`（V1 列值复选、当前可见文本最适宽度、可拖动列宽、不可排序）、`MD Block`（`md_block`）开头**；其余物理字段全部保留在后，并附只读外联字段 `Raw Block`（基础表 `block_json` + `raw_path`），基础表列序不变。源码窗为**唯一可编辑 CM6 文档**；WP08 起**块与块直接拼接，没有任何固定分隔符**，仅父块组的最后子块末尾保障至少一个可见空行，全部空行归属具体逻辑块（见下述 WP08 约定）。位置映射在 CM6 内存、不插 CMD 注释。**CM6 文字编辑只写 `md_block`，PDF 拖动只更改 PBS/块序；共同使用 CM6 原生 Undo/Redo，850ms 空闲后对 SQL 发送结构和正文差量事务（乐观冲突回滚）**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 同步高亮定位和结构；PDF 原始几何只读，但 PBS 拖动关系可编辑。
+- **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表。AG 基础表仍每次从 SQL 读取 120 行分页；**AG 逻辑表取消翻页，完整加载当前逻辑表供视图过滤**，默认按 CM6/Markdown/PDF 当前焦点逻辑块的 **PBS `p` 值**只显示同一逻辑页，AG 工具栏最左端「全部」checkbox 勾选时显示全部逻辑块，取消勾选恢复当前焦点 `p`。这里的 `p` 是逻辑归属页，不是跨页块的原始 PDF 物理页；过滤不修改 SQL，列由数据库元数据提供，横向虚拟化不等于字段缺失。**逻辑表 AG 显示列序以 `PBS`（左固定、当前可见文本最适宽度、可拖动列宽、不可排序）、`Type`（V1 列值复选、当前可见文本最适宽度、可拖动列宽、不可排序）、`MD Block`（`md_block`）开头**；其余物理字段全部保留在后，并附只读外联字段 `Raw Block`（基础表 `block_json` + `raw_path`），基础表列序不变。源码窗为**唯一可编辑 CM6 文档**；WP13 起**同组父子／子子块之间只保留一行换行，不自动制造空白行，也不把两块文字拼为同一行**；组与组之间仍补足一个可见空行。缺少的最少 LF 只存在于 CM6 显示投影，不写进 `md_block`；原 SQL 已有的换行及人为空白行不被擅自裁剪，详见本 README 第 3 节。位置映射在 CM6 内存、不插 CMD 注释。**CM6 文字编辑只写 `md_block`，PDF 拖动只更改 PBS/块序；共同使用 CM6 原生 Undo/Redo，850ms 空闲后对 SQL 发送结构和正文差量事务（乐观冲突回滚）**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 同步高亮定位和结构；PDF 原始几何只读，但 PBS 拖动关系可编辑。
 - **V1 PDF 现状**：直接复用 V1 `lab-ocr` 的 `mountLabOcrPdf` 和 `layoutPbsLabels` 原版动态多轨、引线、手势与 PDF.js。三窗时预览下拉可选 PDF/Markdown；四窗切分时同一个 PDFViewer 和工具栏 DOM 移入独立面板，恢复也不重新建立 PDF 实例。原始 PDF 位置只取基础表的真实 bbox，失配/多来源/无 PDF 时不伪造覆盖框。
 - **PBS 三列现状**：`scripts/v2_pdf_projection.py` 从持久化 `p、b、s` 生成 `p0b0s0` 等两层标签，禁止孙块，不从 `logical_order` 全页重编号。WP07 复用 V1 PDF 拖动可调整根块组前后顺序、归入为子块、调整同组子块前后顺序（含 V1 支持的相邻跨页归入）；**插槽处及其后所有同级编号统一顺延，不跳过空号**；结构经 CM6 内存事务、AG/PDF 即时显示和空闲 SQL 增量更新。**手工拆分子块、任意脱离父组操作仍未开放；WP10 已开放 CM6 正文编辑**。
 
 ## 3. PBS 两层逻辑块：[WP07 拖放；WP08 空行；WP10 正文编辑；拆分未开放]
 
-- **WP08 空行归属与 CM6 拼接 [已实现，WP10 继续复用]**：在唯一 CM6 文档中直接拼接每个 `logical_block.md_block`，**不在块间插入换行或分隔符**。只有父块组最后的逻辑子块（无其他子块时为 `s0`）负责组末可见空行：若原文不以双换行结尾，则仅在 CM6 投影中补足到 `\n\n`；原文已含足够空行则不额外添加。所有原有的空行（包括同组非末子块内部和末尾）保留且属于各自文本块。补足的最小尾部空行归属组末块的 CM6 显示区间，保留 `groupEndPad` 长度以和原始 SQL 文本严格区分，**显示尾部 `groupEndPad` 不直接当作已保存的 MD Block 正文；用户编辑实际内容经 `md-commit` 持久化**。拖动归入/移出时依据新的末块重算这段仅用于显示的尾部，保证旧自动空行不会继续夹在同组子块之间；原文已有空行不裁剪。WP10 已开放 CM6 编辑；组末空行输入归末块 MD Block，不能靠空行拆块；保留仅组末最小显示空行。
+- **WP13 · 父子块换行修正 [已实现，待实机核对]**：CM6 将 SQL `md_block` 投影为唯一文档。同一 `(p,b)` 的相邻块，若前块原文结尾没有 `\n`，仅**补一个显示用 LF**，从而 `父块` + `子块` 成为 `父块\n子块`，不再错误地变成 `父块子块`；有一个或多个原始 LF 则不额外补写，原始人为空行也不得静默删除。不同父块组之间维持原 WP08 规则：组末块原文不足 `\n\n` 时仅补齐最少 LF，使其后有一可见空行。`groupEndPad` 为兼容保留的 CM6 区间字段名，现在记录**当前块结尾任何虚拟补齐 LF（同组最多一个、组末最多两个）**；读取 `logicalTextRows` 时剔除，**不持久化进 SQL `md_block`**。用户编辑虚拟行尾时，按 WP10 原来的单块编辑及历史机制决定真实文本与补尾，禁止跨逻辑块写入。PDF 拖动归入子块、Undo/Redo、AG/Markdown/PDF 联动均使用同一投影，禁止第二套拼接器。详见 [WP13 子块换行修正](docs/v2/WP13_CHILD_SINGLE_NEWLINE.md)。
+- **原 WP08 仍适用的保护规则**：仅组末提供可见空行、原有真实空行归属自身 `md_block`、禁止凭空行推断 logical_id、显示用 LF 不可充当已保存正文。旧 WP08 文档中“同组直接拼为同一行、不加任何 LF”的描述已由 WP13 正式取代。
 
 **用途**：修正 OCR 块识别时的张冠李戴、跨栏/跨页归属错误、拆分、归入和重组；**只允许“父块分组 → 子块”两层，禁止孙块、递归多层和复杂树结构**。
 
@@ -80,6 +81,7 @@
 - 当前 WP08：[CM6 父块组末尾空行与无分隔拼接](docs/v2/WP08_CM6_GROUP_END_BLANK_LINE.md)。
 - 当前 WP09：[para 原始类型/内容与仅重建逻辑表](docs/v2/WP09_PARA_RAW_LOGICAL_REBUILD.md)。
 - 当前 WP10：[MD Block 唯一正文、Raw Block 外联及 CM6 编辑增量回写](docs/v2/WP10_MD_BLOCK_CM6_PERSISTENCE.md)。
+- 当前 WP13：[成为子块时只消除自动空行，保留一个换行](docs/v2/WP13_CHILD_SINGLE_NEWLINE.md)。
 - 本轮 PBS 实施：[PBS 三列直接升级](docs/v2/WP05_PBS_THREE_COLUMNS.md)。
 - PBS 三列升级：[PBS 直接升级与两层规则](docs/v2/WP05_PBS_THREE_COLUMNS.md)。
 - 两表和 Markdown：[WP01 逻辑契约](docs/v2/WP01_LOGICAL_CONTRACT.md)、[WP02 初始化](docs/v2/WP02_LOGICAL_INITIALIZATION.md)、[WP03 无损往返](docs/v2/WP03_MARKDOWN_ROUNDTRIP.md)、[WP03 类型列](docs/v2/WP03_BLOCK_TYPE_CONTRACT.md)；当时的文字可编辑 CM6 属于历史，**WP10 起 CM6 正文可编辑，必须保护单次编辑跨块边界及原始 Raw 数据**。

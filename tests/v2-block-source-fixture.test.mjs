@@ -29,9 +29,10 @@ for(let i=0;i<blocks.length;i++){
  const raw=full.markdown.slice(full.segments[i].startUtf16,full.segments[i].endUtf16);
  const next=blocks[i+1];
  const groupEnd=!next||block.p!==next.p||block.b!==next.b;
- const expected=groupEnd?(raw.endsWith('\n\n')?0:raw.endsWith('\n')?1:2):0;
+ const expected=groupEnd?(raw.endsWith('\n\n')?0:raw.endsWith('\n')?1:2):
+   (raw.endsWith('\n')?0:1);
  assert.equal(block.groupEndPad,expected,
-   'no synthetic separator between typed parent/child; group end has minimum LF');
+   'in-group requires one visible LF; group end has one blank line');
  if(groupEnd)assert.equal(source.slice(block.to-BLOCK_END.length,block.to),BLOCK_END);
  if(i<blocks.length-1)assert.equal(block.to,blocks[i+1].from,
    'block boundaries use offsets, NOT injected separators');
@@ -50,9 +51,10 @@ assert(blocks.every((block,i)=>block.to-block.from>=
 const joined=edits.map((row,i)=>i===1
   ?{...row,p:edits[0].p,b:edits[0].b,s:1,parentId:edits[0].logicalId}:row);
 const next=composeLogicalSource(joined);
-assert.equal(next.blocks[0].groupEndPad,0);
+const firstChildPad=edits[0].markdownText.endsWith('\n')?0:1;
+assert.equal(next.blocks[0].groupEndPad,firstChildPad);
 assert.equal(next.blocks[1].groupEndPad,2);
-assert.equal(next.source.length,source.length-2);
+assert.equal(next.source.length,source.length-2+firstChildPad);
 assert.deepEqual(logicalTextRows(next.source,next.blocks).map(r=>r.markdownText),
   edits.map(r=>r.markdownText),'no PDF/SQL text altered by child regrouping');
 assert(edits.some(row=>row.blockType==='table_caption'));

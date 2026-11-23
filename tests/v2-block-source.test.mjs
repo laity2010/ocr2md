@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {EditorState} from '@codemirror/state';
-import {composeBlockSource,composeLogicalSource,groupEndPadding,
+import {composeBlockSource,composeLogicalSource,groupEndPadding,childLinePadding,
   canEditBlocks,mapEditedBlocks,logicalTextRows,BLOCK_END} from '../ui/v2-block-source.js';
 import {logicalAtOffset} from '../ui/v2-focus-map.js';
 
@@ -24,22 +24,45 @@ assert.equal(groupEndPadding('Text'),'\n\n');
 assert.equal(groupEndPadding('Text\n'),'\n');
 assert.equal(groupEndPadding('Text\n\n'),'');
 assert.equal(groupEndPadding('Text\n\n\n'),'');
+assert.equal(childLinePadding('Text'),'\n');
+assert.equal(childLinePadding('Text\n'),'');
+assert.equal(childLinePadding('Text\n\n'),'');
 assert.equal(result.blocks.length,5);
-assert.equal(result.source,'# 章节🧪\n\n第二段\n第三行A\n\nB\n\n末尾🙂\n\n');
+assert.equal(result.source,'# 章节🧪\n\n\n第二段\n第三行\nA\n\nB\n\n末尾🙂\n\n');
 assert(result.source.endsWith('\n\n'));
 assert.deepEqual(logicalTextRows(result.source,result.blocks).map(r=>r.markdownText),originals,
   'all user/OCR newlines are owned by their original block, never trimmed');
-assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[0,2,0,2,1]);
-assert.equal(result.blocks[0].to,'# 章节🧪'.length,'UTF16 emoji content, no child separator');
-assert.equal(result.blocks[0].to,result.blocks[1].from,'children concatenate exactly');
+assert.deepEqual(result.blocks.map(r=>r.groupEndPad),[1,2,1,2,1]);
+assert.equal(result.blocks[0].to,'# 章节🧪\n'.length,'UTF16 emoji content plus virtual child-line LF');
+assert.equal(result.blocks[0].to,result.blocks[1].from,'child starts on its own CM6 line');
 assert.equal(result.blocks[1].to,result.blocks[2].from,'group end blank belongs to s1');
-assert.equal(result.blocks[2].to,result.blocks[3].from,'two siblings have no separator');
+assert.equal(result.blocks[2].to,result.blocks[3].from,'adjacent siblings have one visible line break');
 assert.equal(logicalAtOffset(result.blocks,result.blocks[1].from).logicalId,14,
   'at an immediate child boundary, the child owns its first position');
 assert.equal(logicalAtOffset(result.blocks,result.blocks[1].to-1).logicalId,14,
   'the visible empty line belongs to the LAST child');
 assert.equal(logicalAtOffset(result.blocks,result.blocks[3].from).logicalId,20);
 assert.equal(logicalAtOffset(result.blocks,result.blocks.at(-1).to).logicalId,23);
+
+// Existing raw line endings remain unchanged: an explicit blank line is
+// not silently removed or rewritten in SQLite to satisfy the display rule.
+const oneLine=composeLogicalSource([
+  {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块'},
+  {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
+]);
+assert.equal(oneLine.source,'父块\n子块\n\n');
+assert.deepEqual(logicalTextRows(oneLine.source,oneLine.blocks).map(r=>r.markdownText),['父块','子块']);
+const rawLine=composeLogicalSource([
+  {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块\n'},
+  {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
+]);
+assert.equal(rawLine.source,'父块\n子块\n\n');
+assert.equal(rawLine.blocks[0].groupEndPad,0,'no extra LF when raw parent already ends in LF');
+const rawBlank=composeLogicalSource([
+  {...result.blocks[0],p:0,b:9,s:0,markdownText:'父块\n\n'},
+  {...result.blocks[1],p:0,b:9,s:1,markdownText:'子块'},
+]);
+assert.equal(rawBlank.source,'父块\n\n子块\n\n','do not delete a user-owned blank line');
 
 // A blank line entered into any child (even a non-last child) is RAW content,
 // and is never trimmed or reclassified as a structural separator.

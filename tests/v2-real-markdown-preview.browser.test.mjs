@@ -426,9 +426,10 @@ try{
         snapshot.segments[0].endUtf16);
       const secondRaw=snapshot.markdown.slice(snapshot.segments[1].startUtf16,
         snapshot.segments[1].endUtf16);
-      assert.deepEqual(groupedText,{text:firstRaw+secondRaw+'\n\n',
-        headPadding:0,childPadding:2,contiguous:true},
-      'WP08 actual V1 drag must merge child texts with NO inter-block separator');
+      const headLinePad=firstRaw.endsWith('\n')?'':'\n';
+      assert.deepEqual(groupedText,{text:firstRaw+headLinePad+secondRaw+'\n\n',
+        headPadding:headLinePad.length,childPadding:2,contiguous:true},
+      'actual V1 drag must display child on next line without synthetic blank line');
       await page.waitForFunction(()=>document.querySelector('#workspace #editor')
         ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
       assert.equal(structurePosts,1,'V1 drag must idle-commit one SQL transaction');

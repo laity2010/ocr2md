@@ -11,7 +11,7 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEndPadding,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEndPadding,childLinePadding,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
@@ -94,10 +94,12 @@ export function mountV2Source(host){
       const pads=[];
       for(let i=0;i<before.length;i++){
         const row=before[i],next=before[i+1];
-        if(next&&next.p===row.p&&next.b===row.b)continue;
+        const sameGroup=next&&next.p===row.p&&next.b===row.b;
         const end=tr.changes.mapPos(row.to,next?-1:1);
         const suffix=tr.newDoc.sliceString(Math.max(0,end-2),end);
-        const padding=groupEndPadding(suffix);
+        // Keep one LF between family members even if the user edits or
+        // deletes the virtual LF; only the final member gets a blank line.
+        const padding=sameGroup?childLinePadding(suffix):groupEndPadding(suffix);
         if(padding)pads.push({logicalId:row.logicalId,length:padding.length,
           from:end,insert:padding});
       }
