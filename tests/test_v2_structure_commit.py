@@ -86,6 +86,42 @@ class StructureCommit(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM sqlite_master WHERE type="table"').fetchone()[0],2)
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],self.raw)
+    def test_wp07_p1b3_after_p1b4_shifts_every_later_b_and_undo(self):
+        """The real 224-row book persists all shifts in ONE SQL transaction."""
+        a=next(row for row in self.original if (row['p'],row['b'],row['s'])==(1,3,0))
+        b=next(row for row in self.original if (row['p'],row['b'],row['s'])==(1,4,0))
+        tail=[row for row in self.original if row['p']==1 and row['b']>=5]
+        self.assertGreater(len(tail),1)
+        moved=[row for row in self.original if row['logical_id']!=a['logical_id']]
+        slot=next(i for i,row in enumerate(moved) if row['logical_id']==b['logical_id'])+1
+        moved.insert(slot,a)
+        orders={row['logical_id']:i+1 for i,row in enumerate(moved)}
+        changes=[]
+        for row in self.original:
+            new_b=5 if row['logical_id']==a['logical_id'] else (
+                row['b']+1 if row['p']==1 and row['b']>=5 else row['b'])
+            proposal=self.change(row,b=new_b,logicalOrder=orders[row['logical_id']])
+            if proposal['before']!=proposal['after']:changes.append(proposal)
+        result=self.commit(changes)
+        self.assertEqual(result['changedRows'],len(changes))
+        updated=self.records()
+        records={row['logical_id']:row for row in updated}
+        self.assertEqual(records[a['logical_id']]['b'],5)
+        self.assertEqual(records[b['logical_id']]['b'],4)
+        for row in tail:self.assertEqual(records[row['logical_id']]['b'],row['b']+1)
+        for row in self.original:
+            self.assertEqual(records[row['logical_id']]['markdown_text'],row['markdown_text'])
+            self.assertEqual(records[row['logical_id']]['base_blockid'],row['base_blockid'])
+            if row['p']!=1:self.assertEqual(records[row['logical_id']]['b'],row['b'])
+        self.assertEqual([r['logical_id'] for r in updated],
+            [r['logical_id'] for r in moved])
+        reverse=[dict(logicalId=change['logicalId'],before=change['after'],
+                      after=change['before']) for change in changes]
+        self.assertEqual(self.commit(reverse)['changedRows'],len(reverse))
+        self.assertEqual(self.records(),self.original)
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual([tuple(row) for row in db.execute(
+                'SELECT * FROM mineru_base ORDER BY blockid')],self.raw)
     def test_rejects_corrupt_payload_without_modify(self):
         a,b=self.original[:2]
         bad=self.change(b,p=a['p'],b=a['b'],s=1,parentId=999999)

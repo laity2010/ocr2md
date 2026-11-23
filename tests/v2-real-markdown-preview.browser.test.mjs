@@ -391,6 +391,86 @@ try{
       await page.waitForFunction(()=>document.querySelector('#workspace #editor')
         ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
       assert.equal(structurePosts,3,'redo must persist SQL again');
+      // Reproduce the user's exact failing operation on ORIGINAL PDF page 2:
+      // p1b3s0 (logicalId 63) AFTER p1b4s0 (logicalId 64), preserving
+      // target b4 while assigning source b5 and shifting ALL later b values.
+      await zoomSelect.selectOption('page-width');
+      await livePdf().evaluate(el=>el.v2PDFPort.focusId(63,true));
+      await page.waitForFunction(()=>document.querySelector(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="63"]')&&document.querySelector(
+        '#workspace .lab-ocr-pdf-overlay-box[data-block-ids="64"]'),null,{timeout:18000});
+      await page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="63"]')
+        .first().evaluate(el=>el.scrollIntoView({block:'center',inline:'nearest'}));
+      await sleep(250);
+      const parentRects=await page.evaluate(()=>{
+        const a=document.querySelector('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="63"]');
+        // On dense PDF pages V1 may place PBS badges on far outward rails;
+        // drop capture is the authoritative ORIGINAL target coverage box.
+        const b=document.querySelector('#workspace .lab-ocr-pdf-overlay-box[data-block-ids="64"]');
+        const clip=document.querySelector('#workspace .lab-ocr-pdf-scroller');
+        const rect=el=>{const r=el.getBoundingClientRect();
+          return {x:r.x+r.width/2,y:r.y+r.height/2};};
+        const viewport=clip.getBoundingClientRect();
+        return {from:rect(a),to:rect(b),
+          clip:{left:viewport.left,right:viewport.right,top:viewport.top,bottom:viewport.bottom}};
+      });
+      for(const p of [parentRects.from,parentRects.to]){
+        assert(p.x>parentRects.clip.left&&p.x<parentRects.clip.right&&
+          p.y>parentRects.clip.top&&p.y<parentRects.clip.bottom,
+          'p1b3 source badge and p1b4 target cover must both be reachable');
+      }
+      const originalP1bbox=await livePdf().evaluate(el=>
+        el.v2PDFPort.getCovers().find(c=>c.logicalId===63).bbox);
+      await page.mouse.move(parentRects.from.x,parentRects.from.y);
+      await page.mouse.down();await sleep(460);
+      await page.mouse.move(parentRects.to.x,parentRects.to.y,{steps:9});
+      await page.waitForFunction(()=>document.querySelector(
+        '.lab-ocr-pdf-drop-guide [data-placement="after"]'),null,{timeout:6000});
+      const afterSlot=await page.evaluate(()=>{
+        const r=document.querySelector('.lab-ocr-pdf-drop-guide [data-placement="after"]').getBoundingClientRect();
+        return {x:r.x+r.width/2,y:r.y+r.height/2};
+      });
+      await page.mouse.move(afterSlot.x,afterSlot.y);
+      assert.deepEqual(await page.evaluate(()=>({
+        guide:document.querySelector('.lab-ocr-pdf-drop-guide')?.dataset.blockId,
+        placement:document.querySelector('.lab-ocr-pdf-drop-guide')?.dataset.placement,
+      })),{guide:'64',placement:'after'},'V1 must select the exact target and AFTER slot');
+      await page.mouse.up();
+      try{
+        await page.waitForFunction(()=>{
+          const list=document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks();
+          const find=id=>list?.find(r=>r.logicalId===id);
+          return find(63)?.b===5&&find(64)?.b===4&&find(65)?.b===6;
+        },null,{timeout:9000});
+      }catch(error){
+        console.log('WP07_ROOT_AFTER_FAILURE',name,await page.evaluate(()=>({
+          status:window.__v2PdfStatuses.slice(-20),
+          rows:[63,64,65].map(id=>document.querySelector('#workspace #editor')
+            ?.v2SourcePort?.getBlocks().find(r=>r.logicalId===id)),
+        })));
+        throw error;
+      }
+      await page.waitForFunction(()=>document.querySelector(
+        '#workspace .lab-ocr-pdf-pbs-tag[data-block-id="63"]')?.textContent==='p1b5s0',
+        null,{timeout:15000});
+      assert.deepEqual(await livePdf().evaluate(el=>
+        el.v2PDFPort.getCovers().find(c=>c.logicalId===63).bbox),originalP1bbox,
+        'root insertion never alters PDF original bounding boxes');
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getState().dirty===false,null,{timeout:14000});
+      assert.equal(structurePosts,4,'parent b+1 insertion must idle-commit once');
+      await page.locator('#workspace #undo').click();
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getBlocks().find(r=>r.logicalId===63)?.b===3,null,{timeout:12000});
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getState().dirty===false,null,{timeout:14000});
+      assert.equal(structurePosts,5,'parent undo is a new SQLite transaction');
+      await page.locator('#workspace #redo').click();
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getBlocks().find(r=>r.logicalId===63)?.b===5,null,{timeout:12000});
+      await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+        ?.v2SourcePort?.getState().dirty===false,null,{timeout:14000});
+      assert.equal(structurePosts,6,'parent redo restores the updated PBS');
       await page.locator('#workspace #editor').evaluate((el,last)=>{
         const port=el.v2SourcePort;
         const interval=port.getIntervals().find(row=>row.logicalId===last);

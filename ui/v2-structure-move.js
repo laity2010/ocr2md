@@ -1,6 +1,7 @@
-/** WP07: pure PBS two-level structural drag, independent of PDF geometry/SQL.
- * All block text and stable logical/base IDs survive byte-for-byte.
- * PBS p,b are group identities, never regenerated from logical_order.
+/** WP07: PBS insertion slots; shift all following same-level numbers by +1.
+ * An emptied source slot is deliberately not compressed. CM6 owns sequence
+ * and history; this pure projection changes only affected logical rows.
+ * Stable logical/base IDs, text and PDF geometry are never regenerated.
  */
 export function moveLogicalBlocks(rows,intent){
   if(!Array.isArray(rows)||!rows.length)throw Error('逻辑块尚未加载');
@@ -17,45 +18,51 @@ export function moveLogicalBlocks(rows,intent){
   if(!srcRoot||!dstRoot)throw Error('父块组缺少 s0');
   const sameGroup=src.p===dst.p&&src.b===dst.b;
   const group=r=>rows.filter(x=>x.p===r.p&&x.b===r.b);
+  const increment=(value,amount=1)=>{
+    const sum=value+amount;
+    if(!Number.isSafeInteger(sum))throw Error('PBS 编号超出安全整数范围');
+    return sum;
+  };
   let moved,remaining,insertAt,newMembers;
   if(placement==='child'){
     if(src.s!==0||sameGroup)throw Error('只能把独立父块组归入其他父块组');
     moved=group(src); // flatten an existing root group, never create grandchildren
-    remaining=rows.filter(r=>!moved.includes(r));
-    const targetGroup=group(dst);
-    const last=remaining.findLastIndex(r=>targetGroup.includes(r));
-    insertAt=last+1;
-    const start=Math.max(...targetGroup.map(r=>r.s))+1;
-    newMembers=moved.map((r,i)=>({...r,p:dst.p,b:dst.b,s:start+i,parentId:dstRoot.logicalId}));
+    const slot=increment(dst.s); // s0 -> s1, sK -> s(K+1)
+    remaining=rows.filter(r=>!moved.includes(r)).map(r=>
+      r.p===dst.p&&r.b===dst.b&&r.s>=slot
+        ?{...r,s:increment(r.s,moved.length)}:r);
+    const at=remaining.findIndex(r=>r.logicalId===dst.logicalId);
+    insertAt=at+1;
+    newMembers=moved.map((r,i)=>({
+      ...r,p:dst.p,b:dst.b,s:increment(slot,i),parentId:dstRoot.logicalId,
+    }));
   }else if(src.s===0&&dst.s===0&&!sameGroup){
     // A root carries its children when moved before/after another root.
     moved=group(src);
-    remaining=rows.filter(r=>!moved.includes(r));
+    const slot=increment(dst.b,placement==='after'?1:0);
+    // Shift *all* later b groups on the target logical page, even across
+    // existing gaps; children inherit the parent's new b automatically.
+    remaining=rows.filter(r=>!moved.includes(r)).map(r=>
+      r.p===dst.p&&r.b>=slot?{...r,b:increment(r.b)}:r);
     const at=remaining.findIndex(r=>r.logicalId===dstRoot.logicalId);
-    const end=remaining.findLastIndex(r=>r.p===dst.p&&r.b===dst.b)+1;
+    // BEFORE moves the target's b; locate by stable logical_id, not PBS.
+    const end=remaining.findLastIndex(r=>r.logicalId===dstRoot.logicalId||
+      r.parentId===dstRoot.logicalId)+1;
     insertAt=placement==='before'?at:end;
-    newMembers=moved.map(r=>({...r}));
+    newMembers=moved.map(r=>({...r,p:dst.p,b:slot}));
   }else if(src.s>0&&dst.s>0&&sameGroup){
     moved=[src];
-    remaining=rows.filter(r=>r!==src);
+    const slot=increment(dst.s,placement==='after'?1:0);
+    remaining=rows.filter(r=>r!==src).map(r=>
+      r.p===dst.p&&r.b===dst.b&&r.s>=slot
+        ?{...r,s:increment(r.s)}:r);
     const at=remaining.findIndex(r=>r.logicalId===dst.logicalId);
     insertAt=at+(placement==='after'?1:0);
-    newMembers=[{...src}];
+    newMembers=[{...src,s:slot}];
   }else throw Error('该层级的拖动落点不受支持');
   const reordered=[...remaining.slice(0,insertAt),...newMembers,...remaining.slice(insertAt)];
-  // Sibling permutation is local to the affected group. Reuse its existing
-  // s values (including holes) rather than renumbering all siblings 1..N.
-  // Only members whose relative position changed receive a different s.
-  if(src.s>0&&placement!=='child'){
-    const siblings=reordered.filter(r=>r.p===src.p&&r.b===src.b&&r.s>0);
-    const priorS=rows.filter(r=>r.p===src.p&&r.b===src.b&&r.s>0)
-      .map(r=>r.s).sort((a,b)=>a-b);
-    const remap=new Map(siblings.map((r,i)=>[r.logicalId,priorS[i]]));
-    for(let i=0;i<reordered.length;i++){
-      const row=reordered[i];
-      if(remap.has(row.logicalId))reordered[i]={...row,s:remap.get(row.logicalId)};
-    }
-  }
+  if(placement!=='child'&&reordered.every((r,i)=>r.logicalId===rows[i].logicalId))
+    throw Error('拖动没有产生结构变化');
   let pos=0;
   const blocks=reordered.map((r,i)=>{
     const text=r.markdownText;
