@@ -18,6 +18,18 @@
 - 工作目录只由 **Frame 原全局设置** `workspace.dataDirectory` 绑定并保存。只在 Frame F02 授权 Cookie、目录白名单及实际读写 `probe` 验证通过后，才可处理书籍数据。原 MinerU JSON、PDF、媒体、其他数据库一律只读保护；禁止假定使用仓库目录或其他 Lab 的数据库。
 - 已弃用 V2 的历史证据在 Git 标签 `archive/retired-lab-ocr-v2-20261120`。不得把它的旧业务源码、SQLite 或 UI 当成当前 V2 基线恢复。
 
+### 1.1 AG Grid 表头筛选组件复用强制约定（长期有效）
+
+> **强制门禁，优先于任何 WP 临时设计**：V2 的所有 AG Grid 数据表、现有 SQL 表与未来新增 View，**必须复用/忠实复刻 V1 已验收的列头过滤组件及交互**；列宽、列序、是否允许排序属于各列独立配置，**不得以「不可排序」为理由删掉表头筛选**。任何新表/新列构建之前，AI 必须先核对下面的 V1 源码和实际交互，不能自行发明另一套过滤 UI。
+
+- **唯一参考实现**：真实 V1 工作树 `labs/lab-ocr/ui/enum-checkbox-filter.js` 的 `EnumCheckboxFilter`（AG Grid Community `IFilterComp`）；接入示例 `labs/lab-ocr/ui/outline-grid.js` 与 `labs/lab-ocr/ui/lab-ocr/workflow.js`。V2 只通过已审计的组件引用或隔离适配复用其公共接口，不为筛选器另建 DOM/状态/渲染体系，也不修改 V1 组件。
+- **原版交互必须一致**：点击 AG Grid **列头原生过滤图标**，使用 **AG Grid 管理生命周期的弹出过滤面板**；面板内是 `all` 总开关和该列去重列值的**多个 checkbox**，允许单选、多选、全选/取消，选中状态与 AG 的 `getFilterModel/setFilterModel` 同步。通过 `filterChangedCallback()` 触发行过滤，其他列过滤模型/当前页码过滤不能被重置；对动态行、空数据中间状态、Unicode 文本的处理沿用 V1 契约。
+- **接线约束**：各可过滤列使用 `filter: EnumCheckboxFilter`、必要时 `filterValueGetter`；配置 `suppressHeaderMenuButton:true`、`suppressHeaderFilterButton:false`。**禁止**使用 `headerComponent` 里自行创建的 `<select>`、`onChange` 单选下拉、自制按钮/弹窗、独立过滤状态变量、重新拼行数据来冒充 V1 表头过滤器，也不依赖 AG Enterprise 特性。
+- **V2 现有列的独立约束**：PBS 仍左固定、列宽最适、`sortable:false`；Type 仍列宽最适、`sortable:false`，但必须通过上述 V1 多值复选过滤；MD Block 与其他适用数据列遵守同一表头组件契约。PBS 的 `p` 页值如需特殊过滤，使用 `filterValueGetter`，不能改变源 PBS 或 SQL。所有过滤只改变 AG 可见行，不能更改 SQLite、CM6、PDF、MD Block 或跨窗定位依据。
+- **每次新建/调整 AG 视图的验收门禁**：先对照 V1 的图标、弹层、`all`/多值复选/取消/保留选择状态等行为；必须同时用 Chromium、iPad-WebKit 验证触摸开关、多列叠加、清除过滤、动态数据刷新、PBS/Type 不可排序与多窗同步。**没有通过上述交互验收不得称已复刻、不得发布。** 以后任何 WP 文档或临时需求都不得私自把这套组件换回单选下拉。
+
+**当前实现差异（未修复，不能伪称符合本约定）**：截至 WP10，`ui/v2-mineru-entry.js` 的 Type 列仍在自定义 `TypeHeader` 中嵌入 `<select class="v2-type-value-filter">`，属于不符合 V1 的临时实现。后续修复应首先**移除自制 TypeHeader**，接回上面的 V1 `EnumCheckboxFilter` 与 AG 原生过滤入口；本 README 约定本身不表示代码已经完成替换。
+
 ## 2. 数据唯一权威：[已实现]
 
 **当前仅有两张应用物理表**：已授权书籍目录内的 `ocr2md.v2.sqlite`。AG/源码/Markdown/PDF/标题等均是视图；不新增第三张业务表、父块表、Markdown 行表或 SQL 历史表。
