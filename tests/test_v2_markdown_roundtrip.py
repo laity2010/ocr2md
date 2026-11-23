@@ -41,8 +41,8 @@ class MarkdownRoundtripTest(unittest.TestCase):
         self.assertEqual(result,base.existing_markdown(self.book))
         self.assertTrue(any(x['startChar']==x['endChar'] for x in result['segments']))
         self.assertIn('<table',result['markdown'])
-        self.assertNotIn('![](',result['markdown'],
-            'Raw Txt does not fabricate Markdown image-link syntax')
+        self.assertIn('![](',result['markdown'],
+            'MD Block must derive Markdown image syntax from Raw Block')
         self.assertIn('https://cdn-mineru.openxlab.org.cn/',result['markdown'],
             'the original OCR media path survives unchanged')
         self.assertTrue(any(s['blockType']=='table_caption' for s in result['segments']))
@@ -91,7 +91,7 @@ class MarkdownRoundtripTest(unittest.TestCase):
         with self.assertRaisesRegex(base.BaseError,'父节点'):
             base.existing_markdown(self.book)
         with closing(sqlite3.connect(self.book/base.DB_NAME)) as db:
-            db.execute('UPDATE logical_block SET parent_id=NULL,markdown_text=NULL WHERE logical_order=2');db.commit()
+            db.execute("UPDATE logical_block SET parent_id=NULL,md_block=x'FF' WHERE logical_order=2");db.commit()
         with self.assertRaisesRegex(base.BaseError,'文本无效'):
             base.existing_markdown(self.book)
     def test_http_denied_without_frame_session_and_get_only(self):

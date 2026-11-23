@@ -26,6 +26,7 @@ base.CARD='''      <article id="lab-ocr-v2"><div class="kind">09 · OCR V2 · �
 V2_BACKEND_FILES=(
     'scripts/v2_mineru_base.py',
     'scripts/v2_logical_contract.py',
+    'scripts/v2_md_block.py',
     'scripts/v2_markdown_roundtrip.py',
     'scripts/v2_pdf_projection.py',
     'scripts/v2_pbs.py',

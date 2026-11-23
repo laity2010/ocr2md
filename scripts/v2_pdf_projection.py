@@ -59,7 +59,7 @@ def project_pdf(db:sqlite3.Connection):
             child_boxes[next_child]=child.get('bbox')
             next_child+=1
     logical=[dict(r) for r in db.execute(
-        'SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s '
+        'SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s '
         'FROM logical_block ORDER BY logical_order,logical_id')]
     try:groups=validate_pbs(logical)
     except ValueError as err:raise PDFProjectionError(str(err)) from err
@@ -86,7 +86,7 @@ def project_pdf(db:sqlite3.Connection):
             'rootLogicalId':roots[lid],
             'logicalOrder':row['logical_order'],'pbs':pbs[lid],
             'physicalPageIndex':page,'physicalBlockIndex':original['page_block_index'],
-            'pageSize':page_sizes[page],'bbox':bbox,'empty':not bool(row['markdown_text'])})
+            'pageSize':page_sizes[page],'bbox':bbox,'empty':not bool(row['md_block'])})
     return {'schema':'v2-pdf-projection/v1','sourcePath':src['path'],
         'pageCount':len(page_sizes),'pageSizes':page_sizes,
         'logicalCount':len(logical),'mappedCount':len(covers),

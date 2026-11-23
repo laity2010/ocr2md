@@ -21,10 +21,11 @@ const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:
   original_bytes:'原文件归档字节'};
 let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
 let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
-let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
-let acknowledged=null,saveTimer=null,saving=false,saveBlocked=false;
+let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='',typeFilter='';
+let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBlocked=false;
 let rebuilding=false;
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
+const textCopy=rows=>new Map(rows.map(r=>[r.logicalId,r.markdownText]));
 const structureCopy=rows=>rows.map(r=>({
   logicalId:r.logicalId,parentId:r.parentId??null,
   logicalOrder:r.logicalOrder,p:r.p,b:r.b,s:r.s}));
@@ -187,12 +188,13 @@ function logicalControls(){
 async function rebuildLogicalOnly(){
   const path=bound;
   if(!path||path!==persistedDirectory()){report('请先在全局设置中绑定并验证工作目录','error');return;}
-  if(rebuilding||saving||pending){report('当前数据库或工作区正在处理，请避免重入重建','warning');return;}
+  if(rebuilding||saving||pending||$('#workspace #editor')?.v2SourcePort?.getState().dirty){
+    report('CM6 尚有未保存正文或结构，拒绝覆盖逻辑表','warning');return;}
   // User-authorized destructive replacement of LOGICAL DATA ONLY. Remove the
   // stale debounce before the POST so it cannot race an old CM6 structure
   // commit into the freshly replaced logical table.
   rebuilding=true;clearTimeout(saveTimer);saveTimer=null;
-  acknowledged=null;saveBlocked=true;
+  acknowledged=null;acknowledgedText=null;saveBlocked=true;
   report('正在仅从 para_blocks 重建逻辑表（覆盖旧逻辑行；原始基础表不变）…','warning');
   try{
     const result=await request('logical-rebuild',path,{method:'POST',
@@ -208,7 +210,7 @@ async function rebuildLogicalOnly(){
     report('逻辑表重建未完成：'+error.message+' · 原始基础表未修改','error');
     // Failure after the server commit may leave stale CM6 state. Reset the
     // session and require re-opening the verified workspace, not stale writes.
-    acknowledged=null;saveBlocked=true;
+    acknowledged=null;acknowledgedText=null;saveBlocked=true;
   }finally{
     rebuilding=false;
   }
@@ -248,23 +250,52 @@ function renderGrid(state){
   // Only the AG view is reordered. The SQLite nine-column physical schema
   // and server-returned column inventory stay untouched.
   const columnKeys=logical
-    ?['block_type','markdown_text',...state.columns.filter(key=>
-      key!=='block_type'&&key!=='markdown_text')]
+    ?['block_type','md_block',...state.columns.filter(key=>
+      key!=='block_type'&&key!=='md_block'),'raw_block']
     :state.columns;
+  const fitting=values=>Math.ceil(Math.max(55,...values.map(value=>
+    String(value??'').length*8+20)));
+  const pbsWidth=Math.min(155,Math.max(80,fitting(state.rows.map(row=>
+    `p${row.p}b${row.b}s${row.s}`))));
+  const types=[...new Set(state.rows.map(row=>row.block_type).filter(Boolean))].sort();
+  const typeWidth=Math.min(220,Math.max(96,fitting(types)+35));
+  class TypeHeader{
+    init(){
+    const header=document.createElement('div');header.className='v2-type-header';
+    const label=document.createElement('span');label.textContent='Type';
+    const select=document.createElement('select');select.className='v2-type-value-filter';
+    select.setAttribute('aria-label','Type 列值筛选');
+    select.add(new Option('全部类型',''));
+    for(const value of types)select.add(new Option(value,value));
+    select.value=typeFilter;
+    select.addEventListener('click',event=>event.stopPropagation());
+    select.addEventListener('change',event=>{
+      event.stopPropagation();typeFilter=select.value;
+      if(logicalState&&selectedTable==='logical_block')renderGrid(logicalState);
+    });
+    header.append(label,select);this.gui=header;
+    }
+    getGui(){return this.gui;}
+  }
   const columns=columnKeys.map((key,index)=>({field:key,
     headerName:logical&&key==='block_type'?'Type':
-      logical&&key==='markdown_text'?'Raw Txt':sourceHeaders[key]||key,
-    headerTooltip:key,tooltipField:key,resizable:true,sortable:true,
-    minWidth:key==='markdown_text'&&logical?320:key==='block_json'?380:
+      logical&&key==='md_block'?'MD Block':
+      logical&&key==='raw_block'?'Raw Block (只读)':sourceHeaders[key]||key,
+    headerTooltip:key,tooltipField:key,resizable:true,
+    sortable:!(logical&&key==='block_type'),
+    headerComponent:logical&&key==='block_type'?TypeHeader:undefined,
+    minWidth:logical&&key==='block_type'?typeWidth:
+      key==='md_block'&&logical?290:key==='block_json'?380:
       key==='source_json_path'?275:key==='source_sha256'?220:105,
-    width:key==='markdown_text'&&logical?420:key==='blockid'?100:
+    width:logical&&key==='block_type'?typeWidth:key==='md_block'&&logical?420:
+      key==='raw_block'&&logical?330:key==='blockid'?100:
       key==='block_json'?440:key==='original_bytes'?155:undefined,
     pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
   if(logical){
-    // PBS is the user-facing identity. Retain all nine physical fields in AG.
+    // PBS is the sole pinned column, sized to its displayed values.
     columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
-      minWidth:125,width:135,pinned:'left',resizable:true,sortable:true});
+      minWidth:pbsWidth,width:pbsWidth,pinned:'left',resizable:true,sortable:false});
   }
   const controls=logicalControls();
   let view=null;
@@ -274,7 +305,8 @@ function renderGrid(state){
     controls.label.querySelector('input').checked=showAllLogical;
   }
   if(logical){
-    view=filterLogicalAG(state.rows,currentLogicalId(),showAllLogical);
+    const page=filterLogicalAG(state.rows,currentLogicalId(),showAllLogical);
+    view={...page,rows:typeFilter?page.rows.filter(row=>row.block_type===typeFilter):page.rows};
     visibleLogicalP=view.p;
     if(controls)controls.indicator.textContent=showAllLogical?
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
@@ -329,10 +361,11 @@ function overlayCMStructure(){
   const source=$('#workspace #editor')?.v2SourcePort;
   if(!logicalState||!source?.getState().loaded||source.getWorkspace()!==bound)return;
   const live=new Map(source.getStructureRows().map(row=>[row.logicalId,row]));
+  const texts=new Map(source.getBlocks().map(row=>[row.logicalId,row.markdownText]));
   logicalState.rows=logicalState.rows.map(record=>{
     const row=live.get(record.logical_id);
     return row?{...record,parent_id:row.parentId,logical_order:row.logicalOrder,
-      p:row.p,b:row.b,s:row.s}:record;
+      p:row.p,b:row.b,s:row.s,md_block:texts.get(row.logicalId)??record.md_block}:record;
   }).sort((a,b)=>a.logical_order-b.logical_order);
 }
 function scheduleStructureSave(){
@@ -340,7 +373,7 @@ function scheduleStructureSave(){
   saveTimer=setTimeout(()=>{saveTimer=null;void flushStructure();},850);
 }
 async function flushStructure(){
-  if(rebuilding||saving||saveBlocked||!acknowledged||!bound)return;
+  if(rebuilding||saving||saveBlocked||!acknowledged||!acknowledgedText||!bound)return;
   const source=$('#workspace #editor')?.v2SourcePort;
   if(!source?.getState().loaded||source.getWorkspace()!==bound)return;
   const current=structureCopy(source.getStructureRows());
@@ -354,20 +387,40 @@ async function flushStructure(){
     return STRUCT_FIELDS.some(key=>before[key]!==after[key])?
       [{logicalId:row.logicalId,before,after}]:[];
   });
-  if(!changes.length){source.markPersisted(acknowledged);return;}
+  const textRows=source.getBlocks();
+  const textChanges=textRows.flatMap(row=>{
+    const before=acknowledgedText.get(row.logicalId);
+    if(before===undefined)throw Error('CM6 文本出现未知逻辑块');
+    return before!==row.markdownText?
+      [{logicalId:row.logicalId,before,after:row.markdownText}]:[];
+  });
+  if(!changes.length&&!textChanges.length){
+    source.markPersisted(acknowledged);source.markTextPersisted(textRows);
+    return;
+  }
   const workspace=bound;
   saving=true;
   try{
-    const result=await request('structure-commit',workspace,{method:'POST',
-      payload:{workspace,confirm:'commit-v2-structure',changes}});
-    if(!result?.saved||result.changedRows!==changes.length)throw Error('SQL 结构写入回执不完整');
-    if(bound!==workspace||source.getWorkspace()!==workspace)return;
-    acknowledged=current;
-    source.markPersisted(current);
-    report(`✓ WP07 SQLite 已增量保存 ${result.changedRows} 行 · 原始基础表未修改`,'ok');
+    if(changes.length){
+      const result=await request('structure-commit',workspace,{method:'POST',
+        payload:{workspace,confirm:'commit-v2-structure',changes}});
+      if(!result?.saved||result.changedRows!==changes.length)throw Error('SQL 结构写入回执不完整');
+      if(bound!==workspace||source.getWorkspace()!==workspace)return;
+      acknowledged=current;
+      source.markPersisted(current);
+    }
+    if(textChanges.length){
+      const result=await request('md-commit',workspace,{method:'POST',
+        payload:{workspace,confirm:'commit-v2-md',changes:textChanges}});
+      if(!result?.saved||result.changedRows!==textChanges.length)throw Error('SQL MD Block 写入回执不完整');
+      if(bound!==workspace||source.getWorkspace()!==workspace)return;
+      acknowledgedText=new Map(textRows.map(r=>[r.logicalId,r.markdownText]));
+      source.markTextPersisted(textRows);
+    }
+    report(`✓ SQLite 已保存 · PBS ${changes.length} 行 / MD Block ${textChanges.length} 行 · Raw Block 未改变`,'ok');
   }catch(error){
     saveBlocked=true;
-    report('WP07 SQL 写回失败，CM6 内存已保留：'+error.message+' · 下次拖动/撤销时重试','error');
+    report('WP10 SQL 写回失败，CM6 内存已保留：'+error.message+' · 后续编辑/撤销可重试','error');
   }finally{
     saving=false;
     if(!saveBlocked&&bound===workspace&&source.getState().dirty)scheduleStructureSave();
@@ -416,10 +469,11 @@ async function ensureBase(path){
         port.load(snapshot,path);
       }
     }
-    if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
+    if(bound!==path){logicalState=null;showAllLogical=false;typeFilter='';lastFocus=null;
       renderedSchema='';clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());
+    acknowledgedText=textCopy(port.getBlocks());
     // PDF evidence is separate and strictly read-only; never discard live
     // CM6 edits or verified SQL because a PDF is absent or ambiguous.
     const pdfPort=$('#workspace .ocr-preview-pdf-host')?.v2PDFPort;
@@ -471,22 +525,24 @@ document.addEventListener('v2-pdf-status',event=>{
   if(text)report(text,kind||'info');
 });
 document.addEventListener('v2-cm-protected-separator',()=>
-  report('WP08：空行属于逻辑块；当前源码仍只读，暂不允许跨块编辑','warning'));
+  report('WP10：不允许单次编辑跨越两个逻辑块；空行仍属于所属块','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
-  if(kind==='clear'){lastFocus=null;acknowledged=null;clearTimeout(saveTimer);saveTimer=null;}
-  if(kind==='load')acknowledged=structureCopy(
-    $('#workspace #editor')?.v2SourcePort?.getStructureRows()||[]);
-  if(kind==='structure'){
+  if(kind==='clear'){lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;}
+  if(kind==='load'){
+    const port=$('#workspace #editor')?.v2SourcePort;
+    acknowledged=structureCopy(port?.getStructureRows()||[]);
+    acknowledgedText=textCopy(port?.getBlocks()||[]);
+  }
+  if(kind==='structure'||kind==='edit'){
     overlayCMStructure();
     if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);
     saveBlocked=false;scheduleStructureSave();
-    report(`● WP07 CM6 结构已改变 · ${blocks} 逻辑块 · ${dirty?'待写 SQL':'已与 SQL 一致'}`,
+    report(`● WP10 CM6 文本/结构已改变 · ${blocks} 逻辑块 · ${dirty?'待写 SQL':'已与 SQL 一致'}`,
       dirty?'warning':'ok');
   }
 });
-document.addEventListener('v2-cm-source-readonly',()=>
-  report('WP07 源码窗只读；仅允许 PDF 拖动修改逻辑块结构','warning'));
+
 window.addEventListener('beforeunload',event=>{
   if($('#workspace #editor')?.v2SourcePort?.getState().dirty){
     event.preventDefault();event.returnValue='';

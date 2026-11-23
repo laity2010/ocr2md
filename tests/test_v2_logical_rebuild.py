@@ -31,7 +31,7 @@ class WP09Rebuild(unittest.TestCase):
             {'workspace':str(self.folder),'confirm':'rebuild-v2-logical-only'}, {},auth or Authorized())
     def test_clear_prior_logic_and_rebuild_267_typed_exact_rows(self):
         with closing(sqlite3.connect(self.db)) as db:
-            db.execute("UPDATE logical_block SET markdown_text='DELIBERATE-USER-OLD',block_type='corrupted' WHERE logical_order=1")
+            db.execute("UPDATE logical_block SET md_block='DELIBERATE-USER-OLD',block_type='corrupted' WHERE logical_order=1")
             db.execute("UPDATE logical_block SET p=100,b=1 WHERE logical_order=2")
             db.commit()
         auth=Authorized();result=self.reset(auth)
@@ -51,8 +51,8 @@ class WP09Rebuild(unittest.TestCase):
           ['table','table_body','table_footnote'])
         self.assertEqual([r['block_type'] for r in rows if r['base_blockid']==120],
           ['table','table_caption','table_body','table_footnote'])
-        self.assertEqual(rows[0]['markdown_text'],'Bufett’s Alpha')
-        self.assertFalse(rows[0]['markdown_text'].startswith('#'))
+        self.assertEqual(rows[0]['md_block'],'## Bufett’s Alpha')
+        self.assertTrue(rows[0]['md_block'].startswith('## '))
         self.assertEqual(len(v.existing_pdf_map(self.folder)['covers']),267)
         self.assertEqual(v.existing_markdown(self.folder)['rowCount'],267)
         self.assertEqual(len({r['base_blockid'] for r in rows if r['parent_id'] is None}),224)

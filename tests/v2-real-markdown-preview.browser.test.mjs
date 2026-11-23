@@ -72,7 +72,7 @@ try{
       const baseCols=['blockid','source_path','source_sha256','page_index','page_number','block_group',
         'page_block_index','source_json_path','block_type','mineru_index','bbox_json','angle','level',
         'lines_json','blocks_json','block_json','record_kind','original_bytes'];
-      const logicCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'];
+      const logicCols=['logical_id','base_blockid','parent_id','logical_order','md_block','block_type','p','b','s','raw_path'];
       const tables=[{name:'mineru_base',columns:baseCols},{name:'logical_block',columns:logicCols}];
       let sqlPosts=0,structurePosts=0,markdownGets=0,pdfGets=0;
       await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
@@ -100,7 +100,7 @@ try{
                 base_blockid:item.baseBlockId,parent_id:item.parentId,
                 p:Number(item.pbs.match(/^p(\d+)/)?.[1]),b:Number(item.pbs.match(/b(\d+)/)?.[1]),
                 s:Number(item.pbs.match(/s(\d+)$/)?.[1]),
-                logical_order:item.logicalOrder,markdown_text:(()=>{const r=snapshot.segments.find(s=>s.logicalId===item.logicalId);return snapshot.markdown.slice(r.startUtf16,r.endUtf16)})(),block_type:snapshot.segments.find(s=>s.logicalId===item.logicalId).blockType}))
+                logical_order:item.logicalOrder,md_block:(()=>{const r=snapshot.segments.find(s=>s.logicalId===item.logicalId);return snapshot.markdown.slice(r.startUtf16,r.endUtf16)})(),raw_path:'$',raw_block:'ORIGINAL EVIDENCE',block_type:snapshot.segments.find(s=>s.logicalId===item.logicalId).blockType}))
             : projection.covers.slice(offset,offset+120).map(item=>({blockid:item.baseBlockId,
                 page_index:item.physicalPageIndex,block_type:'text'}));
           return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
@@ -614,7 +614,7 @@ try{
         ?.clientWidth>80,null,{timeout:12000});
       assert.equal(await zoomSelect.inputValue(),'page-width');
       console.log('LAB_OCR_NATIVE_MULTILANE_FIRST_PAGE',name,JSON.stringify(density));
-      assert.equal(result.headingCount,0,'Raw Txt must not fabricate Markdown headings');
+      assert(result.headingCount>0,'MD Block derives Markdown headings from immutable OCR raw');
       assert(result.textLength>10000,result);
       assert.equal(sqlPosts,0);
       assert.equal(markdownGets,1,'the Markdown document must be fetched once per book');

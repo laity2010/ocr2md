@@ -8,6 +8,7 @@ sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 import v2_mineru_base as base
 import frame_workspace_io as f02
 from v2_logical_contract import initial_rows
+from v2_md_block import raw_bindings,initial_md
 
 FIXTURE=Path(__file__).parents[1]/'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
 class StubF02:
@@ -41,9 +42,10 @@ class LogicalInitTest(unittest.TestCase):
                 {'mineru_base','logical_block'})
             originals=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
             expected=initial_rows(originals)
-            actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type FROM logical_block ORDER BY logical_order')]
+            actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type FROM logical_block ORDER BY logical_order')]
             self.assertEqual(len(actual),267)
-            self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text,r.block_type) for r in expected])
+            self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,
+                initial_md(r.markdown_text,r.block_type,raw_bindings(originals)[r.logical_id][2]),r.block_type) for r in expected])
             self.assertFalse(list(db.execute('PRAGMA foreign_key_check')))
         self.assertEqual(self.source.read_bytes(),self.original)
         self.assertFalse(list(self.folder.glob('.ocr2md-v2-*.tmp')))
@@ -68,7 +70,7 @@ class LogicalInitTest(unittest.TestCase):
     def test_reopen_preserves_latest_user_edited_logic(self):
         self.import_book()
         with closing(sqlite3.connect(self.db_path)) as db:
-            db.execute("UPDATE logical_block SET markdown_text='hand edited',block_type='title' WHERE logical_order=1")
+            db.execute("UPDATE logical_block SET md_block='hand edited',block_type='title' WHERE logical_order=1")
             db.commit()
             before=list(db.execute('SELECT * FROM logical_block ORDER BY logical_order'))
         outcome=self.import_book()
@@ -134,7 +136,7 @@ class LogicalInitTest(unittest.TestCase):
                        'FOREIGN KEY(base_blockid) REFERENCES mineru_base(blockid))')
             if not empty:
                 db.execute('INSERT INTO previous_logic SELECT '
-                           'logical_id,base_blockid,parent_id,logical_order,markdown_text FROM logical_block')
+                           'logical_id,base_blockid,parent_id,logical_order,md_block FROM logical_block')
                 db.execute("UPDATE previous_logic SET markdown_text='USER FIXED',"
                            'parent_id=(SELECT logical_id FROM previous_logic WHERE logical_order=1) '
                            'WHERE logical_order=2')
@@ -163,7 +165,7 @@ class LogicalInitTest(unittest.TestCase):
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
             self.assertTrue(all(row[5]==db.execute('SELECT block_type FROM mineru_base WHERE blockid=?',
                                       (row[1],)).fetchone()[0] for row in rows))
-            self.assertEqual(db.execute('SELECT markdown_text FROM logical_block WHERE logical_order=2').fetchone()[0], 'USER FIXED')
+            self.assertEqual(db.execute('SELECT md_block FROM logical_block WHERE logical_order=2').fetchone()[0], 'USER FIXED')
             self.assertEqual(db.execute('SELECT parent_id FROM logical_block WHERE logical_order=2').fetchone()[0],old[0][0])
             # Deliberately change the CURRENT type to the opposite of OCR.
             original_type=db.execute('SELECT block_type FROM mineru_base WHERE blockid=?',(rows[0][1],)).fetchone()[0]

@@ -1,8 +1,6 @@
-/** WP07: CM6 is the ONLY document+structure memory owner, but source text
- * is read-only. PDF drag generates an auditable structure transaction which
- * CodeMirror history can undo/redo. SQL writes live in the outer adapter.
- */
-import {EditorState,StateField,StateEffect,Transaction} from '@codemirror/state';
+/** WP10: one editable CM6 text+structure history. SQL persists MD Block;
+ * Raw Block is external reference only and never modified from this pane. */
+import {EditorState,StateField,StateEffect,Transaction,Annotation} from '@codemirror/state';
 import {EditorView,Decoration} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth,invertedEffects} from '@codemirror/commands';
@@ -13,15 +11,18 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,logicalTextRows,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,logicalTextRows,canEditBlocks,mapEditedBlocks,groupEndPadding,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
-  let book='',loaded=false,blocks=[],dirty=false,programmatic=false,persistedSignature='';
+  let book='',loaded=false,blocks=[],dirty=false,programmatic=false;
+  let persistedStructureSignature='',persistedTextSignature='';
   const structureEffect=StateEffect.define();
+  const dragEffect=StateEffect.define();
+  const autoblanks=Annotation.define();
   const structureField=StateField.define({
     create:()=>[],
     update(value,tr){
@@ -31,6 +32,10 @@ export function mountV2Source(host){
   });
   const signature=rows=>JSON.stringify(rows.map(r=>[
     r.logicalId,r.logicalOrder,r.parentId,r.p,r.b,r.s]));
+  const textSignature=rows=>JSON.stringify(rows.map(r=>[r.logicalId,r.markdownText]));
+  const actualText=()=>logicalTextRows(editor.state.doc.toString(),blocks);
+  const refreshDirty=()=>{dirty=signature(blocks)!==persistedStructureSignature||
+    textSignature(actualText())!==persistedTextSignature;};
   const focusEffect=StateEffect.define();
   const focusField=StateField.define({
     create:()=>Decoration.none,
@@ -64,30 +69,70 @@ export function mountV2Source(host){
   };
   const extensions=[
     native?nativeIOSBasicSetup:basicSetup,
-    // The DOM is noneditable; a changeFilter rejects every non-structural
-    // change. CM6's state.readOnly must remain false for native undo/redo:
-    // @codemirror/commands intentionally disables history on readOnly state.
-    EditorView.editable.of(false),
+    // The native CM6 document is editable. Every textual transaction owns a
+    // single logical block (or several independent changes, one each); cross-
+    // block deletion/replacement remains forbidden to protect stable IDs.
+    EditorView.editable.of(true),
     EditorView.lineWrapping,
     EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),obsidianMarkdown,
     syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
     obsidianSourceSyntax,obsidianHeadingMarkers,focusField,structureField,
-    invertedEffects.of(tr=>tr.effects.some(e=>e.is(structureEffect))?
-      [structureEffect.of(tr.startState.field(structureField))]:[]),
+    invertedEffects.of(tr=>[
+      ...(tr.effects.some(e=>e.is(structureEffect))?
+        [structureEffect.of(tr.startState.field(structureField))]:[]),
+      ...(tr.effects.some(e=>e.is(dragEffect))?[dragEffect.of(true)]:[]),
+    ]),
+    EditorState.transactionFilter.of(tr=>{
+      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(dragEffect))||
+        !canEditBlocks(tr.startState.field(structureField),tr.changes))return tr;
+      // Each group must still visibly end with a blank line WHILE editing,
+      // not only after the next reload. Add the minimum display LF in the
+      // same native CM6 history transaction, even when typing in the old
+      // virtual blank or deleting its original trailing LF.
+      const before=tr.startState.field(structureField);
+      const pads=[];
+      for(let i=0;i<before.length;i++){
+        const row=before[i],next=before[i+1];
+        if(next&&next.p===row.p&&next.b===row.b)continue;
+        const end=tr.changes.mapPos(row.to,next?-1:1);
+        const suffix=tr.newDoc.sliceString(Math.max(0,end-2),end);
+        const padding=groupEndPadding(suffix);
+        if(padding)pads.push({logicalId:row.logicalId,length:padding.length,
+          from:end,insert:padding});
+      }
+      if(!pads.length)return tr;
+      return [tr,{changes:pads.map(p=>({from:p.from,insert:p.insert})),
+        sequential:true,annotations:autoblanks.of(pads)}];
+    }),
+    EditorState.transactionExtender.of(tr=>{
+      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(structureEffect)))return null;
+      return {effects:structureEffect.of(mapEditedBlocks(
+        tr.startState.field(structureField),tr.changes,tr.annotation(autoblanks)||[]))};
+    }),
     EditorState.changeFilter.of(tr=>{
       if(!tr.docChanged||!loaded)return true;
-      const allowed=tr.effects.some(effect=>effect.is(structureEffect));
-      if(!allowed)document.dispatchEvent(new Event('v2-cm-source-readonly'));
+      // A mapped structureEffect is also attached to ordinary text edits;
+      // it is NOT permission to cross block boundaries. Only an actual PDF
+      // structure drag (and its native inverse history) has dragEffect.
+      if(tr.effects.some(effect=>effect.is(dragEffect)))return true;
+      const allowed=canEditBlocks(blocks,tr.changes);
+      if(!allowed)document.dispatchEvent(new Event('v2-cm-protected-separator'));
       return allowed;
     }),
     EditorView.updateListener.of(update=>{
-      const structural=update.transactions.some(tr=>tr.effects.some(e=>e.is(structureEffect)));
-      if(loaded&&structural){
+      const changedEffect=update.transactions.some(tr=>tr.effects.some(e=>e.is(structureEffect)));
+      if(loaded&&changedEffect){
         blocks=update.state.field(structureField);
-        dirty=signature(blocks)!==persistedSignature;
+        refreshDirty();
         documentChanged(); // V1 revision rejects stale multi-pane focus/scroll
-        refresh();emit('structure');
+        refresh();
+        // Keep the established public session contract. The V1 PDF
+        // adapter listens for "structure"; the V1 Markdown/scroll adapters
+        // distinguish user "edit" from an actual block drag. Undo/Redo
+        // carry dragEffect in their inverse CM6 transaction.
+        const dragging=update.transactions.some(tr=>tr.effects.some(e=>e.is(dragEffect)));
+        emit(dragging?'structure':'edit');
       }else if(update.transactions.length&&loaded){refresh();}
       if(loaded&&!programmatic&&(update.selectionSet||update.docChanged)){
         const pos=update.state.selection.main.head;
@@ -114,13 +159,14 @@ export function mountV2Source(host){
     editor.setState(next);
     editor.dispatch({effects:structureEffect.of(created.blocks),
       annotations:Transaction.addToHistory.of(false)});
-    book=workspace;blocks=created.blocks;persistedSignature=signature(blocks);
+    book=workspace;blocks=created.blocks;persistedStructureSignature=signature(blocks);
+    persistedTextSignature=textSignature(logicalTextRows(created.source,blocks));
     loaded=true;dirty=false;selectedId=null;documentChanged();refresh();emit('load');
     return true;
   };
   const clear=()=>{
     if(!loaded&&!book)return;
-    loaded=false;book='';blocks=[];persistedSignature='';dirty=false;selectedId=null;
+    loaded=false;book='';blocks=[];persistedStructureSignature='';persistedTextSignature='';dirty=false;selectedId=null;
     editor.setState(EditorState.create({doc:'',extensions}));
     documentChanged();refresh();emit('clear');
   };
@@ -133,7 +179,7 @@ export function mountV2Source(host){
     // failed SQL write. No CM6 history entry, dirty flag or idle commit.
     if(result.unchanged)return {changed:[],unchanged:true,sourceBlockId:intent.sourceBlockId};
     editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:result.source},
-      effects:structureEffect.of(result.blocks),
+      effects:[structureEffect.of(result.blocks),dragEffect.of(true)],
       selection:{anchor:result.blocks.find(r=>r.logicalId===intent.sourceBlockId)?.from??0}});
     return {changed:result.changes,unchanged:false,sourceBlockId:intent.sourceBlockId};
   };
@@ -175,8 +221,13 @@ export function mountV2Source(host){
       logicalId,parentId,logicalOrder,p,b,s})),
     markPersisted:rows=>{
       if(!loaded)return;
-      persistedSignature=signature(rows);
-      dirty=signature(blocks)!==persistedSignature;refresh();emit('saved');
+      persistedStructureSignature=signature(rows);
+      refreshDirty();refresh();emit('saved');
+    },
+    markTextPersisted:rows=>{
+      if(!loaded)return;
+      persistedTextSignature=textSignature(rows);
+      refreshDirty();refresh();emit('saved');
     },
     getEditorView:()=>editor,getDoc:()=>editor.state.doc,
     getLineAtOffset:pos=>editor.state.doc.lineAt(Math.min(Math.max(pos,0),editor.state.doc.length)).number,
@@ -185,7 +236,7 @@ export function mountV2Source(host){
     getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})=>({
       logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})),
     getWorkspace:()=>book,
-    getState:()=>({book,loaded,dirty,readOnly:true,blockCount:blocks.length,
+    getState:()=>({book,loaded,dirty,readOnly:false,blockCount:blocks.length,
       undo:undoDepth(editor.state),redo:redoDepth(editor.state),
       separator:'',groupEndMinimum:BLOCK_END}),
     undo:onUndo,redo:onRedo,

@@ -64,10 +64,19 @@ export function composeBlockSource(snapshot){
  * block owns its trailing blank lines; changes must not span block IDs.
  * WP08 still keeps the actual source view read-only.
  */
+export function editOwner(blocks,from,to){
+  // A zero-width insertion at a shared boundary belongs to the NEXT block.
+  if(from===to){
+    const next=blocks.find(row=>row.from===from&&row.to>from);
+    if(next)return next;
+  }
+  return blocks.find(row=>from>=row.from&&to<=row.to&&
+    (from<row.to||row===blocks.at(-1)))||null;
+}
 export function canEditBlocks(blocks,changes){
   let allowed=true;
-  changes.iterChanges((a,b,_newA,_newB)=>{
-    if(!blocks.some(({from,to})=>a>=from&&b<=to))allowed=false;
+  changes.iterChanges((a,b)=>{
+    if(!editOwner(blocks,a,b))allowed=false;
   });
   return allowed;
 }
@@ -75,18 +84,25 @@ export function canEditBlocks(blocks,changes){
 /** Map one block's current coordinates through a CodeMirror transaction.
  * Preserved for a future separately authorized text-editing WP.
  */
-export function mapEditedBlocks(blocks,changes){
+export function mapEditedBlocks(blocks,changes,autopads=[]){
+  const added=new Map(autopads.map(({logicalId,length})=>[logicalId,length]));
+  const autoAt=new Set(blocks.filter(row=>added.has(row.logicalId)).map(row=>row.to));
   const changed=[];
-  changes.iterChanges((fromA,toA)=>changed.push({fromA,toA}));
+  changes.iterChanges((fromA,toA)=>{
+    changed.push({fromA,toA,owner:editOwner(blocks,fromA,toA)?.logicalId});
+  });
   return blocks.map(row=>({
     ...row,
-    from:changes.mapPos(row.from,-1),
-    to:changes.mapPos(row.to,1),
+    from:changes.mapPos(row.from,autoAt.has(row.from)?1:changed.some(change=>
+      change.fromA===row.from&&change.owner===row.logicalId)?-1:1),
+    to:changes.mapPos(row.to,added.has(row.logicalId)?1:changed.some(change=>change.fromA===row.to&&
+      change.toA===row.to&&change.owner!==row.logicalId)?-1:1),
     // Future text-editing WP: when someone types into a currently virtual
     // blank line, promote the WHOLE display tail into this block's real text
     // before persistence. Otherwise slicing off groupEndPad would silently
     // discard text entered by the user. WP08's editor stays read-only.
-    groupEndPad:(row.groupEndPad??0)>0&&changed.some(({fromA,toA})=>
+    groupEndPad:added.has(row.logicalId)?added.get(row.logicalId):
+      (row.groupEndPad??0)>0&&changed.some(({fromA,toA})=>
       fromA<row.to&&(
         toA>row.to-row.groupEndPad||
         fromA===toA&&fromA>=row.to-row.groupEndPad))

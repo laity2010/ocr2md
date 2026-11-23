@@ -46,8 +46,8 @@ class StructureCommit(unittest.TestCase):
         self.assertEqual((actual[1]['p'],actual[1]['b'],actual[1]['s']),(0,0,1))
         self.assertEqual([(r['p'],r['b'],r['s']) for r in actual[2:]],
             [(r['p'],r['b'],r['s']) for r in self.original[2:]])
-        self.assertEqual([(r['markdown_text'],r['base_blockid']) for r in actual],
-            [(r['markdown_text'],r['base_blockid']) for r in self.original])
+        self.assertEqual([(r['md_block'],r['base_blockid']) for r in actual],
+            [(r['md_block'],r['base_blockid']) for r in self.original])
         self.assertEqual(self.commit([{'logicalId':c['logicalId'],'before':c['after'],'after':c['before']}])['changedRows'],1)
         self.assertEqual(self.records(),self.original)
         with closing(sqlite3.connect(self.db)) as db:
@@ -112,7 +112,7 @@ class StructureCommit(unittest.TestCase):
         self.assertEqual(records[b['logical_id']]['b'],4)
         for row in tail:self.assertEqual(records[row['logical_id']]['b'],row['b']+1)
         for row in self.original:
-            self.assertEqual(records[row['logical_id']]['markdown_text'],row['markdown_text'])
+            self.assertEqual(records[row['logical_id']]['md_block'],row['md_block'])
             self.assertEqual(records[row['logical_id']]['base_blockid'],row['base_blockid'])
             if row['p']!=1:self.assertEqual(records[row['logical_id']]['b'],row['b'])
         self.assertEqual([r['logical_id'] for r in updated],

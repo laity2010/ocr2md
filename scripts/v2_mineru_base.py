@@ -14,7 +14,8 @@ import secrets
 import sqlite3
 import stat
 from urllib.parse import parse_qs
-from v2_logical_contract import initial_rows, validate_initial
+from v2_logical_contract import initial_rows, validate_initial, raw_element_text
+from v2_md_block import initial_md, raw_bindings, raw_at
 from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown
 from v2_pdf_projection import project_pdf, PDFProjectionError
 from v2_pbs import initial_pbs, validate_pbs
@@ -27,7 +28,9 @@ MAX_SOURCE_TOTAL=128*1024*1024
 PAGE_SIZE=120
 LEGACY_LOGICAL_COLS=('logical_id','base_blockid','parent_id','logical_order','markdown_text')
 PRE_PBS_LOGICAL_COLS=LEGACY_LOGICAL_COLS+('block_type',)
-LOGICAL_COLS=PRE_PBS_LOGICAL_COLS+('p','b','s')
+OLD_PBS_LOGICAL_COLS=PRE_PBS_LOGICAL_COLS+('p','b','s')
+LOGICAL_COLS=('logical_id','base_blockid','parent_id','logical_order',
+    'md_block','block_type','p','b','s','raw_path')
 BLOCK_LISTS=('preproc_blocks','discarded_blocks','para_blocks')
 COLUMNS=('blockid','source_path','source_sha256','page_index','page_number',
     'block_group','page_block_index','source_json_path','block_type','mineru_index',
@@ -87,7 +90,7 @@ def assert_schema(db, *, allow_legacy=False):
     if tables!={'mineru_base','logical_block'}:raise BaseError(409,'现有 SQLite 不符合 V2 两表结构，拒绝覆盖')
     # Only the verified WP03 five-column table may be migrated in place.
     columns=tuple(row[1] for row in db.execute('PRAGMA table_info(logical_block)'))
-    if columns!=LOGICAL_COLS and not (allow_legacy and columns in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS)):
+    if columns!=LOGICAL_COLS and not (allow_legacy and columns in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS,OLD_PBS_LOGICAL_COLS)):
         raise BaseError(409,'现有 SQLite 逻辑表结构不兼容，禁止将其当作当前逻辑状态')
     if columns==LOGICAL_COLS:
         try:validate_pbs([dict(r) for r in db.execute('SELECT logical_id,p,b,s FROM logical_block')])
@@ -113,10 +116,10 @@ def create_schema(db):
     );
     CREATE TABLE logical_block(
       logical_id INTEGER PRIMARY KEY, base_blockid INTEGER,
-      parent_id INTEGER, logical_order INTEGER, markdown_text TEXT,
+      parent_id INTEGER, logical_order INTEGER, md_block TEXT NOT NULL,
       block_type TEXT NOT NULL DEFAULT '',
       p INTEGER NOT NULL CHECK(p>=0), b INTEGER NOT NULL CHECK(b>=0),
-      s INTEGER NOT NULL CHECK(s>=0),
+      s INTEGER NOT NULL CHECK(s>=0), raw_path TEXT,
       FOREIGN KEY(base_blockid) REFERENCES mineru_base(blockid)
     );
     CREATE UNIQUE INDEX logical_block_pbs_unique ON logical_block(p,b,s);
@@ -164,11 +167,13 @@ def write_initial_logical(db):
     coords=initial_pbs([dict(logical_id=r.logical_id,base_blockid=r.base_blockid,
                         parent_id=r.parent_id,logical_order=r.logical_order) for r in rows],
                        {r['blockid']:r['page_index'] for r in source})
+    bindings=raw_bindings(source)
     db.executemany('INSERT INTO logical_block('
-                   'logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s) '
-                   'VALUES (?,?,?,?,?,?,?,?,?)',[
-                   (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,r.markdown_text,
-                    r.block_type,*coords[r.logical_id]) for r in rows])
+                   'logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s,raw_path) '
+                   'VALUES (?,?,?,?,?,?,?,?,?,?)',[
+                   (r.logical_id,r.base_blockid,r.parent_id,r.logical_order,
+                    initial_md(r.markdown_text,r.block_type,bindings[r.logical_id][2]),
+                    r.block_type,*coords[r.logical_id],bindings[r.logical_id][1]) for r in rows])
     inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
     if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
     if list(db.execute('PRAGMA foreign_key_check')):
@@ -278,9 +283,15 @@ def read_table(db, name, offset):
         raw=db.execute('SELECT * FROM '+identifier+clause+order+' LIMIT ? OFFSET ?',
             (PAGE_SIZE,offset)).fetchall()
     rows=[]
+    original={r['blockid']:r['block_json'] for r in db.execute(
+        'SELECT blockid,block_json FROM mineru_base WHERE blockid>0')} if name=='logical_block' else {}
     for record in raw:
         row=dict(record)
         if 'original_bytes' in row:row['original_bytes']=None
+        if name=='logical_block':
+            source=original.get(row['base_blockid'])
+            element=raw_at(source,row['raw_path']) if source and row['raw_path'] else None
+            row['raw_block']=raw_element_text(element) if element else None
         rows.append(row)
     return {'name':name,'columns':cols,'rowCount':count,'rows':rows}
 
@@ -330,7 +341,7 @@ def existing_markdown(folder:Path):
     with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
         assert_schema(db)
-        rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s '
+        rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s '
                         'FROM logical_block ORDER BY logical_order').fetchall()
         if not rows:raise BaseError(409,'逻辑表尚未初始化，请重新打开已保存的工作目录')
         try:
@@ -358,7 +369,7 @@ def migrate_legacy_type_column(folder: Path, common):
     with closing(sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True)) as read:
         read.row_factory=sqlite3.Row
         cols=tuple(r[1] for r in read.execute('PRAGMA table_info(logical_block)'))
-        if cols not in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS):return None
+        if cols not in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS,OLD_PBS_LOGICAL_COLS):return None
         archive=assert_schema(read,allow_legacy=True)
         n=read.execute('SELECT count(*) FROM logical_block').fetchone()[0]
     sources=mineru_sources(folder)
@@ -379,7 +390,7 @@ def migrate_legacy_type_column(folder: Path, common):
             return {'created':False,'migrated':False,'replaced':False,
                     'blockCount':db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0],
                     'logicalCount':count,'sourceCount':len(archive['sources']),'dbFile':DB_NAME}
-        if now not in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS):
+        if now not in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS,OLD_PBS_LOGICAL_COLS):
             raise BaseError(409,'升级期间逻辑表结构已改变，拒绝覆盖')
         assert_schema(db,allow_legacy=True)
         if now==LEGACY_LOGICAL_COLS:
@@ -387,10 +398,11 @@ def migrate_legacy_type_column(folder: Path, common):
             db.execute('UPDATE logical_block SET block_type=COALESCE(('
                        'SELECT b.block_type FROM mineru_base AS b '
                        "WHERE b.blockid=logical_block.base_blockid),'')")
-        for key in ('p','b','s'):
-            db.execute('ALTER TABLE logical_block ADD COLUMN '+key+' INTEGER')
+        if now in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS):
+            for key in ('p','b','s'):
+                db.execute('ALTER TABLE logical_block ADD COLUMN '+key+' INTEGER')
         existing=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
-        if existing:
+        if existing and now!=OLD_PBS_LOGICAL_COLS:
             source_rows=[dict(r) for r in db.execute(
                 'SELECT logical_id,base_blockid,parent_id,logical_order FROM logical_block ORDER BY logical_order')]
             pages={r['blockid']:r['page_index'] for r in db.execute(
@@ -399,9 +411,28 @@ def migrate_legacy_type_column(folder: Path, common):
             except ValueError as err:raise BaseError(409,str(err)) from err
             db.executemany('UPDATE logical_block SET p=?,b=?,s=? WHERE logical_id=?',
                            [(*value,lid) for lid,value in coords.items()])
+        # Existing WP09 text was raw, so compile Markdown exactly once;
+        # any non-raw text already edited is retained byte-for-byte.
+        db.execute('ALTER TABLE logical_block RENAME COLUMN markdown_text TO md_block')
+        db.execute('ALTER TABLE logical_block ADD COLUMN raw_path TEXT')
+        if existing:
+            base=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
+            bindings=raw_bindings(base)
+            edits=[]
+            for r in db.execute('SELECT logical_id,base_blockid,block_type,md_block FROM logical_block'):
+                ref=bindings.get(r['logical_id'])
+                if ref and ref[0]==r['base_blockid']:
+                    _,path,element=ref
+                    raw=raw_element_text(element)
+                    text=initial_md(raw,r['block_type'],element) if r['md_block']==raw else r['md_block']
+                else:
+                    path=None
+                    text=r['md_block']
+                edits.append((text,path,r['logical_id']))
+            db.executemany('UPDATE logical_block SET md_block=?,raw_path=? WHERE logical_id=?',edits)
         else:
             existing=write_initial_logical(db)
-        db.execute('CREATE UNIQUE INDEX logical_block_pbs_unique ON logical_block(p,b,s)')
+        db.execute('CREATE UNIQUE INDEX IF NOT EXISTS logical_block_pbs_unique ON logical_block(p,b,s)')
         assert_schema(db)
         if list(db.execute('PRAGMA foreign_key_check')):
             raise BaseError(409,'迁移后存在无效基础块来源')
@@ -537,6 +568,53 @@ def existing_pdf_map(folder:Path):
         except PDFProjectionError as err:raise BaseError(409,str(err)) from err
 
 STRUCTURE_FIELDS=('parentId','logicalOrder','p','b','s')
+def commit_md(folder:Path,payload,common):
+    """WP10: optimistic per-row MD Block edit, no base or structure mutation."""
+    if payload.get('confirm')!='commit-v2-md' or set(payload)!={'workspace','confirm','changes'}:
+        raise BaseError(422,'MD Block 事务确认或字段不完整')
+    changes=payload['changes']
+    if not isinstance(changes,list) or not 1<=len(changes)<=1000:
+        raise BaseError(422,'MD Block 修改行数无效')
+    seen=set();total=0
+    for item in changes:
+        if not isinstance(item,dict) or set(item)!={'logicalId','before','after'}:
+            raise BaseError(422,'MD Block 编辑字段不完整')
+        lid=item['logicalId']
+        if type(lid) is not int or lid<=0 or lid in seen:
+            raise BaseError(422,'MD Block 逻辑 ID 重复或无效')
+        seen.add(lid)
+        before,after=item['before'],item['after']
+        if not isinstance(before,str) or not isinstance(after,str) or before==after:
+            raise BaseError(422,'MD Block 旧值或新值无效')
+        total+=len(after.encode('utf-8'))
+        if total>4*1024*1024:raise BaseError(413,'本次 MD Block 保存超过上限')
+    path=folder/DB_NAME
+    if path.is_symlink():raise BaseError(403,'SQLite 不允许符号链接')
+    fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
+    try:
+        info=os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1:
+            raise BaseError(422,'SQLite 不是单一普通文件')
+    finally:os.close(fd)
+    common.probe(folder)
+    with closing(sqlite3.connect('file:'+str(path)+'?mode=rw',uri=True,timeout=5)) as db:
+        db.row_factory=sqlite3.Row
+        try:
+            db.execute('BEGIN IMMEDIATE')
+            assert_schema(db)
+            for change in changes:
+                row=db.execute('SELECT md_block FROM logical_block WHERE logical_id=?',
+                               (change['logicalId'],)).fetchone()
+                if row is None or row['md_block']!=change['before']:
+                    raise BaseError(409,'MD Block 已被其他会话改变，保留 CM6 当前文本')
+            db.executemany('UPDATE logical_block SET md_block=? WHERE logical_id=?',
+                           [(c['after'],c['logicalId']) for c in changes])
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+    return {'saved':True,'changedRows':len(changes),'baseChanged':False}
+
 def commit_structure(folder:Path,payload,common):
     """WP07: optimistic, changed-rows-only SQL transaction. Never write text/base.
 
@@ -604,7 +682,7 @@ def commit_structure(folder:Path,payload,common):
                 v['b'],v['s'],item['logicalId']))
             if updated.rowcount!=1:raise BaseError(409,'结构写入过程中逻辑块消失')
         records=[dict(r) for r in db.execute(
-            'SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type,p,b,s '
+            'SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s '
             'FROM logical_block ORDER BY logical_order')]
         try:
             groups=validate_pbs(records)
@@ -624,6 +702,9 @@ def dispatch(operation,method,folder,payload,query,common):
     if operation=='logical-rebuild':
         if method!='POST':raise BaseError(405,'逻辑表重建只能 POST')
         return rebuild_logical_only(folder,payload,common)
+    if operation=='md-commit':
+        if method!='POST':raise BaseError(405,'正文修改只能 POST')
+        return commit_md(folder,payload,common)
     if operation=='structure-commit':
         if method!='POST':raise BaseError(405,'结构修改只能 POST')
         return commit_structure(folder,payload,common)
@@ -697,7 +778,7 @@ def handle(handler,operation,parsed,common):
             if handler.headers.get('Transfer-Encoding'):raise BaseError(400,'不支持 chunked 请求')
             try:n=int(handler.headers.get('Content-Length','-1'))
             except ValueError:n=-1
-            limit=512*1024 if operation=='structure-commit' else 8192
+            limit=1024*1024 if operation=='md-commit' else 512*1024 if operation=='structure-commit' else 8192
             if not 2<=n<=limit:raise BaseError(413,'请求大小不合法')
             raw=handler.rfile.read(n)
             if len(raw)!=n:raise BaseError(400,'请求数据不完整')

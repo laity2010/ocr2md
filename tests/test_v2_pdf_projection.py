@@ -37,7 +37,7 @@ class PdfProjectionTests(unittest.TestCase):
  def test_empty_and_type_changes_do_not_replace_coordinates(self):
   initial=v.existing_pdf_map(self.folder);block=initial['covers'][0]
   with closing(sqlite3.connect(self.folder/v.DB_NAME)) as db:
-   db.execute("UPDATE logical_block SET markdown_text='',block_type='table' WHERE logical_id=?",(block['logicalId'],));db.commit()
+   db.execute("UPDATE logical_block SET md_block='',block_type='table' WHERE logical_id=?",(block['logicalId'],));db.commit()
   modified=next(c for c in v.existing_pdf_map(self.folder)['covers'] if c['logicalId']==block['logicalId'])
   self.assertTrue(modified['empty']);self.assertEqual(modified['bbox'],block['bbox'])
  def test_missing_pdf_reported_not_fake_pdf(self):

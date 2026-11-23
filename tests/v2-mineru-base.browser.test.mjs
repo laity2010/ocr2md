@@ -18,7 +18,7 @@ try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
      hasTouch:true,...(kind==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0,rebuildPosts=0;const requestedPages=[];
+   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0,rebuildPosts=0,mdCommitPosts=0;const requestedPages=[];
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -33,7 +33,7 @@ try{
    const cols=['blockid','source_path','source_sha256','page_index','page_number','block_group',
      'page_block_index','source_json_path','block_type','mineru_index','bbox_json','angle','level',
      'lines_json','blocks_json','block_json','record_kind','original_bytes'];
-   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'];
+   const logicalCols=['logical_id','base_blockid','parent_id','logical_order','md_block','block_type','p','b','s','raw_path'];
    const tables=[{name:'mineru_base',columns:cols},{name:'logical_block',columns:logicalCols}];
    const rows=Array.from({length:120},(_,i)=>Object.fromEntries(cols.map(k=>[k,k==='blockid'?i+1:k==='block_type'?'text':k==='block_json'?'{"type":"text"}':null])));
    // Match the actual WP03 out-of-band UTF-16 segment contract. The single
@@ -59,6 +59,14 @@ try{
    const mdSnapshot={schema:'v2-logical-md/v2',markdown,rowCount:224,segments};
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
     const request=route.request();const op=new URL(request.url()).pathname.split('/').at(-1);
+    if(op==='md-commit'){
+      mdCommitPosts++;
+      const req=request.postDataJSON();
+      assert.equal(req.confirm,'commit-v2-md');
+      assert(req.changes.every(c=>typeof c.before==='string'&&typeof c.after==='string'));
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        saved:true,baseChanged:false,changedRows:req.changes.length})});
+    }
     if(op==='structure-commit'){
       structurePosts++;
       const changes=request.postDataJSON().changes;
@@ -104,7 +112,7 @@ try{
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
           Array.from({length:224},(_,i)=>({
             logical_id:i+1,base_blockid:i+1,parent_id:null,
-            logical_order:i+1,markdown_text:'reconstructed',block_type:'text',
+            logical_order:i+1,md_block:fragments[i],block_type:i===0?'title':'text',raw_path:'$',raw_block:'ORIGINAL '+i,
             p:Math.floor(i/10),b:i%10,s:0})):[]):
           Array.from({length:Math.max(0,Math.min(120,539-pageOffset))},(_,i)=>({
             ...rows[0],blockid:pageOffset+i+1})),
@@ -149,13 +157,14 @@ try{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
    await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
-      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===10,
+      document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12,
       null,{timeout:30000});
    const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
      .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
-   assert.deepEqual(logicalHeaders,['pbs','block_type','markdown_text',
-     ...logicalCols.filter(key=>key!=='block_type'&&key!=='markdown_text')],
-     'logical AG view puts PBS, Type, Raw Txt first; retains all nine SQLite fields');
+   assert.deepEqual(logicalHeaders,['pbs','block_type','md_block',
+     ...logicalCols.filter(key=>key!=='block_type'&&key!=='md_block'),'raw_block'],
+     'logical AG puts PBS, Type, MD Block first; Raw Block is external only');
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .ag-row [col-id=\"pbs\"]')?.textContent?.trim()==='p0b0s0',null,{timeout:12000});
    const derivedPBS=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
      const columns=el.v2BaseGridPort.getColumns();
      const row=el.querySelector('.ag-row[row-index="0"]');
@@ -165,10 +174,25 @@ try{
        rawWidth:columns[2].width,otherPinned:columns.slice(1).some(column=>column.pinned)};
    });
    assert.deepEqual(derivedPBS,{pinned:'left',field:'pbs',rendered:'p0b0s0',
-     headers:['PBS','Type','Raw Txt'],rawWidth:420,otherPinned:false});
+     headers:['PBS','Type','MD Block'],rawWidth:420,otherPinned:false});
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
      el=>el.v2BaseGridPort.getColumns().find(column=>column.field==='block_type').headerName),
      'Type');
+   const agRules=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
+     const cs=el.v2BaseGridPort.getColumns();
+     return {pbsSort:cs[0].sortable,pbsPin:cs[0].pinned,
+       typeSort:cs[1].sortable,typeWidth:cs[1].width,pbsWidth:cs[0].width,
+       md:cs[2].field,raw:cs.at(-1).field};
+   });
+   assert.equal(agRules.pbsSort,false);assert.equal(agRules.pbsPin,'left');
+   assert.equal(agRules.typeSort,false);
+   assert(agRules.pbsWidth>=80&&agRules.pbsWidth<=155);
+   assert(agRules.typeWidth>=96&&agRules.typeWidth<=220);
+   assert.equal(agRules.md,'md_block');assert.equal(agRules.raw,'raw_block');
+   const typeFilter=page.locator('#workspace .v2-type-value-filter');
+   await typeFilter.selectOption('title');
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/1 \/ 224/);
+   await typeFilter.selectOption('');
    const all=page.getByRole('checkbox',{name:'全部逻辑块'});
    assert.equal(await all.isVisible(),true,'全部必须在逻辑表顶栏');
    assert.equal(await all.isChecked(),false,'默认按焦点 PBS p 过滤');
@@ -286,7 +310,7 @@ try{
      ?.v2MarkdownPreviewPort?.getScrollDriver()==='cm6',null,{timeout:12000});
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
      ?.scrollTop<500,null,{timeout:12000});
-   assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'false');
+   assert.equal(await page.locator('#workspace #editor .cm-content').getAttribute('contenteditable'),'true');
    const computed=await page.locator('#workspace #editor .cm-editor').evaluate(el=>({
      background:getComputedStyle(el).backgroundColor,color:getComputedStyle(el).color,
      family:getComputedStyle(el).fontFamily,gutters:el.querySelectorAll('.cm-gutters').length,
@@ -304,9 +328,56 @@ try{
    assert.equal(mdRequests,1,'auto load should fetch Markdown once');
    assert.equal(await page.locator('#workspace #undo').isDisabled(),true);
    assert.equal(await page.locator('#workspace #redo').isDisabled(),true);
-   // WP07 source is read-only, including programmatic unapproved changes.
+   // WP10: live CM6 edit changes just one MD Block, not its immutable Raw.
+   const beforeTextPosts=mdCommitPosts;
+   const editNow=await page.locator('#workspace #editor').evaluate(el=>{
+     const port=el.v2SourcePort,row=port.getIntervals()[0];
+     port.getEditorView().dispatch({changes:{from:row.from+2,to:row.from+2,insert:'EDIT '}});
+     return {dirty:port.getState().dirty,md:port.getBlocks()[0].markdownText};
+   });
+   assert.equal(editNow.dirty,true,'CM6 marks changed MD Block dirty immediately');
+   assert(editNow.md.includes('EDIT '),'input belongs to the original logical ID');
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(mdCommitPosts,beforeTextPosts+1,'edited MD Block saved once via SQL');
+   await page.locator('#workspace #undo').click();
+   await page.waitForFunction(original=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getMarkdown()===original,sourceState.text,{timeout:9000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(mdCommitPosts,beforeTextPosts+2,'CM6 Undo persists original MD Block');
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+     el.v2SourcePort.getBlocks()[0].markdownText),fragments[0]);
+   // WP08+WP10: typing in the group-ending virtual blank must belong to
+   // this MD Block, and the rendered group must STILL end with one blank.
+   const blankBeforePosts=mdCommitPosts;
+   const blankEdit=await page.locator('#workspace #editor').evaluate(el=>{
+     const port=el.v2SourcePort,first=port.getIntervals()[0],editor=port.getEditorView();
+     editor.dispatch({changes:{from:first.to-1,to:first.to-1,insert:'New line'}});
+     const next=port.getIntervals()[0];
+     return {raw:port.getBlocks()[0].markdownText,
+       suffix:editor.state.doc.sliceString(next.to-2,next.to),
+       continued:next.to===port.getIntervals()[1].from,
+       pad:next.groupEndPad};
+   });
+   assert(blankEdit.raw.includes('New line'));
+   assert.deepEqual({suffix:blankEdit.suffix,continued:blankEdit.continued},
+     {suffix:'\n\n',continued:true});
+   assert.equal(blankEdit.pad,1,'new final LF remains virtual; typed line becomes MD');
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(mdCommitPosts,blankBeforePosts+1);
+   await page.locator('#workspace #undo').click();
+   await page.waitForFunction(original=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getMarkdown()===original,sourceState.text,{timeout:12000});
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(mdCommitPosts,blankBeforePosts+2,'blank-line edit undo persists to MD Block');
+   // One edit spanning two logical IDs is forbidden, even though CM6 is open.
    await page.locator('#workspace #editor').evaluate(el=>{
-     el.v2SourcePort.getEditorView().dispatch({changes:{from:0,to:0,insert:'ILLEGAL'}});
+     const port=el.v2SourcePort,rows=port.getIntervals();
+     port.getEditorView().dispatch({changes:{from:rows[0].to-1,
+       to:rows[1].from+1,insert:'CROSS'}});
    });
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown()),sourceState.text);
    // A genuine PDF drag intent enters CM6 structure and native history.
@@ -332,7 +403,7 @@ try{
    await page.locator('#workspace #undo').click();
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getBlocks()[1].s===0,
      null,{timeout:12000});
-   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().dirty),true);
+   for(let tries=0;tries<100&&structurePosts<2;tries++)await sleep(100);
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().dirty===false,
      null,{timeout:12000});
    assert.equal(structurePosts,2,'undo is a new incremental SQL transaction');
@@ -347,13 +418,15 @@ try{
    // Structural boundaries are not user text: Ctrl/Meta+A replacement across
    // all blocks must be refused rather than erase identities or blank lines.
    const beforeCross=await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown());
-   await page.locator('#workspace #editor .cm-content').click();
-   await page.keyboard.press('ControlOrMeta+A');
-   await page.keyboard.type('SHOULD BE DENIED');
+   await page.locator('#workspace #editor').evaluate(el=>{
+     const port=el.v2SourcePort;
+     port.getEditorView().dispatch({changes:{from:0,to:port.getDoc().length,
+       insert:'SHOULD BE DENIED'}});
+   });
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getMarkdown()),beforeCross);
    assert.equal(postCount,1);
    assert.equal(await page.locator('#workspace .ocr-outline-grid').evaluate(
-     el=>el.v2BaseGridPort.getColumns().length),10);
+     el=>el.v2BaseGridPort.getColumns().length),12);
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:mineru-base';select.dispatchEvent(new Event('change',{bubbles:true}));
    });

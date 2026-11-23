@@ -64,7 +64,7 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual([t['name'] for t in state['tables']],['mineru_base','logical_block'])
         self.assertEqual(state['tables'][0]['columns'],list(v.COLUMNS))
         self.assertEqual(state['tables'][1]['columns'],
-            ['logical_id','base_blockid','parent_id','logical_order','markdown_text','block_type','p','b','s'])
+            ['logical_id','base_blockid','parent_id','logical_order','md_block','block_type','p','b','s','raw_path'])
         self.assertEqual(state['tableName'],'mineru_base')
         self.assertEqual(state['rowCount'],539)
         logical=v.existing_state(self.book,table='logical_block')
@@ -73,7 +73,7 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual(len(logical['rows']),267)
         self.assertEqual(v.existing_state(self.book,offset=120,table='logical_block')['offset'],0)
         self.assertEqual(len(v.existing_state(self.book,offset=120,table='logical_block')['rows']),267)
-        self.assertEqual(len(logical['columns']),9)
+        self.assertEqual(len(logical['columns']),10)
         self.assertEqual(logical['tables'],state['tables'])
         self.assertEqual(logical['blockCount'],539)
         self.assertEqual(v.dispatch('state','GET',self.book,{},

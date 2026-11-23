@@ -35,7 +35,7 @@ class Upgrade(unittest.TestCase):
     def test_s0_two_tables_real_mineru_and_all_columns(self):
         logical=v.existing_state(self.folder,table='logical_block')
         self.assertEqual(logical['columns'],list(v.LOGICAL_COLS))
-        self.assertEqual(len(logical['columns']),9)
+        self.assertEqual(len(logical['columns']),10)
         self.assertEqual(logical['rowCount'],267)
         with closing(sqlite3.connect(self.path)) as db:
             coords=db.execute('SELECT p,b,s FROM logical_block ORDER BY logical_order').fetchall()
@@ -84,7 +84,7 @@ class Upgrade(unittest.TestCase):
     def make_six_column(self):
         with closing(sqlite3.connect(self.path)) as db:
             # Simulate V2's previously released six-column table in this temp book.
-            previous=list(db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,markdown_text,block_type '
+            previous=list(db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type '
                                      'FROM logical_block ORDER BY logical_order'))
             original_base=list(db.execute('SELECT * FROM mineru_base ORDER BY blockid'))
             db.execute('DROP TABLE logical_block')
@@ -109,7 +109,7 @@ class Upgrade(unittest.TestCase):
         self.assertEqual(probe.calls,1)
         with closing(sqlite3.connect(self.path)) as db:
             self.assertEqual(tuple(row[1] for row in db.execute('PRAGMA table_info(logical_block)')),v.LOGICAL_COLS)
-            self.assertEqual(db.execute('SELECT markdown_text FROM logical_block WHERE logical_id=?',
+            self.assertEqual(db.execute('SELECT md_block FROM logical_block WHERE logical_id=?',
                 (first,)).fetchone()[0],'MANUAL_EDIT_SENTINEL')
             self.assertEqual(db.execute('SELECT block_type FROM logical_block WHERE logical_id=?',
                 (first,)).fetchone()[0],'title')

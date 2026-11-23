@@ -53,7 +53,7 @@ def checked_rows(rows):
 def from_sql_rows(rows):
     """Public adapter for existing SQL five-column records (not an extra table)."""
     return checked_rows([LogicalRow(row['logical_id'],row['base_blockid'],
-                     row['parent_id'],row['logical_order'],row['markdown_text'],row['block_type'],
+                     row['parent_id'],row['logical_order'],row['md_block'],row['block_type'],
                      row['p'],row['b'],row['s'])
                      for row in rows])
 

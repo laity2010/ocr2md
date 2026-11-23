@@ -91,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp09-para-raw-typed-children-sql-group-actions-f02',
+        stage:'wp10-md-block-cm6-edit-ag-type-filter-f02',
       })+'\n'});
     },
   }],
