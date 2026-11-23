@@ -48,6 +48,21 @@ function navs(){return [...document.querySelectorAll('.ocr-source-file-select')]
 function wireNav(select){
   if(select.dataset.v2MineruWired)return;
   select.dataset.v2MineruWired='yes';
+  // Tom Select owns only the visible navigation projection. Its optgroup
+  // header is clickable; the underlying native <select> remains the same
+  // authority for SQL table selection. No additional toolbar control.
+  const adapter=select.ocrNavigationSelect;
+  if(!adapter?.tom?.dropdown)throw Error('SQL 导航组件未就绪');
+  adapter.tom.dropdown.addEventListener('click',event=>{
+    const header=event.target.closest('.optgroup-header');
+    // Tom Select derives numeric data-group IDs from native optgroups; the
+    // displayed SQL label, not that unstable ID, is the group identity.
+    if(!header?.closest('.optgroup')||header.textContent.trim()!=='SQL')return;
+    event.preventDefault();
+    event.stopPropagation();
+    adapter.tom.close();
+    openSQLActions();
+  },true);
   select.addEventListener('change',()=>{
     const table=tableForValue(select.value);
     if(!table)return;
@@ -79,6 +94,75 @@ function revealPhysicalTables(tables){
   }
 }
 function picker(){return $('#workspace .ocr-ag-toolbar');}
+function sqlActionsDialog(){
+  let dialog=$('#v2-sql-actions-dialog');
+  if(dialog)return dialog;
+  dialog=document.createElement('dialog');
+  dialog.id='v2-sql-actions-dialog';
+  dialog.setAttribute('aria-labelledby','v2-sql-actions-title');
+  const heading=document.createElement('h2');heading.id='v2-sql-actions-title';
+  heading.textContent='SQL · 数据操作';
+  const info=document.createElement('p');info.className='v2-sql-actions-info';
+  const importBtn=document.createElement('button');importBtn.type='button';
+  importBtn.className='v2-sql-action-import';importBtn.textContent='导入基础表';
+  importBtn.title='使用当前工作目录的 MinerUJSON；同源已有数据保持不变';
+  const rebuildBtn=document.createElement('button');rebuildBtn.type='button';
+  rebuildBtn.className='v2-sql-action-rebuild';rebuildBtn.textContent='重建逻辑表';
+  rebuildBtn.title='仅覆盖当前逻辑表（PBS、类型、Raw Txt），绝不改基础表';
+  const warning=document.createElement('p');warning.className='v2-sql-actions-warning';
+  warning.textContent='导入基础表会验证 MinerU 来源；重建逻辑表将覆盖现有逻辑块及 PBS，原始基础表、PDF 和 MinerUJSON 不变。';
+  const close=document.createElement('button');close.type='button';
+  close.className='v2-sql-action-close';close.textContent='取消';
+  close.addEventListener('click',()=>dialog.close());
+  importBtn.addEventListener('click',()=>{
+    dialog.close();void importBaseFromMineru();
+  });
+  rebuildBtn.addEventListener('click',()=>{
+    dialog.close();void rebuildLogicalOnly();
+  });
+  const buttons=document.createElement('div');buttons.className='v2-sql-actions-buttons';
+  buttons.append(importBtn,rebuildBtn);
+  dialog.append(heading,info,buttons,warning,close);
+  document.body.append(dialog);
+  return dialog;
+}
+function openSQLActions(){
+  const dialog=sqlActionsDialog();
+  const workspace=bound&&bound===persistedDirectory()?bound:'';
+  dialog.querySelector('.v2-sql-actions-info').textContent=workspace?
+    '当前工作目录：'+workspace:'请先在全局设置中绑定并验证工作目录';
+  const busy=rebuilding||saving||Boolean(pending)||
+    Boolean($('#workspace #editor')?.v2SourcePort?.getState().dirty);
+  for(const selector of ['.v2-sql-action-import','.v2-sql-action-rebuild']){
+    dialog.querySelector(selector).disabled=!workspace||busy;
+  }
+  if(!dialog.open)dialog.showModal();
+}
+async function importBaseFromMineru(){
+  const path=bound;
+  if(!path||path!==persistedDirectory()){report('请先绑定并验证工作目录','error');return;}
+  const source=$('#workspace #editor')?.v2SourcePort;
+  if(rebuilding||saving||pending||source?.getState().dirty){
+    report('当前逻辑结构尚未保存或数据库正在处理，不能导入基础表','warning');return;
+  }
+  // Existing import API validates F02, source hashes and schema. It preserves
+  // an existing nonempty logical table and NEVER silently overwrites edits.
+  rebuilding=true;
+  report('正在检查并导入当前工作目录的 MinerU 基础表…');
+  try{
+    const result=await request('import',path,{method:'POST',
+      payload:{workspace:path,confirm:'import-mineru-base'}});
+    if(result.created||result.replaced||result.backfilled||result.migrated){
+      clearTimeout(saveTimer);saveTimer=null;saveBlocked=true;
+      source?.clear();bound='';lastFocus=null;logicalState=null;renderedSchema='';
+      await ensureBase(path);
+    }else if(active)await fetchPage();
+    report(result.created||result.replaced||result.backfilled||result.migrated?
+      '✓ 已从 MinerUJSON 导入基础表并重新加载 SQL':
+      '✓ 基础表已存在且来源相同，保留现有基础表和逻辑表','ok');
+  }catch(error){report('导入基础表失败：'+error.message,'error');}
+  finally{rebuilding=false;}
+}
 function logicalControls(){
   const bar=picker();if(!bar)return null;
   let label=bar.querySelector('.v2-logical-all');
@@ -98,17 +182,7 @@ function logicalControls(){
     indicator=document.createElement('span');indicator.className='v2-logical-page';
     bar.append(indicator);
   }
-  let rebuild=bar.querySelector('.v2-logical-rebuild');
-  if(!rebuild){
-    rebuild=document.createElement('button');rebuild.type='button';
-    rebuild.className='v2-logical-rebuild';
-    rebuild.textContent='重建逻辑表';
-    rebuild.title='仅从原始 para_blocks 重新生成逻辑表，覆盖以前的 PBS 和逻辑文本；不改基础表';
-    rebuild.addEventListener('click',()=>void rebuildLogicalOnly());
-    bar.append(rebuild);
-  }
-  rebuild.disabled=rebuilding||saving||!bound;
-  return {label,indicator,rebuild};
+  return {label,indicator};
 }
 async function rebuildLogicalOnly(){
   const path=bound;
@@ -137,7 +211,6 @@ async function rebuildLogicalOnly(){
     acknowledged=null;saveBlocked=true;
   }finally{
     rebuilding=false;
-    picker()?.querySelector('.v2-logical-rebuild')?.removeAttribute('disabled');
   }
 }
 function currentLogicalId(){
@@ -198,7 +271,6 @@ function renderGrid(state){
   if(controls){
     controls.label.hidden=!logical;
     controls.indicator.hidden=!logical;
-    controls.rebuild.hidden=!logical;
     controls.label.querySelector('input').checked=showAllLogical;
   }
   if(logical){

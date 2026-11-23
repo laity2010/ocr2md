@@ -4,7 +4,7 @@
 
 用户明确批准覆盖现有逻辑表，不保留旧 PBS、旧逻辑块顺序、旧的 Markdown 合并文本。**只能清空并重建 `logical_block`**；不重建、不修改 `mineru_base`，不替换 SQLite 文件，不修改 MinerUJSON、PDF 或媒体。保留且核查基础表全部原始字节，并在同一 `BEGIN IMMEDIATE` 事务内 `DELETE + INSERT + 校验 + COMMIT`；重建中发生错误必须完整 `ROLLBACK`。
 
-当前用户书籍目录通过 Frame F02 授权绑定。运行中的实验工作台会显示逻辑表顶栏「重建逻辑表」操作，POST `/labs/lab-ocr-v2/api/mineru-base/logical-rebuild`，请求体只能为 `{workspace,confirm:"rebuild-v2-logical-only"}`。保持同源请求、Frame 会话、根目录白名单和本地 probe。**不对所有书籍自动批量重建**。点击后停止旧 CM6 保存计时器，清除旧的 AG/CM6/PDF 会话，从同一本 SQLite 重新加载。未经点击的其他书籍与工作树绝不受影响。
+当前用户书籍目录通过 Frame F02 授权绑定。运行中的实验工作台点击导航下拉 SQL 组标题，弹窗显示「导入基础表」「重建逻辑表」两个操作；普通 SQL 表条目只切换 AG 视图，AG 顶栏不再放数据操作按钮。导入基础表复用 F02 import 接口，同源数据不会覆盖非空逻辑表；重建逻辑表 POST `/labs/lab-ocr-v2/api/mineru-base/logical-rebuild`，请求体只能为 `{workspace,confirm:"rebuild-v2-logical-only"}`。保持同源请求、Frame 会话、根目录白名单和本地 probe。**不对所有书籍自动批量重建**。点击后停止旧 CM6 保存计时器，清除旧的 AG/CM6/PDF 会话，从同一本 SQLite 重新加载。未经点击的其他书籍与工作树绝不受影响。
 
 ## 新逻辑层映射（两表不变）
 

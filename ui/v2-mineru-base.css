@@ -10,11 +10,29 @@
 #workspace .v2-logical-page{font-size:calc(11px * var(--ocr-frame-scale));white-space:nowrap;
   margin-left:auto;color:#a7c080}
 #workspace .v2-logical-page[hidden]{display:none!important}
-#workspace .v2-logical-rebuild{border:1px solid #60766b;background:#293b3c;color:#d3c6aa;
-  border-radius:4px;font-size:calc(11px * var(--ocr-frame-scale));padding:4px 8px;
-  white-space:nowrap;cursor:pointer}
-#workspace .v2-logical-rebuild[hidden]{display:none!important}
-#workspace .v2-logical-rebuild:disabled{opacity:.5;cursor:default}
+/* SQL operations live exclusively on the existing Tom Select group header. */
+.ocr-navigation-popup-files .optgroup-header{user-select:none}
+.ocr-navigation-popup-files .optgroup-header:has(+ .option[data-value^="sql:"]){
+  cursor:pointer;min-height:36px;box-sizing:border-box;display:flex;align-items:center}
+.ocr-navigation-popup-files .optgroup-header:has(+ .option[data-value^="sql:"])::after{
+  content:' · 操作';font-size:.84em;opacity:.8}
+#v2-sql-actions-dialog{
+  padding:20px 22px 18px;width:min(410px,calc(100vw - 32px));max-width:100%;
+  box-sizing:border-box;border:1px solid #72816e;border-radius:10px;
+  background:#293b3c;color:#d3c6aa;
+  font:var(--ocr-navigation-font-size,10pt)/1.5 'OCR2MD Sarasa',monospace}
+#v2-sql-actions-dialog::backdrop{background:rgba(0,0,0,.62)}
+#v2-sql-actions-dialog h2{font:inherit;font-size:1.22em;font-weight:700;
+  margin:0 0 12px;color:#a7c080}
+#v2-sql-actions-dialog p{margin:10px 0;overflow-wrap:anywhere}
+#v2-sql-actions-dialog .v2-sql-actions-info{opacity:.92}
+#v2-sql-actions-dialog .v2-sql-actions-warning{color:#e5bd80}
+#v2-sql-actions-dialog .v2-sql-actions-buttons{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}
+#v2-sql-actions-dialog button{min-height:38px;padding:7px 13px;border-radius:6px;
+  border:1px solid #60766b;background:#344349;color:#d3c6aa;font:inherit;cursor:pointer}
+#v2-sql-actions-dialog button:disabled{opacity:.42;cursor:default}
+#v2-sql-actions-dialog .v2-sql-action-rebuild{border-color:#bc9e6c}
+#v2-sql-actions-dialog .v2-sql-action-close{display:block;margin-left:auto;min-height:34px}
 
 /* V1-style AG focus follows a stable logical ID, never the physical row index. */
 #workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell{

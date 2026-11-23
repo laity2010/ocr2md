@@ -27,7 +27,7 @@
 | `mineru_base` | **18 列**；`blockid` 为全局稳定整数索引；`blockid=0` 是非业务源文件档案 | 无损保留三类 MinerU 原始块（`preproc_blocks`、`discarded_blocks`、`para_blocks`）、原始 JSON 字节及 SHA256、完整 `block_json`、原始页码和 bbox；不因逻辑编辑而改变 |
 | `logical_block` | **9 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`markdown_text`、`block_type`、`p`、`b`、`s` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，当前类型以 `logical_block.block_type` 为准 |
 
-- **WP09 初始化现状**：仅取最终 `para_blocks` 作为逻辑来源，不把前处理和丢弃块当正文；每个顶层 para 为 s0 原始父块，原始 `blocks[]` 内每个 caption/body/footnote 等直系元素生成独立 s1+ 子行。真实 22 页样本为 539 个原始基础块 / 224 个 para 根 + 43 个直系子元素 = **267 条逻辑行**。Raw Txt 只取该元素自身 span 的 `content/html/image_path` 与原有行结构，不再生成 Markdown 标题/围栏/媒体标记或合并不同类型；原始 JSON 字节归档于基础表 `blockid=0`。新书初始化产生新结构；同源非空旧库不会自动覆盖，用户可在 AG 逻辑表明确执行「重建逻辑表」。
+- **WP09 初始化现状**：仅取最终 `para_blocks` 作为逻辑来源，不把前处理和丢弃块当正文；每个顶层 para 为 s0 原始父块，原始 `blocks[]` 内每个 caption/body/footnote 等直系元素生成独立 s1+ 子行。真实 22 页样本为 539 个原始基础块 / 224 个 para 根 + 43 个直系子元素 = **267 条逻辑行**。Raw Txt 只取该元素自身 span 的 `content/html/image_path` 与原有行结构，不再生成 Markdown 标题/围栏/媒体标记或合并不同类型；原始 JSON 字节归档于基础表 `blockid=0`。新书初始化产生新结构；同源非空旧库不会自动覆盖，仅在导航下拉点击 SQL 组标题，弹窗提供「导入基础表」和「重建逻辑表」两个操作，AG 顶栏不放数据操作按钮。
 - **当前窗口**：框架原导航下拉 `SQL` 组展示 SQLite `sqlite_master` 中真实两表。AG 基础表仍每次从 SQL 读取 120 行分页；**AG 逻辑表取消翻页，完整加载当前逻辑表供视图过滤**，默认按 CM6/Markdown/PDF 当前焦点逻辑块的 **PBS `p` 值**只显示同一逻辑页，AG 工具栏最左端「全部」checkbox 勾选时显示全部逻辑块，取消勾选恢复当前焦点 `p`。这里的 `p` 是逻辑归属页，不是跨页块的原始 PDF 物理页；过滤不修改 SQL，列由数据库元数据提供，横向虚拟化不等于字段缺失。**逻辑表 AG 显示列序固定以 `PBS`、`Type`（`block_type`）、`Raw Txt`（`markdown_text`）开头**，其余九列中的其他物理字段全部保留在后；只改变视图，不调整 SQLite 表结构，基础表原有列序保持不变。源码窗为**唯一 CM6 文档，只读显示，暂不允许文字编辑**；WP08 起**块与块直接拼接，没有任何固定分隔符**，仅父块组的最后子块末尾保障至少一个可见空行，全部空行归属具体逻辑块（见下述 WP08 约定）。位置映射在 CM6 内存、不插 CMD 注释。**仅 PDF 逻辑块拖动可修改 CM6 内存中的块序与父子关系；CM6 原生 Undo/Redo 管结构历史，850ms 空闲后增量更新 SQL 逻辑表**。Markdown 预览由真实 V1 渲染器投影当前 CM6 文档。AG↔CM6↔MD↔PDF 同步高亮定位和结构；PDF 原始几何只读，但 PBS 拖动关系可编辑。
 - **V1 PDF 现状**：直接复用 V1 `lab-ocr` 的 `mountLabOcrPdf` 和 `layoutPbsLabels` 原版动态多轨、引线、手势与 PDF.js。三窗时预览下拉可选 PDF/Markdown；四窗切分时同一个 PDFViewer 和工具栏 DOM 移入独立面板，恢复也不重新建立 PDF 实例。原始 PDF 位置只取基础表的真实 bbox，失配/多来源/无 PDF 时不伪造覆盖框。
 - **PBS 三列现状**：`scripts/v2_pdf_projection.py` 从持久化 `p、b、s` 生成 `p0b0s0` 等两层标签，禁止孙块，不从 `logical_order` 全页重编号。WP07 复用 V1 PDF 拖动可调整根块组前后顺序、归入为子块、调整同组子块前后顺序（含 V1 支持的相邻跨页归入）；**插槽处及其后所有同级编号统一顺延，不跳过空号**；结构经 CM6 内存事务、AG/PDF 即时显示和空闲 SQL 增量更新。**源码编辑、手工拆分子块、任意脱离父组操作仍未开放**。
@@ -47,6 +47,8 @@
 - **WP07 验收门禁**：真实 V1 PDF 标签拖动，包括 `p1b3s0 → p1b4s0 之后` 的根块和后续 `b+1`、同组子块 `s+1`、父块带子块、缺号仍顺延、跨页原 bbox 保持原位、无孙块、AG/CM6/MD/PDF 联动、同源 CM6 Undo/Redo、SQL 延迟增量事务、冲突回滚；并单独验证 iPad-WebKit 和源码只读。**拆分新文本子块不属于 WP07**。
 
 ## 4. 旧 SQLite 原地升级与数据边界：[风险已修复]
+
+- **WP09 SQL 组入口**：沿用原 Tom Select 导航的 SQL optgroup 标题点击事件，以模态弹窗执行「导入基础表」和「重建逻辑表」，原 SQL 表条目继续切换 AG 视图。导入调用已有 F02 `import`，同源非空逻辑表保留不覆盖；重建调用 `logical-rebuild`，只在当前已授权资料目录内事务覆盖 `logical_block`，不修改 `mineru_base` 及原文件；操作后同步刷新 CM6/AG/PDF。AG 顶栏不容纳导入/重建按钮。
 
 - 用户明确当前 V2 **没有任何人工编辑**，同意直接升级 PBS，不要求先建独立 WP05 门禁。已知五列、六列 `logical_block` 在来源不变及 Frame F02 授权验证后，**原地事务升级九列**，保留现有文本、ID、顺序和类型，不执行整体从 MinerU 重建覆盖。
 - 已修复早前“未知九列非空逻辑状态被自动重建造成内容丢失”的入口：不兼容且非空的未知逻辑表现在**拒绝覆盖**，仅已确认的五/六列执行可验证迁移；空逻辑表可按原规则补齐。测试见 `tests/test_v2_pbs_upgrade.py` 与 `tests/test_v2_mineru_base.py`。

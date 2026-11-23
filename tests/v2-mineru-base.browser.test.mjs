@@ -78,10 +78,10 @@ try{
     }
     if(op==='import'){
       postCount++;assert.equal(request.postDataJSON().confirm,'import-mineru-base');
-      const created=exists==='retired-v2';
+      const created=exists==='retired-v2',backfilled=!created&&!logicalReady;
       exists=true;logicalReady=true;
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({created,
-        backfilled:!created,blockCount:539,logicalCount:224,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
+        backfilled,blockCount:539,logicalCount:224,sourceCount:1,dbFile:'ocr2md.v2.sqlite'})});
     }
     if(op==='markdown'){
       mdRequests++;assert(logicalReady,'Markdown should only be rendered from initialized logical rows');
@@ -128,6 +128,21 @@ try{
      {label:'基础表 · mineru_base',value:'sql:mineru-base'},
      {label:'逻辑表 · logical_block',value:'sql:logical_block'}
    ]);
+   // SQL group in the original Tom Select (including Settings view) is the
+   // ONLY gateway for base import and logical rebuild; no AG toolbar button.
+   await page.locator('#settings-workspace .ts-wrapper.ocr-navigation-files .ts-control').click();
+   const groupHeader=page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first();
+   if(kind==='webkit')await groupHeader.tap();
+   else await groupHeader.click();
+   const sqlActions=page.locator('#v2-sql-actions-dialog');
+   assert.equal(await sqlActions.isVisible(),true,'clicking SQL group opens modal');
+   assert.equal(await sqlActions.getByRole('button',{name:'导入基础表'}).isEnabled(),true);
+   assert.equal(await sqlActions.getByRole('button',{name:'重建逻辑表'}).isEnabled(),true);
+   assert.equal(await page.locator('#workspace .v2-logical-rebuild').count(),0,
+     'rebuild must not exist in the AG toolbar');
+   await sqlActions.getByRole('button',{name:'取消'}).click();
+   assert.equal(await sqlActions.isVisible(),false);
    // Both physical tables are populated atomically during initial import;
    // choosing logical_block must open its nine-field+PBS AG view without a click.
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
@@ -459,21 +474,37 @@ try{
      throw error;
    }
    assert.equal(postCount,2,'previous empty logical table should auto-backfill once');
-   // WP09 UI: actual user click posts explicit logical-only rebuild, then
-   // invalidates stale CM6 and refreshes the same book without re-import.
+   // WP09: SQL group actions in the WORKSPACE dropdown. Explicit import is
+   // safe/idempotent for an identical source; explicit logical-only rebuild
+   // invalidates stale CM6 and refreshes the same book without full import.
    await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
      select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
    });
-   await page.waitForFunction(()=>{const el=document.querySelector('#workspace .v2-logical-rebuild');
-     return !!el&&!el.disabled&&!el.hidden;},null,{timeout:15000});
+   await page.locator('#workspace .ts-wrapper.ocr-navigation-files .ts-control').click();
+   if(kind==='webkit')await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().tap();
+   else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().click();
+   const dialog=page.locator('#v2-sql-actions-dialog');
+   assert.equal(await dialog.isVisible(),true);
+   assert.equal(await page.locator('#workspace .ocr-ag-toolbar .v2-logical-rebuild').count(),0);
+   await dialog.getByRole('button',{name:'导入基础表'}).click();
+   await page.waitForFunction(()=>document.querySelector('#status')
+     ?.textContent.includes('基础表已存在且来源相同'),null,{timeout:15000});
+   assert.equal(postCount,3,'user explicit import invokes existing safe F02 API');
+   await page.locator('#workspace .ts-wrapper.ocr-navigation-files .ts-control').click();
+   if(kind==='webkit')await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().tap();
+   else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().click();
    const beforeMD=mdRequests;
-   await page.locator('#workspace .v2-logical-rebuild').click();
+   await dialog.getByRole('button',{name:'重建逻辑表'}).click();
    await page.waitForFunction(()=>document.querySelector('#workspace #editor')
      ?.v2SourcePort?.getState().loaded&&document.querySelector('#status')
      ?.textContent.includes('逻辑表已从原始 para_blocks 重建'),null,{timeout:15000});
    assert.equal(rebuildPosts,1);
    assert.equal(mdRequests,beforeMD+1,'single CM6 refreshed after rebuild');
-   assert.equal(postCount,2,'logic-only rebuild must NOT import the original base');
+   assert.equal(postCount,3,'logic-only rebuild must NOT import the original base');
 
    assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
    assert.deepEqual(errors,[]);
