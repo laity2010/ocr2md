@@ -61,8 +61,18 @@ export function moveLogicalBlocks(rows,intent){
     newMembers=[{...src,s:slot}];
   }else throw Error('该层级的拖动落点不受支持');
   const reordered=[...remaining.slice(0,insertAt),...newMembers,...remaining.slice(insertAt)];
-  if(placement!=='child'&&reordered.every((r,i)=>r.logicalId===rows[i].logicalId))
-    throw Error('拖动没有产生结构变化');
+  // CM6 order may already match the intended drop while PBS labels are still
+  // inverted by an older order-only move. Do not mistake that for a no-op:
+  // the slot insertion must still repair b/s and persist the changed rows.
+  // Only an ALREADY correctly ordered + numbered neighbor is truly unchanged.
+  const sequenceUnchanged=reordered.every((r,i)=>r.logicalId===rows[i].logicalId);
+  const numberedCorrectly=src.s===0
+    ?src.p===dst.p&&(placement==='before'?src.b<dst.b:src.b>dst.b)
+    :sameGroup&&(placement==='before'?src.s<dst.s:src.s>dst.s);
+  if(sequenceUnchanged&&placement!=='child'&&numberedCorrectly){
+    return {blocks:rows,source:rows.map(r=>r.markdownText+'\n\n').join(''),
+      changes:[],unchanged:true};
+  }
   let pos=0;
   const blocks=reordered.map((r,i)=>{
     const text=r.markdownText;
@@ -77,12 +87,12 @@ export function moveLogicalBlocks(rows,intent){
     .map(r=>({logicalId:r.logicalId,
       before:Object.fromEntries(fields.map(k=>[k,before.get(r.logicalId)?.[k]??null])),
       after:Object.fromEntries(fields.map(k=>[k,r[k]??null]))}));
-  if(!changes.length)throw Error('拖动没有产生结构变化');
+  if(!changes.length)return {blocks,source,changes:[],unchanged:true};
   const coords=new Set(blocks.map(r=>[r.p,r.b,r.s].join('/')));
   if(coords.size!==blocks.length)throw Error('PBS 编号冲突');
   for(const r of blocks){
     const root=blocks.find(x=>x.p===r.p&&x.b===r.b&&x.s===0);
     if(!root||r.parentId!==(r.s===0?null:root.logicalId))throw Error('拖动产生无效父子关系');
   }
-  return {blocks,source,changes};
+  return {blocks,source,changes,unchanged:false};
 }

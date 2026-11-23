@@ -21,8 +21,9 @@ const parentAfter=moveLogicalBlocks(rows,{sourceBlockId:11,targetBlockId:12,plac
 assert.deepEqual(parentAfter.blocks.map(r=>[r.logicalId,r.p,r.b,r.s]),[
   [12,0,1,0],[11,0,2,0],[13,0,3,0],[21,1,0,0],[22,1,1,0]]);
 assert.equal(parentAfter.blocks.find(r=>r.logicalId===11).parentId,null);
-assert.throws(()=>moveLogicalBlocks(rows,{sourceBlockId:11,targetBlockId:12,placement:'before'}),
-  /没有产生结构变化/,'already adjacent: no pointless renumbering');
+const redundantBefore=moveLogicalBlocks(rows,{sourceBlockId:11,targetBlockId:12,placement:'before'});
+assert.equal(redundantBefore.unchanged,true,'already correctly positioned: no unnecessary renumbering');
+assert.deepEqual(redundantBefore.changes,[]);
 assert.throws(()=>moveLogicalBlocks(join.blocks,{sourceBlockId:13,targetBlockId:12,placement:'after'}),/不受支持/);
 const joinAgain=moveLogicalBlocks(join.blocks,{sourceBlockId:21,targetBlockId:12,placement:'child'});
 assert.equal(joinAgain.blocks.find(r=>r.logicalId===21).s,1);
@@ -70,6 +71,36 @@ assert.deepEqual(familyAfter.blocks.map(r=>[r.logicalId,r.p,r.b,r.s,r.parentId])
   [303,1,4,0,null],[304,1,4,1,303],
   [301,1,5,0,null],[302,1,5,1,301],
   [305,1,6,0,null],[306,1,6,2,305],[307,2,0,0,null]]);
+// iPad screenshot regression: the CM6 sequence is ALREADY target then
+// source+its child (an older drag moved order only), but PBS remains inverted.
+// A sequence-only no-op check would incorrectly reject this necessary b fix.
+const invertedFamily=[family[2],family[3],family[0],family[1],family[4],family[5],family[6]]
+  .map((row,i)=>({...row,logicalOrder:i+1}));
+const fixLabelsOnly=moveLogicalBlocks(invertedFamily,{
+  sourceBlockId:301,targetBlockId:303,placement:'after'});
+assert.deepEqual(fixLabelsOnly.blocks.map(r=>[r.logicalId,r.p,r.b,r.s]),[
+  [303,1,4,0],[304,1,4,1],[301,1,5,0],[302,1,5,1],
+  [305,1,6,0],[306,1,6,2],[307,2,0,0]]);
+assert.equal(fixLabelsOnly.source,invertedFamily.map(r=>r.markdownText+'\n\n').join(''),
+  'CM6 document text must remain byte-identical during PBS-only corrections');
+assert.deepEqual(fixLabelsOnly.changes.map(r=>r.logicalId).sort((a,b)=>a-b),
+  [301,302,305,306],'only affected PBS changes, no logicalOrder difference');
+assert.equal(fixLabelsOnly.unchanged,false);
+const alreadyCorrect=moveLogicalBlocks(fixLabelsOnly.blocks,{
+  sourceBlockId:301,targetBlockId:303,placement:'after'});
+assert.equal(alreadyCorrect.unchanged,true,'repeating AFTER should not keep shifting b and writing SQL');
+assert.deepEqual(alreadyCorrect.changes,[]);
+const invertedChildren=[
+  [601,0,null],[602,2,601],[603,1,601],[604,3,601],
+].map(([logicalId,s,parentId],i)=>({
+  logicalId,baseBlockId:logicalId,blockType:'text',logicalOrder:i+1,
+  p:1,b:1,s,parentId,markdownText:'K'+logicalId,
+}));
+const fixChildLabelOnly=moveLogicalBlocks(invertedChildren,{
+  sourceBlockId:603,targetBlockId:602,placement:'after'});
+assert.deepEqual(fixChildLabelOnly.blocks.map(r=>[r.logicalId,r.s]),
+  [[601,0],[602,2],[603,3],[604,4]]);
+assert.deepEqual(fixChildLabelOnly.changes.map(r=>r.logicalId),[603,604]);
 // Slots are absolute; holes are never used to suppress the +1 shift.
 const holes=[
   [401,1,null],[402,4,null],[403,6,null],[404,10,null],

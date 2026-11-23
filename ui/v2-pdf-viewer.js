@@ -108,6 +108,10 @@ export function mountV2PDF(host,{toolbar}={}){
         const result=port.applyDrag(intent);
         const row=port.getIntervals().find(item=>item.logicalId===intent.sourceBlockId);
         if(row)focusLogical(row,'pdf');
+        if(result.unchanged){
+          notify('Block 手势 · 已在目标位置，结构与 SQL 均无需修改');
+          return true;
+        }
         notify(`Block 手势 · 已调整 ${result.changed.length} 行 · CM6 已更新，等待空闲写入 SQL`,'ok');
         return true;
       },

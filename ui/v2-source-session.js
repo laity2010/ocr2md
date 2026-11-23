@@ -129,10 +129,13 @@ export function mountV2Source(host){
   const applyDrag=intent=>{
     if(!loaded)throw Error('工作目录未绑定');
     const result=moveLogicalBlocks(logicalTextRows(editor.state.doc.toString(),blocks),intent);
+    // A repeated drop at the correct position is a successful no-op, not a
+    // failed SQL write. No CM6 history entry, dirty flag or idle commit.
+    if(result.unchanged)return {changed:[],unchanged:true,sourceBlockId:intent.sourceBlockId};
     editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:result.source},
       effects:structureEffect.of(result.blocks),
       selection:{anchor:result.blocks.find(r=>r.logicalId===intent.sourceBlockId)?.from??0}});
-    return {changed:result.changes,sourceBlockId:intent.sourceBlockId};
+    return {changed:result.changes,unchanged:false,sourceBlockId:intent.sourceBlockId};
   };
   undoButton?.addEventListener('click',onUndo);
   redoButton?.addEventListener('click',onRedo);

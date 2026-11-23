@@ -471,6 +471,37 @@ try{
       await page.waitForFunction(()=>document.querySelector('#workspace #editor')
         ?.v2SourcePort?.getState().dirty===false,null,{timeout:14000});
       assert.equal(structurePosts,6,'parent redo restores the updated PBS');
+      // Real Safari/Chromium gesture repeated at its CURRENT correct slot:
+      // show a benign status rather than "写入失败：拖动没有产生结构变化".
+      await livePdf().evaluate(el=>el.v2PDFPort.focusId(63,true));
+      await page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="63"]')
+        .first().evaluate(el=>el.scrollIntoView({block:'center',inline:'nearest'}));
+      await sleep(180);
+      const repeatedRects=await page.evaluate(()=>{
+        const src=document.querySelector('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="63"]');
+        const dst=document.querySelector('#workspace .lab-ocr-pdf-overlay-box[data-block-ids="64"]');
+        const mid=el=>{const r=el.getBoundingClientRect();
+          return {x:r.x+r.width/2,y:r.y+r.height/2};};
+        return {source:mid(src),target:mid(dst)};
+      });
+      await page.mouse.move(repeatedRects.source.x,repeatedRects.source.y);
+      await page.mouse.down();await sleep(460);
+      await page.mouse.move(repeatedRects.target.x,repeatedRects.target.y,{steps:8});
+      await page.waitForFunction(()=>document.querySelector(
+        '.lab-ocr-pdf-drop-guide [data-placement="after"]'),null,{timeout:6000});
+      const repeatAfter=await page.evaluate(()=>{
+        const r=document.querySelector('.lab-ocr-pdf-drop-guide [data-placement="after"]')
+          .getBoundingClientRect();
+        return {x:r.x+r.width/2,y:r.y+r.height/2};
+      });
+      await page.mouse.move(repeatAfter.x,repeatAfter.y);
+      await page.mouse.up();
+      await page.waitForFunction(()=>window.__v2PdfStatuses.some(text=>
+        text.includes('已在目标位置')),null,{timeout:6000});
+      assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+        el.v2SourcePort.getBlocks().find(r=>r.logicalId===63).b),5);
+      await sleep(1100);
+      assert.equal(structurePosts,6,'real repeated PDF AFTER must not write SQLite');
       await page.locator('#workspace #editor').evaluate((el,last)=>{
         const port=el.v2SourcePort;
         const interval=port.getIntervals().find(row=>row.logicalId===last);

@@ -359,6 +359,63 @@ try{
      throw error;
    }
    assert.equal(postCount,1);
+   // iPad Safari actual failure: a book edited with an older order-only
+   // release can have CM6 order B,A already, but PBS still A:b2 B:b3.
+   // Re-drop A AFTER B must repair PBS even if visible source text stays
+   // byte-for-byte identical; CM6 history and idle SQL must still work.
+   const beforeRepairPosts=structurePosts;
+   const repaired=await page.locator('#workspace #editor').evaluate((el,snapshot)=>{
+     const port=el.v2SourcePort;
+     const fragments=snapshot.segments.map(r=>({...r,
+       text:snapshot.markdown.slice(r.startUtf16,r.endUtf16)}));
+     [fragments[2],fragments[3]]=[fragments[3],fragments[2]];
+     let markdown='';
+     const segments=fragments.map((r,i)=>{
+       if(i)markdown+='\n\n';
+       const startUtf16=markdown.length;markdown+=r.text;
+       const {text,...meta}=r;
+       return {...meta,logicalOrder:i+1,startUtf16,endUtf16:markdown.length};
+     });
+     port.clear();
+     // This historical-order fixture is browser-local, not user SQL.
+     port.load({...snapshot,markdown,segments},'/demo/books/my-book');
+     const beforeText=port.getMarkdown();
+     const result=port.applyDrag({sourceBlockId:3,targetBlockId:4,placement:'after'});
+     return {beforeText,afterText:port.getMarkdown(),result,
+       source:port.getBlocks().find(row=>row.logicalId===3),
+       target:port.getBlocks().find(row=>row.logicalId===4),
+       following:port.getBlocks().find(row=>row.logicalId===5)};
+   },mdSnapshot);
+   assert.equal(repaired.result.unchanged,false,'inverted PBS labels are NOT a no-op');
+   assert.equal(repaired.beforeText,repaired.afterText,'PBS-only repair keeps the CM6 Markdown bytes');
+   assert.equal(repaired.source.b,4);
+   assert.equal(repaired.target.b,3);
+   assert.equal(repaired.following.b,5);
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(structurePosts,beforeRepairPosts+1,'PBS-only repair must persist SQL even when document text does not move');
+   await page.locator('#workspace #undo').click();
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+     el.v2SourcePort.getBlocks().find(row=>row.logicalId===3).b),2);
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(structurePosts,beforeRepairPosts+2,'native Undo restores persisted PBS-only state');
+   await page.locator('#workspace #redo').click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+   assert.equal(structurePosts,beforeRepairPosts+3,'Redo persists PBS-only repair again');
+   const noop=await page.locator('#workspace #editor').evaluate(el=>{
+     const p=el.v2SourcePort;
+     const before=p.getState();
+     const result=p.applyDrag({sourceBlockId:3,targetBlockId:4,placement:'after'});
+     return {result,before,after:p.getState()};
+   });
+   assert.equal(noop.result.unchanged,true,'repeat at already correct position is a benign no-op');
+   assert.equal(noop.result.changed.length,0);
+   assert.equal(noop.after.dirty,false);
+   assert.equal(noop.after.undo,noop.before.undo,'no-op must not create CM6 undo history');
+   await sleep(1100);
+   assert.equal(structurePosts,beforeRepairPosts+3,'no-op must NOT issue a redundant SQLite write');
    // Simulate a previously-created WP00 SQLite with an empty logical table:
    // the next verified reopen automatically backfills through the SAME import
    // endpoint. The user must not click a separate initializer.
