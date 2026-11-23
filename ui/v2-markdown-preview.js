@@ -112,6 +112,7 @@ export function mountV2MarkdownPreview(scroller){
     getFocusedId:()=>focusedId,
     getScrollDriver:()=>coordinator.port.getScrollDriver(),
     getScrollAnchorCount:()=>coordinator.port.getScrollAnchorCount(),
+    beforeSourceEdit:()=>coordinator.port.sourceEditGesture(),
     refresh:()=>schedule(true),
   });
   scroller.v2MarkdownPreviewPort=port;

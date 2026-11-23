@@ -79,6 +79,9 @@ export function mountV2PaneFocus(previewPane,previewBody){
     },
     beforeRender:()=>scroll?.beforeRender()??null,
     afterRender:previous=>scroll?.afterRender(previous),
+    // V1 public gesture hook: a source gutter action must not be interpreted
+    // as a Markdown preview edit when the CM6 editor no longer has DOM focus.
+    sourceEditGesture:()=>scroll?.sourceEditGesture(),
     measureLater:()=>scroll?.measureLater(),
   });
   return Object.freeze({port,dispose(){unsub();scroll?.dispose();

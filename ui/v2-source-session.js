@@ -1,6 +1,6 @@
 /** WP10: one editable CM6 text+structure history. SQL persists MD Block;
  * Raw Block is external reference only and never modified from this pane. */
-import {EditorState,StateField,StateEffect,Transaction} from '@codemirror/state';
+import {EditorState,StateField,StateEffect,Transaction,ChangeSet} from '@codemirror/state';
 import {EditorView,Decoration} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
 import {undo,redo,undoDepth,redoDepth,invertedEffects} from '@codemirror/commands';
@@ -274,13 +274,35 @@ export function mountV2Source(host){
     const planned=composeLogicalSource(textRows.map(item=>item.logicalId===id?
       {...item,markdownText:nextText}:item));
     const target=planned.blocks.find(item=>item.logicalId===id);
-    // V1 native text-layer extraction can target a V2 EMPTY SQL row. A
-    // small insertion at its zero-length CM range would accidentally turn
-    // synthetic trailing LF into persisted text. WP15's proven one-history
-    // recompose preserves every block ID and the virtual separator metadata.
-    editor.dispatch({changes:{from:0,to:editor.state.doc.length,insert:planned.source},
-      effects:[structureEffect.of(planned.blocks),blockTextEffect.of(true)],
-      selection:{anchor:target.from+offset+inserted.length}});
+    // WP21: do NOT replace the entire CM6 document for a one-block edit.
+    // Full-document replacement invalidates CM6's viewport height map and
+    // sent the real 267-block book from visible line 60 to line 1 on WebKit
+    // and Chromium. Change ONLY the target block (including its virtual
+    // padding when required) and prove the result equals the canonical
+    // projection before dispatch. The typed effect preserves LF ownership.
+    const replacement=planned.source.slice(target.from,target.to);
+    const current=editor.state.doc.toString();
+    if(current.slice(0,row.from)+replacement+current.slice(row.to)!==planned.source)
+      throw Error('PDF 单块替换与原逻辑块位置不一致，已取消操作');
+    const beforeHead=editor.state.selection.main.head;
+    // PDF/gutter commands run outside CM6's focus tree. Keep SOURCE as the
+    // scroll leader across the delayed Markdown re-render: reuse the proven
+    // V1 scroll-sync sourceEditGesture() instead of allowing the read-only
+    // preview to drag CM6 to its previous viewport anchor.
+    document.querySelector('#workspace .ocr-preview-md-scroll')
+      ?.v2MarkdownPreviewPort?.beforeSourceEdit?.();
+    const caret=mode==='replace'
+      ?target.from+Math.min(Math.max(beforeHead-from,0),nextText.length)
+      :target.from+offset+inserted.length;
+    const localChange={from:row.from,to:row.to,insert:replacement};
+    // Use CM6's NATIVE scroll anchor, mapped through the local change. This
+    // retains the currently visible source section even when the edited line
+    // loses/gains hundreds of pixels of wrapping; no ad-hoc scrollTop write.
+    const scrollAnchor=editor.scrollSnapshot()
+      .map(ChangeSet.of([localChange],editor.state.doc.length));
+    editor.dispatch({changes:localChange,
+      effects:[scrollAnchor,structureEffect.of(planned.blocks),blockTextEffect.of(true)],
+      selection:{anchor:caret}});
     if(actualText().find(item=>item.logicalId===id)?.markdownText!==nextText)
       throw Error('PDF 文本回写未与逻辑块精确对齐');
     return inserted.length;

@@ -74,7 +74,7 @@ try{
         'lines_json','blocks_json','block_json','record_kind','original_bytes'];
       const logicCols=['logical_id','base_blockid','parent_id','logical_order','md_block','block_type','p','b','s','raw_path'];
       const tables=[{name:'mineru_base',columns:baseCols},{name:'logical_block',columns:logicCols}];
-      let sqlPosts=0,structurePosts=0,markdownGets=0,pdfGets=0;
+      let sqlPosts=0,structurePosts=0,markdownGets=0,pdfGets=0,mdEditPosts=0,windowlessTargetId=null;
       await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
         const req=route.request();const op=new URL(req.url()).pathname.split('/').at(-1);
         if(op==='import'){sqlPosts++;return route.fulfill({status:500,contentType:'application/json',body:'{"error":"No DB import in WP04"}'});}
@@ -91,6 +91,15 @@ try{
         if(op==='pdf-map')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(projection)});
         if(op==='pdf'){pdfGets++;return route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes});}
         if(op==='markdown'){markdownGets++;return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(snapshot)});}
+        if(op==='md-commit' && process.env.V2_TEST_WP21_ONLY){
+          const body=req.postDataJSON();
+          assert.equal(body.confirm,'commit-v2-md');
+          assert.equal(body.workspace,folder);
+          assert.equal(body.changes.length,1,'one source block only');
+          assert.equal(body.changes[0].logicalId,windowlessTargetId);
+          mdEditPosts++;
+          return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({saved:true,changedRows:1})});
+        }
         if(op==='state'){
           const query=new URL(req.url()).searchParams;
           const table=query.get('table')||'mineru_base';
@@ -139,6 +148,91 @@ try{
       // because final para_blocks marked its three children lines_deleted.
       // preproc_blocks from the same page restores caption/HTML/note; page 4
       // receives its own (non-merged) Table 1-B portion without duplicate.
+      if(process.env.V2_TEST_WP21_ONLY){
+        const viewport=await page.locator('#workspace #editor').evaluate(el=>{
+          const src=el.v2SourcePort,view=src.getEditorView();
+          const line=view.state.doc.line(60);
+          const row=src.getIntervals().find(r=>r.from<=line.from&&r.to>line.from);
+          if(!row)throw Error('Line 60 has no logical block');
+          // Real user is reviewing the middle of a long book, source line 60.
+          view.dispatch({selection:{anchor:line.from+Math.min(5,line.length)}});
+          view.scrollDOM.scrollTop=view.lineBlockAt(line.from).top-100;
+          return {id:row.logicalId,line:60,raw:src.getBlocks().find(r=>r.logicalId===row.logicalId)?.markdownText};
+        });
+        windowlessTargetId=viewport.id;
+        await sleep(250);
+        await page.locator('#workspace #editor').evaluate(el=>{
+          const view=el.v2SourcePort.getEditorView();
+          const y=view.documentTop+view.lineBlockAt(view.state.doc.line(60).from).top
+            -view.scrollDOM.getBoundingClientRect().top;
+          view.scrollDOM.scrollTop+=y-95; // line-60 first visual wrap at 95px
+        });
+        await sleep(400);
+        const before=await page.locator('#workspace #editor').evaluate(el=>{
+          const view=el.v2SourcePort.getEditorView();return {scrollTop:view.scrollDOM.scrollTop,
+            head:view.state.selection.main.head,viewportFrom:view.viewport.from,viewportTo:view.viewport.to,
+            topLine:view.state.doc.lineAt(view.viewport.from).number,
+            line60Y:view.documentTop+view.lineBlockAt(view.state.doc.line(60).from).top-view.scrollDOM.getBoundingClientRect().top,
+            scrollHeight:view.scrollDOM.scrollHeight,viewportHeight:view.scrollDOM.clientHeight};
+        });
+        await page.locator('#workspace #editor').evaluate((el,id)=>
+          el.v2SourcePort.insertPdfText({blockId:id,text:'Native PDF replacement for line 60',mode:'replace'}),viewport.id);
+        await sleep(750);
+        const after=await page.locator('#workspace #editor').evaluate(el=>{
+          const view=el.v2SourcePort.getEditorView();return {scrollTop:view.scrollDOM.scrollTop,
+            head:view.state.selection.main.head,viewportFrom:view.viewport.from,viewportTo:view.viewport.to,
+            topLine:view.state.doc.lineAt(view.viewport.from).number,
+            line60Y:view.documentTop+view.lineBlockAt(view.state.doc.line(60).from).top-view.scrollDOM.getBoundingClientRect().top,
+            scrollHeight:view.scrollDOM.scrollHeight,viewportHeight:view.scrollDOM.clientHeight};
+        });
+        console.log('WP21_VIEWPORT_DIAG',name,JSON.stringify({id:viewport.id,before,after,
+          delta:after.scrollTop-before.scrollTop,mdEditPosts}));
+        // A long soft-wrapped logical line can shrink during replacement,
+        // changing the absolute scrollTop by its removed visual height.
+        // The correct invariant is that the reader stays around *line 60*,
+        // not that raw pixels stay fixed while the line height changes.
+        // The WP20 bug jumped from viewport line 60 all the way to line 1.
+        assert(before.line60Y>20&&before.line60Y<before.viewportHeight-20,
+          'WP21 fixture must position source line 60 visibly, not inside a hidden scroll region');
+        assert.equal(after.topLine,before.topLine,'WP21 viewport must remain at source line 60');
+        assert(Math.abs(after.scrollTop-before.scrollTop)<3,
+          'WP21 source scroller must not drift when the edited line begins visibly');
+        assert(Math.abs(after.line60Y-before.line60Y)<3,
+          'WP21 visible line-60 anchor must stay at the same screen position');
+        assert.equal(after.head,before.head,'PDF replacement must preserve the in-line CM6 caret');
+        assert(after.scrollTop>1500,'WP21 source viewport cannot jump back to book beginning');
+        await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+          ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+        assert.equal(mdEditPosts,1);
+        await page.locator('#workspace #undo').click();
+        await page.waitForFunction(({id,text})=>document.querySelector('#workspace #editor')
+          ?.v2SourcePort?.getBlocks().find(r=>r.logicalId===id)?.markdownText===text,
+          {id:viewport.id,text:viewport.raw},{timeout:12000});
+        await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+          ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+        assert.equal(mdEditPosts,2);
+        await page.locator('#workspace #redo').click();
+        await page.waitForFunction(id=>document.querySelector('#workspace #editor')
+          ?.v2SourcePort?.getBlocks().find(r=>r.logicalId===id)?.markdownText==='Native PDF replacement for line 60',
+          viewport.id,{timeout:12000});
+        await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+          ?.v2SourcePort?.getState().dirty===false,null,{timeout:12000});
+        assert.equal(mdEditPosts,3);
+        const final=await page.locator('#workspace #editor').evaluate(el=>{
+          const view=el.v2SourcePort.getEditorView();return {
+            topLine:view.state.doc.lineAt(view.viewport.from).number,
+            caret:view.state.selection.main.head,
+            idsCount:el.v2SourcePort.getBlocks().length,
+            targetLogicalId:el.v2SourcePort.getIntervals().find(r=>r.from<=view.state.doc.line(60).from&&r.to>view.state.doc.line(60).from)?.logicalId,
+          };
+        });
+        assert(final.topLine>45&&final.topLine<75,
+          'Undo and Redo must remain near selected line 60, not return to page 1');
+        assert.equal(final.idsCount,267,'all logical IDs remain loaded');
+        assert.equal(final.targetLogicalId,viewport.id,'line 60 logical identity unchanged');
+        console.log('WP21_REAL_LINE60_VIEWPORT_UNDO_REDO_PASS',name,JSON.stringify({before,after,final,mdEditPosts}));
+        continue;
+      }
       const getTablePart=(p,b,type)=>{
         const seg=snapshot.segments.find(row=>row.p===p&&row.b===b&&row.blockType===type);
         assert(seg,`missing ${p}/${b}/${type}`);
