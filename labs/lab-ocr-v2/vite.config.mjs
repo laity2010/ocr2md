@@ -91,7 +91,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp07-pdf-drag-cm6-structure-idle-sql-readonly-f02',
+        stage:'wp08-cm6-group-end-owned-blank-no-interblock-separator-readonly-f02',
       })+'\n'});
     },
   }],
