@@ -56,6 +56,7 @@
 - **Frame/F02**：`ui/frame/*` 基线一致性和 Settings 保存、权限验证、两表导航；旧 `/api/v2/` 不得复活。V2 的业务 API 为 `/labs/lab-ocr-v2/api/mineru-base/{state,import,markdown,pdf-map,pdf}`，只处理本书籍的授权数据；不新设端口、Tunnel、认证或平行文件管理器。
 - **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/v2-logical-ag-filter.test.mjs`、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。浏览器回归包括 Chromium 和 iPad-WebKit，特别验证三窗↔四窗两轮切换中 PDFViewer 不换实例、不重复下载、原 PBS 标签恢复；**实机 iPad Safari 仍须单独验收**。
 - **Git/发布**：变更经过有依据的定向回归与审计、commit/push 后，按 `AGENTS.md` 第 9 节的唯一 `release/`+manifest 网关发布同一 `lab-ocr-v2` 入口，核对 Git SHA、静态文件 SHA256 和其余 Lab 不变。本轮修改 SQL、投影和 AG，需重新构建、发布并校验同一 V2 入口。
+- **V2 后端运行版本同步**：Gateway 使用常驻 Python 进程导入 V2 模块；静态资源发布不等于更新其 `sys.modules` 缓存。V2 的正式发布脚本 `scripts/v2_frame_publish.py` 对比上次发布 SHA 与本次 Git SHA，若 V2 五个 Python 业务模块发生变化，发布后只通过既有 `launchctl kickstart -k` 刷新 **同一个统一 Gateway**，并核验 `/labs/healthz` 的发布 ID；纯静态变更不重启。禁止清理用户书籍 SQLite 或建立第二个 Gateway。直接测试：`python3 tests/test_v2_gateway_publish_sync.py -q`。
 
 ## 6. 既有航点文档（历史证据与模块说明；不得覆盖本 README）
 
