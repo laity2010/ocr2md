@@ -159,6 +159,36 @@ try{
    await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
       document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12,
       null,{timeout:30000});
+   if(process.env.V2_TEST_CROSS_FILTER){
+     // Mandatory cross-version release gate. Drive the actual AG Grid Type
+     // header icon and popup on Chromium and iPad WebKit, not a static mock.
+     assert.equal(await page.locator('#workspace .v2-type-value-filter').count(),0,
+       'custom Type <select> forbidden by V1 cross-version contract');
+     const button=page.locator('#workspace .ag-header-cell[col-id="block_type"] .ag-header-cell-filter-button');
+     await button.waitFor({timeout:12000});
+     if(kind==='webkit')await button.tap();else await button.click();
+     const popup=page.locator('.ocr-enum-filter[aria-label="Type 筛选"]:visible');
+     await popup.waitFor({timeout:12000});
+     const checkbox=value=>popup.locator(`[data-filter-value="${value}"] input`);
+     assert.equal(await checkbox('all').isChecked(),true);
+     assert.equal(await checkbox('title').count(),1);
+     assert.equal(await checkbox('text').count(),1);
+     await checkbox('all').uncheck();
+     await checkbox('title').check();
+     const titleOnly=await page.locator('#workspace .ocr-outline-grid .ag-row [col-id="block_type"]')
+       .allTextContents();
+     assert(titleOnly.length>0&&titleOnly.every(text=>text.trim()==='title'),
+       'V1 Type filter does not project only title rows');
+     await checkbox('text').check();
+     const both=await page.locator('#workspace .ocr-outline-grid .ag-row [col-id="block_type"]')
+       .allTextContents();
+     assert(both.includes('title')&&both.includes('text'),'V1 multiple Type options must be combinable');
+     await checkbox('all').check();
+     assert.equal(await checkbox('all').isChecked(),true);
+     assert.deepEqual(errors,[]);
+     console.log('V2_V1_AG_TYPE_FILTER_BROWSER_PASS',kind,'native icon/all/multi/model');
+     continue;
+   }
    const logicalHeaders=await page.locator('#workspace .ocr-outline-grid')
      .evaluate(el=>el.v2BaseGridPort.getColumns().map(x=>x.field));
    assert.deepEqual(logicalHeaders,['pbs','block_type','md_block',

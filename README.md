@@ -22,6 +22,8 @@
 
 **唯一跨版本契约**：统一开发区根目录 `CROSS_VERSION_COMPONENTS.md`（由 `AGENTS.md` 第 10 条登记）；V1 `labs/lab-ocr/ui/enum-checkbox-filter.js` 的 `EnumCheckboxFilter` 是已核验的多选过滤组件基线。新建/调整 V2 AG Grid 列前必须先阅读跨版本规范并查 V1 源码和直接测试，**不得在本 README 中另建或改写同一套强制规则**。PBS/Type/MD Block 的 V2 列序、宽度、排序及过滤状态以本 README 下文为准；Type 即使不可排序，也必须能使用原生 AG 表头多选过滤。
 
+**强制发布门禁（已接入）**：`scripts/v2_frame_publish.py` 发布前执行 Main Git 的 `scripts/verify_cross_version_components.py --target lab-ocr-v2 --browser`，包含 V1 真实组件测试和 V2 真实 AG 浏览器测试；只要 Type 仍是单选，自检就非零退出并阻止发布，不触碰用户 SQL 或旧发布资源。
+
 **当前实际差异（尚未修复）**：V2 `ui/v2-mineru-entry.js` 的 Type 列仍存在自制 `TypeHeader` 与单选 `<select class="v2-type-value-filter">`，不符合 V1 原生表头过滤器契约。后续应移除临时替代实现，复用 `EnumCheckboxFilter`，并用 V1 直接测试与 Chromium/iPad-WebKit 浏览器测试验收；本规范登记**不等于程序已修复**。
 
 ## 2. 数据唯一权威：[已实现]

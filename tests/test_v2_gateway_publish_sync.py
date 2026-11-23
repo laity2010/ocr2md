@@ -23,6 +23,17 @@ class V2GatewayPublishTests(unittest.TestCase):
             self.assertEqual(args[:3],['launchctl','kickstart','-k'])
             self.assertEqual(args[3],f'gui/{pub.os.getuid()}/{pub.GATEWAY_LABEL}')
             self.assertIn('/labs/healthz',fetch.call_args.args[0])
+    def test_cross_version_filter_gate_is_mandatory_before_release(self):
+        with patch.object(pub.subprocess,'run') as run:
+            pub.require_cross_version_component_gate()
+            args=run.call_args.args[0]
+            self.assertEqual(args[0],pub.sys.executable)
+            self.assertTrue(args[1].endswith('main/scripts/verify_cross_version_components.py'))
+            self.assertEqual(args[2:],['--target','lab-ocr-v2','--browser'])
+            self.assertTrue(run.call_args.kwargs['check'])
+        with patch.object(pub.subprocess,'run',side_effect=pub.subprocess.CalledProcessError(1,['preflight'])):
+            with self.assertRaises(pub.subprocess.CalledProcessError):
+                pub.require_cross_version_component_gate()
     def test_non_macos_does_not_touch_launchctl(self):
         with patch.object(pub.subprocess,'run') as run:
             self.assertFalse(pub.reload_gateway(release_id='release-123',platform='linux'))

@@ -33,6 +33,21 @@ V2_BACKEND_FILES=(
 )
 GATEWAY_LABEL='com.laity.agentlink.ocr2md-labs-gateway'
 
+
+def require_cross_version_component_gate(target='lab-ocr-v2', repository=base.ROOT):
+    """Fail closed BEFORE publishing when the V1 AG checkbox filter is bypassed.
+
+    This is one shared Main-Git validator used by every new Lab as it grows
+    AG Grid functionality. It never modifies live SQLite or published assets.
+    """
+    home=Path(repository).resolve().parents[1]
+    validator=home/'main/scripts/verify_cross_version_components.py'
+    if not validator.is_file():
+        raise RuntimeError('missing shared cross-version component gate: '+str(validator))
+    subprocess.run([sys.executable,str(validator),'--target',target,'--browser'],
+                   cwd=repository,check=True,timeout=120)
+    print('V2_CROSS_VERSION_COMPONENTS_RELEASE_GATE_PASS',target)
+
 def backend_changed(previous_commit, current_commit, repository=base.ROOT):
     if not previous_commit or previous_commit==current_commit:
         return previous_commit!=current_commit
@@ -65,6 +80,8 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--release-root',type=Path,required=True)
     args=parser.parse_args()
+    # No release I/O or gateway action is permitted before this preflight.
+    require_cross_version_component_gate()
     base.require_workspace_io_runtime()
     release=args.release_root.resolve()
     previous=json.loads((release/'release-manifest.json').read_text())
