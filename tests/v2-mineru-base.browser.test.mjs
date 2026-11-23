@@ -330,6 +330,12 @@ try{
    assert.equal(sourceState.state.dirty,false);
    assert.equal(sourceState.state.separator,'\n\n');
    assert.equal(sourceState.state.groupEndMinimum,'\n\n');
+   // WP22 starts with PDF as the DEFAULT preview. This V1 Markdown
+   // interactive regression explicitly switches to Markdown before clicking
+   // its hidden footnote popover; the separate real PDF test verifies PDF boot.
+   assert.equal(await page.locator('#workspace .ocr-preview-mode').inputValue(),'pdf');
+   await page.locator('#workspace .ocr-preview-mode').selectOption('md');
+   assert.equal(await page.locator('#workspace .ocr-preview-pane').getAttribute('data-preview-mode'),'md');
    // Original V1 Markdown renderer is mounted in the ORIGINAL Frame MD pane.
    // It projects the live source rather than reparsing SQL on each keystroke.
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')

@@ -280,6 +280,38 @@ try{
           typeof el.v2PDFPort.getV1Preview()?.[name]==='function')),true);
       assert.equal(await page.locator('#workspace .v2-pdf-label,#workspace .v2-pdf-cover,#workspace .ocr-pdf-block-ctrl').count(),0,
         'neither handmade V2 tags nor Main/V6 PdfPreview may be mounted');
+      // WP22 default: no fourth panel, PDF preview in the lower 2/3 of the
+      // RIGHT column, source above it. AG toolbar uses just the module picker.
+      const initialLayout=await page.locator('#workspace').evaluate(el=>{
+        const source=el.querySelector('.ocr-source-pane'),preview=el.querySelector('.ocr-preview-pane');
+        const ag=el.querySelector('.ocr-ag-toolbar');
+        const sr=source.getBoundingClientRect(),pr=preview.getBoundingClientRect();
+        const pdf=el.querySelector('.ocr-preview-pdf-host');
+        return {paneCount:el.querySelectorAll('.dv-content-container').length,
+          sourceHeight:sr.height,previewHeight:pr.height,
+          sameColumn:Math.abs(sr.left-pr.left)<3,
+          verticalOrder:pr.top>=sr.bottom-3,
+          previewRatio:pr.height/(sr.height+pr.height),
+          initialMode:preview.dataset.previewMode,
+          splitChecked:el.querySelector('.ocr-preview-split-toggle input')?.checked,
+          pdfInPreview:pdf.parentElement===preview,
+          originalPdfCount:el.querySelectorAll('.ocr-preview-pdf-host').length,
+          agText:ag.textContent.trim(),
+          redundantAgLabel:ag.querySelectorAll('.ocr-ag-toolbar-label').length,
+          framePickerText:[...ag.querySelector('.ocr-ag-module-select').options].map(option=>option.textContent),
+        };
+      });
+      assert.equal(initialLayout.paneCount,3,'WP22 must boot into three panels, not detached split PDF');
+      assert.equal(initialLayout.initialMode,'pdf','WP22 PDF is the default preview');
+      assert.equal(initialLayout.splitChecked,false,'WP22 preview begins unsplit');
+      assert.equal(initialLayout.pdfInPreview,true,'WP22 V1 PDF.js is mounted in original preview pane');
+      assert.equal(initialLayout.originalPdfCount,1,'WP22 must not instantiate another PDF renderer');
+      assert.equal(initialLayout.redundantAgLabel,0,'AG 表 label removed');
+      assert(initialLayout.framePickerText.includes('逻辑块审阅'),'V2 module name');
+      assert(initialLayout.sameColumn&&initialLayout.verticalOrder,initialLayout);
+      assert(Math.abs(initialLayout.previewRatio-2/3)<0.065,
+        'WP22 PDF preview should use about two-thirds right-column height: '+JSON.stringify(initialLayout));
+      console.log('WP22_DEFAULT_THREE_PANEL_PDF_2_3_PASS',name,JSON.stringify(initialLayout));
       const firstTag=page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="23"]').first();
       assert.equal(await firstTag.textContent(),'p0b0s0');
       assert.equal(await firstTag.getAttribute('data-lane'),'0');
@@ -383,11 +415,20 @@ try{
       const split=page.locator('#workspace .ocr-preview-split-toggle input');
       const previewMode=page.locator('#workspace .ocr-preview-mode');
       const livePdf=()=>page.locator('#workspace .ocr-preview-pdf-host');
-      assert.equal(await split.isChecked(),true,'V2 starts split with detached PDF');
-      assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true);
+      assert.equal(await split.isChecked(),false,'WP22 V2 defaults to one unsplit PDF preview');
+      assert.equal(await previewMode.inputValue(),'pdf');
+      assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),false);
       assert.equal(pdfGets,1,'initial real PDF downloaded exactly once');
       await page.evaluate(()=>window.__v2PreviewInstance=
         document.querySelector('#workspace .ocr-preview-pdf-host').v2PDFPort.getV1Preview());
+      // The old fourth-pane choice is still optional and must move, never
+      // create a second V1 PDF.js instance. Existing split regression follows.
+      await split.check();
+      await page.waitForFunction(()=>document.querySelectorAll('#workspace .dv-content-container').length===4&&
+        !!document.querySelector('#workspace .ocr-detached-pdf-pane .ocr-preview-pdf-host'),
+        null,{timeout:12000});
+      assert.equal(await previewMode.locator('option[value="pdf"]').isDisabled(),true);
+      assert.equal(await livePdf().evaluate(el=>el.v2PDFPort.getV1Preview()===window.__v2PreviewInstance),true);
       for(let cycle=0;cycle<2;cycle++){
         await split.uncheck();
         await page.waitForFunction(()=>document.querySelectorAll('#workspace .dv-content-container').length===3,

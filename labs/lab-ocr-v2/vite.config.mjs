@@ -27,6 +27,7 @@ export default defineConfig({
       html=exact(html,'<title>OCR2MD V6 · Lab Frame</title>',
         '<title>OCR2MD · V2 · MinerU 无损基础表</title>','document title');
       html=exact(html,'OCR2MD lab-frame</a>','OCR2MD lab-ocr-v2</a>','brand');
+      html=exact(html,'正在初始化空白框架','正在初始化逻辑块审阅','V2 startup status');
       return html;
     }},
     transform(code,id){
@@ -71,6 +72,36 @@ export default defineConfig({
         code=exact(code,'<option value="pdf" disabled>PDF 原文</option>',
           '<option value="pdf">PDF 原文</option>',
           'V1 unsplit PDF option');
+        // WP22: V2 presentation only. Keep Frame/V1 source and APIs unchanged.
+        // The AG strip has its module select already; do not waste width on a
+        // redundant "AG 表" prefix, and label V2's actual review module.
+        code=exact(code,"const label=document.createElement('span');label.className='ocr-ag-toolbar-label';label.textContent='AG 表';",
+          "",'V2 redundant AG label removed');
+        code=exact(code,'bar.append(label,picker);element.append(bar);',
+          'bar.append(picker);element.append(bar);','V2 AG toolbar one module picker');
+        code=exact(code,"picker.add(new Option('空白框架','frame'));",
+          "picker.add(new Option('逻辑块审阅','frame'));",'V2 module title');
+        code=exact(code,"picker.title='空白框架 AG 模块切换不可用';",
+          "picker.title='逻辑块审阅模块 · 导航由源码窗管理';",'V2 module tooltip');
+        // The same V1 PDF.js viewer begins in the single preview pane.
+        code=exact(code,"    const split=document.createElement('label');split.className='ocr-preview-split-toggle';",
+          "    mode.value='pdf';\n    const split=document.createElement('label');split.className='ocr-preview-split-toggle';",
+          'V2 initial PDF mode');
+        code=exact(code,"checkbox.type='checkbox';checkbox.checked=true;",
+          "checkbox.type='checkbox';checkbox.checked=false;",'V2 initial unsplit preview');
+        code=exact(code,`  setSplit(true);
+  return Object.freeze({setSplit,activate(){if(container.clientWidth&&container.clientHeight)
+    dockview.layout(container.clientWidth,container.clientHeight);},`,
+          `  // WP22: initial three-pane layout, PDF in the lower two-thirds.
+  let sized=false;
+  return Object.freeze({setSplit,activate(){
+    if(!container.clientWidth||!container.clientHeight)return;
+    dockview.layout(container.clientWidth,container.clientHeight);
+    if(!sized){
+      dockview.getPanel('preview')?.api.setSize({height:Math.round(container.clientHeight*2/3)});
+      sized=true;
+    }
+  },`, 'V2 initial right-hand PDF two-thirds native Dockview size');
         code=exact(code,"element.append(area);\n    element.setAttribute('aria-label','Markdown 预览（空白）');",
           "const pdfTools=document.createElement('div');pdfTools.className='ocr-preview-mode-tools';pdfTools.dataset.mode='pdf';pdfTools.hidden=true;bar.append(pdfTools);\n"+
           "const pdfSurface=document.createElement('div');pdfSurface.className='ocr-preview-pdf-host';pdfSurface.dataset.pdfTheme='dark';\n"+
@@ -91,7 +122,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp21-pdf-source-viewport-stable',
+        stage:'wp22-default-pdf-review-2thirds',
       })+'\n'});
     },
   }],
