@@ -143,8 +143,32 @@ try{
    if(uiRestoreMode){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const checkTitleHeaders=async()=>{
+       await grid.evaluate(el=>{
+         const viewport=el.querySelector('.ag-body-horizontal-scroll-viewport');
+         if(viewport)viewport.scrollLeft=0;
+       });
+       const actual=await grid.evaluate(el=>{
+         const state=el.v2BaseGridPort.getColumnState();
+         const visible=[...el.querySelectorAll('.ag-header-cell[col-id]')].filter(n=>n.getBoundingClientRect().width>0).sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left).map(n=>n.getAttribute('col-id'));
+         const pinned=[...el.querySelectorAll('.ag-pinned-left-header .ag-header-cell[col-id]')].map(n=>n.getAttribute('col-id'));
+         return {order:state.filter(c=>!c.hide).map(c=>c.colId),pinned:state.filter(c=>c.pinned).map(c=>[c.colId,c.pinned]),visible,pinnedDOM:pinned};
+       });
+       console.log('WP25K_HEADER_STATE',name,JSON.stringify(actual));
+       assert.deepEqual(actual.order.slice(0,3),['md_line','source_line','pbs']);
+       assert.deepEqual(actual.pinned,[]);
+       assert.deepEqual(actual.pinnedDOM,[]);
+       assert.equal(actual.visible[0],'md_line');
+       const firstThree=actual.visible.filter(c=>['md_line','source_line','pbs'].includes(c));
+       assert.deepEqual(firstThree,['md_line','source_line','pbs'].filter(c=>actual.visible.includes(c)));
+     };
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().find(c=>c.colId==='pbs')?.pinned),'left');
      await picker.selectOption('title');
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['source_line','源码行号'],['pbs','PBS']]);
+     await checkTitleHeaders();
+     await picker.selectOption('frame');
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().find(c=>c.colId==='pbs')?.pinned),'left');
+     await picker.selectOption('title');
+     await checkTitleHeaders();
      const checkGutter=async()=>{
        await page.waitForFunction(()=>{
          const e=document.querySelector('#workspace #editor'),v=e.v2SourcePort.getEditorView();

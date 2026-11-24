@@ -34,7 +34,10 @@ export function mdLineColumns(view='line'){
   const leading=['md_line','source_line','pbs','title_level','line_type'];
   const marker=n=>Number.isInteger(n)&&n>=1&&n<=6?'#'.repeat(n):'';
   return [...leading.map(key=>columns.find(c=>c.field===key)),
-    ...columns.filter(c=>!leading.includes(c.field))].map(c=>{
+    ...columns.filter(c=>!leading.includes(c.field))].map(column=>{
+    // AG preserves prior pinned state when pinned is undefined. Explicitly
+    // clear it when entering the title preset; the block preset still pins PBS.
+    const c={...column,pinned:null};
     if(c.field==='md_line')return {...c,cellClass:'v2-ag-title-text',cellRenderer:renderTitleMdCell};
     if(c.field==='title_level')return {...c,headerName:'Level',
       valueFormatter:p=>marker(p.value),filterValueGetter:p=>marker(p.data?.title_level)};
