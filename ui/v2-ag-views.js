@@ -40,6 +40,7 @@ export function titleClickLine(row,target){
 
 export const AG_VIEWS=Object.freeze({
   frame:Object.freeze({label:'逻辑块审阅'}),
+  line:Object.freeze({label:'MD Line',lineRows:true}),
   title:Object.freeze({
     label:'标题',types:Object.freeze(['title']),
     leading:Object.freeze(['md_block','pbs','source_line','block_type']),
@@ -61,3 +62,10 @@ export function viewFilter(view){
   const types=AG_VIEWS[view]?.types;
   return types?{block_type:{values:[...types]}}:null;
 }
+
+export function usesMdLines(view){return AG_VIEWS[view]?.lineRows===true;}
+export function mdLineColumns(){return [
+  ['md_line','MD Line'],['pbs','PBS'],['line_offset','块内偏移'],
+  ['source_line','源码行号'],['block_type','Block Type'],['line_type','Line Type'],
+  ['logical_id','Logical ID'],['base_blockid','Base ID'],['title_level','标题层级'],
+].map(([field,headerName])=>({field,headerName}));}

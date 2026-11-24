@@ -6,7 +6,7 @@ import {createFrameStatus} from './frame/global-status.js';
 import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
-import {AG_VIEWS,viewColumns,viewFilter,titleClickLine} from './v2-ag-views.js';
+import {AG_VIEWS,viewColumns,viewFilter,titleClickLine,usesMdLines,mdLineColumns} from './v2-ag-views.js';
 import {effectiveBlockType,collectOwnedHeadings,ownedBlockType} from './v2-live-block-type.js';
 import './v2-ag-views.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
@@ -31,6 +31,7 @@ let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='
 let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBlocked=false;
 let rebuilding=false;
 let agView='frame',savedLogicalFilter=null,renderedView='frame';
+let savedLineFilter=null;
 let renderedDataTable='',renderedRows=[];
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
 const textCopy=rows=>new Map(rows.map(r=>[r.logicalId,r.markdownText]));
@@ -113,9 +114,10 @@ function wireViewPicker(){
     select.replaceChildren(...Object.entries(AG_VIEWS).map(([value,config])=>
       new Option(config.label,value)));
     select.setAttribute('aria-label','选择 AG 过滤视图');
-    select.title='同一逻辑块 AG 表：切换列布局和 Type 筛选';
+    select.title='同一 AG Grid：逻辑块与 MD Line 公共投影';
     select.addEventListener('change',()=>{
       if(!bound||!AG_VIEWS[select.value])return;
+      if(usesMdLines(select.value)&&!$('#workspace #editor')?.v2SourcePort?.getMdLineIndex()){select.value=agView;return;}
       const next=select.value;
       if(next===agView)return;
       agView=next;selectedTable='logical_block';active=true;offset=0;
@@ -125,6 +127,7 @@ function wireViewPicker(){
     });
   }
   select.disabled=!bound;
+  for(const option of select.options)if(usesMdLines(option.value))option.disabled=!$('#workspace #editor')?.v2SourcePort?.getState().ownedLF;
   select.value=agView;
 }
 function sqlActionsDialog(){
@@ -354,6 +357,11 @@ function pagingControls(){
   next.addEventListener('click',()=>{offset+=120;void fetchPage();});
   host.append(prev,label,next);bar.append(host);return host;
 }
+function focusAGLine(port,focus){
+  const index=$('#workspace #editor')?.v2SourcePort?.getMdLineIndex();
+  const line=index?.atSourceLine(focus.sourceLine);
+  port.focusRow('source_line',line?.logical_id===focus.logicalId?line.source_line:index?.forBlock(focus.logicalId)[0]?.source_line??null);
+}
 function renderGrid(state){
   const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
   if(!port)throw Error('AG 公共数据显示接口尚未就绪');
@@ -363,12 +371,16 @@ function renderGrid(state){
       if(!active||!bound||!event.data)return;
       document.dispatchEvent(new CustomEvent('v2-ag-row-click',{
         detail:{table:selectedTable,row:event.data,workspace:bound,
-          sourceLine:selectedTable==='logical_block'&&agView==='title'?
-            titleClickLine(event.data,event.event?.target):null}}));
+          lineRow:selectedTable==='logical_block'&&usesMdLines(agView),
+          sourceLine:selectedTable==='logical_block'?(usesMdLines(agView)?event.data.source_line:
+            agView==='title'?titleClickLine(event.data,event.event?.target):null):null}}));
     });
   }
   const logical=state.tableName==='logical_block';
   const nextView=logical?agView:'frame';
+  const lineView=logical&&usesMdLines(nextView);
+  const lineIndex=lineView?$('#workspace #editor')?.v2SourcePort?.getMdLineIndex():null;
+  if(lineView&&!lineIndex)throw Error('MD Line View 需要真实 LF 文档');
   // Only the AG view is reordered. The SQLite ten-column physical schema
   // and server-returned column inventory stay untouched.
   const columnKeys=logical
@@ -380,7 +392,8 @@ function renderGrid(state){
   // The minimum is deliberately smaller than the fitted width: AG Grid's
   // native resize handle must allow both shrinking and expanding.
   const page=logical?filterLogicalAG(state.rows,currentLogicalId(),showAllLogical):null;
-  const visibleRows=page?.rows||state.rows;
+  const lineRows=lineView?(showAllLogical?lineIndex.rows:lineIndex.rows.filter(r=>r.p===page.p)):null;
+  const visibleRows=lineRows||page?.rows||state.rows;
   const gridHost=$('#workspace .ocr-outline-grid');
   const cell=gridHost?.querySelector('.ag-cell');
   const measuredStyle=getComputedStyle(cell||gridHost);
@@ -414,7 +427,14 @@ function renderGrid(state){
       key==='block_json'?440:key==='original_bytes'?155:undefined,
     pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
-  if(logical){
+  if(lineView){
+    columns=mdLineColumns().map(c=>({...c,headerTooltip:c.field,tooltipField:c.field,
+      resizable:true,sortable:!['pbs','block_type','line_type'].includes(c.field),
+      filter:EnumCheckboxFilter,filterValueGetter:p=>String(p.data?.[c.field]??''),
+      suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
+      minWidth:c.field==='md_line'?220:72,width:c.field==='md_line'?420:
+        c.field==='pbs'?pbsWidth:c.field==='block_type'?typeWidth:105}));
+  }else if(logical){
     // PBS is pinned only in the default logical-block view.
     columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
       minWidth:72,width:pbsWidth,pinned:'left',resizable:true,sortable:false,
@@ -437,31 +457,34 @@ function renderGrid(state){
     controls.label.querySelector('input').checked=showAllLogical;
   }
   if(logical){
-    view=page;
+    view=lineView?{p:page.p,rows:lineRows}:page;
     visibleLogicalP=view.p;
     if(controls)controls.indicator.textContent=showAllLogical?
-      `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
+      `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${lineView?lineIndex.rows.length:state.rowCount}`;
   }else visibleLogicalP=null;
   const schema=state.tableName+':'+nextView+':'+columns.map(column=>column.field).join(',');
   const switchingView=renderedView!==nextView;
   if(switchingView){
     if(renderedView==='frame'&&renderedSchema.startsWith('logical_block:'))
       savedLogicalFilter=port.getFilterModel();
+    if(renderedView==='line')savedLineFilter=port.getFilterModel();
     port.setFilterModel(null);
   }
   if(schema!==renderedSchema){port.setColumns(columns,state.tableName+':'+nextView);renderedSchema=schema;}
   renderedView=nextView;
-  const rows=logical?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`})):state.rows;
+  const rows=lineView?lineRows:logical?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`})):state.rows;
   // Switching presets with identical rows must not reload AG rowData.
   // Existing page scope and live CM6 edits may change the common row set.
-  const sameRows=renderedDataTable===state.tableName&&rows.length===renderedRows.length&&
+  const dataTable=state.tableName+(lineView?':line':'');
+  const sameRows=renderedDataTable===dataTable&&rows.length===renderedRows.length&&
     rows.every((row,i)=>{
       const old=renderedRows[i],keys=Object.keys(row);
+      if(lineView)return row===old;
       return keys.length===Object.keys(old).length&&keys.every(key=>row[key]===old[key]);
     });
   if(!sameRows){
     const currentViewFilter=!switchingView&&nextView!=='frame'?port.getFilterModel():null;
-    port.setRows(rows);renderedRows=rows;renderedDataTable=state.tableName;
+    port.setRows(rows);renderedRows=rows;renderedDataTable=dataTable;
     // The common page scope can briefly omit a selected Type. Preserve the
     // view filter through the ordinary AG row refresh, not a separate dataset.
     if(currentViewFilter)port.setFilterModel(currentViewFilter);
@@ -469,12 +492,13 @@ function renderGrid(state){
   if(switchingView){
     // This is the SAME logical rowData, including non-title blocks. The
     // native AG EnumCheckboxFilter alone determines visible block types.
-    port.setFilterModel(nextView==='frame'?(logical?savedLogicalFilter:null):viewFilter(nextView));
+    port.setFilterModel(nextView==='frame'?(logical?savedLogicalFilter:null):nextView==='line'?savedLineFilter:viewFilter(nextView));
     if(nextView==='frame')savedLogicalFilter=null;
   }
   if(logical)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
   if(lastFocus){
-    port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
+    if(lineView)focusAGLine(port,lastFocus);
+    else port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
       state.tableName==='logical_block'?lastFocus.logicalId:lastFocus.baseBlockId);
   }
   const count=Number(state.rowCount??state.blockCount??0);
@@ -664,7 +688,7 @@ async function ensureBase(path){
       }
     }
     if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
-      renderedSchema='';renderedDataTable='';renderedRows=[];agView='frame';savedLogicalFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
+      renderedSchema='';renderedDataTable='';renderedRows=[];agView='frame';savedLogicalFilter=null;savedLineFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());
     acknowledgedText=textCopy(port.getBlocks());
@@ -704,7 +728,9 @@ document.addEventListener('v2-sync-focus',event=>{
       return;
     }
     visibleLogicalP=logical.p;
-    $('#workspace .ocr-outline-grid')?.v2BaseGridPort?.focusRow('logical_id',row.logicalId);
+    const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
+    if(port&&usesMdLines(agView))focusAGLine(port,row);
+    else port?.focusRow('logical_id',row.logicalId);
     return;
   }
   const desired=pageForLogical(row,'mineru_base');
@@ -725,7 +751,7 @@ document.addEventListener('v2-pdf-status',event=>{
   if(text)report(text,kind||'info');
 });
 document.addEventListener('v2-cm-protected-separator',()=>
-  report('不允许单次编辑跨越两个逻辑块；空行仍属于所属块','warning'));
+  report('跨块编辑归属不明确，已拒绝；完整行删除仍保留逻辑块','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
   if(kind==='clear'){lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;}

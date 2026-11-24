@@ -59,7 +59,7 @@ export function mountV2Source(host){
       return value;
     },provide:f=>EditorView.decorations.from(f),
   });
-  let selectedId=null;
+  let selectedId=null,selectedLine=null;
   let indexedDoc=null,indexedBlocks=null,lineIndex=null;
   const getMdLineIndex=()=>{
     if(!loaded||!ownedLF)return null;
@@ -217,13 +217,12 @@ export function mountV2Source(host){
         const pos=update.state.selection.main.head;
         selectionChanged(pos);
         const row=logicalAtOffset(blocks,pos);
-        if(row&&row.logicalId!==selectedId){
-          selectedId=row.logicalId;
-          // CM6 cannot dispatch while its own update is in progress.
-          // Schedule only the decoration; the state-bus focus is synchronous.
-          queueMicrotask(()=>{if(loaded&&selectedId===row.logicalId)setFocused(row);});
-          publishFocus({sourceLine:update.state.doc.lineAt(Math.min(pos,update.state.doc.length)).number,
-            origin:'cm6',intent:'click',elementId:String(row.logicalId)});
+        const line=update.state.doc.lineAt(Math.min(pos,update.state.doc.length)).number;
+        if(row&&(row.logicalId!==selectedId||(ownedLF&&(line!==selectedLine||update.docChanged)))){
+          const blockChanged=row.logicalId!==selectedId;
+          selectedId=row.logicalId;selectedLine=line;
+          if(blockChanged)queueMicrotask(()=>{if(loaded&&selectedId===row.logicalId)setFocused(row);});
+          publishFocus({sourceLine:line,origin:'cm6',intent:'click',elementId:String(row.logicalId)});
         }
       }
     }),
@@ -242,7 +241,7 @@ export function mountV2Source(host){
       annotations:Transaction.addToHistory.of(false)});
     book=workspace;blocks=created.blocks;persistedStructureSignature=signature(blocks);
     persistedTextSignature=textSignature(logicalTextRows(created.source,blocks));
-    loaded=true;dirty=false;selectedId=null;documentChanged();refresh();emit('load');
+    loaded=true;dirty=false;selectedId=null;selectedLine=null;documentChanged();refresh();emit('load');
     return true;
   };
   const clear=()=>{
@@ -432,7 +431,7 @@ export function mountV2Source(host){
     programmatic=true;
     try{editor.dispatch({selection:{anchor:pos},effects:focusEffect.of(row)});}
     finally{programmatic=false;}
-    selectedId=row?.logicalId??null;
+    selectedId=row?.logicalId??null;selectedLine=line;
     editor.focus();
     return true;
   };
@@ -444,7 +443,7 @@ export function mountV2Source(host){
     programmatic=true;
     try{editor.dispatch({selection:{anchor:pos},effects:focusEffect.of(row)});}
     finally{programmatic=false;}
-    selectedId=id;editor.focus();return true;
+    selectedId=id;selectedLine=editor.state.doc.lineAt(pos).number;editor.focus();return true;
   };
   const port=Object.freeze({
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),

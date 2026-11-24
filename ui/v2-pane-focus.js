@@ -6,11 +6,11 @@ import {createScrollSync} from './scroll-sync.js';
 import {logicalAtSourceLine,logicalForAG} from './v2-focus-map.js';
 
 const sourcePort=()=>document.querySelector('#workspace #editor')?.v2SourcePort;
-function emit(row,origin){
+function emit(row,origin,sourceLine){
   if(!row)return;
   document.dispatchEvent(new CustomEvent('v2-sync-focus',{detail:{
     logicalId:row.logicalId,baseBlockId:row.baseBlockId,logicalOrder:row.logicalOrder,
-    origin,
+    origin,sourceLine,
   }}));
 }
 export function focusLogical(row,origin){
@@ -45,8 +45,13 @@ export function mountV2PaneFocus(previewPane,previewBody){
     if(kind==='edit')scroll?.measureLater();
   };
   const onAG=event=>{
-    const {table,row,workspace,sourceLine}=event.detail||{};
+    const {table,row,workspace,sourceLine,lineRow}=event.detail||{};
     const source=sourcePort();if(!source?.getState().loaded||source.getWorkspace()!==workspace)return;
+    if(lineRow){
+      const current=source.getMdLineIndex()?.atSourceLine(sourceLine);
+      if(current!==row)return; // stale AG row from a previous document revision
+      focusSourceLine(sourceLine,'outline');return;
+    }
     const intervals=source.getIntervals();
     const match=logicalForAG(intervals,table,row);
     if(!match)return;
@@ -61,7 +66,7 @@ export function mountV2PaneFocus(previewPane,previewBody){
       const target=state.focusTarget;
       const source=sourcePort();if(!source?.getState().loaded)return;
       const row=logicalAtSourceLine(source.getIntervals(),source.getDoc(),target.sourceLine);
-      if(row){lastId=row.logicalId;emit(row,target.origin);}
+      if(row){lastId=row.logicalId;emit(row,target.origin,target.sourceLine);}
     }
     // WP19: scrollTarget means VIEWPORT POSITION, never selection.
     // ScrollSync still moves CM6/Markdown panes together, but only the

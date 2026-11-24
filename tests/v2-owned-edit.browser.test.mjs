@@ -14,8 +14,9 @@ const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
+const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
-const pdfMode=structureMode||splitMode||titleMode||initMode;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode;
 const port=5431,url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -181,6 +182,53 @@ try{
      assert.deepEqual((await snapshot()).rows,now.rows);
      assert.deepEqual(errors,[]);
      console.log('WP25C_REAL_LINE_EDIT_SQL_PASS',name,writes.length,'delta saves, 267 unchanged IDs, reopen');
+     continue;
+   }
+   if(lineViewMode){
+     const grid=page.locator('#workspace .ocr-outline-grid');
+     const picker=page.locator('#workspace .ocr-ag-module-select');
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const cols=()=>grid.evaluate(el=>el.v2BaseGridPort.getColumns().map(c=>c.field));
+     const oldColumns=await cols();
+     await picker.selectOption('line');
+     assert.deepEqual((await cols()).slice(0,6),['md_line','pbs','line_offset','source_line','block_type','line_type']);
+     assert((await read()).every(r=>r.p===before.rows[0].p));
+     await page.getByRole('checkbox',{name:'全部逻辑块'}).check();
+     const all=await read();
+     const expected=await source.evaluate(el=>el.v2SourcePort.getMdLineIndex().rows);
+     assert.deepEqual(all,expected);assert.equal(all.length,497);
+     assert.equal(await grid.evaluate(el=>{
+       const p=document.querySelector('#workspace #editor').v2SourcePort;
+       return el.v2BaseGridPort.getDisplayedRows().every(r=>p.getMdLineIndex().atSourceLine(r.source_line)===r);
+     }),true);
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel({line_type:{values:['blank','title']}}));
+     assert.deepEqual((await read()).map(r=>r.source_line),all.filter(r=>['blank','title'].includes(r.line_type)).map(r=>r.source_line));
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
+     const click=async line=>{
+       const cell=grid.locator('.ag-center-cols-container .ag-row').filter({has:grid.locator('[col-id="source_line"]').getByText(String(line),{exact:true})});
+       // Native focusRow brings the intended row into the virtual viewport.
+       await grid.evaluate((el,line)=>el.v2BaseGridPort.focusRow('source_line',line),line);
+       const row=grid.locator('.ag-row.v2-sync-ag-row [col-id="md_line"]').first();
+       await row.click();
+       assert.equal(await source.evaluate(el=>el.v2SourcePort.getEditorView().state.doc.lineAt(el.v2SourcePort.getEditorView().state.selection.main.head).number),line);
+     };
+     await click(3);
+     await source.evaluate(el=>{
+       const p=el.v2SourcePort,v=p.getEditorView();v.dispatch({selection:{anchor:v.state.doc.line(1).from}});
+     });
+     await page.waitForFunction(()=>document.querySelector('.ag-row.v2-sync-ag-row [col-id="source_line"]')?.textContent==='1');
+     assert.equal(await pdf.evaluate(el=>el.v2PDFPort.getState().selectedId),23);
+     const focusBefore=await source.evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head);
+     await grid.evaluate(el=>{const viewport=el.querySelector('.ag-body-viewport');if(viewport)viewport.scrollTop+=120;});
+     assert.equal(await source.evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),focusBefore);
+     await picker.selectOption('frame');assert.deepEqual(await cols(),oldColumns);
+     assert.equal((await read()).length,267);
+     await picker.selectOption('line');assert.deepEqual(await read(),all);
+     assert.deepEqual((await snapshot()).rows,before.rows);assert.equal(writes.length,0);
+     assert.deepEqual(errors,[]);
+     console.log('WP25E_REAL_AG_LINE_VIEW_PASS',name,all.length,'shared rows, native filter, exact line focus, no writes');
      continue;
    }
    if(titleMode){

@@ -180,7 +180,7 @@ export function mountV2PDF(host,{toolbar}={}){
   const onFocus=event=>{
     if(event.detail?.origin==='pdf')return;
     const id=event.detail?.logicalId;
-    if(Number.isSafeInteger(id))focusId(id,true);
+    if(Number.isSafeInteger(id)&&id!==selectedId)focusId(id,true);
   };
   const onSession=event=>{
     if(event.detail?.kind==='clear')clear();

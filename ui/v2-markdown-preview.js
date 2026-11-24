@@ -28,7 +28,7 @@ export function mountV2MarkdownPreview(scroller){
     focusSourceLine(Number(tagged.dataset.sourceStart),'preview');
   };
   article.addEventListener('click',onClick);
-  let lastSource=null,renderCount=0,timer=null,disposed=false,focusedId=null;
+  let lastSource=null,renderCount=0,timer=null,disposed=false,focusedId=null,focusedLine=null;
   const highlight=(logicalId)=>{
     for(const node of article.querySelectorAll('.v2-sync-preview-focus'))
       node.classList.remove('v2-sync-preview-focus');
@@ -36,8 +36,9 @@ export function mountV2MarkdownPreview(scroller){
     const source=sourcePort();
     const row=source?.getIntervals().find(item=>item.logicalId===logicalId);
     if(!row)return;
-    const first=source.getLineAtOffset(row.from);
-    const last=source.getLineAtOffset(Math.max(row.from,row.to-1));
+    const real=source.getMdLineIndex()?.atSourceLine(focusedLine);
+    const first=real?.logical_id===logicalId?real.source_line:source.getLineAtOffset(row.from);
+    const last=real?.logical_id===logicalId?real.source_line:source.getLineAtOffset(Math.max(row.from,row.to-1));
     // Multiple Markdown tokens can belong to one logical block; mark all
     // intersecting render ranges, not just the first paragraph.
     for(const node of article.querySelectorAll('[data-source-start][data-source-end]')){
@@ -46,7 +47,7 @@ export function mountV2MarkdownPreview(scroller){
     }
   };
   const onFocus=event=>{
-    focusedId=event.detail?.logicalId??null;
+    focusedId=event.detail?.logicalId??null;focusedLine=event.detail?.sourceLine??null;
     highlight(focusedId);
   };
   document.addEventListener('v2-sync-focus',onFocus);
