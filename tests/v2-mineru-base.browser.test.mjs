@@ -12,7 +12,8 @@ try{
    if(i===99)throw Error('V2 start failed '+log);
    await sleep(200);
  }
- for(const [kind,browserType] of [['chromium',chromium],['webkit',webkit]]){
+ for(const [kind,browserType] of [['chromium',chromium],['webkit',webkit]]
+   .filter(([kind])=>!process.env.V2_TEST_BROWSER||process.env.V2_TEST_BROWSER===kind)){
   const browser=await browserType.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
@@ -200,6 +201,86 @@ try{
      ...logicalCols.filter(key=>key!=='block_type'&&key!=='md_block'),'raw_block'],
      'logical AG puts PBS, Type, MD Block first; Raw Block is external only');
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .ag-row [col-id=\"pbs\"]')?.textContent?.trim()==='p0b0s0',null,{timeout:12000});
+   // WP23: the existing AG module selector owns the title derived view.
+   const viewSelect=page.locator('#workspace .ocr-ag-module-select');
+   assert.equal(await viewSelect.isEnabled(),true);
+   const options=await viewSelect.locator('option').evaluateAll(nodes=>nodes.map(x=>[x.value,x.textContent]));
+   assert.deepEqual(options,[['frame','逻辑块审阅'],['titles','标题']]);
+   await viewSelect.selectOption('titles');
+   const titleGrid=page.locator('#workspace .ocr-outline-grid');
+   await page.waitForFunction(()=>{
+     const port=document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort;
+     return port?.getColumns()?.[0]?.field==='md_block'&&port.getDisplayedRows().length===1;
+   },null,{timeout:12000});
+   const titleColumns=await titleGrid.evaluate(el=>el.v2BaseGridPort.getColumns().map(c=>c.field));
+   assert.deepEqual(titleColumns.slice(0,4),['md_block','level','block_type','pbs']);
+   assert.deepEqual(await titleGrid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>c.headerName)),
+     ['MD Block','level','type']);
+   assert.equal(await titleGrid.locator('.ag-row [col-id="md_block"] .v2-title-md').first().textContent(),
+     '# WP04 Chapter 🧪');
+   assert.equal(await titleGrid.locator('.ag-row [col-id="level"] .v2-title-level').first().textContent(),'#');
+   const style=await titleGrid.locator('.v2-title-md').first().evaluate(el=>({
+     size:getComputedStyle(el).fontSize,color:getComputedStyle(el).color}));
+   assert.equal(style.size,'16px');
+   assert.equal(style.color,'rgb(218, 99, 98)','color matches Everforest Source H1');
+   assert.equal(await page.getByRole('checkbox',{name:'全部逻辑块'}).isVisible(),false);
+   assert.match(await page.locator('#workspace .v2-logical-page').textContent(),/标题 · 1 行/);
+   await titleGrid.locator('.ag-row [col-id="md_block"]').first().click();
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>
+     el.v2SourcePort.getEditorView().state.selection.main.head),0);
+   assert.equal(await page.evaluate(()=>{
+     document.documentElement.style.setProperty('--ocr-frame-font-size','22px');
+     return getComputedStyle(document.querySelector('#workspace .v2-title-md')).fontSize;
+   }),'22px','global Settings font size controls all title levels');
+   await page.evaluate(()=>document.documentElement.style.setProperty('--ocr-frame-font-size','16px'));
+   if(process.env.V2_TEST_WP23_ONLY){
+     const original=await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getBlocks()[1].markdownText);
+     assert.equal(original,'Original text');
+     await page.locator('#workspace #editor').evaluate(el=>{
+       const p=el.v2SourcePort,row=p.getIntervals().find(r=>r.logicalId===2);
+       p.getEditorView().dispatch({changes:{from:row.from,insert:'## '}});
+     });
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===2,null,{timeout:12000});
+     const rows=await titleGrid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows().map(r=>({
+       id:r.logical_id,level:r.level,text:r.md_block,type:r.block_type})));
+     assert.deepEqual(rows,[{id:1,level:'#',text:'# WP04 Chapter 🧪',type:'title'},
+       {id:2,level:'##',text:'## Original text',type:'text'}]);
+     assert.equal(await titleGrid.locator('.v2-title-md').nth(1).evaluate(el=>getComputedStyle(el).color),
+       'rgb(215, 127, 72)','H2 matches CM6 Source');
+     await page.evaluate(()=>{
+       window.__wp23AGClicks=[];
+       document.addEventListener('v2-ag-row-click',event=>window.__wp23AGClicks.push({
+         table:event.detail?.table,id:event.detail?.row?.logical_id}));
+     });
+     await titleGrid.locator('.ag-row [col-id="md_block"]').nth(1).click();
+     await page.waitForFunction(()=>window.__wp23AGClicks?.length>0,null,{timeout:5000});
+     const at=await page.locator('#workspace #editor').evaluate(el=>{
+       const p=el.v2SourcePort;const pos=p.getEditorView().state.selection.main.head;
+       return {pos,found:p.getIntervals().find(r=>r.from===pos)?.logicalId,
+         clicks:window.__wp23AGClicks,from2:p.getIntervals().find(r=>r.logicalId===2)?.from};
+     });
+     assert.equal(at.found,2,'derived row click locates unchanged logical ID: '+JSON.stringify(at));
+     await page.locator('#workspace #undo').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===1,null,{timeout:12000});
+     await page.locator('#workspace #redo').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===2,null,{timeout:12000});
+     await page.locator('#workspace #undo').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===1,null,{timeout:12000});
+     assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getBlocks()[1].markdownText),original);
+     assert.equal(structurePosts,0,'title view never writes structure');
+     assert.deepEqual(errors,[]);
+     console.log('WP23_TITLE_DERIVED_CM6_UNDO_REDO_BROWSER_PASS',kind,{rows,mdCommitPosts,structurePosts});
+     continue;
+   }
+   await viewSelect.selectOption('frame');
+   await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+     ?.v2BaseGridPort?.getColumns()[0]?.field==='pbs',null,{timeout:12000});
+   assert.equal(await titleGrid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows().length),10,
+     'original logical review restored after leaving title view');
    const derivedPBS=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
      const columns=el.v2BaseGridPort.getColumns();
      const row=el.querySelector('.ag-row[row-index="0"]');
@@ -258,11 +339,16 @@ try{
    for(const field of ['pbs','block_type']){
      const before=(await gridWidths())[field];
      await dragResize(field,60);
-     await page.waitForFunction(({field,before})=>{
-       const state=document.querySelector('#workspace .ocr-outline-grid')
-         ?.v2BaseGridPort?.getColumnState();
-       return state?.find(c=>c.colId===field)?.width>=before+30;
-     },{field,before},{timeout:12000});
+     try{
+       await page.waitForFunction(({field,before})=>{
+         const state=document.querySelector('#workspace .ocr-outline-grid')
+           ?.v2BaseGridPort?.getColumnState();
+         return state?.find(c=>c.colId===field)?.width>=before+30;
+       },{field,before},{timeout:12000});
+     }catch(error){
+       const now=await gridWidths();
+       throw Error(`WP12 native column resize after title-view switch: ${kind} ${field} before=${before} after=${now[field]} widths=${JSON.stringify(now)}: ${error.message}`);
+     }
      const wider=(await gridWidths())[field];
      await dragResize(field,-65);
      const narrower=(await gridWidths())[field];

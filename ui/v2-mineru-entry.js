@@ -6,6 +6,7 @@ import {createFrameStatus} from './frame/global-status.js';
 import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
+import {deriveTitleRows} from './v2-title-derived-view.js';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './ag-enum-filter-shared.css';
@@ -25,6 +26,8 @@ const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:
 let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
 let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
 let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
+let reviewMode='frame';
+const reviewFilters=new Map();
 let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBlocked=false;
 let rebuilding=false;
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
@@ -78,6 +81,10 @@ function wireNav(select){
       return;
     }
     selectedTable=table;
+    if(table==='mineru_base'&&reviewMode==='titles'){
+      reviewMode='frame';const review=$('#workspace .ocr-ag-module-select');
+      if(review)review.value='frame';
+    }
     active=true;
     offset=0;
     if(bound)void fetchPage();
@@ -98,6 +105,33 @@ function revealPhysicalTables(tables){
   }
 }
 function picker(){return $('#workspace .ocr-ag-toolbar');}
+function reviewPicker(){
+  const select=$('#workspace .ocr-ag-module-select');
+  if(!select)return null;
+  if(select.dataset.v2ReviewWired!=='yes'){
+    select.dataset.v2ReviewWired='yes';
+    // Frame's single AG picker is the ONLY module control; Settings remains
+    // in the original CM6 navigation. No second toolbar or Grid instance.
+    select.querySelector('option[value="settings"]')?.remove();
+    select.add(new Option('标题','titles'));
+    select.disabled=false;
+    select.title='选择逻辑块审阅或标题派生视图';
+    select.addEventListener('change',()=>{
+      reviewMode=select.value==='titles'?'titles':'frame';
+      if(!active||!bound)return;
+      if(reviewMode==='titles'&&selectedTable!=='logical_block'){
+        selectedTable='logical_block';offset=0;
+        // Preserve the existing source navigation's truthful SQL selection.
+        const nav=$('#workspace .ocr-source-file-select');
+        if(nav){nav.ocrNavigationSelect?.tom?.setValue(valueForTable('logical_block'),true);
+          nav.value=valueForTable('logical_block');}
+        void fetchPage();
+      }else if(logicalState&&selectedTable==='logical_block')renderGrid(logicalState);
+    });
+  }
+  select.value=reviewMode;
+  return select;
+}
 function sqlActionsDialog(){
   let dialog=$('#v2-sql-actions-dialog');
   if(dialog)return dialog;
@@ -329,19 +363,26 @@ function renderGrid(state){
         detail:{table:selectedTable,row:event.data,workspace:bound}}));
     });
   }
+  reviewPicker();
   const logical=state.tableName==='logical_block';
-  // Only the AG view is reordered. The SQLite ten-column physical schema
-  // and server-returned column inventory stay untouched.
+  const titles=logical&&reviewMode==='titles';
+  // WP23 is a read-only AG projection, NEVER a SQL View or a stored title table.
+  // Keep the original logical-block column order exactly as in WP22.
   const columnKeys=logical
-    ?['block_type','md_block',...state.columns.filter(key=>
-      key!=='block_type'&&key!=='md_block'),'raw_block']
+    ?titles
+      ?['md_block','level','block_type','pbs',...state.columns.filter(key=>
+        key!=='md_block'&&key!=='block_type'),'raw_block']
+      :['block_type','md_block',...state.columns.filter(key=>
+        key!=='block_type'&&key!=='md_block'),'raw_block']
     :state.columns;
   // WP12: fit the ACTUAL displayed PBS and Type cell text in the current
   // AG font. Never use all hidden pages to inflate the current Type column.
   // The minimum is deliberately smaller than the fitted width: AG Grid's
   // native resize handle must allow both shrinking and expanding.
   const page=logical?filterLogicalAG(state.rows,currentLogicalId(),showAllLogical):null;
-  const visibleRows=page?.rows||state.rows;
+  const titleRows=titles?deriveTitleRows(state.rows,
+    $('#workspace #editor')?.v2SourcePort?.getBlocks()||[]):null;
+  const visibleRows=titleRows||page?.rows||state.rows;
   const gridHost=$('#workspace .ocr-outline-grid');
   const cell=gridHost?.querySelector('.ag-cell');
   const measuredStyle=getComputedStyle(cell||gridHost);
@@ -357,10 +398,22 @@ function renderGrid(state){
   const pbsWidth=logical?fit(visibleRows.map(row=>`p${row.p}b${row.b}s${row.s}`),'PBS',80,180):80;
   const typeWidth=logical?fit(visibleRows.map(row=>row.block_type),'Type',82,240):105;
   const columns=columnKeys.map((key,index)=>({field:key,
-    headerName:logical&&key==='block_type'?'Type':
+    headerName:logical&&key==='block_type'?(titles?'type':'Type'):
       logical&&key==='md_block'?'MD Block':
+      titles&&key==='level'?'level':
+      logical&&key==='pbs'?'PBS':
       logical&&key==='raw_block'?'Raw Block (只读)':sourceHeaders[key]||key,
     headerTooltip:key,tooltipField:key,resizable:true,
+    ...(titles&&key==='md_block'?{cellRenderer:params=>{
+      const el=document.createElement('span');el.className='v2-title-md';
+      el.dataset.level=String(params.data?.heading_level||'');
+      el.textContent=params.value??'';return el;
+    }}:{}),
+    ...(titles&&key==='level'?{cellRenderer:params=>{
+      const el=document.createElement('span');el.className='v2-title-level';
+      el.dataset.level=String(params.data?.heading_level||'');
+      el.textContent=params.value??'';return el;
+    }}:{}),
     // V1 source: ui/enum-checkbox-filter.js. AG owns the native icon,
     // popup, multi-checkbox model and onNewRowsLoaded lifecycle.
     filter:EnumCheckboxFilter,
@@ -368,15 +421,17 @@ function renderGrid(state){
     suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
     sortable:!(logical&&key==='block_type'),
     minWidth:logical&&key==='block_type'?76:
+      titles&&key==='level'?72:
       key==='md_block'&&logical?290:key==='block_json'?380:
       key==='source_json_path'?275:key==='source_sha256'?220:105,
-    width:logical&&key==='block_type'?typeWidth:key==='md_block'&&logical?420:
+    width:logical&&key==='block_type'?typeWidth:titles&&key==='level'?98:
+      key==='md_block'&&logical?420:
       key==='raw_block'&&logical?330:key==='blockid'?100:
       key==='block_json'?440:key==='original_bytes'?155:undefined,
     pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
-  if(logical){
-    // PBS is the sole pinned column, sized to its displayed values.
+  if(logical&&!titles){
+    // The original logical review still owns the pinned first PBS column.
     columns.unshift({field:'pbs',headerName:'PBS',headerTooltip:'当前逻辑块编号',
       minWidth:72,width:pbsWidth,pinned:'left',resizable:true,sortable:false,
       filter:EnumCheckboxFilter,filterValueGetter:params=>params.data?
@@ -386,22 +441,28 @@ function renderGrid(state){
   const controls=logicalControls();
   let view=null;
   if(controls){
-    controls.label.hidden=!logical;
+    controls.label.hidden=!logical||titles;
     controls.indicator.hidden=!logical;
     controls.label.querySelector('input').checked=showAllLogical;
   }
   if(logical){
-    view=page;
+    view=titles?{p:null,rows:titleRows}:page;
     visibleLogicalP=view.p;
-    if(controls)controls.indicator.textContent=showAllLogical?
+    if(controls)controls.indicator.textContent=titles?
+      `标题 · ${view.rows.length} 行`:showAllLogical?
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
   }else visibleLogicalP=null;
-  const schema=state.tableName+':'+columns.map(column=>column.field).join(',');
-  if(schema!==renderedSchema){port.setColumns(columns,state.tableName);renderedSchema=schema;}
+  const schema=state.tableName+':'+reviewMode+':'+columns.map(column=>column.field).join(',');
+  if(schema!==renderedSchema){
+    if(renderedSchema)reviewFilters.set(renderedSchema,port.getFilterModel());
+    port.setColumns(columns,state.tableName+(titles?':titles':''));
+    port.setFilterModel(reviewFilters.get(schema)||null);
+    renderedSchema=schema;
+  }
   port.setRows(logical
     ?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`}))
     :state.rows);
-  if(logical)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
+  if(logical)port.fitColumns(titles?{block_type:typeWidth}:{pbs:pbsWidth,block_type:typeWidth});
   if(lastFocus){
     port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
       state.tableName==='logical_block'?lastFocus.logicalId:lastFocus.baseBlockId);
@@ -422,6 +483,7 @@ function renderGrid(state){
   }
   const label=tableLabel(state.tableName);
   report(logical?
+    titles?`标题派生视图 · ${view.rows.length} 个标题 · CM6 当前正文 · 不落 SQLite`:
     `SQL 逻辑表 · ${showAllLogical?'全部':('p'+visibleLogicalP)} · ${view.rows.length} / ${count} 行 · ${state.columns.length} 列`:
     `SQL ${label}已加载 · ${count} 行 · ${state.columns.length} 列 · BlockID 为整数`,'ok');
 }
@@ -555,7 +617,7 @@ async function ensureBase(path){
         port.load(snapshot,path);
       }
     }
-    if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
+    if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;reviewFilters.clear();
       renderedSchema='';clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());
@@ -587,6 +649,10 @@ document.addEventListener('v2-sync-focus',event=>{
   lastFocus=row;
   if(!active)return;
   if(selectedTable==='logical_block'){
+    if(reviewMode==='titles'){
+      $('#workspace .ocr-outline-grid')?.v2BaseGridPort?.focusRow('logical_id',row.logicalId);
+      return;
+    }
     const logical=logicalState?.rows.find(item=>item.logical_id===row.logicalId);
     if(!logical)return;
     if(logical.p!==visibleLogicalP&&!showAllLogical){
