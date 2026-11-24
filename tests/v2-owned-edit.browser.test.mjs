@@ -12,7 +12,8 @@ import {chromium,webkit} from 'playwright';
 import {makePDF} from './v2-pdf-fixture.mjs';
 const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
-const pdfMode=structureMode||splitMode;
+const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
+const pdfMode=structureMode||splitMode||titleMode;
 const port=5431,url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -58,7 +59,7 @@ try{
      if(op==='pdf')return pdfMode?route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes}):fulfill(route,{error:'No PDF in disposable fixture'},404);
      const payload=req.method()==='POST'?req.postDataJSON():{};
      if(req.method()==='POST'){
-       if(pdfMode)assert(['md-commit','structure-commit'].includes(op));
+       if(pdfMode&&!titleMode)assert(['md-commit','structure-commit'].includes(op));
        else assert.equal(op,'md-commit');
        assert.equal(payload.confirm,op==='structure-commit'?(splitMode?'commit-v2-owned-inventory':'commit-v2-owned-structure'):'commit-v2-owned-md');
        if(splitMode)assert([267,268].includes(payload.expectedStructure.length));
@@ -89,6 +90,103 @@ try{
    });
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(titleMode){
+     const grid=page.locator('#workspace .ocr-outline-grid');
+     const picker=page.locator('#workspace .ocr-ag-module-select');
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const geometry=()=>pdf.evaluate(el=>el.v2PDFPort.getCovers().map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0]));
+     const originalGeometry=await geometry();
+     const target=before.rows[1],id=target.logicalId;
+     assert.equal(id,24);
+     const readRows=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const find=async()=> (await readRows()).find(r=>r.logical_id===id);
+     await page.getByRole('checkbox',{name:'全部逻辑块'}).check();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===267);
+     await grid.evaluate((el,id)=>{window.__wp23hRow=el.v2BaseGridPort.getDisplayedRows().find(r=>r.logical_id===id);},id);
+     await picker.selectOption('title');
+     const row=await find();assert(row);
+     assert.equal(row.block_type,'title');
+     assert.equal(row.md_block,target.markdownText);
+     assert.equal(row.source_line,8);
+     assert.deepEqual(JSON.parse(row.heading_lines),[{line:8,text:'# 新标题'}]);
+     assert.equal(await grid.evaluate((el,id)=>el.v2BaseGridPort.getDisplayedRows().find(r=>r.logical_id===id)===window.__wp23hRow,id),true,'same shared AG row on switching presets');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getFilterModel()),{block_type:{values:['title']}});
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,4).map(c=>c.field)),['md_block','pbs','source_line','block_type']);
+     const edit=async(from,to,insert)=>{
+       await source.evaluate((el,{id,from,to,insert})=>{
+         const p=el.v2SourcePort,r=p.getIntervals().find(x=>x.logicalId===id);
+         p.getEditorView().dispatch({changes:{from:r.from+from,to:r.from+to,insert},userEvent:'input.type'});
+       },{id,from,to,insert});
+     };
+     const save=async()=>{
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:15000});
+       const now=await snapshot();assert(now.complete);assert.equal(now.rows.length,267);
+       assert.deepEqual(now.rows.filter(r=>r.logicalId!==id),before.rows.filter(r=>r.logicalId!==id));
+       const disk=api(folder,'markdown','GET').body;
+       assert.equal(disk.markdown,now.doc);
+       assert.deepEqual(disk.segments.map(r=>[r.logicalId,r.baseBlockId,r.p,r.b,r.s,r.parentId,r.blockType]),
+         before.rows.map(r=>[r.logicalId,r.baseBlockId,r.p,r.b,r.s,r.parentId,r.blockType]));
+       assert.deepEqual(await geometry(),originalGeometry);
+       return now;
+     };
+     // Insert at actual empty line; the last blank remains part of this row.
+     const pos=target.markdownText.length-1;
+     await source.evaluate((el,{id,pos})=>{
+       const p=el.v2SourcePort,r=p.getIntervals().find(x=>x.logicalId===id);
+       p.getEditorView().dispatch({selection:{anchor:r.from+pos}});p.getEditorView().focus();
+     },{id,pos});
+     await page.keyboard.insertText('## Added heading');
+     let multi=await find();
+     assert.deepEqual(JSON.parse(multi.heading_lines),[{line:8,text:'# 新标题'},{line:10,text:'## Added heading'}]);
+     const withTwo=await save();
+     const first=grid.locator('.ocr-ag-title-source[data-v2-title-line="8"]').filter({hasText:'# 新标题'});
+     const second=grid.locator('.ocr-ag-title-source[data-v2-title-line="10"]').filter({hasText:'## Added heading'});
+     await first.waitFor({state:'visible'});await second.waitFor({state:'visible'});
+     assert.equal(await first.evaluate(el=>getComputedStyle(el).color),'rgb(218, 99, 98)');
+     assert.equal(await second.evaluate(el=>getComputedStyle(el).color),'rgb(215, 127, 72)');
+     assert.equal(await second.evaluate(el=>getComputedStyle(el).fontSize),'16px');
+     const bounds1=await first.boundingBox(),bounds2=await second.boundingBox();
+     assert(bounds2.y>=bounds1.y+bounds1.height-1,'two headings rendered in distinct visual lines of a single cell');
+     await second.click();
+     await page.waitForFunction(()=>{const p=document.querySelector('#workspace #editor').v2SourcePort,v=p.getEditorView();
+       return v.state.doc.lineAt(v.state.selection.main.head).number===10;});
+     assert.equal(await pdf.evaluate(el=>el.v2PDFPort.getState().selectedId),id);
+     await first.click();
+     await page.waitForFunction(()=>{const p=document.querySelector('#workspace #editor').v2SourcePort,v=p.getEditorView();
+       return v.state.doc.lineAt(v.state.selection.main.head).number===8;});
+     // Remove first prefix; the shared row persists with the second title.
+     let current=withTwo.rows[1].markdownText;
+     let prefix=current.indexOf('# 新标题');
+     await edit(prefix,prefix+2,'');
+     assert.deepEqual(JSON.parse((await find()).heading_lines),[{line:10,text:'## Added heading'}]);
+     current=(await save()).rows[1].markdownText;
+     prefix=current.indexOf('## Added heading');
+     await edit(prefix,prefix+3,'');
+     assert.equal(await find(),undefined,'removing last title immediately removes the shared row');
+     await save();
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.equal(JSON.parse((await find()).heading_lines)[0].line,10);
+     await save();
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.equal(JSON.parse((await find()).heading_lines).length,2);
+     await save();
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     assert.equal(JSON.parse((await find()).heading_lines).length,1);
+     await save();
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     const restored=await save();assert.deepEqual(restored.rows,withTwo.rows);
+     // Reopen the actual persisted source, then reapply only the native preset.
+     await loadPage();
+     await page.getByRole('checkbox',{name:'全部逻辑块'}).check();
+     await picker.selectOption('title');
+     assert.deepEqual(JSON.parse((await find()).heading_lines),[{line:8,text:'# 新标题'},{line:10,text:'## Added heading'}]);
+     assert.equal(writes.length,7);
+     assert(writes.every(w=>w.op==='md-commit'&&w.payload.changes.length===1&&w.payload.changes[0].logicalId===id));
+     assert.deepEqual(errors,[]);
+     console.log('WP23H_REAL_OWNED_TITLES_PASS',name,'same 267 rows, exact multiline clicks, 7 delta saves and reopen');
+     continue;
+   }
    if(splitMode){
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});

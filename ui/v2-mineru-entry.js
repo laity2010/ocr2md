@@ -6,8 +6,8 @@ import {createFrameStatus} from './frame/global-status.js';
 import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
-import {AG_VIEWS,viewColumns,viewFilter} from './v2-ag-views.js';
-import {effectiveBlockType} from './v2-live-block-type.js';
+import {AG_VIEWS,viewColumns,viewFilter,titleClickLine} from './v2-ag-views.js';
+import {effectiveBlockType,collectOwnedHeadings,ownedBlockType} from './v2-live-block-type.js';
 import {isSyntheticId} from './v2-structure-split.js';
 import './v2-ag-views.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
@@ -361,7 +361,9 @@ function renderGrid(state){
     unsubscribeGridClick=port.onRowClicked(event=>{
       if(!active||!bound||!event.data)return;
       document.dispatchEvent(new CustomEvent('v2-ag-row-click',{
-        detail:{table:selectedTable,row:event.data,workspace:bound}}));
+        detail:{table:selectedTable,row:event.data,workspace:bound,
+          sourceLine:selectedTable==='logical_block'&&agView==='title'?
+            titleClickLine(event.data,event.event?.target):null}}));
     });
   }
   const logical=state.tableName==='logical_block';
@@ -517,7 +519,10 @@ function overlayCMStructure(){
   if(!logicalState||!source?.getState().loaded||source.getWorkspace()!==bound)return;
   const live=new Map(source.getStructureRows().map(row=>[row.logicalId,row]));
   const texts=new Map(source.getBlocks().map(row=>[row.logicalId,row.markdownText]));
-  const lines=new Map(source.getIntervals().map(row=>[row.logicalId,source.getLineAtOffset(row.from)]));
+  const intervals=source.getIntervals();
+  const lines=new Map(intervals.map(row=>[row.logicalId,source.getLineAtOffset(row.from)]));
+  const owned=source.getState().ownedLF;
+  const headings=owned?collectOwnedHeadings(source.getMarkdown(),intervals):null;
   const originals=new Map(logicalState.rows.map(r=>[r.logical_id,r]));
   const liveRows=source.getBlocks();
   const records=source.getState().ownedLF?liveRows.map(row=>{
@@ -532,10 +537,12 @@ function overlayCMStructure(){
     if(!row)return record;
     const md=texts.get(row.logicalId)??record.md_block;
     const storedType=record.stored_block_type??record.block_type;
+    const titles=headings?.get(row.logicalId)||[];
     return {...record,parent_id:row.parentId,logical_order:row.logicalOrder,
-      p:row.p,b:row.b,s:row.s,source_line:lines.get(row.logicalId),
+      p:row.p,b:row.b,s:row.s,source_line:titles[0]?.line??lines.get(row.logicalId),
       md_block:md,stored_block_type:storedType,
-      block_type:effectiveBlockType(storedType,md)};
+      ...(owned?{heading_lines:JSON.stringify(titles)}:{}),
+      block_type:owned?ownedBlockType(storedType,titles):effectiveBlockType(storedType,md)};
   }).sort((a,b)=>a.logical_order-b.logical_order);
   if(source.getState().ownedLF)logicalState.rowCount=logicalState.logicalCount=logicalState.rows.length;
 }

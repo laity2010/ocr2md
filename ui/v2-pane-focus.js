@@ -45,10 +45,16 @@ export function mountV2PaneFocus(previewPane,previewBody){
     if(kind==='edit')scroll?.measureLater();
   };
   const onAG=event=>{
-    const {table,row,workspace}=event.detail||{};
+    const {table,row,workspace,sourceLine}=event.detail||{};
     const source=sourcePort();if(!source?.getState().loaded||source.getWorkspace()!==workspace)return;
-    const match=logicalForAG(source.getIntervals(),table,row);
-    if(match)focusLogical(match,'outline');
+    const intervals=source.getIntervals();
+    const match=logicalForAG(intervals,table,row);
+    if(!match)return;
+    // Validate against the CURRENT CM6 owner; an old rendered cell must
+    // never send focus to another logical block after an edit.
+    const target=table==='logical_block'?logicalAtSourceLine(intervals,source.getDoc(),sourceLine):null;
+    if(target?.logicalId===match.logicalId)focusSourceLine(sourceLine,'outline');
+    else focusLogical(match,'outline');
   };
   const unsub=viewStore.subscribe((state,prev)=>{
     if(state.focusTarget!==prev.focusTarget && state.focusTarget){

@@ -3,6 +3,41 @@
  */
 import {renderTitleMdCell} from './lab-ocr/title-view.js';
 
+/** Same MD Block row, display only. Multiple headings stay inside this
+ * cell; data attributes carry the actual source line to the native row click.
+ */
+function headingEntries(data){
+  return typeof data?.heading_lines==='string'?JSON.parse(data.heading_lines):null;
+}
+function renderOwnedTitleCell(params){
+  const headings=headingEntries(params.data);
+  if(!headings?.length)return renderTitleMdCell(params);
+  const wrapper=document.createElement('div');wrapper.className='v2-ag-heading-stack';
+  for(const heading of headings){
+    const element=renderTitleMdCell({value:heading.text});
+    element.dataset.v2TitleLine=String(heading.line);
+    element.title='定位源码第 '+heading.line+' 行';
+    wrapper.append(element);
+  }
+  return wrapper;
+}
+function renderHeadingLineNumbers(params){
+  const headings=headingEntries(params.data);
+  if(!headings?.length)return String(params.value??'');
+  const wrapper=document.createElement('div');wrapper.className='v2-ag-heading-stack v2-ag-heading-numbers';
+  for(const heading of headings){
+    const item=document.createElement('span');item.dataset.v2TitleLine=String(heading.line);
+    item.textContent=String(heading.line);wrapper.append(item);
+  }
+  return wrapper;
+}
+export function titleClickLine(row,target){
+  const headings=headingEntries(row);
+  if(!headings?.length)return Number.isInteger(row?.source_line)?row.source_line:null;
+  const selected=Number(target?.closest?.('[data-v2-title-line]')?.dataset.v2TitleLine);
+  return headings.some(h=>h.line===selected)?selected:headings[0].line;
+}
+
 export const AG_VIEWS=Object.freeze({
   frame:Object.freeze({label:'逻辑块审阅'}),
   title:Object.freeze({
@@ -17,7 +52,9 @@ export function viewColumns(view,columns){
     ...columns.filter(c=>!leading.includes(c.field))].map(c=>({
     ...c,pinned:null,
     ...(view==='title'&&c.field==='md_block'?
-      {cellClass:'v2-ag-title-text',cellRenderer:renderTitleMdCell}:{}),
+      {cellClass:'v2-ag-title-text',cellRenderer:renderOwnedTitleCell,autoHeight:true}:{}),
+    ...(view==='title'&&c.field==='source_line'?
+      {cellRenderer:renderHeadingLineNumbers}:{}),
   }));
 }
 export function viewFilter(view){

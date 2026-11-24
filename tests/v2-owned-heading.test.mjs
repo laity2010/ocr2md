@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {collectOwnedHeadings,ownedBlockType} from '../ui/v2-live-block-type.js';
+import {titleClickLine,viewColumns,viewFilter} from '../ui/v2-ag-views.js';
+const blocks=[
+  '正文😀\n\n## Alpha\n# Beta\n\n',
+  '普通正文\n\n```js\n# not title\n',
+  '### still code\n```\n\n#### Gamma\n\n',
+  '####### Invalid\n#NoSpace\n\n~~~\n# tilde code\n~~~\n\n',
+  '# Last\n\n',
+];
+let offset=0;
+const intervals=blocks.map((text,i)=>{
+ const from=offset;offset+=text.length;
+ return {logicalId:101+i,from,to:offset};
+});
+const doc=blocks.join('');
+const headings=collectOwnedHeadings(doc,intervals);
+assert.deepEqual([...headings],[
+ [101,[{line:3,text:'## Alpha'},{line:4,text:'# Beta'}]],
+ [102,[]],
+ [103,[{line:13,text:'#### Gamma'}]],
+ [104,[]],
+ [105,[{line:22,text:'# Last'}]],
+]);
+assert.equal(ownedBlockType('text',headings.get(101)),'title');
+assert.equal(ownedBlockType('title',[]),'text');
+assert.equal(ownedBlockType('table_body',[]),'table_body');
+assert.equal(ownedBlockType('table_body',headings.get(103)),'title');
+const row={source_line:3,heading_lines:JSON.stringify(headings.get(101))};
+assert.equal(titleClickLine(row,null),3);
+assert.equal(titleClickLine(row,{closest:()=>({dataset:{v2TitleLine:'4'}})}),4);
+assert.equal(titleClickLine(row,{closest:()=>({dataset:{v2TitleLine:'999'}})}),3);
+assert.equal(titleClickLine({source_line:13},null),13);
+assert.equal(titleClickLine({},null),null);
+assert.deepEqual(viewFilter('title'),{block_type:{values:['title']}});
+assert.equal(viewColumns('title',[{field:'md_block'}])[0].autoHeight,true);
+console.log('WP23H_OWNED_HEADINGS_PASS');

@@ -12,3 +12,10 @@
 #workspace .v2-ag-title-text .cm-ob-heading-line-4{color:#899c40}
 #workspace .v2-ag-title-text .cm-ob-heading-line-5{color:#569d79}
 #workspace .v2-ag-title-text .cm-ob-heading-line-6{color:#b87b9d}
+
+/* Multiple headings in the same logical row use AG native autoHeight.
+ * Every visual line retains the V1 renderer and shared base font. */
+#workspace .v2-ag-heading-stack{display:flex;flex-direction:column;min-width:0;
+  width:100%;padding:4px 0;line-height:calc(var(--ocr-frame-font-size) + 8px)}
+#workspace .v2-ag-heading-stack [data-v2-title-line]{cursor:pointer;line-height:inherit}
+#workspace .v2-ag-heading-numbers{font-size:var(--ocr-frame-font-size)}
