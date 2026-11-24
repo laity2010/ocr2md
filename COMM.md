@@ -1,6 +1,6 @@
 # OCR2MD · 公共组件与 UI 契约（COMM.md）
 
-> **宪法第二层 · 公共组件 / UI 契约。** 本文件与 `AGENTS.md` 同级，依据第 10 条成为宪法组成部分；由 Main Git 维护，对 Main、Frame、所有现有 Lab 和未来 V3/V4 统一有效，不能凌驾最高宪法或规定 V2 专有 SQL / PBS Schema。读前须先读 `AGENTS.md`、`BUILD.md`，随后读本文件和**当前 Lab 自身 README**。仅用户明确授权可修改强制组件要求，技术核对与门禁变化保留 Git 证据。历史 `CROSS_VERSION_COMPONENTS.md` 仅为指向本文件的兼容别名，不是另一份契约。
+> **宪法第二层 · 公共组件 / UI 契约。** 本文件与 `AGENTS.md` 同级，依据第 10 条成为宪法组成部分；由 Main Git 维护，对 Main、Frame、所有现有 Lab 和未来 V3/V4 统一有效，不能凌驾最高宪法或规定 V2 专有 SQL / PBS Schema。接手时须先读**统一根目录** `AGENTS.md`、`BUILD.md`，随后读本文件、**本项目州级 `AGENTS.md`** 和当前 Lab 自身 README。仅用户明确授权可修改强制组件要求，技术核对与门禁变化保留 Git 证据。历史 `CROSS_VERSION_COMPONENTS.md` 仅为指向本文件的兼容别名，不是另一份契约。
 
 ## 1. 公共组件登记表与责任边界
 

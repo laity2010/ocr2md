@@ -4,7 +4,7 @@
 
 OCR2MD V6 是运行于 Mac 的 Markdown 校阅工作台，当前业务模块为**章节定界**。使用 MinerU JSON 转换出的 `.minerujson.md` 作为可编辑母文档，结合原始 PDF 进行定位核对。公网入口：[https://ocr2md.laity.bid/](https://ocr2md.laity.bid/)。
 
-跨版本工程原则以 [`AGENTS.md`](./AGENTS.md) 为准；本文件只描述 **V6 当前实现和操作方法**。功能演进、问题溯源见 Git Commit，不在 README 中追加开发流水账。
+跨版本工程原则以[统一根目录联邦 AGENTS](../AGENTS.md)、[联邦 BUILD](../BUILD.md)、[联邦 COMM](../COMM.md) 为准；本州补充约定见 [`AGENTS.md`](./AGENTS.md)。本文件只描述 **V6 当前实现和操作方法**。功能演进、问题溯源见 Git Commit，不在 README 中追加开发流水账。
 
 V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘，也不以 V5 作为运行后备。旧实现仅供按需只读参考。
 

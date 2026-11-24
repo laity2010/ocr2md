@@ -50,18 +50,24 @@ def check_core(root: Path):
         require((root / folder).is_dir(), f'missing root directory: {folder}')
     require(not (root / 'dev').exists(), 'old redundant dev shortcut must not reappear')
     labs = discover_labs(root)
-    # First constitutional layer and exactly two authoritative peer contracts.
-    # All three real source inodes are tracked in Main; the unified root
-    # hard-links them so all Labs inherit one law, not another editable copy.
+    # Federal constitution is tracked by Main Git *separately* from Main's
+    # own state constitution. Only the federal AGENTS, BUILD and COMM are
+    # hard-linked between the unified workspace root and Main's tracking path.
     agents = root / 'AGENTS.md'
+    federal_git = main / 'constitution/AGENTS.md'
     build = root / 'BUILD.md'
     comm = root / 'COMM.md'
-    for name in ('AGENTS.md', 'BUILD.md', 'COMM.md'):
+    for file in (agents, federal_git):
+        require(file.is_file() and not file.is_symlink(),
+                f'missing or linked-to-symlink federal constitution: {file}')
+    require(same_inode(agents, federal_git),
+            'federal AGENTS.md must share inode with Main constitution/AGENTS.md')
+    for name in ('BUILD.md', 'COMM.md'):
         for file in (root / name, main / name):
             require(file.is_file() and not file.is_symlink(),
                     f'missing or linked-to-symlink contract: {file}')
         require(same_inode(root / name, main / name),
-                f'Main {name} is not the shared constitutional contract inode')
+                f'Main {name} is not the shared federal contract inode')
     # Compatibility alias is a link to COMM, never a third editable contract.
     for file in (root / 'CROSS_VERSION_COMPONENTS.md',
                  main / 'CROSS_VERSION_COMPONENTS.md'):
@@ -69,30 +75,50 @@ def check_core(root: Path):
                 same_inode(file, comm),
                 f'legacy components alias must resolve to COMM.md: {file}')
     ag_text = agents.read_text(encoding='utf-8')
-    require('## 10. 两层宪法与同级契约目录' in ag_text and
-            '`BUILD.md`' in ag_text and '`COMM.md`' in ag_text,
-            'AGENTS.md does not register the two constitutional peer contracts')
+    require('## 10. 联邦 / 州宪法继承与同级联邦契约' in ag_text and
+            '`BUILD.md`' in ag_text and '`COMM.md`' in ag_text and
+            '州宪法' in ag_text,
+            'federal AGENTS.md does not register the federal/state hierarchy')
     require('一构建一 Git' in build.read_text(encoding='utf-8') and
             '回退' in build.read_text(encoding='utf-8') and
             '偏离' in build.read_text(encoding='utf-8'),
             'BUILD.md is missing mandatory one-build-one-Git / rollback-on-drift policy')
     require('EnumCheckboxFilter' in comm.read_text(encoding='utf-8'),
             'COMM.md does not preserve the real V1 AG filter component contract')
+    state_ids = set()
     for tree in [main, *labs]:
         readme = tree / 'README.md'
-        ag = tree / 'AGENTS.md'
+        state = tree / 'AGENTS.md'
         require(readme.is_file() and not readme.is_symlink(), f'missing project README: {readme}')
         require(bool(readme.read_text(encoding='utf-8').strip()) and
                 '#' in readme.read_text(encoding='utf-8'),
                 f'invalid project README: {readme}')
-        require(ag.is_file() and not ag.is_symlink() and same_inode(ag, agents),
-                f'separate or missing AGENTS.md (must be hard-linked): {ag}')
+        require(state.is_file() and not state.is_symlink(),
+                f'missing or linked state AGENTS.md: {state}')
+        require(not same_inode(state, agents),
+                f'state AGENTS.md must be independent from federal: {state}')
+        identity = (state.stat().st_dev, state.stat().st_ino)
+        require(identity not in state_ids,
+                f'state AGENTS.md must not share inode with another state: {state}')
+        state_ids.add(identity)
+        prefix = '../' if tree == main else '../../'
+        declaration = ('<!-- ocr2md:state-constitution:v1 '
+                       f'federal={prefix}AGENTS.md build={prefix}BUILD.md '
+                       f'comm={prefix}COMM.md -->')
+        text = state.read_text(encoding='utf-8')
+        require(declaration in text and '不得覆盖联邦宪法' in text,
+                f'state AGENTS.md missing federal inheritance declaration: {state}')
+        for filename in ('AGENTS.md', 'BUILD.md', 'COMM.md'):
+            ref = (tree / (prefix + filename)).resolve()
+            require(ref == (root / filename).resolve() and ref.is_file(),
+                    f'state AGENTS.md federal reference does not reach root: {state}: {filename}')
         print('GIT_ACTIVE', tree.name, git_head(tree))
-    require(agents.stat().st_nlink >= len(labs) + 2,
-            'shared AGENTS link count lower than discovered root/Main/Labs paths')
+    require(agents.stat().st_nlink >= 2,
+            'federal AGENTS link count lower than unified root + Main tracking path')
     print('LAB_AUTO_DISCOVERY_PASS', len(labs), 'labs', ','.join(p.name for p in labs))
-    print('SHARED_AGENTS_PASS', agents.stat().st_ino,
+    print('FEDERAL_AGENTS_PASS', agents.stat().st_ino,
           hashlib.sha256(agents.read_bytes()).hexdigest()[:12])
+    print('STATE_CONSTITUTIONS_PASS', len(state_ids), 'distinct state AGENTS files')
     print('SHARED_BUILD_PASS', build.stat().st_ino,
           hashlib.sha256(build.read_bytes()).hexdigest()[:12])
     print('SHARED_COMM_PASS', comm.stat().st_ino,
