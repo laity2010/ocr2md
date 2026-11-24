@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | V0 | `main` | 历史主线工作台，**不是** V1 源码；Git 分支/工作树名称不作改名 |
 | V1 | `lab-ocr` | 现有已验证交互、PDF 动态多轨 PBS、手势和样式的**复用基线** |
-| V2 | `lab-ocr-v2` | 当前 **2 Tables + N Derived Views（两实体表 + N 个前端派生视图）** 的独立实验工作台和唯一 V2 发布目标；标题 View 已实现；其他独立审阅 View 尚待逐项实施 |
+| V2 | `lab-ocr-v2` | 当前 **2 Tables + N Derived Views（两实体表 + N 个前端派生视图）** 的独立实验工作台和唯一 V2 发布目标；N 个独立审阅 View 尚待按模块逐项实施 |
 | Frame | `lab-frame` | 原四窗、全局设置、目录授权、导航和 AG Grid 的基础框架 |
 
 - V2 是 **框架型 Lab**，不是 V0/Main 的镜像。优先复用真实 V1 `lab-ocr` 的原组件及公开 API，不得把 V0 的 `ui/pdf-preview.js` 固定双轨误当 V1；业务数据用隔离适配器接入，不额外制作平行 PDF、AG、Settings、导航、状态栏或 CM6 实例。
@@ -36,13 +36,11 @@
 
 1. **SQLite · 唯一持久化权威 [已实现]**：只维护 MinerU 无损原始资料、当前逻辑块正文/顺序/归属及**经明确设计并验收后**需要长期保留的逻辑审阅状态；仍以 `mineru_base`、`logical_block` 两张应用物理表为底座。不得为了标题/LaTeX/断行等每新增一个审阅模块就再建一张表、额外存派生结果或未经授权修改 Schema。
 2. **CM6 · 当前会话唯一可编辑正文 [已实现]**：`logical_block.md_block` 是持久化正文，加载后由唯一 CM6 EditorState 表示正在编辑的最新正文；适配器从**当前 CM6 正文快照及 `logical_id`/PBS 位置映射**读取，而不是从可能滞后的 SQL 查询结果自行构造第二个可写正文。正文/结构写回仍使用已有 CM6 事务、原生 Undo/Redo、`md-commit` / `structure-commit` 及旧值冲突保护；派生 View 无权绕开正式写入口。
-3. **前端适配器 + AG Grid · N 个只读派生审阅 View [WP23 标题已实现；其他模块待实施]**：适配器按模块识别、提取、关联并生成带 `logical_id`、必要时带源码区间的 AG 行模型；AG Grid 统一承担筛选、排序、审阅入口和跨窗定位。**AG 的列值过滤只筛已有行，不替代公式、脚注匹配、跨块断行等候选发现逻辑。** 派生行和筛选结果默认只驻留会话内存，随 CM6 对应逻辑块修订而局部更新，**不默认落 SQLite**；PDF/Markdown/AG 仍是投影，不成为另一份正文权威。
+3. **前端适配器 + AG Grid · N 个只读派生审阅 View [架构已确定；各模块待实施]**：适配器按模块识别、提取、关联并生成带 `logical_id`、必要时带源码区间的 AG 行模型；AG Grid 统一承担筛选、排序、审阅入口和跨窗定位。**AG 的列值过滤只筛已有行，不替代公式、脚注匹配、跨块断行等候选发现逻辑。** 派生行和筛选结果默认只驻留会话内存，随 CM6 对应逻辑块修订而局部更新，**不默认落 SQLite**；PDF/Markdown/AG 仍是投影，不成为另一份正文权威。
 
 **审阅决定的持久化例外 [待设计、未实现]**：例如「忽略 / 待核实 / 已匹配 / 已转换」若要求刷新、重开后仍保留，必须有按稳定身份定位的受控持久化契约、历史/冲突语义及迁移/回归测试。当前 `logical_block` 十列**未提供这些新模块的通用审阅状态字段**；不得假定已有持久化能力，也不得静默添加第三张物理表、额外 SQLite View、将状态写入原文或以 AG 过滤状态冒充已保存的仲裁结果。各模块实施前先提交方案取得授权。
 
-**当前与后续范围**：当前已实现的是**基础表/逻辑块审阅**、AG 原生表头过滤、唯一 CM6 正文与 PDF/Markdown/AG 联动，及已验收的增量写回。标题层级已于 WP23 实施；以下独立审阅模块仍为 **[待实施]**：LaTeX、非法断行（跨块识别）、注释对（注号/注文匹配）、媒体链接、HTML 表格。它们应各自提供只读派生适配器及直接测试；不能因为现有 `block_type` 列能过滤出相似类型，就宣称该模块已实现或已保存审阅结果。
-
-**WP23 · 标题 View [Chromium/iPad-WebKit 浏览器验收通过；待 iPad Safari 实机核对]**：现有 AG 工具栏下拉在已绑定工作目录后提供「标题」，不改变源码导航 SQL 组的两张物理表。复用 V1 原样 `ui/lab-ocr/title-view.js` 及其依赖，按当前 CM6 的 MD Block 实时识别 ATX 1–6 级标题（不按原始 OCR 类型猜测）。前 3 列严格为 **MD Block、Level、Type**，其后 PBS、源码行号、逻辑身份及原始类型等只读元数据；Level 用 `#` 至 `######`，Type 为实时标题语义 `title`，OCR Type 保留原始类型。MD Block 完整源码采用 V1 标题渲染与 V2 CM6 Everforest 同色，字号使用 `--ocr-frame-font-size`，不按层级缩放。标题列表覆盖全文；点击沿用 `logical_id` 跨窗定位。标题增删、改层级、Undo/Redo 或结构变化后重新派生；仅投影变化时更新 AG 行，不写入额外数据或另发 SQL 查询。切换回逻辑块审阅恢复原列配置及原物理视图筛选，标题的筛选不污染原视图。原两表、CM6、PDF、Frame 源码保持不变。测试：`node tests/v2-title-view.test.mjs`、`V2_TEST_TITLE=1 node tests/v2-mineru-base.browser.test.mjs`。详见 [WP23 标题 View](docs/v2/WP23_TITLE_VIEW.md)。
+**当前与后续范围**：当前已实现的是**基础表/逻辑块审阅**、AG 原生表头过滤、唯一 CM6 正文与 PDF/Markdown/AG 联动，及已验收的增量写回。以下独立审阅模块仍为 **[待实施]**：标题层级、LaTeX、非法断行（跨块识别）、注释对（注号/注文匹配）、媒体链接、HTML 表格。它们应各自提供只读派生适配器及直接测试；不能因为现有 `block_type` 列能过滤出相似类型，就宣称该模块已实现或已保存审阅结果。
 
 ### 2.2 两张已实现的应用物理表
 
@@ -117,7 +115,6 @@
 - 当前 WP20：[行号菜单 PDF 原文插入/替换与唯一 CM6 归属](docs/v2/WP20_LINE_NATIVE_PDF_INSERT_REPLACE.md)。
 - 当前 WP21：[PDF 文字替换/插入后的 CM6 源码窗口位置保持](docs/v2/WP21_PDF_SOURCE_VIEWPORT_STABILITY.md)。
 - 当前 WP22：[默认三窗右侧 PDF 2/3、AG 顶栏与模块命名](docs/v2/WP22_DEFAULT_PDF_2THIRDS_REVIEW.md)。
-- 当前 WP23：[标题派生 View](docs/v2/WP23_TITLE_VIEW.md)。
 - 本轮 PBS 实施：[PBS 三列直接升级](docs/v2/WP05_PBS_THREE_COLUMNS.md)。
 - PBS 三列升级：[PBS 直接升级与两层规则](docs/v2/WP05_PBS_THREE_COLUMNS.md)。
 - 两表和 Markdown：[WP01 逻辑契约](docs/v2/WP01_LOGICAL_CONTRACT.md)、[WP02 初始化](docs/v2/WP02_LOGICAL_INITIALIZATION.md)、[WP03 无损往返](docs/v2/WP03_MARKDOWN_ROUNDTRIP.md)、[WP03 类型列](docs/v2/WP03_BLOCK_TYPE_CONTRACT.md)；当时的文字可编辑 CM6 属于历史，**WP10 起 CM6 正文可编辑，必须保护单次编辑跨块边界及原始 Raw 数据**。

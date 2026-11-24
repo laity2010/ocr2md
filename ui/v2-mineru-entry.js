@@ -6,8 +6,6 @@ import {createFrameStatus} from './frame/global-status.js';
 import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
-import {projectTitleRows,titleColumns} from './v2-title-view.js';
-import './v2-title-view.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './ag-enum-filter-shared.css';
@@ -29,7 +27,6 @@ let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
 let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
 let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBlocked=false;
 let rebuilding=false;
-let agView='frame',titleSignature=null,physicalFilter=null;
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
 const textCopy=rows=>new Map(rows.map(r=>[r.logicalId,r.markdownText]));
 const structureCopy=rows=>rows.map(r=>({
@@ -81,9 +78,6 @@ function wireNav(select){
       return;
     }
     selectedTable=table;
-    agView='frame';
-    const viewPicker=picker()?.querySelector('.ocr-ag-module-select');
-    if(viewPicker)viewPicker.value='frame';
     active=true;
     offset=0;
     if(bound)void fetchPage();
@@ -104,66 +98,6 @@ function revealPhysicalTables(tables){
   }
 }
 function picker(){return $('#workspace .ocr-ag-toolbar');}
-function wireViewPicker(){
-  const select=picker()?.querySelector('.ocr-ag-module-select');
-  if(!select)return;
-  if(!select.dataset.v2TitleWired){
-    select.dataset.v2TitleWired='yes';
-    select.add(new Option('标题','title'));
-    select.setAttribute('aria-label','选择 AG 过滤视图');
-    select.title='切换逻辑块审阅或标题派生视图';
-    select.querySelector('option[value="settings"]').disabled=true;
-    select.addEventListener('change',()=>{
-      if(!bound)return;
-      agView=select.value==='title'?'title':'frame';
-      if(agView==='title'){
-        ++pageRequest; // cancel an in-flight physical table query
-        renderTitles();
-      }else{
-        if(!active)selectedTable='logical_block';
-        active=true;void fetchPage();
-      }
-    });
-  }
-  select.disabled=!bound;
-  select.value=agView;
-}
-function gridPort(){
-  const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
-  if(!port)throw Error('AG 公共数据显示接口尚未就绪');
-  if(port!==wiredGrid){
-    unsubscribeGridClick?.();wiredGrid=port;
-    unsubscribeGridClick=port.onRowClicked(event=>{
-      if(!bound||!event.data)return;
-      if(agView!=='title'&&!active)return;
-      document.dispatchEvent(new CustomEvent('v2-ag-row-click',{
-        detail:{table:agView==='title'?'logical_block':selectedTable,row:event.data,workspace:bound}}));
-    });
-  }
-  return port;
-}
-function renderTitles(){
-  const source=$('#workspace #editor')?.v2SourcePort;
-  const port=gridPort();
-  const rows=source?.getState().loaded&&source.getWorkspace()===bound?
-    projectTitleRows(source.getBlocks(),source.getIntervals(),pos=>source.getLineAtOffset(pos)):[];
-  const controls=logicalControls();
-  if(controls){controls.label.hidden=true;controls.indicator.hidden=true;}
-  const paging=picker()?.querySelector('.v2-base-paging');if(paging)paging.hidden=true;
-  const sig=JSON.stringify(rows);
-  const entering=renderedSchema!=='title';
-  if(entering){
-    physicalFilter={schema:renderedSchema,model:port.getFilterModel()};
-    port.setFilterModel(null);
-    port.setColumns(titleColumns(),'title');renderedSchema='title';
-  }
-  // A non-heading edit must not reset the AG projection or its filters.
-  if(entering||sig!==titleSignature){
-    titleSignature=sig;port.setRows(rows);
-    if(lastFocus)port.focusRow('logical_id',lastFocus.logicalId);
-  }
-  if(entering)report('AG 标题 · '+rows.length+' 个标题 · 实时 CM6 只读派生','ok');
-}
 function sqlActionsDialog(){
   let dialog=$('#v2-sql-actions-dialog');
   if(dialog)return dialog;
@@ -385,7 +319,16 @@ function pagingControls(){
   host.append(prev,label,next);bar.append(host);return host;
 }
 function renderGrid(state){
-  const port=gridPort();
+  const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
+  if(!port)throw Error('AG 公共数据显示接口尚未就绪');
+  if(port!==wiredGrid){
+    unsubscribeGridClick?.();wiredGrid=port;
+    unsubscribeGridClick=port.onRowClicked(event=>{
+      if(!active||!bound||!event.data)return;
+      document.dispatchEvent(new CustomEvent('v2-ag-row-click',{
+        detail:{table:selectedTable,row:event.data,workspace:bound}}));
+    });
+  }
   const logical=state.tableName==='logical_block';
   // Only the AG view is reordered. The SQLite ten-column physical schema
   // and server-returned column inventory stay untouched.
@@ -454,16 +397,10 @@ function renderGrid(state){
       `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${state.rowCount}`;
   }else visibleLogicalP=null;
   const schema=state.tableName+':'+columns.map(column=>column.field).join(',');
-  const leavingTitle=renderedSchema==='title';
-  if(leavingTitle)port.setFilterModel(null);
   if(schema!==renderedSchema){port.setColumns(columns,state.tableName);renderedSchema=schema;}
   port.setRows(logical
     ?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`}))
     :state.rows);
-  if(leavingTitle){
-    if(physicalFilter?.schema===schema)port.setFilterModel(physicalFilter.model);
-    physicalFilter=null;
-  }
   if(logical)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
   if(lastFocus){
     port.focusRow(state.tableName==='logical_block'?'logical_id':'blockid',
@@ -490,7 +427,6 @@ function renderGrid(state){
 }
 let pageRequest=0;
 async function fetchPage(){
-  if(agView==='title'){renderTitles();return;}
   if(!bound||!active)return;
   const generation=++pageRequest;
   try{
@@ -620,7 +556,7 @@ async function ensureBase(path){
       }
     }
     if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
-      renderedSchema='';physicalFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
+      renderedSchema='';clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());
     acknowledgedText=textCopy(port.getBlocks());
@@ -637,10 +573,8 @@ async function ensureBase(path){
       })();
     }
     revealPhysicalTables(state.tables);
-    wireViewPicker();
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
-    if(agView==='title')renderTitles();
-    else if(active)await fetchPage();
+    if(active)await fetchPage();
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}
 }
@@ -651,7 +585,6 @@ document.addEventListener('v2-sync-focus',event=>{
   const source=$('#workspace #editor')?.v2SourcePort;
   if(!row||!bound||source?.getWorkspace()!==bound)return;
   lastFocus=row;
-  if(agView==='title'){gridPort().focusRow('logical_id',row.logicalId);return;}
   if(!active)return;
   if(selectedTable==='logical_block'){
     const logical=logicalState?.rows.find(item=>item.logical_id===row.logicalId);
@@ -685,8 +618,7 @@ document.addEventListener('v2-cm-protected-separator',()=>
   report('WP10：不允许单次编辑跨越两个逻辑块；空行仍属于所属块','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
-  if(kind==='clear'){lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;
-    if(agView==='title')renderTitles();}
+  if(kind==='clear'){lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;}
   if(kind==='load'){
     const port=$('#workspace #editor')?.v2SourcePort;
     acknowledged=structureCopy(port?.getStructureRows()||[]);
@@ -694,8 +626,7 @@ document.addEventListener('v2-cm-session',event=>{
   }
   if(kind==='structure'||kind==='edit'){
     overlayCMStructure();
-    if(agView==='title')renderTitles();
-    else if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);
+    if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);
     saveBlocked=false;scheduleStructureSave();
     report(`● WP10 CM6 文本/结构已改变 · ${blocks} 逻辑块 · ${dirty?'待写 SQL':'已与 SQL 一致'}`,
       dirty?'warning':'ok');

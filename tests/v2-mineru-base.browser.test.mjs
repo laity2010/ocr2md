@@ -40,7 +40,6 @@ try{
    // CM6 source is automatically populated with all 224 logical rows.
    const fragments=Array.from({length:224},(_,i)=>
      i===0?'# WP04 Chapter 🧪':i===1?'Original text':i===2?'':
-     process.env.V2_TEST_TITLE&&i===22?'## Second page title':
      i===3?'中文😀 content':i===4?'$$\nx^2+1\n$$':
      i===5?'<table><tr><td>V1 Table</td></tr></table>':
      i===6?'> [!note] V1 Callout\n> V1 callout body':
@@ -162,60 +161,6 @@ try{
    await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
       document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12,
       null,{timeout:30000});
-   if(process.env.V2_TEST_TITLE){
-     const picker=page.locator('#workspace .ocr-ag-module-select');
-     const grid=page.locator('#workspace .ocr-outline-grid');
-     const source=page.locator('#workspace #editor');
-     const rows=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
-     const beforeReq=requestedPages.length;
-     await picker.selectOption('title');
-     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===2);
-     assert.equal(requestedPages.length,beforeReq,'title view must not query SQL');
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>c.headerName)),['MD Block','Level','Type']);
-     assert.deepEqual((await rows()).map(r=>[r.logical_id,r.level,r.block_type]),[[1,'#','title'],[23,'##','title']]);
-     const heading=grid.locator('.ocr-ag-title-source').first();
-     await heading.waitFor();
-     assert.equal(await heading.evaluate(el=>getComputedStyle(el).fontSize),'16px');
-     assert.equal(await heading.evaluate(el=>getComputedStyle(el).color),'rgb(218, 99, 98)');
-     assert.equal(await grid.locator('.ocr-ag-title-source').nth(1).evaluate(el=>getComputedStyle(el).color),'rgb(215, 127, 72)');
-     // The setting variable is the shared base, independent of H1/H2 multipliers.
-     await page.evaluate(()=>document.documentElement.style.setProperty('--ocr-frame-font-size','21px'));
-     assert.equal(await heading.evaluate(el=>getComputedStyle(el).fontSize),'21px');
-     assert.equal(await grid.locator('.ocr-ag-title-source').nth(1).evaluate(el=>getComputedStyle(el).fontSize),'21px');
-     await page.evaluate(()=>document.documentElement.style.setProperty('--ocr-frame-font-size','16px'));
-     await grid.locator('.ocr-ag-title-source').nth(1).click();
-     assert.equal(await source.evaluate(el=>{
-       const p=el.v2SourcePort;return p.getEditorView().state.selection.main.head===p.getIntervals().find(r=>r.logicalId===23).from;
-     }),true);
-     const button=grid.locator('.ag-header-cell[col-id="block_type"] .ag-header-cell-filter-button');
-     await button.click();
-     const popup=page.locator('.ocr-enum-filter[aria-label="Type 筛选"]:visible');
-     await popup.waitFor();
-     assert.equal(await popup.locator('[data-filter-value="title"] input').isChecked(),true);
-     await popup.locator('[data-filter-value="all"] input').uncheck();
-     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===0);
-     await popup.locator('[data-filter-value="all"] input').check();
-     await page.keyboard.press('Escape');
-     const edit=(id,insert,remove=0)=>source.evaluate((el,{id,insert,remove})=>{
-       const p=el.v2SourcePort,r=p.getIntervals().find(r=>r.logicalId===id);
-       p.getEditorView().dispatch({changes:{from:r.from,to:r.from+remove,insert}});
-     },{id,insert,remove});
-     await edit(2,'### ');
-     assert.deepEqual((await rows()).map(r=>r.level),['#','###','##']);
-     await edit(1,'',2);
-     assert.deepEqual((await rows()).map(r=>r.logical_id),[2,23]);
-     await source.evaluate(el=>el.v2SourcePort.undo());
-     assert.deepEqual((await rows()).map(r=>r.logical_id),[1,2,23]);
-     await source.evaluate(el=>el.v2SourcePort.undo());
-     assert.deepEqual((await rows()).map(r=>r.logical_id),[1,23]);
-     assert.equal(structurePosts,0);
-     await picker.selectOption('frame');
-     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getColumns()[0].field==='pbs');
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>c.headerName)),['PBS','Type','MD Block']);
-     assert.deepEqual(errors,[]);
-     console.log('WP23_TITLE_VIEW_BROWSER_PASS',kind,'live heading, font/color, AG click, V1 filter, undo, return');
-     continue;
-   }
    if(process.env.V2_TEST_CROSS_FILTER){
      // Mandatory cross-version release gate. Drive the actual AG Grid Type
      // header icon and popup on Chromium and iPad WebKit, not a static mock.
