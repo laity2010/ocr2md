@@ -203,3 +203,45 @@ export function planOwnedTextEdit(source,blocks,changes){
   });
   return valid?composeLogicalSource(updates):null;
 }
+
+/** WP23E: edit real owned characters, including LF. A touched block must
+ * still end in the required real LF. Repair only its missing suffix in the
+ * same CM6 transaction; never strip extra authored LF or touch a neighbor.
+ * Return the requested source separately so the caller can verify it.
+ */
+export function planRealTextEdit(source,blocks,changes){
+  if(typeof source!=='string'||!blocks.length||!changes?.iterChanges||
+    blocks[0].from!==0||blocks.at(-1).to!==source.length||
+    blocks.some((r,i)=>r.groupEndPad!==undefined||r.to<=r.from||
+      (i&&r.from!==blocks[i-1].to)))return null;
+  const original=logicalTextRows(source,blocks);
+  const byId=new Map();let valid=true;
+  changes.iterChanges((a,b,_c,_d,inserted)=>{
+    const owner=editOwner(blocks,a,b);
+    if(!owner){valid=false;return;}
+    const list=byId.get(owner.logicalId)||[];
+    list.push({a:a-owner.from,b:b-owner.from,text:inserted.toString()});
+    byId.set(owner.logicalId,list);
+  });
+  if(!valid||!byId.size)return null;
+  let requested='',repairs=[];
+  const rows=original.map((row,i)=>{
+    const edits=byId.get(row.logicalId)||[];
+    let cursor=0,text='';
+    for(const edit of edits){
+      if(edit.a<cursor||edit.b>row.markdownText.length){valid=false;break;}
+      text+=row.markdownText.slice(cursor,edit.a)+edit.text;cursor=edit.b;
+    }
+    text+=row.markdownText.slice(cursor);
+    requested+=text;
+    const next=original[i+1];
+    const min=next&&groupKey(next)===groupKey(row)?1:2;
+    const count=text.length-text.replace(/\n+$/,'').length;
+    const suffix='\n'.repeat(Math.max(0,min-count));
+    if(suffix)repairs.push({from:requested.length,insert:suffix});
+    return {...row,markdownText:text+suffix};
+  });
+  if(!valid)return null;
+  try{return {...composeOwnedSource(rows),requested,repairs};}
+  catch{return null;}
+}

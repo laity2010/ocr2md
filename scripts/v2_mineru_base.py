@@ -17,11 +17,16 @@ from urllib.parse import parse_qs
 from v2_logical_contract import initial_rows, validate_initial, raw_element_text
 from v2_md_block import initial_md, raw_bindings, raw_at
 from v2_table_recovery import table_overrides
-from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown
+from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown, OWNED_FORMAT, FORMAT
 from v2_pdf_projection import project_pdf, PDFProjectionError
 from v2_pbs import initial_pbs, validate_pbs
 
 DB_NAME='ocr2md.v2.sqlite'
+# Explicit database header marker, not an extra table or inferred state.
+# WP23E never sets it on an existing book. Activation/migration is separate.
+OWNED_LF_VERSION=2303
+def is_owned_lf(db):
+    return db.execute('PRAGMA user_version').fetchone()[0]==OWNED_LF_VERSION
 SCHEMA='ocr2md-v2-mineru-base/v1'
 MAX_SOURCE_FILE=64*1024*1024
 MAX_PDF_FILE=64*1024*1024
@@ -346,13 +351,14 @@ def existing_markdown(folder:Path):
     finally:os.close(fd)
     with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
+        db.execute('BEGIN')
         assert_schema(db)
         rows=db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s '
                         'FROM logical_block ORDER BY logical_order').fetchall()
         if not rows:raise BaseError(409,'逻辑表尚未初始化，请重新打开已保存的工作目录')
         try:
             originals=from_sql_rows(rows)
-            result=to_markdown(originals)
+            result=to_markdown(originals,format=OWNED_FORMAT if is_owned_lf(db) else FORMAT)
             if from_markdown(result)!=originals:
                 raise BaseError(409,'只读 Markdown 往返结果与逻辑表不一致')
         except ValueError as error:
@@ -550,6 +556,7 @@ def rebuild_logical_only(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             meta=assert_schema(db)
+            if is_owned_lf(db):raise BaseError(409,'真实换行模式禁止旧版逻辑表重建')
             expected=[(item['path'],item['sha256']) for item in meta['sources']]
             if [(rel,sha(raw)) for rel,raw,_ in sources]!=expected:
                 raise BaseError(409,'原始 MinerU 文件与基础表档案不一致，拒绝覆盖逻辑表')
@@ -622,8 +629,19 @@ def existing_pdf_map(folder:Path):
 STRUCTURE_FIELDS=('parentId','logicalOrder','p','b','s')
 def commit_md(folder:Path,payload,common):
     """WP10: optimistic per-row MD Block edit, no base or structure mutation."""
-    if payload.get('confirm')!='commit-v2-md' or set(payload)!={'workspace','confirm','changes'}:
+    owned=payload.get('confirm')=='commit-v2-owned-md'
+    expected_keys={'workspace','confirm','changes'}|({'expectedStructure'} if owned else set())
+    if payload.get('confirm') not in ('commit-v2-md','commit-v2-owned-md') or set(payload)!=expected_keys:
         raise BaseError(422,'MD Block 事务确认或字段不完整')
+    if owned:
+        expected=payload['expectedStructure']
+        if not isinstance(expected,list) or not 1<=len(expected)<=100000:
+            raise BaseError(422,'真实换行结构快照无效')
+        for row in expected:
+            if not isinstance(row,dict) or set(row)!={'logicalId',*STRUCTURE_FIELDS} or any(
+                type(row[k]) is not int for k in ('logicalId','logicalOrder','p','b','s')) or (
+                    row['parentId'] is not None and type(row['parentId']) is not int):
+                raise BaseError(422,'真实换行结构快照无效')
     changes=payload['changes']
     if not isinstance(changes,list) or not 1<=len(changes)<=1000:
         raise BaseError(422,'MD Block 修改行数无效')
@@ -654,6 +672,13 @@ def commit_md(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             assert_schema(db)
+            if owned!=is_owned_lf(db):
+                raise BaseError(409,'正文协议与数据库不一致，请刷新；拒绝旧客户端修改真实换行')
+            if owned:
+                actual=[dict(logicalId=r['logical_id'],parentId=r['parent_id'],
+                    logicalOrder=r['logical_order'],p=r['p'],b=r['b'],s=r['s'])
+                    for r in db.execute('SELECT logical_id,parent_id,logical_order,p,b,s FROM logical_block ORDER BY logical_order')]
+                if actual!=expected:raise BaseError(409,'PBS 结构已变化，保留 CM6 正文')
             for change in changes:
                 row=db.execute('SELECT md_block FROM logical_block WHERE logical_id=?',
                                (change['logicalId'],)).fetchone()
@@ -661,6 +686,11 @@ def commit_md(folder:Path,payload,common):
                     raise BaseError(409,'MD Block 已被其他会话改变，保留 CM6 当前文本')
             db.executemany('UPDATE logical_block SET md_block=? WHERE logical_id=?',
                            [(c['after'],c['logicalId']) for c in changes])
+            if owned:
+                try:
+                    to_markdown(from_sql_rows(db.execute('SELECT * FROM logical_block ORDER BY logical_order')),format=OWNED_FORMAT)
+                except ValueError as error:
+                    raise BaseError(409,'真实换行正文不满足块归属：'+str(error)) from error
             db.commit()
         except BaseException:
             db.rollback()
@@ -710,6 +740,7 @@ def commit_structure(folder:Path,payload,common):
         db.execute('PRAGMA foreign_keys=ON')
         db.execute('BEGIN IMMEDIATE')
         assert_schema(db)
+        if is_owned_lf(db):raise BaseError(409,'真实换行归组需原子正文/结构事务，待 WP23F')
         old={r['logical_id']:dict(r) for r in db.execute(
             'SELECT logical_id,parent_id,logical_order,p,b,s FROM logical_block')}
         if len(old)<len(changes):raise BaseError(409,'逻辑块数量已变化，禁止覆盖')

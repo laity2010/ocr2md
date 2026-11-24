@@ -246,9 +246,14 @@ function openSQLActions(){
   for(const selector of ['.v2-sql-action-import','.v2-sql-action-rebuild']){
     dialog.querySelector(selector).disabled=!workspace||busy;
   }
-  normal.disabled=!workspace||busy||selectedTable!=='logical_block'||
-    !$('#workspace #editor')?.v2SourcePort?.getState().loaded;
+  const sourceState=$('#workspace #editor')?.v2SourcePort?.getState();
+  normal.disabled=!workspace||busy||selectedTable!=='logical_block'||!sourceState?.loaded||sourceState.ownedLF;
   tableRepair.disabled=normal.disabled;
+  if(sourceState?.ownedLF){
+    rebuild.disabled=true;
+    normal.title='真实换行模式不允许单行整理';
+    tableRepair.title='真实换行模式表格修复待兼容验收';
+  }
   if(!dialog.open)dialog.showModal();
 }
 async function importBaseFromMineru(){
@@ -556,6 +561,8 @@ async function flushStructure(){
   const workspace=bound;
   saving=true;
   try{
+    const owned=source.getState().ownedLF;
+    if(owned&&changes.length)throw Error('真实换行结构事务尚未开放');
     if(changes.length){
       const result=await request('structure-commit',workspace,{method:'POST',
         payload:{workspace,confirm:'commit-v2-structure',changes}});
@@ -566,7 +573,8 @@ async function flushStructure(){
     }
     if(textChanges.length){
       const result=await request('md-commit',workspace,{method:'POST',
-        payload:{workspace,confirm:'commit-v2-md',changes:textChanges}});
+        payload:{workspace,confirm:owned?'commit-v2-owned-md':'commit-v2-md',changes:textChanges,
+          ...(owned?{expectedStructure:acknowledged}:{})}});
       if(!result?.saved||result.changedRows!==textChanges.length)throw Error('SQL MD Block 写入回执不完整');
       if(bound!==workspace||source.getWorkspace()!==workspace)return;
       acknowledgedText=new Map(textRows.map(r=>[r.logicalId,r.markdownText]));
@@ -685,7 +693,7 @@ document.addEventListener('v2-pdf-status',event=>{
   if(text)report(text,kind||'info');
 });
 document.addEventListener('v2-cm-protected-separator',()=>
-  report('WP10：不允许单次编辑跨越两个逻辑块；空行仍属于所属块','warning'));
+  report('不允许单次编辑跨越两个逻辑块；空行仍属于所属块','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
   if(kind==='clear'){lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;}

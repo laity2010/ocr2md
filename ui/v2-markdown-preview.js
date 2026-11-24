@@ -62,7 +62,9 @@ export function mountV2MarkdownPreview(scroller){
     const location=coordinator.port.beforeRender();
     const rows=port.getBlocks();
     const intervals=new Map(port.getIntervals().map(row=>[row.logicalId,row]));
-    const render=previewLineProjection(rows,id=>port.getLineAtOffset(intervals.get(id)?.from??0));
+    const render=port.getState().ownedLF?
+      {source,map:(first,last)=>({start:Number(first),end:Number(last)})}:
+      previewLineProjection(rows,id=>port.getLineAtOffset(intervals.get(id)?.from??0));
     const html=source?renderMarkdown(render.source):'';
     footnotes.close();
     const ratio=scroller.scrollHeight>scroller.clientHeight

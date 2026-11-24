@@ -11,7 +11,7 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,composeLogicalSource,logicalTextRows,planOwnedTextEdit,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,composeLogicalSource,composeOwnedSource,logicalTextRows,planOwnedTextEdit,planRealTextEdit,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
@@ -21,7 +21,7 @@ import {createMdLineGutter} from './v2-md-line-gutter.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
-  let book='',loaded=false,blocks=[],dirty=false,programmatic=false;
+  let book='',loaded=false,blocks=[],dirty=false,programmatic=false,ownedLF=false;
   let persistedStructureSignature='',persistedTextSignature='';
   const structureEffect=StateEffect.define();
   const dragEffect=StateEffect.define();
@@ -77,7 +77,7 @@ export function mountV2Source(host){
     focusLineAt:state=>state.doc.lineAt(state.selection.main.head).number,
     lineIdAt:lineNo=>{
       const line=editor?.state.doc.line(lineNo);
-      return line?blocks.find(row=>row.from===line.from)?.logicalId??null:null;
+      return line?(ownedLF?logicalAtOffset(blocks,line.from):blocks.find(row=>row.from===line.from))?.logicalId??null:null;
     },
     onDelete:logicalId=>{
       if(deleteLogicalLine(logicalId))document.dispatchEvent(new CustomEvent('v2-cm-status',{
@@ -136,6 +136,22 @@ export function mountV2Source(host){
     EditorState.transactionFilter.of(tr=>{
       if(!loaded||!tr.docChanged||tr.effects.some(e=>
         e.is(dragEffect)||e.is(blockTextEffect)))return tr;
+      if(ownedLF){
+        const plan=planRealTextEdit(tr.startState.doc.toString(),
+          tr.startState.field(structureField),tr.changes);
+        if(!plan||plan.requested!==tr.newDoc.toString()){
+          document.dispatchEvent(new Event('v2-cm-protected-separator'));return [];
+        }
+        const repair=ChangeSet.of(plan.repairs,tr.changes.newLength);
+        if(repair.apply(tr.newDoc).toString()!==plan.source)
+          throw Error('WP23E real LF transaction projection mismatch');
+        if(plan.source===tr.startState.doc.toString())return [];
+        // Repair is real text, in the SAME native CM6 history transaction.
+        // Keep the caret before a newly supplied trailing LF.
+        return [tr,{sequential:true,changes:repair,
+          selection:tr.newSelection.map(repair,-1),
+          effects:structureEffect.of(plan.blocks)}];
+      }
       const plan=planOwnedTextEdit(tr.startState.doc.toString(),
         tr.startState.field(structureField),tr.changes);
       if(!plan||plan.source!==tr.newDoc.toString()){
@@ -145,14 +161,14 @@ export function mountV2Source(host){
       return tr;
     }),
     EditorState.transactionExtender.of(tr=>{
-      if(!loaded||!tr.docChanged||tr.effects.some(e=>e.is(structureEffect)))return null;
+      if(!loaded||ownedLF||!tr.docChanged||tr.effects.some(e=>e.is(structureEffect)))return null;
       const plan=planOwnedTextEdit(tr.startState.doc.toString(),
         tr.startState.field(structureField),tr.changes);
       if(!plan||plan.source!==tr.newDoc.toString())return null;
       return {effects:structureEffect.of(plan.blocks)};
     }),
     EditorState.changeFilter.of(tr=>{
-      if(!loaded||!tr.docChanged||tr.effects.some(e=>
+      if(!loaded||ownedLF||!tr.docChanged||tr.effects.some(e=>
         e.is(dragEffect)||e.is(blockTextEffect)))return true;
       const plan=planOwnedTextEdit(tr.startState.doc.toString(),
         tr.startState.field(structureField),tr.changes);
@@ -194,6 +210,7 @@ export function mountV2Source(host){
     const created=composeBlockSource(snapshot); // validate BEFORE touching current editor
     const next=EditorState.create({doc:created.source,extensions});
     loaded=false; // state replacement is not a user edit/history step
+    ownedLF=snapshot.schema==='v2-logical-md/v3';
     editor.setState(next);
     editor.dispatch({effects:structureEffect.of(created.blocks),
       annotations:Transaction.addToHistory.of(false)});
@@ -204,7 +221,7 @@ export function mountV2Source(host){
   };
   const clear=()=>{
     if(!loaded&&!book)return;
-    loaded=false;book='';blocks=[];persistedStructureSignature='';persistedTextSignature='';dirty=false;selectedId=null;
+    loaded=false;ownedLF=false;book='';blocks=[];persistedStructureSignature='';persistedTextSignature='';dirty=false;selectedId=null;
     editor.setState(EditorState.create({doc:'',extensions}));
     documentChanged();refresh();emit('clear');
   };
@@ -212,6 +229,7 @@ export function mountV2Source(host){
   const onRedo=()=>{if(loaded&&redoDepth(editor.state))redo(editor);refresh();};
   const applyDrag=intent=>{
     if(!loaded)throw Error('工作目录未绑定');
+    if(ownedLF)throw Error('真实换行模式的归组事务待 WP23F 验收');
     const result=moveLogicalBlocks(logicalTextRows(editor.state.doc.toString(),blocks),intent);
     // A repeated drop at the correct position is a successful no-op, not a
     // failed SQL write. No CM6 history entry, dirty flag or idle commit.
@@ -223,6 +241,7 @@ export function mountV2Source(host){
   };
   const countMultiline=()=>actualText().filter(r=>singleLineMD(r.markdownText)!==r.markdownText).length;
   const normalizeLines=()=>{
+    if(ownedLF)throw Error('真实换行模式禁止单行整理');
     if(!loaded||dirty)throw Error('请先保存当前正文或结构');
     const rows=actualText();
     const next=rows.map(row=>({...row,markdownText:singleLineMD(row.markdownText)}));
@@ -243,6 +262,13 @@ export function mountV2Source(host){
     if(!loaded||!Number.isSafeInteger(logicalId))return false;
     const row=blocks.find(r=>r.logicalId===logicalId);
     if(!row)return false;
+    if(ownedLF){
+      const line=editor.state.doc.lineAt(editor.state.selection.main.head);
+      if(logicalAtOffset(blocks,line.from)?.logicalId!==logicalId||line.to===line.from)return false;
+      editor.dispatch({changes:{from:line.from,to:line.to,insert:''},
+        selection:{anchor:line.from},annotations:Transaction.userEvent.of('delete.line')});
+      return true;
+    }
     const from=row.from,to=row.to-row.groupEndPad;
     if(to<=from||!editor.state.doc.sliceString(from,to))return false;
     editor.dispatch({changes:{from,to,insert:''},
@@ -263,15 +289,20 @@ export function mountV2Source(host){
     const inserted=singleLineMD(text);
     if(!inserted)throw Error('PDF 覆盖框没有可用文字');
     const head=editor.state.selection.main.head;
-    const from=row.from,to=row.to-row.groupEndPad;
-    const pos=head>=from&&head<=to?head:from;
+    const from=row.from,to=row.to-(row.groupEndPad??0);
+    const pos=head>=from&&(ownedLF?head<to:head<=to)?head:from;
     const raw=textRows.find(r=>r.logicalId===id)?.markdownText;
     if(typeof raw!=='string')throw Error('PDF 目标逻辑正文不存在');
     const offset=mode==='replace'?0:pos-from;
-    const nextText=mode==='replace'?inserted:
+    let nextText=mode==='replace'?(ownedLF?inserted+(raw.match(/\n+$/)?.[0]||''):inserted):
       raw.slice(0,offset)+inserted+raw.slice(offset);
+    if(ownedLF){
+      const next=blocks[blocks.indexOf(row)+1];
+      const min=next&&next.p===row.p&&next.b===row.b?1:2;
+      nextText+='\n'.repeat(Math.max(0,min-(nextText.match(/\n+$/)?.[0].length||0)));
+    }
     if(nextText===raw)return 0; // no second SQL commit for identical content
-    const planned=composeLogicalSource(textRows.map(item=>item.logicalId===id?
+    const planned=(ownedLF?composeOwnedSource:composeLogicalSource)(textRows.map(item=>item.logicalId===id?
       {...item,markdownText:nextText}:item));
     const target=planned.blocks.find(item=>item.logicalId===id);
     // WP21: do NOT replace the entire CM6 document for a one-block edit.
@@ -308,6 +339,7 @@ export function mountV2Source(host){
     return inserted.length;
   };
   const applyTableRecovery=candidates=>{
+    if(ownedLF)throw Error('真实换行模式的表格恢复待兼容验收');
     if(!loaded||dirty)throw Error('请先保存正文或结构后再恢复表格');
     if(!Array.isArray(candidates)||!candidates.length||candidates.length>10000)
       throw Error('表格恢复清单无效');
@@ -389,11 +421,11 @@ export function mountV2Source(host){
     getMarkdown:()=>editor.state.doc.toString(),
     getBlocks:()=>logicalTextRows(editor.state.doc.toString(),blocks),
     getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})=>({
-      logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})),
+      logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,...(ownedLF?{}:{groupEndPad})})),
     getWorkspace:()=>book,
     getState:()=>({book,loaded,dirty,readOnly:false,blockCount:blocks.length,
       undo:undoDepth(editor.state),redo:redoDepth(editor.state),
-      separator:BLOCK_END,groupEndMinimum:BLOCK_END}),
+      ownedLF,separator:ownedLF?'':BLOCK_END,groupEndMinimum:BLOCK_END}),
     undo:onUndo,redo:onRedo,
   });
   host.v2SourcePort=port;
