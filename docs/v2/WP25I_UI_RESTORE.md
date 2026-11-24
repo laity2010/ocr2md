@@ -17,3 +17,5 @@
 - 未触碰原书或其他 Lab。实际发布身份以 manifest 为准。
 
 - WP25F 标题交互矩阵 Chromium/WebKit 均 PASS：独立标题行、原着色字号、精确点击、7 次 SQLite 差量保存及重开、267 个 ID 不变；未发生 CM6 插件崩溃。
+
+> WP25J：用户最新明确指定标题前三列为 MD Line、源码行号、PBS；Level、Type 等其余列顺延。该明确指令取代本历史记录的前三列约定，以当前 README 为准。

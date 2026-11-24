@@ -31,7 +31,7 @@ export function mdLineColumns(view='line'){
   ].map(([field,headerName])=>({field,headerName}));
   if(view!=='title')return columns;
   // A common row set does not imply a common presentation layout.
-  const leading=['md_line','title_level','line_type'];
+  const leading=['md_line','source_line','pbs','title_level','line_type'];
   const marker=n=>Number.isInteger(n)&&n>=1&&n<=6?'#'.repeat(n):'';
   return [...leading.map(key=>columns.find(c=>c.field===key)),
     ...columns.filter(c=>!leading.includes(c.field))].map(c=>{

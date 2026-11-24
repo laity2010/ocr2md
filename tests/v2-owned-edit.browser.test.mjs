@@ -144,7 +144,7 @@ try{
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
      await picker.selectOption('title');
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['title_level','Level'],['line_type','Type']]);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['source_line','源码行号'],['pbs','PBS']]);
      const checkGutter=async()=>{
        await page.waitForFunction(()=>{
          const e=document.querySelector('#workspace #editor'),v=e.v2SourcePort.getEditorView();
@@ -369,7 +369,7 @@ try{
      assert.deepEqual(await headingPairs(),[{line:8,text:'# 新标题'}]);
      assert.equal(await grid.evaluate((el,id)=>el.v2BaseGridPort.getDisplayedRows().find(r=>r.logical_id===id)===window.__wp25fRow,id),true,'same common MD Line row on switching presets');
      assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getFilterModel()),{line_type:{values:['title']}});
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['title_level','Level'],['line_type','Type']]);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['source_line','源码行号'],['pbs','PBS']]);
      const edit=async(from,to,insert)=>{
        await source.evaluate((el,{id,from,to,insert})=>{
          const p=el.v2SourcePort,r=p.getIntervals().find(x=>x.logicalId===id);
