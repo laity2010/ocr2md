@@ -89,11 +89,12 @@ export function mountV2Source(host){
     focusLineAt:state=>state.doc.lineAt(state.selection.main.head).number,
     lineIdAt:lineNo=>{
       const line=editor?.state.doc.line(lineNo);
-      return line?(ownedLF?logicalAtOffset(blocks,line.from):blocks.find(row=>row.from===line.from))?.logicalId??null:null;
+      return line?(ownedLF?getMdLineIndex()?.atSourceLine(lineNo)?.logical_id:blocks.find(row=>row.from===line.from)?.logicalId)??null:null;
     },
-    onDelete:logicalId=>{
-      if(deleteLogicalLine(logicalId))document.dispatchEvent(new CustomEvent('v2-cm-status',{
-        detail:{text:'已删除当前行正文，逻辑块及 PBS 保留 · CM6 可撤销',kind:'ok'},
+    captureLine:lineNo=>ownedLF?getMdLineIndex()?.makeRef(lineNo):{legacy:true},
+    onDelete:(logicalId,lineRef)=>{
+      if(deleteLogicalLine(logicalId,lineRef))document.dispatchEvent(new CustomEvent('v2-cm-status',{
+        detail:{text:'已删除当前 MD 行，逻辑块及 PBS 保留 · CM6 可撤销',kind:'ok'},
       }));
     },
     getPdfText:async logicalId=>{
@@ -104,11 +105,11 @@ export function mountV2Source(host){
         await pdf.getNativeTextForLogicalId(logicalId):'';
       return {text:loaded&&book===activeBook?text:'',workspace:activeBook};
     },
-    onPdfText:(logicalId,mode,text,expectedBook)=>{
+    onPdfText:(logicalId,mode,text,expectedBook,lineRef)=>{
       try{
         if(!loaded||!expectedBook||book!==expectedBook)
           throw Error('原工作目录已经变更，拒绝使用旧 PDF 文字层');
-        const count=insertPdfText({blockId:logicalId,mode,text});
+        const count=insertPdfText({blockId:logicalId,mode,text,lineRef});
         const row=blocks.find(item=>item.logicalId===logicalId);
         document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{
           text:`PDF 原文${mode==='replace'?'替换':'插入'} · p${row?.p}b${row?.b}s${row?.s} · ${count} 字符 · CM6 可撤销`,kind:'ok',
@@ -283,16 +284,18 @@ export function mountV2Source(host){
   // WP17: V1 physically deletes a source row. V2 owns a stable SQL
   // logical_id for EACH line; clearing only its MD text is the safe analogue.
   // The virtual LF, logical order, PBS identity and PDF geometry never move.
-  const deleteLogicalLine=logicalId=>{
+  const deleteLogicalLine=(logicalId,lineRef=null)=>{
     if(!loaded||legacyReadOnly||!Number.isSafeInteger(logicalId))return false;
     const row=blocks.find(r=>r.logicalId===logicalId);
     if(!row)return false;
     if(ownedLF){
-      const line=editor.state.doc.lineAt(editor.state.selection.main.head);
-      if(logicalAtOffset(blocks,line.from)?.logicalId!==logicalId||line.to===line.from)return false;
+      const idx=getMdLineIndex(),line=lineRef?idx.resolve(lineRef):idx.atOffset(editor.state.selection.main.head);
+      if(!line||line.logical_id!==logicalId)return false;
+      const previous=editor.state.doc;
+      document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.beforeSourceEdit?.();
       editor.dispatch({changes:{from:line.from,to:line.to,insert:''},
         selection:{anchor:line.from},annotations:Transaction.userEvent.of('delete.line')});
-      return true;
+      return editor.state.doc!==previous;
     }
     const from=row.from,to=row.to-row.groupEndPad;
     if(to<=from||!editor.state.doc.sliceString(from,to))return false;
@@ -302,7 +305,7 @@ export function mountV2Source(host){
   };
   // V1's PDF.js callback contains ONLY text collected from its currently
   // highlighted bbox; V2 restores one physical text row per logical block.
-  const insertPdfText=({blockId,text,mode='insert'})=>{
+  const insertPdfText=({blockId,text,mode='insert',lineRef=null})=>{
     if(legacyReadOnly)throw Error('历史人工逻辑块仅可只读审阅');
     if(!['insert','replace'].includes(mode))throw Error('PDF 文本操作类型无效');
     if(!loaded||typeof text!=='string'||!text.trim())
@@ -315,6 +318,21 @@ export function mountV2Source(host){
     const inserted=singleLineMD(text);
     if(!inserted)throw Error('PDF 覆盖框没有可用文字');
     const head=editor.state.selection.main.head;
+    if(ownedLF){
+      const idx=getMdLineIndex(),atCaret=idx.atOffset(head);
+      const line=lineRef?idx.resolve(lineRef):atCaret?.logical_id===id?atCaret:idx.forBlock(id)[0];
+      if(!line||line.logical_id!==id)throw Error('MD 行定位已过期或不属于目标 PDF 块');
+      const pos=head>=line.from&&head<=line.textTo?head:line.from;
+      const change={from:mode==='replace'?line.from:pos,to:mode==='replace'?line.textTo:pos,insert:inserted};
+      if(editor.state.doc.sliceString(change.from,change.to)===inserted)return 0;
+      document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.beforeSourceEdit?.();
+      const scrollAnchor=editor.scrollSnapshot().map(ChangeSet.of([change],editor.state.doc.length));
+      const previous=editor.state.doc;
+      editor.dispatch({changes:change,effects:scrollAnchor,
+        selection:{anchor:change.from+inserted.length},userEvent:'input.paste'});
+      if(editor.state.doc===previous)throw Error('MD 行文字操作未提交');
+      return inserted.length;
+    }
     const from=row.from,to=row.to-(row.groupEndPad??0);
     const pos=head>=from&&(ownedLF?head<to:head<=to)?head:from;
     const raw=textRows.find(r=>r.logicalId===id)?.markdownText;

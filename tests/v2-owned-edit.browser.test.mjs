@@ -302,6 +302,59 @@ try{
      continue;
    }
    if(structureMode){
+     const first=before.rows[0];
+     const verifyIndex=()=>source.evaluate(el=>{
+       const p=el.v2SourcePort,idx=p.getMdLineIndex();
+       return idx.rows.map(r=>r.md_line+'\n').join('')===p.getMarkdown()&&
+         idx.rows.every(r=>idx.atBlockLine(r.logical_id,r.line_offset)===r&&idx.atSourceLine(r.source_line)===r);
+     });
+     assert(await verifyIndex());
+     if(process.env.V2_TEST_LINE_ACTIONS==='1'){
+       // The real PDF first-load scroll sync must finish before opening
+       // the gutter menu; normal scrolling intentionally dismisses it.
+       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+       await source.evaluate(el=>el.v2SourcePort.locateSourceLine(3));
+       const btn=page.locator('#workspace #editor .ocr-cm-line-number-button[data-line-no="3"]');
+       await btn.waitFor({state:'visible',timeout:10000});
+       await btn.click();
+       await page.getByRole('menuitem',{name:'删除当前行'}).click();
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       let current=await snapshot();
+       assert.equal(current.rows[0].markdownText,first.markdownText.replace('手工修改\n',''));
+       assert.deepEqual(current.rows.slice(1),before.rows.slice(1));
+       assert(await verifyIndex());
+       await source.evaluate(el=>el.v2SourcePort.undo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       assert.deepEqual((await snapshot()).rows,before.rows);
+       await source.evaluate(el=>{
+         const p=el.v2SourcePort,idx=p.getMdLineIndex(),ref=idx.makeRef(3);
+         p.locateSourceLine(3);p.insertPdfText({blockId:ref.logical_id,mode:'replace',text:'PDF line sample',lineRef:ref});
+         window.__staleLineRef=ref;
+       });
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       current=await snapshot();
+       assert.equal(current.rows[0].markdownText,first.markdownText.replace('手工修改','PDF line sample'));
+       assert.deepEqual(current.rows.slice(1),before.rows.slice(1));
+       assert(await source.evaluate(el=>{
+         const p=el.v2SourcePort;
+         try{p.insertPdfText({blockId:window.__staleLineRef.logical_id,mode:'insert',text:'bad',lineRef:window.__staleLineRef});return false;}catch{return true;}
+       }));
+       await source.evaluate(el=>el.v2SourcePort.undo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       assert.deepEqual((await snapshot()).rows,before.rows);
+       await source.evaluate(el=>{
+         const p=el.v2SourcePort,ref=p.getMdLineIndex().makeRef(3);
+         p.locateSourceLine(3);p.insertPdfText({blockId:ref.logical_id,mode:'insert',text:'PREFIX ',lineRef:ref});
+       });
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       assert.equal((await snapshot()).rows[0].markdownText,first.markdownText.replace('手工修改','PREFIX手工修改'));
+       await source.evaluate(el=>el.v2SourcePort.undo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       assert.deepEqual((await snapshot()).rows,before.rows);assert(await verifyIndex());
+       assert.equal(writes.length,6);
+       // Scope the original WP23F counter assertions to its own drag phase.
+       writes.splice(0);
+     }
      const parent=before.rows[0],child=before.rows[1];
      assert.equal(parent.logicalId,23);assert.equal(child.logicalId,24);
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');
@@ -345,7 +398,7 @@ try{
        structure:document.querySelector('#workspace #editor').v2SourcePort.getStructureRows().slice(0,6),
        statusText:document.querySelector('#status')?.textContent,
      })),errors,writes.map(w=>w.op));throw e;}
-     const merged=await saveStructure();
+     const merged=await saveStructure();assert(await verifyIndex());
      assert.equal(merged.rows[0].markdownText,parent.markdownText.replace(/\n+$/,'\n'));
      assert.equal(merged.rows[1].parentId,23);
      assert.equal(merged.rows[1].markdownText,child.markdownText);
@@ -370,7 +423,7 @@ try{
        const dst=rows.find(r=>r.s===0&&r.logicalId!==23&&r.p===rows[0].p);
        p.applyDrag({sourceBlockId:23,targetBlockId:dst.logicalId,placement:'after'});
      });
-     const moved=await saveStructure();
+     const moved=await saveStructure();assert(await verifyIndex());
      assert.equal(moved.rows.find(r=>r.logicalId===23).markdownText,authored.rows[0].markdownText);
      await source.evaluate(el=>el.v2SourcePort.undo());
      const restored=await saveStructure();assert.deepEqual(restored.rows,authored.rows);

@@ -25,7 +25,7 @@ export function focusedLineHasAction(lineNo,focusLineNo,mdLoaded,lineId){
 /** Native CM6 line-number gutter: one button follows the highlighted focus
  * line. The same immutable document/line-ID authority owns its menu action.
  */
-export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,getPdfText=null,onPdfText=null}){
+export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,getPdfText=null,onPdfText=null,captureLine=null}){
   if(typeof lineIdAt!=='function'||typeof isMarkdown!=='function'||
      typeof focusLineAt!=='function'||typeof onDelete!=='function')
     throw Error('CM6 line gutter port invalid');
@@ -37,6 +37,8 @@ export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,get
   function open(anchor,lineNo){
     const lineId=lineIdAt(lineNo);
     if(!lineId)return;
+    const lineRef=captureLine?.(lineNo)??null;
+    if(captureLine&&!lineRef)return;
     if(menu){close();}
     const root=document.createElement('div');
     root.className='ocr-cm-line-menu';root.setAttribute('role','menu');
@@ -46,7 +48,7 @@ export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,get
     item.className='ocr-cm-line-delete';item.setAttribute('role','menuitem');
     item.textContent='删除当前行';
     item.addEventListener('click',event=>{
-      event.stopPropagation();close();onDelete(lineId);
+      event.stopPropagation();close();onDelete(lineId,lineRef);
     });
     root.append(item);
     // V2-only addition to the copied V1 Frame gutter. Never insert PDF
@@ -73,7 +75,7 @@ export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,get
         buttons.forEach((button,i)=>button.addEventListener('click',event=>{
           event.stopPropagation();close();
           // Live source port revalidates the ID and normalizes native text.
-          onPdfText(lineId,actions[i][0],text,workspace);
+          onPdfText(lineId,actions[i][0],text,workspace,lineRef);
         }));
       }).catch(()=>{
         if(menu===root)buttons.forEach(button=>{button.disabled=true;
