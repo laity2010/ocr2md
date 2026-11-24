@@ -11,11 +11,13 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,composeLogicalSource,composeOwnedSource,logicalTextRows,planOwnedTextEdit,planRealTextEdit,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,composeLogicalSource,composeOwnedSource,logicalTextRows,planOwnedTextEdit,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
 import {isSyntheticId} from './v2-legacy-block-id.js';
+import {createMdLineIndex} from './v2-md-line-index.js';
+import {planMdLineEdit} from './v2-md-line-edit.js';
 import {singleLineMD} from './v2-single-line.js';
 // Byte-identical V1 Frame source gutter, adapted only via callbacks.
 import {createMdLineGutter} from './v2-md-line-gutter.js';
@@ -58,6 +60,15 @@ export function mountV2Source(host){
     },provide:f=>EditorView.decorations.from(f),
   });
   let selectedId=null;
+  let indexedDoc=null,indexedBlocks=null,lineIndex=null;
+  const getMdLineIndex=()=>{
+    if(!loaded||!ownedLF)return null;
+    if(indexedDoc!==editor.state.doc||indexedBlocks!==blocks){
+      lineIndex=createMdLineIndex(editor.state.doc,blocks);
+      indexedDoc=editor.state.doc;indexedBlocks=blocks;
+    }
+    return lineIndex;
+  };
   host.classList.add('v2-source-session');
   const native=isIOSWebKit();
   host.classList.toggle('ocr-ios-native-selection',native);
@@ -139,7 +150,18 @@ export function mountV2Source(host){
       if(!loaded||!tr.docChanged||tr.effects.some(e=>
         e.is(dragEffect)||e.is(blockTextEffect)))return tr;
       if(ownedLF){
-        const plan=planRealTextEdit(tr.startState.doc.toString(),
+        // History restores the exact prior ownership, including boundary
+        // insertions whose inverse otherwise looks like another line edit.
+        if((tr.isUserEvent('undo')||tr.isUserEvent('redo'))&&tr.effects.some(e=>e.is(structureEffect))){
+          const restored=tr.effects.find(e=>e.is(structureEffect)).value;
+          try{
+            createMdLineIndex(tr.newDoc,restored);
+            const old=tr.startState.field(structureField);
+            if(signature(restored)!==signature(old))return [];
+            return tr;
+          }catch{return [];}
+        }
+        const plan=planMdLineEdit(tr.startState.doc,
           tr.startState.field(structureField),tr.changes);
         if(!plan||plan.requested!==tr.newDoc.toString()){
           document.dispatchEvent(new Event('v2-cm-protected-separator'));return [];
@@ -421,7 +443,7 @@ export function mountV2Source(host){
       persistedTextSignature=textSignature(rows);
       refreshDirty();refresh();emit('saved');
     },
-    getEditorView:()=>editor,getDoc:()=>editor.state.doc,
+    getEditorView:()=>editor,getDoc:()=>editor.state.doc,getMdLineIndex,
     getLineAtOffset:pos=>editor.state.doc.lineAt(Math.min(Math.max(pos,0),editor.state.doc.length)).number,
     getMarkdown:()=>editor.state.doc.toString(),
     getBlocks:()=>logicalTextRows(editor.state.doc.toString(),blocks),

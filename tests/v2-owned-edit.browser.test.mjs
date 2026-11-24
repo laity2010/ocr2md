@@ -11,6 +11,7 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 import {makePDF} from './v2-pdf-fixture.mjs';
 const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
+const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
@@ -129,6 +130,59 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(lineEditMode){
+     const expectedIds=before.rows.map(r=>r.logicalId);
+     const edit=async(a,b,insert)=>source.evaluate((el,{a,b,insert})=>{
+       const p=el.v2SourcePort;
+       p.getEditorView().dispatch({changes:{from:a,to:b,insert},selection:{anchor:a+insert.length},userEvent:'input.paste'});
+     },{a,b,insert});
+     const saved=async()=>{
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:15000});
+       const now=await snapshot();assert(now.complete);
+       assert.deepEqual(now.rows.map(r=>r.logicalId),expectedIds);
+       assert.equal(api(folder,'markdown','GET').body.markdown,now.doc);
+       const check=await source.evaluate(el=>{
+         const p=el.v2SourcePort,idx=p.getMdLineIndex();
+         return idx.rows.map(r=>r.md_line+'\n').join('')===p.getMarkdown()&&
+           idx.rows.every(r=>idx.atBlockLine(r.logical_id,r.line_offset)===r);
+       });
+       assert(check);return now;
+     };
+     let pos=before.intervals[1].from;
+     await edit(pos,pos,'\n');
+     let now=await saved();
+     assert.equal(now.rows[0].markdownText,before.rows[0].markdownText+'\n');
+     assert.deepEqual(now.rows.slice(1),before.rows.slice(1));
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual((await saved()).rows,before.rows);
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     assert.deepEqual((await saved()).rows,now.rows);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual((await saved()).rows,before.rows);
+     await edit(pos,pos,'新行😀\nPREFIX ');
+     now=await saved();
+     assert.equal(now.rows[0].markdownText,before.rows[0].markdownText+'新行😀\n\n');
+     assert.equal(now.rows[1].markdownText,'PREFIX '+before.rows[1].markdownText);
+     assert.deepEqual(now.rows.slice(2),before.rows.slice(2));
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual((await saved()).rows,before.rows);
+     await edit(0,before.intervals[2].from,'');
+     now=await saved();
+     assert.equal(now.rows[0].markdownText,'\n\n');
+     assert.equal(now.rows[1].markdownText,'\n\n');
+     assert.deepEqual(now.rows.slice(2),before.rows.slice(2));
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual((await saved()).rows,before.rows);
+     await edit(before.doc.length,before.doc.length,'EOF😀');
+     now=await saved();
+     assert.equal(now.rows.at(-1).markdownText,before.rows.at(-1).markdownText+'EOF😀\n\n');
+     assert.deepEqual(now.rows.slice(0,-1),before.rows.slice(0,-1));
+     await loadPage();
+     assert.deepEqual((await snapshot()).rows,now.rows);
+     assert.deepEqual(errors,[]);
+     console.log('WP25C_REAL_LINE_EDIT_SQL_PASS',name,writes.length,'delta saves, 267 unchanged IDs, reopen');
+     continue;
+   }
    if(titleMode){
      const grid=page.locator('#workspace .ocr-outline-grid');
      const picker=page.locator('#workspace .ocr-ag-module-select');
