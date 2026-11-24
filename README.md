@@ -1,4 +1,4 @@
-# OCR2MD · V2 工程契约（当前事实、PBS 目标与开发门禁）
+# OCR2MD · V2 执行细则（当前实现、数据架构与验收边界）
 
 > **接手前必读**：先读取 OCR2MD 统一根目录联邦 `AGENTS.md`、`BUILD.md`、`COMM.md`，再读 V2 本州 `AGENTS.md`、本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
 >
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | V0 | `main` | 历史主线工作台，**不是** V1 源码；Git 分支/工作树名称不作改名 |
 | V1 | `lab-ocr` | 现有已验证交互、PDF 动态多轨 PBS、手势和样式的**复用基线** |
-| V2 | `lab-ocr-v2` | 当前**两表 + N View** 独立实验工作台和唯一 V2 发布目标 |
+| V2 | `lab-ocr-v2` | 当前 **2 Tables + N Derived Views（两实体表 + N 个前端派生视图）** 的独立实验工作台和唯一 V2 发布目标；N 个独立审阅 View 尚待按模块逐项实施 |
 | Frame | `lab-frame` | 原四窗、全局设置、目录授权、导航和 AG Grid 的基础框架 |
 
 - V2 是 **框架型 Lab**，不是 V0/Main 的镜像。优先复用真实 V1 `lab-ocr` 的原组件及公开 API，不得把 V0 的 `ui/pdf-preview.js` 固定双轨误当 V1；业务数据用隔离适配器接入，不额外制作平行 PDF、AG、Settings、导航、状态栏或 CM6 实例。
@@ -20,7 +20,7 @@
 
 ### 1.1 AG Grid 表头筛选：统一跨版本规范引用
 
-**唯一跨版本契约**：统一开发区根目录 `CROSS_VERSION_COMPONENTS.md`（由 `AGENTS.md` 第 10 条登记）；V1 `labs/lab-ocr/ui/enum-checkbox-filter.js` 的 `EnumCheckboxFilter` 是已核验的多选过滤组件基线。新建/调整 V2 AG Grid 列前必须先阅读跨版本规范并查 V1 源码和直接测试，**不得在本 README 中另建或改写同一套强制规则**。PBS/Type/MD Block 的 V2 列序、宽度、排序及过滤状态以本 README 下文为准；Type 即使不可排序，也必须能使用原生 AG 表头多选过滤。
+**唯一跨版本契约**：统一开发区根目录联邦 `COMM.md`（由联邦 `AGENTS.md` 第 10 条登记；旧 `CROSS_VERSION_COMPONENTS.md` 只是兼容链接）；V1 `labs/lab-ocr/ui/enum-checkbox-filter.js` 的 `EnumCheckboxFilter` 是已核验的多选过滤组件基线。新建/调整 V2 AG Grid 列前必须先阅读跨版本规范并查 V1 源码和直接测试，**不得在本 README 中另建或改写同一套强制规则**。PBS/Type/MD Block 的 V2 列序、宽度、排序及过滤状态以本 README 下文为准；Type 即使不可排序，也必须能使用原生 AG 表头多选过滤。
 
 **强制发布门禁（已接入）**：`scripts/v2_frame_publish.py` 发布前执行 Main Git 的 `scripts/verify_cross_version_components.py --target lab-ocr-v2 --browser`，包含 V1 真实组件测试和 V2 真实 AG 浏览器测试；只要 Type 仍是单选，自检就非零退出并阻止发布，不触碰用户 SQL 或旧发布资源。
 
@@ -28,9 +28,23 @@
 
 **WP12 列宽纠偏 [定向浏览器验收已通过]**：逻辑表 `PBS`（固定）、`Type`（不固定）默认列宽按**当前 AG 视图中可见的实际文本**和 AG 字体测量，预留原生过滤按钮及单元格边距；不再按整篇文档所有 Type 值的最长字符串给当前页预留过宽空间。两列 `minWidth` 小于默认拟合宽度，因此使用 AG 原生表头右边缘可双向拖动；用户手动调整后，自动拟合不覆盖手动选择，切换“全部／当前页”和切换 SQL 表后再返回仍可保留。不可排序、原版多值过滤和 `MD Block` 第三列不变；验收脚本：`tests/v2-mineru-base.browser.test.mjs`（Chromium/iPad-WebKit 的真实 resize 拖动及宽度保持）。技术说明见 `docs/v2/WP12_AG_PBS_TYPE_FIT_RESIZE.md`。
 
-## 2. 数据唯一权威：[已实现]
+## 2. 数据唯一权威与派生视图执行架构
 
-**当前仅有两张应用物理表**：已授权书籍目录内的 `ocr2md.v2.sqlite`。AG/源码/Markdown/PDF/标题等均是视图；不新增第三张业务表、父块表、Markdown 行表或 SQL 历史表。
+### 2.1 2 Tables + N Derived Views · V2 当前采用的正式方案
+
+**本节是 V2 的具体架构执行细则，依据本州 `AGENTS.md` 的两实体表、稳定 `logical_id`、唯一 CM6 正文原则；不修改联邦/州宪法。** 旧文档所称的「两表 + N View」，在 V2 中明确解释为 **2 Tables + N Derived Views（前端派生视图）**：**N 不代表新增 SQL 实体表，也不要求为每个功能执行 `CREATE VIEW`。** SQL 普通 View 不储存数据，但在现阶段并不是本方案的派生视图实现层。
+
+1. **SQLite · 唯一持久化权威 [已实现]**：只维护 MinerU 无损原始资料、当前逻辑块正文/顺序/归属及**经明确设计并验收后**需要长期保留的逻辑审阅状态；仍以 `mineru_base`、`logical_block` 两张应用物理表为底座。不得为了标题/LaTeX/断行等每新增一个审阅模块就再建一张表、额外存派生结果或未经授权修改 Schema。
+2. **CM6 · 当前会话唯一可编辑正文 [已实现]**：`logical_block.md_block` 是持久化正文，加载后由唯一 CM6 EditorState 表示正在编辑的最新正文；适配器从**当前 CM6 正文快照及 `logical_id`/PBS 位置映射**读取，而不是从可能滞后的 SQL 查询结果自行构造第二个可写正文。正文/结构写回仍使用已有 CM6 事务、原生 Undo/Redo、`md-commit` / `structure-commit` 及旧值冲突保护；派生 View 无权绕开正式写入口。
+3. **前端适配器 + AG Grid · N 个只读派生审阅 View [架构已确定；各模块待实施]**：适配器按模块识别、提取、关联并生成带 `logical_id`、必要时带源码区间的 AG 行模型；AG Grid 统一承担筛选、排序、审阅入口和跨窗定位。**AG 的列值过滤只筛已有行，不替代公式、脚注匹配、跨块断行等候选发现逻辑。** 派生行和筛选结果默认只驻留会话内存，随 CM6 对应逻辑块修订而局部更新，**不默认落 SQLite**；PDF/Markdown/AG 仍是投影，不成为另一份正文权威。
+
+**审阅决定的持久化例外 [待设计、未实现]**：例如「忽略 / 待核实 / 已匹配 / 已转换」若要求刷新、重开后仍保留，必须有按稳定身份定位的受控持久化契约、历史/冲突语义及迁移/回归测试。当前 `logical_block` 十列**未提供这些新模块的通用审阅状态字段**；不得假定已有持久化能力，也不得静默添加第三张物理表、额外 SQLite View、将状态写入原文或以 AG 过滤状态冒充已保存的仲裁结果。各模块实施前先提交方案取得授权。
+
+**当前与后续范围**：当前已实现的是**基础表/逻辑块审阅**、AG 原生表头过滤、唯一 CM6 正文与 PDF/Markdown/AG 联动，及已验收的增量写回。以下独立审阅模块仍为 **[待实施]**：标题层级、LaTeX、非法断行（跨块识别）、注释对（注号/注文匹配）、媒体链接、HTML 表格。它们应各自提供只读派生适配器及直接测试；不能因为现有 `block_type` 列能过滤出相似类型，就宣称该模块已实现或已保存审阅结果。
+
+### 2.2 两张已实现的应用物理表
+
+**当前仅有两张应用物理表**：已授权书籍目录内的 `ocr2md.v2.sqlite`。AG、源码、Markdown、PDF 及未来标题等审阅 View 均作为前端投影／派生数据使用；不新增第三张业务表、父块表、Markdown 行表或 SQL 历史表。仅修改本 README **不会变更当前数据库文件或已发布程序**。
 
 | 物理表 | 当前列与来源 | 作用 |
 | --- | --- | --- |
@@ -79,9 +93,9 @@
 
 ## 5. 开发、验收与发布门禁
 
-- **按 AGENTS.md 执行**：任务开始先读本 README，查受影响源码、公开 API 和独立测试；先固定可回退 Git 点；在隔离夹具上实验，不以推测修补未定位故障；任何新的结构 Schema 必须有明确迁移与数据恢复测试。README 只记录当前项目契约，开发历史放 `docs/v2/`。
+- **按联邦/州约定执行**：任务开始依次读统一根目录联邦 `AGENTS.md`、`BUILD.md`、`COMM.md`，再读本州 `AGENTS.md` 和本 README，查受影响源码、公开 API 和独立测试；先固定可回退 Git 点；在隔离夹具上实验，不以推测修补未定位故障；任何新的结构 Schema 必须有明确迁移与数据恢复测试。README 只记录当前项目契约，开发历史放 `docs/v2/`。
 - **Frame/F02**：`ui/frame/*` 基线一致性和 Settings 保存、权限验证、两表导航；旧 `/api/v2/` 不得复活。V2 的业务 API 为 `/labs/lab-ocr-v2/api/mineru-base/{state,import,markdown,pdf-map,pdf,structure-commit,logical-rebuild}`；`structure-commit` 和 `md-commit` 均仅允许带 Frame 会话/同源来源/旧值校验的 POST 差量提交，只处理本书籍的授权数据；不新设端口、Tunnel、认证或平行文件管理器。V2 的 F03 自动更新在 CM6 结构未保存时延后执行，不依赖 iOS 的离开页面弹窗。
-- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`、**`python3 tests/test_v2_structure_commit.py -q`**；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/v2-focus-map.test.mjs`、`node tests/v2-logical-ag-filter.test.mjs`、**`node tests/v2-structure-move.test.mjs`**、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。WP08 重点手势回归可用 `V2_TEST_WP08_ONLY=1 node tests/v2-real-markdown-preview.browser.test.mjs`，保留不加标志的全量 WP07 PDF 手势测试。浏览器回归包括 Chromium 和 iPad-WebKit，重点检查真实 V1 PDF 标签拖放、CM6 源码只读、Undo/Redo 后 SQL 再次写入、PDFViewer 不换实例、不重复下载及原 bbox 不变；**实机 iPad Safari 仍须单独验收**；WP10 还需 `tests/test_v2_md_block.py`、`md-commit` 的冲突回滚和 Type 表头筛选测试。
+- **现行测试**：`python3 tests/test_v2_mineru_base.py -v`（两表、原始字节与兼容迁移）、`python3 tests/test_v2_pdf_projection.py -q`、`python3 tests/test_v2_pbs_upgrade.py -q`、**`python3 tests/test_v2_structure_commit.py -q`**；`node tests/v2-block-source.test.mjs`、`node tests/v2-block-source-fixture.test.mjs`、`node tests/v2-focus-map.test.mjs`、`node tests/v2-logical-ag-filter.test.mjs`、**`node tests/v2-structure-move.test.mjs`**、`node tests/lab-ocr-pbs-layout.test.mjs`、`node tests/v2-pdf-evidence-adapter.test.mjs`；`node tests/v2-mineru-base.browser.test.mjs`、`node tests/v2-real-markdown-preview.browser.test.mjs`、`node tests/v2-clean-frame.browser.test.mjs`、`node tests/v2-clean-frame-isolation.test.mjs`。WP08 重点手势回归可用 `V2_TEST_WP08_ONLY=1 node tests/v2-real-markdown-preview.browser.test.mjs`，保留不加标志的全量 WP07 PDF 手势测试。浏览器回归包括 Chromium 和 iPad-WebKit，重点检查真实 V1 PDF 标签拖放、CM6 源码可编辑及唯一正文归属、Undo/Redo 后 SQL 再次写入、PDFViewer 不换实例、不重复下载及原 bbox 不变；**实机 iPad Safari 仍须单独验收**；WP10 还需 `tests/test_v2_md_block.py`、`md-commit` 的冲突回滚和 Type 表头筛选测试。
 - **Git/发布**：变更经过有依据的定向回归与审计、commit/push 后，按 `AGENTS.md` 第 9 节的唯一 `release/`+manifest 网关发布同一 `lab-ocr-v2` 入口，核对 Git SHA、静态文件 SHA256 和其余 Lab 不变。WP07 修改 SQLite 写入接口，发布后必须通过既有 V2 发布脚本同步刷新常驻 Gateway 的 Python 业务模块。
 - **V2 后端运行版本同步**：Gateway 使用常驻 Python 进程导入 V2 模块；静态资源发布不等于更新其 `sys.modules` 缓存。V2 的正式发布脚本 `scripts/v2_frame_publish.py` 对比上次发布 SHA 与本次 Git SHA，若 V2 五个 Python 业务模块发生变化，发布后只通过既有 `launchctl kickstart -k` 刷新 **同一个统一 Gateway**，并核验 `/labs/healthz` 的发布 ID；纯静态变更不重启。禁止清理用户书籍 SQLite 或建立第二个 Gateway。直接测试：`python3 tests/test_v2_gateway_publish_sync.py -q`。
 
