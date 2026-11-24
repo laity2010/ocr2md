@@ -12,7 +12,8 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from v6_tailnet_https_ingress import TailnetIngress
+from v6_tailnet_https_ingress import (
+    TailnetIngress, parse_allowed_clients, allowed_peer)
 
 
 class FakeResponse:
@@ -106,6 +107,20 @@ class TailnetIngressTests(unittest.TestCase):
                                   headers={'Origin': origin}, body=b'{}')
             self.assertEqual(status, 403)
         self.assertEqual(FakeUpstream.requests, [])
+
+    def test_explicit_peer_allowlist_is_fail_closed(self):
+        peers = parse_allowed_clients('100.71.47.27')
+        self.assertTrue(allowed_peer('100.71.47.27', peers))
+        self.assertTrue(allowed_peer('127.0.0.1', peers))
+        for ip in ('100.71.47.28', '100.82.183.98', '192.168.1.10',
+                   '198.18.0.1', '0.0.0.0', '::1', 'bad-address'):
+            with self.subTest(source=ip):
+                self.assertFalse(allowed_peer(ip, peers))
+        for config in ('', ' ', '100.71.47.27,', '0.0.0.0',
+                       '192.168.1.10', '100.64.0.0/10'):
+            with self.subTest(config=config):
+                with self.assertRaises(ValueError):
+                    parse_allowed_clients(config)
 
 
 if __name__ == '__main__':

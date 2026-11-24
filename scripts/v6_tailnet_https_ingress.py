@@ -22,6 +22,52 @@ HOP_HEADERS = frozenset({
 MAX_BODY = 64 * 1024 * 1024
 
 
+def parse_allowed_clients(raw):
+    """Deny-by-default IPv4 Tailnet /32 peers; no wildcard subnet grants."""
+    if not raw.strip():
+        raise ValueError('OCR2MD_TAILNET_ALLOWED_CLIENTS must not be empty')
+    peers = set()
+    tailnet = ipaddress.ip_network('100.64.0.0/10')
+    for item in raw.split(','):
+        address = ipaddress.IPv4Address(item.strip())
+        if address not in tailnet:
+            raise ValueError('An allowed client must be a Tailnet IPv4 address')
+        peers.add(address)
+    return frozenset(peers)
+
+
+def allowed_peer(source, clients):
+    try:
+        ip = ipaddress.IPv4Address(source)
+    except ipaddress.AddressValueError:
+        return False
+    # Local health and operational tests remain available, never other LAN IPs.
+    return ip == ipaddress.IPv4Address('127.0.0.1') or ip in clients
+
+
+class RestrictedTailnetHTTPServer(ThreadingHTTPServer):
+    """Reject disallowed TCP sources *before* starting the TLS handshake.
+
+    This is an application socket admission gate, not a kernel firewall.
+    macOS PF remains unavailable without an administrator credential.
+    """
+    def __init__(self, address, handler, context, allowed_clients):
+        super().__init__(address, handler)
+        self.tls_context = context
+        self.allowed_clients = allowed_clients
+
+    def get_request(self):
+        socket, address = self.socket.accept()
+        if not allowed_peer(address[0], self.allowed_clients):
+            socket.close()
+            raise ConnectionAbortedError('Source rejected before TLS')
+        try:
+            return self.tls_context.wrap_socket(socket, server_side=True), address
+        except (OSError, ssl.SSLError):
+            socket.close()
+            raise
+
+
 class TailnetIngress(BaseHTTPRequestHandler):
     protocol_version = 'HTTP/1.1'
 
@@ -134,6 +180,7 @@ def run():
     lan_port = int(os.environ.get('OCR2MD_LAN_UPSTREAM_PORT', '4443'))
     if not (1024 <= listen_port <= 65535 and 1024 <= lan_port <= 65535):
         raise RuntimeError('Invalid HTTPS port')
+    allowed_clients = parse_allowed_clients(os.environ.get('OCR2MD_TAILNET_ALLOWED_CLIENTS', ''))
     settings = {
         'tailnet_ip': tailnet_ip,
         'listen_port': listen_port,
@@ -145,9 +192,9 @@ def run():
     tls.minimum_version = ssl.TLSVersion.TLSv1_2
     tls.load_cert_chain(os.environ['OCR2MD_TAILNET_CERT'],
                         os.environ['OCR2MD_TAILNET_KEY'])
-    server = ThreadingHTTPServer(('0.0.0.0', listen_port), TailnetIngress)
+    server = RestrictedTailnetHTTPServer(
+        ('0.0.0.0', listen_port), TailnetIngress, tls, allowed_clients)
     server.settings = settings
-    server.socket = tls.wrap_socket(server.socket, server_side=True)
     server.serve_forever()
 
 
