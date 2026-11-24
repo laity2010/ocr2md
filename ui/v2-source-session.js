@@ -59,6 +59,16 @@ export function mountV2Source(host){
       return value;
     },provide:f=>EditorView.decorations.from(f),
   });
+  const latexEffect=StateEffect.define();
+  const latexField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      if(tr.docChanged||tr.effects.some(e=>e.is(structureEffect)))value=Decoration.none;
+      for(const effect of tr.effects)if(effect.is(latexEffect))
+        value=Decoration.set(effect.value.map(r=>Decoration.mark({class:r.kind==='独立'?'v2-latex-display':'v2-latex-inline'}).range(r.source_from,r.source_to)),true);
+      return value;
+    },provide:f=>EditorView.decorations.from(f),
+  });
   let selectedId=null,selectedLine=null;
   let indexedDoc=null,indexedBlocks=null,lineIndex=null;
   const getMdLineIndex=(state=editor?.state)=>{
@@ -139,7 +149,7 @@ export function mountV2Source(host){
     EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),obsidianMarkdown,
     syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
-    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,structureField,
+    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,structureField,latexField,
     invertedEffects.of(tr=>[
       ...(tr.effects.some(e=>e.is(structureEffect))?
         [structureEffect.of(tr.startState.field(structureField))]:[]),
@@ -470,6 +480,20 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     replaceMdLines,
+    setLatexHighlights(index,rows){
+      if(index&&index!==getMdLineIndex())return false;
+      editor.dispatch({effects:latexEffect.of(rows),annotations:Transaction.addToHistory.of(false)});
+      return true;
+    },
+    focusFormula(index,row){
+      if(index!==getMdLineIndex()||!index.resolve(row.source_ref))return false;
+      const pos=row.source_from;
+      if(!Number.isInteger(pos)||pos<0||pos>=editor.state.doc.length)return false;
+      programmatic=true;
+      try{editor.dispatch({selection:{anchor:pos},effects:EditorView.scrollIntoView(pos,{y:'center'})});}
+      finally{programmatic=false;}
+      editor.focus();return true;
+    },
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
     applyDrag,countMultiline,normalizeLines,applyTableRecovery,
     deleteLogicalLine,insertPdfText,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({

@@ -17,6 +17,7 @@ const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const noteConversionMode=process.env.V2_TEST_NOTE_CONVERSION==='1';
 const noteReviewMode=process.env.V2_TEST_NOTE_REVIEW==='1'||noteConversionMode;
 const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
+const latexMode=process.env.V2_TEST_LATEX_VIEW==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
@@ -24,7 +25,7 @@ const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
 const copyFrom=(legacyEditMode||uiRestoreMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
 const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -147,6 +148,71 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(latexMode){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     assert(projection.formulaBlocks.length>0);
+     const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     await picker.selectOption('latex');
+     const all=page.getByRole('checkbox',{name:'全部逻辑块'});
+     assert(await all.isChecked());
+     let rows=await read();
+     assert(rows.length>0);
+     assert(rows.some(r=>r.kind==='行内'));assert(rows.some(r=>r.kind==='独立'));
+     assert(rows.some(r=>r.render_status==='成功'));assert(rows.some(r=>r.pdf_bbox));
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>!c.hide).map(c=>c.colId)),['formula','render_status','kind','render_html','pdf_crop','pbs','line_no','match_status','render_error','syntax']);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned)),[]);
+     assert.equal(await grid.evaluate(el=>[...el.querySelectorAll('.ag-header-cell[col-id]')].filter(n=>n.getBoundingClientRect().width>0).sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left)[0].getAttribute('col-id')),'formula');
+     const target=rows.find(r=>r.pdf_bbox&&r.source_ref&&r.render_status==='成功');
+     assert(target);
+     const focus=async row=>{
+       const at=await grid.evaluate((el,id)=>{
+         const port=el.v2BaseGridPort;port.focusRow('formula_id',id);
+         return port.getDisplayedRows().findIndex(r=>r.formula_id===id);
+       },row.formula_id);
+       await grid.locator('.ag-row[row-index="'+at+'"] [col-id="formula"]').click();
+     };
+     await focus(target);
+     await page.waitForFunction(pos=>document.querySelector('#workspace #editor').v2SourcePort.getEditorView().state.selection.main.head===pos,target.source_from,{timeout:10000});
+     assert.equal(await source.evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),target.source_from);
+     await page.waitForFunction(id=>document.querySelector('#workspace .ocr-preview-pdf-host').v2PDFPort.getState().selectedId===id,target.block_id);
+     await page.waitForFunction(()=>document.querySelector('#workspace #editor .v2-latex-inline,#workspace #editor .v2-latex-display'));
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host .lab-ocr-pdf-formula-all'));
+     const preview=page.locator('#workspace .ocr-preview-md-scroll .ocr-math .katex').first();
+     await preview.waitFor({state:'attached'});
+     const tint=await preview.evaluate(el=>getComputedStyle(el).backgroundColor);
+     assert.equal(tint,'rgba(190, 211, 140, 0.37)');
+     const actualRow=grid.locator('.ag-row[row-index]').first();
+     assert.equal(Math.round((await actualRow.boundingBox()).height),134);
+     const crop=await pdf.evaluate((el,r)=>el.v2PDFPort.renderFormulaCrop({page:r.page,bbox:r.pdf_bbox,pageSize:r.page_size}),target);
+     assert(crop.startsWith('data:image/png;base64,'));
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel({kind:{values:['行内']}}));
+     assert((await read()).every(r=>r.kind==='行内'));
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
+     // Add a deliberately malformed, unique MD-only formula using native input.
+     await source.evaluate(el=>el.v2SourcePort.locateSourceLine(3));
+     await page.keyboard.press('End');
+     await page.keyboard.insertText(' $\\frac{WP27$');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().some(r=>r.formula.includes('WP27')&&r.render_status==='失败'));
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert((await snapshot()).doc.includes('WP27'));assert.equal(writes.length,1);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert.deepEqual((await snapshot()).rows,before.rows);
+     await picker.selectOption('title');
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor .v2-latex-inline,#workspace #editor .v2-latex-display')&&!document.querySelector('#workspace .ocr-preview-pdf-host .lab-ocr-pdf-formula-all'));
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().slice(0,3).map(c=>[c.colId,c.pinned])),[['md_line',null],['source_line',null],['pbs',null]]);
+     assert.equal(await page.locator('#workspace').evaluate(el=>el.classList.contains('ocr-latex-all-active')),false);
+     await picker.selectOption('frame');assert(!await all.isChecked());
+     assert.equal(Math.round((await actualRow.boundingBox()).height),35);
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().find(c=>c.colId==='pbs').pinned),'left');
+     await picker.selectOption('latex');assert(await all.isChecked());
+     assert.equal((await read()).length,rows.length);
+     assert.deepEqual(errors,[]);
+     console.log('WP27_REAL_LATEX_VIEW_PASS',name,JSON.stringify({formulas:rows.length,ocr:rows.filter(r=>r.pdf_bbox).length,renderOK:rows.filter(r=>r.render_status==='成功').length,renderFail:rows.filter(r=>r.render_status==='失败').length}), 'actual AG header, crop, source/PDF focus, live error, undo, view switch');
+     continue;
+   }
    if(noteMode){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');

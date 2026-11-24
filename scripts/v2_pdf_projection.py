@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64, json, math, sqlite3
 from pathlib import Path
 from v2_pbs import validate_pbs
+from v2_md_block import raw_at
 
 class PDFProjectionError(ValueError):pass
 
@@ -67,7 +68,7 @@ def project_pdf(db:sqlite3.Connection):
     # s0 is the logical parent/group anchor; s1+ are its only child level.
     roots={row['logical_id']:groups[(row['p'],row['b'])][0] for row in logical}
     pbs={row['logical_id']:f"p{row['p']}b{row['b']}s{row['s']}" for row in logical}
-    covers=[];unmapped=[]
+    covers=[];unmapped=[];formula_blocks=[]
     for row in logical:
         lid=row['logical_id'];original=base.get(row['base_blockid'])
         if 2**48<=lid<2**49 and row['raw_path'] is None:
@@ -79,6 +80,16 @@ def project_pdf(db:sqlite3.Connection):
             unmapped.append(lid);continue
         try:bbox=json.loads(original['bbox_json'])
         except (TypeError,ValueError):bbox=None
+        # The exact original element is determined by raw_path, NOT the
+        # current PBS or neighboring formula. Artificial IDs have no span.
+        element=raw_at(original['block_json'],row['raw_path'])
+        if isinstance(element,dict):
+            lines=element.get('lines') or []
+            if any(isinstance(span,dict) and span.get('type') in ('inline_equation','interline_equation')
+                   for line in lines if isinstance(line,dict) for span in (line.get('spans') or [])):
+                formula_blocks.append({'block_id':lid,'base_blockid':row['base_blockid'],
+                    'block_type':element.get('type',''),'global_page':page,
+                    'page_size_json':page_sizes[page],'block_json':element})
         specific=child_boxes.get(lid)
         if valid_bbox(specific,page_sizes[page]):bbox=specific
         if not valid_bbox(bbox,page_sizes[page]):
@@ -92,5 +103,5 @@ def project_pdf(db:sqlite3.Connection):
     return {'schema':'v2-pdf-projection/v1','sourcePath':src['path'],
         'pageCount':len(page_sizes),'pageSizes':page_sizes,
         'logicalCount':len(logical),'mappedCount':len(covers),
-        'unmappedLogicalIds':unmapped,'covers':covers,
+        'unmappedLogicalIds':unmapped,'covers':covers,'formulaBlocks':formula_blocks,
         'pbs':{str(row['logical_id']):pbs[row['logical_id']] for row in logical}}

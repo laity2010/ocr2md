@@ -206,6 +206,19 @@ export function mountV2PDF(host,{toolbar}={}){
     getCovers:()=>projection?.map.covers||[],
     getV1Preview:()=>native,
     focusId,updateStructure,syncTextEmpty,getNativeTextForLogicalId,
+    getFormulaBlocks:()=>projection?.map.formulaBlocks||[],
+    renderFormulaCrop:target=>native?.renderFormulaCrop(target)??Promise.resolve(null),
+    setFormulaHighlights:rows=>native?.setFormulaHighlights(rows)??0,
+    clearFormulaFocus:()=>{
+      if(native&&selectedId!=null)return focusId(selectedId,false);
+      return false;
+    },
+    focusFormula:row=>{
+      if(!native||!projection?.byId.has(row.block_id)||!row.pdf_bbox)return false;
+      selectedId=row.block_id;
+      return native.focusFormula({id:String(row.block_id),page:row.page,bbox:row.pdf_bbox,
+        kind:row.kind==='独立'?'display':'inline'});
+    },
   });
   host.v2PDFPort=port;
   return {

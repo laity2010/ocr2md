@@ -1,0 +1,32 @@
+/* V1 focus-theme.css LaTeX mode: same green intermediate tint,
+ * selection contributes outline, not a second translucent fill.
+ * V2 source/preview class names are the only adaptation. */
+#workspace.ocr-latex-all-active{
+ --ocr-latex-all-fill:rgba(190,211,140,.37);
+ --ocr-latex-all-edge:rgba(155,183,103,.62);
+ --ocr-review-focus-edge:#ffd46c;
+}
+#workspace.ocr-latex-all-active .cm-line :is(.v2-latex-inline,.v2-latex-display){
+ background:var(--ocr-latex-all-fill);box-shadow:none;border-radius:2px;
+}
+#workspace.ocr-latex-all-active .ocr-preview-md-scroll :is(
+ .ocr-reviewed-inline-latex,.ocr-reviewed-inline-error,.ocr-math .katex,.ocr-math-fallback){
+ background:var(--ocr-latex-all-fill);border-radius:2px;box-shadow:none;
+}
+#workspace.ocr-latex-all-active .lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-all{
+ position:absolute;z-index:8;box-sizing:border-box;pointer-events:none;
+ background:var(--ocr-latex-all-fill);border:1px solid var(--ocr-latex-all-edge);
+ box-shadow:none;border-radius:2px;
+}
+#workspace.ocr-latex-all-active .ocr-cm-source.v2-source-session .cm-content .v2-sync-source-focus,
+#workspace.ocr-latex-all-active .ocr-preview-md-scroll .v2-sync-preview-focus,
+#workspace.ocr-latex-all-active .lab-ocr-pdf-overlay-box[data-selected="true"],
+#workspace.ocr-latex-all-active .lab-ocr-pdf-overlay-box[data-family-selected="true"]{
+ background:transparent;
+}
+#workspace.ocr-latex-all-active .ocr-cm-source.v2-source-session .cm-content :is(.v2-latex-inline,.v2-latex-display).v2-sync-source-focus{
+ background:var(--ocr-latex-all-fill);
+}
+#workspace.ocr-latex-all-active .lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-focus{
+ background:transparent;box-shadow:none;border:2px solid var(--ocr-review-focus-edge);
+}

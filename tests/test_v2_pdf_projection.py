@@ -1,5 +1,5 @@
 from pathlib import Path
-import base64,shutil,sqlite3,sys,tempfile,unittest
+import base64,hashlib,json,shutil,sqlite3,sys,tempfile,unittest
 from contextlib import closing
 sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 import v2_mineru_base as v
@@ -21,6 +21,29 @@ class PdfProjectionTests(unittest.TestCase):
   self.assertTrue(all(valid_bbox(c['bbox'],c['pageSize']) for c in m['covers']))
   with closing(sqlite3.connect(self.folder/v.DB_NAME)) as db:
    self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}, {'mineru_base','logical_block'})
+ def test_formula_blocks_are_exact_original_raw_path_evidence(self):
+  from v2_md_block import raw_at
+  dbpath=self.folder/v.DB_NAME
+  digest=hashlib.sha256(dbpath.read_bytes()).hexdigest()
+  result=v.existing_pdf_map(self.folder)
+  with closing(sqlite3.connect(dbpath)) as db:
+   db.row_factory=sqlite3.Row
+   originals={r['logical_id']:r for r in db.execute('SELECT l.logical_id,l.base_blockid,l.raw_path,b.block_json,b.page_index FROM logical_block l JOIN mineru_base b ON b.blockid=l.base_blockid')}
+   count=0
+   for item in result['formulaBlocks']:
+    row=originals[item['block_id']]
+    self.assertEqual(item['base_blockid'],row['base_blockid'])
+    self.assertEqual(item['block_json'],raw_at(row['block_json'],row['raw_path']))
+    self.assertEqual(item['global_page'],row['page_index'])
+    self.assertEqual(item['page_size_json'],result['pageSizes'][row['page_index']])
+    count+=sum(span.get('type') in ('inline_equation','interline_equation') for line in item['block_json']['lines'] for span in line['spans'])
+   self.assertEqual(count,42)
+  self.assertEqual(hashlib.sha256(dbpath.read_bytes()).hexdigest(),digest)
+  # Moving a logical block to another PBS must not change formula evidence.
+  item=result['formulaBlocks'][0]
+  with closing(sqlite3.connect(dbpath)) as db:
+   db.execute("UPDATE logical_block SET md_block='edited',block_type='text' WHERE logical_id=?",(item['block_id'],));db.commit()
+  self.assertEqual(v.existing_pdf_map(self.folder)['formulaBlocks'],result['formulaBlocks'])
  def test_parent_child_cross_page_does_not_move_cover(self):
   before=v.existing_pdf_map(self.folder)
   first=before['covers'][0];last=before['covers'][-1]
