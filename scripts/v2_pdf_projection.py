@@ -48,8 +48,8 @@ def project_pdf(db:sqlite3.Connection):
     # WP09: the stable IDs of original immediate child elements start above
     # ALL base IDs (same deterministic assignment as initial_rows). Use each
     # child's OWN original bbox where provided, never the aggregated table
-    # rectangle for a caption/body/footnote. Rows created by future manual
-    # splitting safely fall back to their original base rectangle.
+    # rectangle for a caption/body/footnote. Manually split rows carry a source association,
+    # but no raw_path and no physical geometry of their own.
     child_boxes={}
     next_child=max(base,default=0)+1
     for record in base.values():
@@ -59,7 +59,7 @@ def project_pdf(db:sqlite3.Connection):
             child_boxes[next_child]=child.get('bbox')
             next_child+=1
     logical=[dict(r) for r in db.execute(
-        'SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s '
+        'SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s,raw_path '
         'FROM logical_block ORDER BY logical_order,logical_id')]
     try:groups=validate_pbs(logical)
     except ValueError as err:raise PDFProjectionError(str(err)) from err
@@ -70,6 +70,8 @@ def project_pdf(db:sqlite3.Connection):
     covers=[];unmapped=[]
     for row in logical:
         lid=row['logical_id'];original=base.get(row['base_blockid'])
+        if 2**48<=lid<2**49 and row['raw_path'] is None:
+            unmapped.append(lid);continue
         if not original or original['block_group']!='para_blocks':
             unmapped.append(lid);continue
         page=original['page_index']

@@ -5,6 +5,7 @@
 import {mountLabOcrPdf} from './lab-ocr/pdf-viewer.js';
 import {projectV2PDFEvidence,emptyLogicalIds} from './v2-pdf-evidence-adapter.js';
 import {focusLogical} from './v2-pane-focus.js';
+import {isSyntheticId} from './v2-structure-split.js';
 import './v2-pdf-viewer.css';
 
 const PDF_URL='/labs/lab-ocr-v2/api/mineru-base/pdf?';
@@ -48,7 +49,11 @@ export function mountV2PDF(host,{toolbar}={}){
   });
   const focusId=(id,reveal=true)=>{
     const row=projection?.byId.get(Number(id));
-    if(!row||!native)return false;
+    if(!native)return false;
+    if(!row){
+      if(isSyntheticId(Number(id))){selectedId=null;native.clearFocus();}
+      return false;
+    }
     selectedId=row.logicalId;
     return native.focusBlock({id:String(id),page:row.physicalPageIndex+1,reveal});
   };
@@ -82,8 +87,11 @@ export function mountV2PDF(host,{toolbar}={}){
   const updateStructure=rows=>{
     if(!projection||!native||!Array.isArray(rows))return false;
     const byId=new Map(rows.map(r=>[r.logicalId,r]));
-    if(byId.size!==rows.length||rows.length!==projection.map.logicalCount)
-      throw Error('PDF 与 CM6 逻辑块数量不一致');
+    if(byId.size!==rows.length||
+      projection.map.unmappedLogicalIds?.some(id=>!isSyntheticId(id)&&!byId.has(id))||
+      rows.some(r=>!projection.byId.has(r.logicalId)&&
+        !projection.map.unmappedLogicalIds?.includes(r.logicalId)&&!isSyntheticId(r.logicalId)))
+      throw Error('PDF 与 CM6 原始逻辑块身份不一致');
     const touched=new Set();
     const nextCovers=projection.map.covers.map(old=>{
       const row=byId.get(old.logicalId);
@@ -95,7 +103,10 @@ export function mountV2PDF(host,{toolbar}={}){
       return {...old,pbs,parentId,rootLogicalId:parentId??old.logicalId,
         logicalOrder:row.logicalOrder};
     });
-    projection=projectV2PDFEvidence({...projection.map,covers:nextCovers});
+    projection=projectV2PDFEvidence({...projection.map,covers:nextCovers,
+      logicalCount:rows.length,
+      unmappedLogicalIds:rows.filter(r=>!projection.byId.has(r.logicalId)).map(r=>r.logicalId),
+      pbs:Object.fromEntries(rows.map(r=>[String(r.logicalId),`p${r.p}b${r.b}s${r.s}`]))});
     // V1 keeps its original PDF.js instance. Only re-fetch changed overlay
     // pages from this in-memory projection; geometry never comes from CM6.
     for(const page of touched)native.invalidateOverlayPage(page);

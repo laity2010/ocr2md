@@ -15,6 +15,7 @@ import {composeBlockSource,composeLogicalSource,composeOwnedSource,logicalTextRo
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
+import {newSplitId,splitOwnedBlock} from './v2-structure-split.js';
 import {singleLineMD} from './v2-single-line.js';
 // Byte-identical V1 Frame source gutter, adapted only via callbacks.
 import {createMdLineGutter} from './v2-md-line-gutter.js';
@@ -78,6 +79,15 @@ export function mountV2Source(host){
     lineIdAt:lineNo=>{
       const line=editor?.state.doc.line(lineNo);
       return line?(ownedLF?logicalAtOffset(blocks,line.from):blocks.find(row=>row.from===line.from))?.logicalId??null:null;
+    },
+    canSplit:(id,lineNo)=>{
+      if(!loaded||!ownedLF)return false;
+      const line=editor.state.doc.line(lineNo),r=logicalAtOffset(blocks,line.from);
+      return line.length===0&&r?.logicalId===id&&line.from<r.to;
+    },
+    onSplit:(id,lineNo)=>{
+      try{splitAtLine(lineNo,id);}
+      catch(error){document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{text:'分割失败：'+error.message,kind:'error'}}));}
     },
     onDelete:logicalId=>{
       if(deleteLogicalLine(logicalId))document.dispatchEvent(new CustomEvent('v2-cm-status',{
@@ -237,6 +247,27 @@ export function mountV2Source(host){
       effects:[structureEffect.of(result.blocks),dragEffect.of(true)],
       selection:{anchor:result.blocks.find(r=>r.logicalId===intent.sourceBlockId)?.from??0}});
     return {changed:result.changes,unchanged:false,sourceBlockId:intent.sourceBlockId};
+  };
+  const splitAtLine=(lineNo,expectedId)=>{
+    if(!loaded||!ownedLF)throw Error('真实换行模式未加载');
+    if(!Number.isInteger(lineNo)||lineNo<1||lineNo>editor.state.doc.lines)throw Error('源码行无效');
+    const line=editor.state.doc.line(lineNo),row=logicalAtOffset(blocks,line.from);
+    if(line.length||!row||line.from>=row.to||(expectedId!=null&&row.logicalId!==expectedId))
+      throw Error('当前行不是指定逻辑块的真实空行');
+    const rows=actualText(),newId=newSplitId(rows);
+    const planned=splitOwnedBlock(rows,{logicalId:row.logicalId,offset:line.from-row.from,newId});
+    const target=planned.blocks.find(r=>r.logicalId===newId);
+    // Even if the text is unchanged, structureEffect is inverted by the
+    // same native CM6 history. dragEffect signals a structure revision.
+    const replacement=planned.source.slice(row.from,
+      planned.blocks.find(r=>r.logicalId===newId).to);
+    const old=editor.state.doc.toString();
+    if(old.slice(0,row.from)+replacement+old.slice(row.to)!==planned.source)
+      throw Error('分割局部正文与完整投影不一致');
+    const changes=old===planned.source?[]:{from:row.from,to:row.to,insert:replacement};
+    editor.dispatch({changes,effects:[structureEffect.of(planned.blocks),dragEffect.of(true)],
+      selection:{anchor:target.from}});
+    return newId;
   };
   const countMultiline=()=>actualText().filter(r=>singleLineMD(r.markdownText)!==r.markdownText).length;
   const normalizeLines=()=>{
@@ -402,7 +433,7 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
-    applyDrag,countMultiline,normalizeLines,applyTableRecovery,
+    applyDrag,splitAtLine,countMultiline,normalizeLines,applyTableRecovery,
     deleteLogicalLine,insertPdfText,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({
       logicalId,parentId,logicalOrder,p,b,s})),
     markPersisted:rows=>{
