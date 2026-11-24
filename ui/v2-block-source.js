@@ -31,8 +31,40 @@ export function composeLogicalSource(rows){
   });
   return {source,blocks};
 }
+/** WP23D owned-LF model: all text and LF belong to real logical rows.
+ * Strict read-only projection. No padding, no stripping, no implicit migration.
+ * Legacy live callers remain on v2 until the editor/SQL transition is validated.
+ */
+export function composeOwnedSource(rows){
+  if(!Array.isArray(rows))throw Error('Invalid logical rows');
+  let source='';
+  const ids=new Set(),groups=new Set();
+  let rootId=null;
+  const blocks=rows.map((row,i)=>{
+    const next=rows[i+1],prev=rows[i-1],key=groupKey(row);
+    const same=next&&groupKey(next)===key;
+    if(!Number.isSafeInteger(row.logicalId)||row.logicalId<=0||ids.has(row.logicalId)||
+      !Number.isSafeInteger(row.baseBlockId)||row.baseBlockId<=0||
+      row.logicalOrder!==i+1||typeof row.blockType!=='string'||
+      ![row.p,row.b,row.s].every(v=>Number.isSafeInteger(v)&&v>=0)||
+      typeof row.markdownText!=='string'||row.markdownText.includes('\r')||
+      !row.markdownText.endsWith(same?'\n':'\n\n'))
+      throw Error('Invalid owned block or missing owned LF');
+    ids.add(row.logicalId);
+    if(!prev||groupKey(prev)!==key){
+      if(groups.has(key)||row.s!==0||row.parentId!==null)throw Error('Invalid PBS group');
+      groups.add(key);rootId=row.logicalId;
+    }else{
+      if(row.s<=prev.s||row.parentId!==rootId)throw Error('Invalid PBS child');
+    }
+    const from=source.length;
+    source+=row.markdownText;
+    return {...row,from,to:source.length};
+  });
+  return {source,blocks};
+}
 export function composeBlockSource(snapshot){
-  if(!snapshot||snapshot.schema!=='v2-logical-md/v2'||
+  if(!snapshot||!['v2-logical-md/v2','v2-logical-md/v3'].includes(snapshot.schema)||
     typeof snapshot.markdown!=='string'||!Array.isArray(snapshot.segments)||
     snapshot.rowCount!==snapshot.segments.length)
     throw Error('WP04: invalid logical Markdown snapshot');
@@ -47,7 +79,7 @@ export function composeBlockSource(snapshot){
       part.logicalOrder!==i+1||typeof part.blockType!=='string'||
       ids.has(part.logicalId))throw Error('WP04: invalid logical block boundary or ID');
     ids.add(part.logicalId);
-    if(i){
+    if(i&&snapshot.schema==='v2-logical-md/v2'){
       if(original.slice(offset,offset+BACKEND_SEP.length)!==BACKEND_SEP)
         throw Error('WP04: source separator lost');
       offset+=BACKEND_SEP.length;
@@ -61,7 +93,7 @@ export function composeBlockSource(snapshot){
     offset=part.endUtf16;
   }
   if(offset!==original.length)throw Error('WP04: unmapped backend Markdown tail');
-  return composeLogicalSource(blocks);
+  return snapshot.schema==='v2-logical-md/v3'?composeOwnedSource(blocks):composeLogicalSource(blocks);
 }
 
 /** CM6 change coordinates are UTF-16, exactly as document strings. Each

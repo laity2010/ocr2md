@@ -6,9 +6,12 @@ changing any bytes without a newly authorized span-edit contract is rejected.
 """
 from __future__ import annotations
 from hashlib import sha256
+from dataclasses import replace
+from v2_pbs import validate_pbs
 from v2_logical_contract import LogicalRow
 
 FORMAT='v2-logical-md/v2'
+OWNED_FORMAT='v2-logical-md/v3'
 MAX_MD_BYTES=8*1024*1024
 MAX_ROWS=100000
 SEP='\n\n'
@@ -58,12 +61,61 @@ def from_sql_rows(rows):
                      for row in rows])
 
 
-def to_markdown(rows):
+def owned_rows(rows):
+    """Validate the real-LF model; never manufacture or trim characters."""
+    result=checked_rows(rows)
+    coords=[dict(logical_id=r.logical_id,p=r.p,b=r.b,s=r.s) for r in result]
+    groups=validate_pbs(coords)
+    seen=set()
+    for i,row in enumerate(result):
+        key=(row.p,row.b)
+        previous=result[i-1] if i else None
+        if not previous or (previous.p,previous.b)!=key:
+            if key in seen or row.s!=0:
+                raise ValueError('PBS group is not contiguous or does not start at s0')
+            seen.add(key)
+        elif row.s<=previous.s:
+            raise ValueError('PBS child order is invalid')
+        if row.parent_id!=(None if row.s==0 else groups[key][0]):
+            raise ValueError('PBS parent mismatch')
+        next_row=result[i+1] if i+1<len(result) else None
+        minimum=1 if next_row and (next_row.p,next_row.b)==key else 2
+        if not row.markdown_text.endswith('\n'*minimum):
+            raise ValueError('Missing owned LF at logical block '+str(row.logical_id))
+        if '\r' in row.markdown_text:
+            # CM6 normalizes CR/CRLF; never silently change existing text.
+            raise ValueError('CR/CRLF requires explicit lossless migration review')
+    return result
+
+
+def preview_owned_migration(rows):
+    """Pure read-only plan from legacy SQL rows. Match legacy CM6 projection
+    exactly, including empty blocks and any previously authored extra LF.
+    Already-owned LF is never appended a second time. No SQLite write API.
+    """
+    original=checked_rows(rows)
+    migrated=[]
+    changes=[]
+    for i,row in enumerate(original):
+        next_row=original[i+1] if i+1<len(original) else None
+        minimum=1 if next_row and (next_row.p,next_row.b)==(row.p,row.b) else 2
+        old=row.markdown_text
+        tail=len(old)-len(old.rstrip('\n'))
+        new=old+'\n'*max(0,minimum-tail)
+        migrated.append(replace(row,markdown_text=new))
+        if old!=new:
+            changes.append(dict(logicalId=row.logical_id,before=old,after=new))
+    owned_rows(migrated)
+    return dict(snapshot=to_markdown(migrated,format=OWNED_FORMAT),changes=changes)
+
+
+def to_markdown(rows, *, format=FORMAT):
     """Return document plus out-of-band complete logical-coordinate manifest."""
-    validated=checked_rows(rows)
+    if format not in (FORMAT,OWNED_FORMAT):raise ValueError('Unknown Markdown format')
+    validated=owned_rows(rows) if format==OWNED_FORMAT else checked_rows(rows)
     pieces=[];spans=[];start_char=0;start_utf16=0;total_bytes=0
     for index,row in enumerate(validated):
-        if index:
+        if index and format==FORMAT:
             pieces.append(SEP)
             start_char+=len(SEP);start_utf16+=length_utf16(SEP)
             total_bytes+=len(SEP.encode('utf-8'))
@@ -82,7 +134,7 @@ def to_markdown(rows):
         pieces.append(chunk)
         start_char=end_char;start_utf16=end_utf16
     document=''.join(pieces)
-    return {'schema':FORMAT,'markdown':document,'sha256':digest(document),
+    return {'schema':format,'markdown':document,'sha256':digest(document),
             'rowCount':len(validated),'lengthUtf16':start_utf16,'segments':spans}
 
 
@@ -92,8 +144,9 @@ def from_markdown(snapshot):
     Snapshot's external offsets are necessary; plain Markdown alone cannot
     distinguish adjacent/empty blocks or recover parent/base identities.
     """
-    if not isinstance(snapshot,dict) or snapshot.get('schema')!=FORMAT:
+    if not isinstance(snapshot,dict) or snapshot.get('schema') not in (FORMAT,OWNED_FORMAT):
         raise ValueError('Markdown 位置清单版本错误')
+    format=snapshot['schema']
     md=snapshot.get('markdown')
     seg=snapshot.get('segments')
     if not isinstance(md,str) or not isinstance(seg,list):
@@ -107,7 +160,7 @@ def from_markdown(snapshot):
     rows=[];cursor=0;cursor16=0
     for index,item in enumerate(seg):
         if not isinstance(item,dict):raise ValueError('逻辑块位置项格式无效')
-        if index:
+        if index and format==FORMAT:
             if md[cursor:cursor+len(SEP)]!=SEP:
                 raise ValueError('逻辑块分隔符已变化')
             cursor+=len(SEP);cursor16+=length_utf16(SEP)
@@ -125,4 +178,4 @@ def from_markdown(snapshot):
         cursor=end;cursor16+=length_utf16(fragment)
     if cursor!=len(md) or cursor16!=length_utf16(md):
         raise ValueError('Markdown 结尾存在未映射内容')
-    return checked_rows(rows)
+    return owned_rows(rows) if format==OWNED_FORMAT else checked_rows(rows)

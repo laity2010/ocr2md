@@ -1,0 +1,15 @@
+# WP23D · 真实换行数据底座（隔离验证）
+基线 b5c13ed；执行 README 3.1 用户批准的真实正文契约。
+## 接口
+在现有接口增加明确的 v3 格式，不建立第二个编辑器、SQL 表、独立正文或 HTTP 路由。
+- Python `to_markdown(rows, format=OWNED_FORMAT)`：逐块直接拼接全部 md_block，字符/UTF-16 区间及 SHA。原默认 v2 格式暂保留；`from_markdown` 严格检查相应格式、区间、摘要、PBS 与组末 LF，v3 不补写任何字符。
+- `preview_owned_migration(rows)`：纯函数，基于现有 legacy CM6 投影计算缺少的末尾 LF。只追加最少数量，保留已写入的多行和额外 LF，返回 v3 snapshot 和旧值/新值 changes；不会打开或写入数据库。无自动迁移。
+- JS `composeBlockSource` 可读取 v3，调用 `composeOwnedSource` 直接拼接真实正文；不生成 groupEndPad。复用 `logicalTextRows` 完整切片，区间覆盖整个 CM6 文档。旧 v2 输入行为仍保留，避免未授权迁移。
+- CR/CRLF 会被 CM6 规范化：检测后拒绝预演，不能无声修改原文；需另行明确迁移策略。
+## 实测
+- `python3 tests/test_v2_owned_lf.py -v` PASS (2 tests)：真实 Buffett fixture 的隔离 SQLite 267 逻辑块，添加多行人工正文和 Unicode 后，266 行只追加 LF。预演不改变 SQLite 文件 SHA；原始基础表、逻辑身份、PBS、raw_path 与两表 schema 不变。现有 md-commit 在隔离库的旧值文本冲突整批拒绝；成功提交重开后第二次预演零变更。空块也实际持有 LF。没有用户库写入。
+- `node tests/v2-owned-lf.test.mjs` PASS：v3 正文逐字符等于旧版 CM6 可见源码，83337 UTF-16 单元/498 行；无间隙、无重叠、无虚拟补尾，267 行往返一致。
+- `node tests/v2-owned-lf.browser.test.mjs` PASS Chromium / iPad-WebKit：隔离真实只读 CM6 EditorView（非线上四窗）验证全文和全部块区间、实际 DOM。未宣称实机验收。
+- 旧版 `tests/test_v2_markdown_roundtrip.py` (5 tests)、`tests/v2-block-source.test.mjs`、`tests/v2-block-source-fixture.test.mjs`、`tests/v2-prefix-ownership.test.mjs` PASS。旧入口仍维持行为。
+## 边界
+本航点不开放编辑、结构变更或迁移执行接口，不调用用户库。隔离验证只证明既有 md-commit 的文本旧值冲突保护；正式迁移还要在同一事务校验结构/PBS 前置条件并取得用户授权，防止预演后的并发归组。WP23E-F 分别处理编辑及归组，WP23G 分割，WP23H 多行标题。禁止把此隔离底座宣称为线上空行编辑已经生效。
