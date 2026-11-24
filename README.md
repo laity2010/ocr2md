@@ -1,6 +1,6 @@
 # OCR2MD · V2 工程契约（当前事实、PBS 目标与开发门禁）
 
-> **接手前必读**：先读本工作树的 `AGENTS.md`、工程根目录 `CROSS_VERSION_COMPONENTS.md`，再读本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
+> **接手前必读**：先读取 OCR2MD 统一根目录联邦 `AGENTS.md`、`BUILD.md`、`COMM.md`，再读 V2 本州 `AGENTS.md`、本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
 >
 > **WP15 当前范围：基础块转逻辑块时每个 `md_block` 仅一条正文行；同一 PBS 父组内部只隔一个 LF，独立父组之间保留一个空白行（两 LF）；已有书籍只在 SQL 组二次确认后按 CM6 原生 Undo/Redo 进行单行整理，原 MinerU/基础表/PBS 保留不变。继续保留 WP10 MD Block 唯一可写正文与 SQL 旧值增量提交、WP11 原版 AG 过滤、WP12 列宽、WP13 PDF 父子结构。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；唯一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。仅通过独立测试及本 WP 发布验收后，才能称为已上线。
 
