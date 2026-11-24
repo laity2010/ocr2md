@@ -61,11 +61,14 @@ export function mountV2Source(host){
   });
   let selectedId=null,selectedLine=null;
   let indexedDoc=null,indexedBlocks=null,lineIndex=null;
-  const getMdLineIndex=()=>{
-    if(!loaded||!ownedLF)return null;
-    if(indexedDoc!==editor.state.doc||indexedBlocks!==blocks){
-      lineIndex=createMdLineIndex(editor.state.doc,blocks);
-      indexedDoc=editor.state.doc;indexedBlocks=blocks;
+  const getMdLineIndex=(state=editor?.state)=>{
+    // Gutter rendering precedes updateListener. Read both parts of the
+    // snapshot from the SAME immutable CM6 state, never its outer cache.
+    const intervals=state?.field(structureField,false);
+    if(!ownedLF||!intervals?.length)return null;
+    if(indexedDoc!==state.doc||indexedBlocks!==intervals){
+      lineIndex=createMdLineIndex(state.doc,intervals);
+      indexedDoc=state.doc;indexedBlocks=intervals;
     }
     return lineIndex;
   };
@@ -87,9 +90,11 @@ export function mountV2Source(host){
   const lineGutter=createMdLineGutter({
     isMarkdown:state=>Boolean(state.field(structureField).length),
     focusLineAt:state=>state.doc.lineAt(state.selection.main.head).number,
-    lineIdAt:lineNo=>{
-      const line=editor?.state.doc.line(lineNo);
-      return line?(ownedLF?getMdLineIndex()?.atSourceLine(lineNo)?.logical_id:blocks.find(row=>row.from===line.from)?.logicalId)??null:null;
+    lineIdAt:(lineNo,state=editor?.state)=>{
+      if(!state||lineNo<1||lineNo>state.doc.lines)return null;
+      const line=state.doc.line(lineNo),intervals=state.field(structureField);
+      return (ownedLF?getMdLineIndex(state)?.atSourceLine(lineNo)?.logical_id:
+        intervals.find(row=>row.from===line.from)?.logicalId)??null;
     },
     captureLine:lineNo=>ownedLF?getMdLineIndex()?.makeRef(lineNo):{legacy:true},
     onDelete:(logicalId,lineRef)=>{

@@ -432,7 +432,7 @@ function renderGrid(state){
   if(lineView){
     columns=mdLineColumns(nextView).map(c=>({...c,headerTooltip:c.field,tooltipField:c.field,
       resizable:true,sortable:!['pbs','block_type','line_type'].includes(c.field),
-      filter:EnumCheckboxFilter,filterValueGetter:p=>String(p.data?.[c.field]??''),
+      filter:EnumCheckboxFilter,filterValueGetter:c.filterValueGetter??(p=>String(p.data?.[c.field]??'')),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
       minWidth:c.field==='md_line'?220:72,width:c.field==='md_line'?420:
         c.field==='pbs'?pbsWidth:c.field==='block_type'?typeWidth:105}));

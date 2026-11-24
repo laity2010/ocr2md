@@ -151,7 +151,7 @@ export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,get
       const row=view.state.doc.lineAt(line.from);
       if(row.from!==line.from)return null;
       return new NumberButtonMarker(row.number,focusedLineHasAction(
-        row.number,focusLineAt(view.state),isMarkdown(view.state),lineIdAt(row.number)));
+        row.number,focusLineAt(view.state),isMarkdown(view.state),lineIdAt(row.number,view.state)));
     },
     lineMarkerChange:update=>update.docChanged||
       focusLineAt(update.startState)!==focusLineAt(update.state)||

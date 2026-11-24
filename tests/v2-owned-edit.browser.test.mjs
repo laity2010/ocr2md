@@ -16,11 +16,12 @@ const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
+const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
 const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
-const copyFrom=legacyEditMode?process.env.V2_TEST_COPY_FROM:null;
+const copyFrom=(legacyEditMode||uiRestoreMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
 const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -41,7 +42,7 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=legacyEditMode?py(copyFrom?
+   const initial=(legacyEditMode||uiRestoreMode&&copyFrom)?py(copyFrom?
      'import sqlite3\nfrom contextlib import closing\noriginal=Path(args["copyFrom"]).resolve()\nwith closing(sqlite3.connect(original.as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
      'from test_v2_owned_split import prepare_retired_split_book\nprint(json.dumps(prepare_retired_split_book(folder),ensure_ascii=False))',
      folder,{copyFrom}):py(initMode?
@@ -52,6 +53,7 @@ try{
    const page=await browser.newPage({viewport:name==='webkit'?{width:834,height:1112}:{width:1280,height:850},
     hasTouch:true,...(name==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[],writes=[];page.on('pageerror',e=>errors.push(e.message));
+   page.on('console',m=>{if(m.text().includes('CodeMirror plugin crashed'))errors.push(m.text());});
    if(structureMode)await page.addInitScript(()=>{
      window.__wp23fStatuses=[];
      document.addEventListener('v2-pdf-status',e=>window.__wp23fStatuses.push(e.detail?.text));
@@ -138,6 +140,42 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(uiRestoreMode){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     await picker.selectOption('title');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['title_level','Level'],['line_type','Type']]);
+     const checkGutter=async()=>{
+       await page.waitForFunction(()=>{
+         const e=document.querySelector('#workspace #editor'),v=e.v2SourcePort.getEditorView();
+         const current=v.state.doc.lineAt(v.state.selection.main.head).number;
+         const n=e.querySelector('.ocr-cm-line-number-button[data-line-no="'+current+'"]');
+         return n&&n.getBoundingClientRect().width>0&&e.querySelectorAll('.ocr-cm-line-number-label:not([data-spacer])').length>0;
+       },null,{timeout:10000});
+       assert.equal(await source.locator('.cm-gutters').count(),1);
+       assert.equal(await source.locator('.ocr-cm-line-number-button').count(),1);
+       assert.deepEqual(errors,[]);
+     };
+     const save=async()=>page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     await source.evaluate(el=>el.v2SourcePort.locateSourceLine(3));
+     await checkGutter();
+     await page.keyboard.insertText('WP25I');await page.keyboard.press('End');await page.keyboard.press('Enter');
+     await checkGutter();await save();
+     let now=await snapshot();assert(now.doc.includes('WP25I'));assert(now.complete);
+     assert.deepEqual(now.rows.map(r=>r.logicalId),before.rows.map(r=>r.logicalId));
+     await source.evaluate(el=>el.v2SourcePort.undo());await checkGutter();await save();
+     await source.evaluate(el=>el.v2SourcePort.redo());await checkGutter();await save();
+     await source.locator('.ocr-cm-line-number-button').click();
+     await page.getByRole('menuitem',{name:'删除当前行'}).waitFor({state:'visible',timeout:10000});
+     assert.equal(await page.getByRole('menuitem',{name:'在此分割逻辑块'}).count(),0);
+     await page.keyboard.press('Escape');
+     now=await snapshot();assert.equal(api(folder,'markdown','GET').body.markdown,now.doc);
+     await loadPage();await source.evaluate(el=>el.v2SourcePort.locateSourceLine(3));await checkGutter();
+     assert.deepEqual((await snapshot()).rows,now.rows);
+     assert.deepEqual(errors,[]);
+     console.log('WP25I_UI_RESTORE_PASS',name,copyFrom?'actual book copy':'fixture','title order, gutter after input/Enter/undo/redo/reopen, real menu, no plugin crash');
+     continue;
+   }
    if(legacyEditMode){
      const ids=before.rows.map(r=>r.logicalId);
      const legacy=ids.filter(id=>id>=2**48&&id<2**49);
@@ -331,7 +369,7 @@ try{
      assert.deepEqual(await headingPairs(),[{line:8,text:'# 新标题'}]);
      assert.equal(await grid.evaluate((el,id)=>el.v2BaseGridPort.getDisplayedRows().find(r=>r.logical_id===id)===window.__wp25fRow,id),true,'same common MD Line row on switching presets');
      assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getFilterModel()),{line_type:{values:['title']}});
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,6).map(c=>c.field)),['md_line','pbs','line_offset','source_line','block_type','line_type']);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>[c.field,c.headerName])),[['md_line','MD Line'],['title_level','Level'],['line_type','Type']]);
      const edit=async(from,to,insert)=>{
        await source.evaluate((el,{id,from,to,insert})=>{
          const p=el.v2SourcePort,r=p.getIntervals().find(x=>x.logicalId===id);

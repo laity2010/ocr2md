@@ -29,6 +29,16 @@ export function mdLineColumns(view='line'){
     ['source_line','源码行号'],['block_type','Block Type'],['line_type','Line Type'],
     ['logical_id','Logical ID'],['base_blockid','Base ID'],['title_level','标题层级'],
   ].map(([field,headerName])=>({field,headerName}));
-  return columns.map(c=>view==='title'&&c.field==='md_line'?
-    {...c,cellClass:'v2-ag-title-text',cellRenderer:renderTitleMdCell}:c);
+  if(view!=='title')return columns;
+  // A common row set does not imply a common presentation layout.
+  const leading=['md_line','title_level','line_type'];
+  const marker=n=>Number.isInteger(n)&&n>=1&&n<=6?'#'.repeat(n):'';
+  return [...leading.map(key=>columns.find(c=>c.field===key)),
+    ...columns.filter(c=>!leading.includes(c.field))].map(c=>{
+    if(c.field==='md_line')return {...c,cellClass:'v2-ag-title-text',cellRenderer:renderTitleMdCell};
+    if(c.field==='title_level')return {...c,headerName:'Level',
+      valueFormatter:p=>marker(p.value),filterValueGetter:p=>marker(p.data?.title_level)};
+    if(c.field==='line_type')return {...c,headerName:'Type'};
+    return c;
+  });
 }
