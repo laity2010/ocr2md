@@ -562,7 +562,23 @@ async function flushStructure(){
   saving=true;
   try{
     const owned=source.getState().ownedLF;
-    if(owned&&changes.length)throw Error('真实换行结构事务尚未开放');
+    if(owned&&changes.length){
+      const boundaries=rows=>new Map(rows.map((r,i)=>{
+        const next=rows[i+1];
+        return [r.logicalId,next&&r.p===next.p&&r.b===next.b?next.logicalId:null];
+      }));
+      const before=boundaries(acknowledged),after=boundaries(current);
+      const expectedBoundaryText=acknowledged.filter(r=>before.get(r.logicalId)!==after.get(r.logicalId))
+        .map(r=>({logicalId:r.logicalId,before:acknowledgedText.get(r.logicalId)}));
+      const result=await request('structure-commit',workspace,{method:'POST',
+        payload:{workspace,confirm:'commit-v2-owned-structure',changes,textChanges,
+          expectedStructure:acknowledged,expectedBoundaryText}});
+      if(!result?.saved||result.changedRows!==changes.length||result.textChangedRows!==textChanges.length)
+        throw Error('SQL 真实换行归组原子写入回执不完整');
+      if(bound!==workspace||source.getWorkspace()!==workspace)return;
+      acknowledged=current;acknowledgedText=textCopy(textRows);
+      source.markPersisted(current);source.markTextPersisted(textRows);
+    }else{
     if(changes.length){
       const result=await request('structure-commit',workspace,{method:'POST',
         payload:{workspace,confirm:'commit-v2-structure',changes}});
@@ -579,6 +595,7 @@ async function flushStructure(){
       if(bound!==workspace||source.getWorkspace()!==workspace)return;
       acknowledgedText=new Map(textRows.map(r=>[r.logicalId,r.markdownText]));
       source.markTextPersisted(textRows);
+    }
     }
     report(`✓ SQLite 已保存 · PBS ${changes.length} 行 / MD Block ${textChanges.length} 行 · Raw Block 未改变`,'ok');
   }catch(error){

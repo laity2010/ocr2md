@@ -229,8 +229,7 @@ export function mountV2Source(host){
   const onRedo=()=>{if(loaded&&redoDepth(editor.state))redo(editor);refresh();};
   const applyDrag=intent=>{
     if(!loaded)throw Error('工作目录未绑定');
-    if(ownedLF)throw Error('真实换行模式的归组事务待 WP23F 验收');
-    const result=moveLogicalBlocks(logicalTextRows(editor.state.doc.toString(),blocks),intent);
+    const result=moveLogicalBlocks(logicalTextRows(editor.state.doc.toString(),blocks),intent,{ownedLF});
     // A repeated drop at the correct position is a successful no-op, not a
     // failed SQL write. No CM6 history entry, dirty flag or idle commit.
     if(result.unchanged)return {changed:[],unchanged:true,sourceBlockId:intent.sourceBlockId};

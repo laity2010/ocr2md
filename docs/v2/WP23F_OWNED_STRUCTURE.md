@@ -1,0 +1,18 @@
+# WP23F · 父子块归组合并（隔离验收）
+基线 bf37f06。遵守 README §3.1；两张物理表及 V1 PDF 组件、原始证据、现有用户库和线上发布均不改动。
+
+## 实施
+- 复用 moveLogicalBlocks 的既有 PBS 拖放规则，仅为 ownedLF 增加真实正文投影。以稳定逻辑 ID 判断旧/新相邻组内边界，而非可变 PBS。新形成的组内边界仅保留一个 LF，内部正文和既有相邻边界的人工空行不改变，组末至少两个 LF。不创建、删除逻辑身份，不产生孙块，不制造虚拟 LF。重复正确落点保持无操作。
+- 复用唯一 CM6 applyDrag 及 StateEffect、原生 Undo/Redo。一次归组的正文与结构同属一条历史记录；恢复原始正文（包括原人工空行）及原结构，而非重新推测。
+- 既有 structure-commit 入口新增 commit-v2-owned-structure 确认协议：expectedStructure 全量旧 PBS/顺序、expectedBoundaryText 变化相邻边界旧正文、changes 结构差量和 textChanges 正文差量。BEGIN IMMEDIATE 内统一验证旧值、暂存受影响 PBS 避免唯一索引冲突、写入正文与结构、验证父子关系/真实 LF/FK，任意失败则不提交。客户端仅在完整原子回执后同时更新两个 acknowledged 快照。旧客户端拒绝对 owned-LF 库使用旧结构写入协议。
+- 真实 LF 编辑模式仍仅对显式标记的隔离测试书籍启用；尚无生产迁移入口。WP23G 才处理显式分割；不扩张此航点功能。
+
+## 验收证据
+- node tests/v2-owned-structure.test.mjs: PASS。归组、原有内部空行、同组重排、父组携子块、重复落点、追加子块、空 OCR 块归属、完整拼接。
+- python3 tests/test_v2_owned_structure.py -v: PASS。267 行真实 MinerU 样本隔离库，边界快照缺失/旧值冲突、非法末尾 LF 导致结构和文本整批回滚，成功归组与原子逆操作重开一致，原始 PDF physicalPageIndex/bbox 不变。
+- V2_TEST_OWNED_STRUCTURE=1 node tests/v2-owned-edit.browser.test.mjs: 最终退出 0；Chromium 和 iPad-WebKit 各 6 次 SQLite 原子/正文提交和重开。真实 V2 Vite 工作台、V1 PDF.js（合成 PDF 对应原始样本页尺寸）、实际 PBS 标签长按/指针拖到目标覆盖框中段 child 落点；校验目标/落点后释放。验证 24 归入 23，空行缩减，撤销、重做、人工增加组内空行、父组移动及撤销、重开，267 块实际映射坐标不变、SQL 与 CM6 一致。F02 授权探测用测试桩，Python 真正 dispatch 写入临时库；没有真实 iPad 设备验收。
+- 初次浏览器失败：测试误用 getState().ready（实际 loaded），未到拖放；修正后两次浮动菜单指针落点丢失，V1 按原逻辑取消且 SQL 写入 0。最终测试直接指向原覆盖框中段，验证 guide=23/placement=child 后释放；未修改 PDF 组件，不宣称浮动菜单路径已通过本航点回归。
+- 旧版 node tests/v2-structure-move.test.mjs、python3 tests/test_v2_owned_edit.py -q、python3 tests/test_v2_structure_commit.py -q 通过。
+
+## 发布
+隔离验收 PASS；不自动迁移用户库，不发布半完成的多行架构。下一航点 WP23G 显式分割。

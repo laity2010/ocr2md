@@ -9,6 +9,8 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
+import {makePDF} from './v2-pdf-fixture.mjs';
+const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const port=5431,url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -30,9 +32,15 @@ try{
   const browser=await browserType.launch({headless:true});
   try{
    const initial=py('print(json.dumps(prepare_owned_book(folder),ensure_ascii=False))',folder);
+   const projection=structureMode?api(folder,'pdf-map','GET').body:null;
+   const pdfBytes=projection?makePDF(projection.pageSizes):null;
    const page=await browser.newPage({viewport:name==='webkit'?{width:834,height:1112}:{width:1280,height:850},
     hasTouch:true,...(name==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[],writes=[];page.on('pageerror',e=>errors.push(e.message));
+   if(structureMode)await page.addInitScript(()=>{
+     window.__wp23fStatuses=[];
+     document.addEventListener('v2-pdf-status',e=>window.__wp23fStatuses.push(e.detail?.text));
+   });
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -45,13 +53,14 @@ try{
    await page.route('**/labs/lab-frame/api/workspace-io/session',r=>fulfill(r,{authorized:true}));
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',async route=>{
      const req=route.request(),u=new URL(req.url()),op=u.pathname.split('/').at(-1);
-     if(op==='pdf')return fulfill(route,{error:'No PDF in disposable fixture'},404);
+     if(op==='pdf')return structureMode?route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes}):fulfill(route,{error:'No PDF in disposable fixture'},404);
      const payload=req.method()==='POST'?req.postDataJSON():{};
      if(req.method()==='POST'){
-       assert.equal(op,'md-commit');
-       assert.equal(payload.confirm,'commit-v2-owned-md');
+       if(structureMode)assert(['md-commit','structure-commit'].includes(op));
+       else assert.equal(op,'md-commit');
+       assert.equal(payload.confirm,op==='structure-commit'?'commit-v2-owned-structure':'commit-v2-owned-md');
        assert.equal(payload.expectedStructure.length,267);
-       writes.push(payload.changes);
+       writes.push(structureMode?{op,payload}:payload.changes);
      }
      const query={};for(const [k,v] of u.searchParams)query[k]=[v];
      const result=api(folder,op,req.method(),payload,query);
@@ -77,6 +86,85 @@ try{
    });
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(structureMode){
+     const parent=before.rows[0],child=before.rows[1];
+     assert.equal(parent.logicalId,23);assert.equal(child.logicalId,24);
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:20000});
+     const geometry=()=>pdf.evaluate(el=>el.v2PDFPort.getCovers().map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0]));
+     const originalGeometry=await geometry();
+     const sourceTag=page.locator('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]').first();
+     await sourceTag.waitFor({state:'visible',timeout:15000});
+     await sourceTag.evaluate(el=>el.scrollIntoView({block:'center',inline:'nearest'}));
+     await sleep(250);
+     const points=await page.evaluate(()=>{
+       const center=node=>{const r=node.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};};
+       const from=center(document.querySelector('#workspace .lab-ocr-pdf-pbs-tag[data-block-id="24"]'));
+       const to=center(document.querySelector('#workspace .lab-ocr-pdf-overlay-box[data-block-ids="23"]'));
+       return {from,to};
+     });
+     await page.mouse.move(points.from.x,points.from.y);await page.mouse.down();await sleep(460);
+     // The middle third of the original target cover is V1's child slot.
+     // Release directly at that verified point, not at a stale floating
+     // menu rectangle while PDF edge auto-scroll is active.
+     await page.mouse.move(points.to.x,points.to.y);
+     const drop=await page.evaluate(()=>({
+       guide:document.querySelector('.lab-ocr-pdf-drop-guide')?.dataset.blockId,
+       placement:document.querySelector('.lab-ocr-pdf-drop-guide')?.dataset.placement,
+     }));
+     assert.deepEqual(drop,{guide:'23',placement:'child'},'actual V1 child slot must be selected before release');
+     await page.mouse.up();
+     const saveStructure=async()=>{
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:10000});
+       const now=await snapshot();assert(now.complete);
+       const disk=api(folder,'markdown','GET').body;
+       assert.equal(disk.markdown,now.doc);
+       assert.deepEqual(disk.segments.map(r=>[r.logicalId,r.p,r.b,r.s,r.parentId]),
+         now.rows.map(r=>[r.logicalId,r.p,r.b,r.s,r.parentId]));
+       assert.deepEqual(await geometry(),originalGeometry);
+       return now;
+     };
+     try{await page.waitForFunction(()=>document.querySelector('#workspace #editor').v2SourcePort.getBlocks().find(r=>r.logicalId===24).s===1,null,{timeout:8000});}
+     catch(e){console.log('WP23F_GESTURE_FAIL',name,await page.evaluate(()=>({
+       statuses:window.__wp23fStatuses.slice(-20),
+       structure:document.querySelector('#workspace #editor').v2SourcePort.getStructureRows().slice(0,6),
+       statusText:document.querySelector('#status')?.textContent,
+     })),errors,writes.map(w=>w.op));throw e;}
+     const merged=await saveStructure();
+     assert.equal(merged.rows[0].markdownText,parent.markdownText.replace(/\n+$/,'\n'));
+     assert.equal(merged.rows[1].parentId,23);
+     assert.equal(merged.rows[1].markdownText,child.markdownText);
+     assert.deepEqual(merged.rows.slice(2),before.rows.slice(2));
+     assert.equal(writes.length,1);assert.equal(writes[0].op,'structure-commit');
+     assert.equal(writes[0].payload.textChanges.length,1);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     const undone=await saveStructure();assert.deepEqual(undone.rows,before.rows);
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     const redone=await saveStructure();assert.deepEqual(redone.rows,merged.rows);
+     assert.equal(writes.length,3);
+     // Manually add an internal blank to the already merged group.
+     await source.evaluate(el=>{
+       const p=el.v2SourcePort,r=p.getIntervals().find(r=>r.logicalId===23);
+       p.getEditorView().dispatch({changes:{from:r.to-1,insert:'\n'},userEvent:'input'});
+     });
+     const authored=await saveStructure();assert.equal(authored.rows[0].markdownText,merged.rows[0].markdownText+'\n');
+     assert.equal(writes.at(-1).op,'md-commit');
+     // Existing root + child move together; internal authored LF preserved.
+     await source.evaluate(el=>{
+       const p=el.v2SourcePort,rows=p.getBlocks();
+       const dst=rows.find(r=>r.s===0&&r.logicalId!==23&&r.p===rows[0].p);
+       p.applyDrag({sourceBlockId:23,targetBlockId:dst.logicalId,placement:'after'});
+     });
+     const moved=await saveStructure();
+     assert.equal(moved.rows.find(r=>r.logicalId===23).markdownText,authored.rows[0].markdownText);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     const restored=await saveStructure();assert.deepEqual(restored.rows,authored.rows);
+     await loadPage();
+     assert.deepEqual((await snapshot()).rows,authored.rows);
+     assert.deepEqual(errors,[]);
+     console.log('WP23F_REAL_PDF_SQL_PASS',name,writes.length,'atomic/delta commits and reopen');
+     continue;
+   }
    const target=before.rows[1],id=target.logicalId;
    const save=async expected=>{
      await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:10000});

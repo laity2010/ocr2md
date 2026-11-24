@@ -3,9 +3,23 @@
  * and history; this pure projection changes only affected logical rows.
  * Stable logical/base IDs, text and PDF geometry are never regenerated.
  */
-import {composeLogicalSource} from './v2-block-source.js';
-export function moveLogicalBlocks(rows,intent){
+import {composeLogicalSource,composeOwnedSource} from './v2-block-source.js';
+export function moveLogicalBlocks(rows,intent,{ownedLF=false}={}){
   if(!Array.isArray(rows)||!rows.length)throw Error('逻辑块尚未加载');
+  if(ownedLF)composeOwnedSource(rows); // reject invalid input, never repair on load
+  const same=(a,b)=>Boolean(b&&a.p===b.p&&a.b===b.b);
+  // Stable adjacent identities, NOT mutable PBS numbers, define an existing
+  // internal boundary. Preserve all authored LF at such boundaries.
+  const internal=new Map(rows.map((r,i)=>[r.logicalId,
+    same(r,rows[i+1])?rows[i+1].logicalId:null]));
+  const compose=ordered=>ownedLF?composeOwnedSource(ordered.map((r,i)=>{
+    const next=ordered[i+1],inside=same(r,next);
+    let text=r.markdownText;
+    if(inside&&internal.get(r.logicalId)!==next.logicalId)
+      text=text.replace(/\n+$/,'\n');
+    if(!inside&&!text.endsWith('\n\n'))text+='\n';
+    return {...r,markdownText:text};
+  })):composeLogicalSource(ordered);
   const ids=new Map(rows.map(r=>[r.logicalId,r]));
   if(ids.size!==rows.length)throw Error('逻辑块 ID 重复');
   const {sourceBlockId,targetBlockId,placement}=intent||{};
@@ -71,10 +85,10 @@ export function moveLogicalBlocks(rows,intent){
     ?src.p===dst.p&&(placement==='before'?src.b<dst.b:src.b>dst.b)
     :sameGroup&&(placement==='before'?src.s<dst.s:src.s>dst.s);
   if(sequenceUnchanged&&placement!=='child'&&numberedCorrectly){
-    return {...composeLogicalSource(rows),
+    return {...compose(rows),
       changes:[],unchanged:true};
   }
-  const {blocks,source}=composeLogicalSource(reordered.map((r,i)=>({
+  const {blocks,source}=compose(reordered.map((r,i)=>({
     ...r,logicalOrder:i+1,
   })));
   const before=new Map(rows.map(r=>[r.logicalId,r]));

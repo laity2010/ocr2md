@@ -703,8 +703,28 @@ def commit_structure(folder:Path,payload,common):
     The client sends the last acknowledged values as 'before', not the
     current focus view; another editor/session cannot be silently overwritten.
     """
-    if payload.get('confirm')!='commit-v2-structure':
+    owned=payload.get('confirm')=='commit-v2-owned-structure'
+    if payload.get('confirm') not in ('commit-v2-structure','commit-v2-owned-structure'):
         raise BaseError(422,'缺少 V2 结构事务确认')
+    if owned:
+        if set(payload)!={'workspace','confirm','changes','textChanges','expectedStructure','expectedBoundaryText'}:
+            raise BaseError(422,'真实换行归组事务字段不完整')
+        text_changes=payload['textChanges']
+        if not isinstance(text_changes,list) or len(text_changes)>1000:
+            raise BaseError(422,'真实换行正文差量无效')
+        seen_text=set();total=0
+        for change in text_changes:
+            if (not isinstance(change,dict) or set(change)!={'logicalId','before','after'} or
+                type(change['logicalId']) is not int or change['logicalId']<1 or
+                change['logicalId'] in seen_text or not isinstance(change['before'],str) or
+                not isinstance(change['after'],str) or change['before']==change['after']):
+                raise BaseError(422,'真实换行正文差量无效')
+            seen_text.add(change['logicalId']);total+=len(change['after'].encode('utf-8'))
+        if total>4*1024*1024:raise BaseError(413,'归组正文保存超过上限')
+        expected=payload['expectedStructure']
+        expected_text=payload['expectedBoundaryText']
+        if not isinstance(expected,list) or not isinstance(expected_text,list):
+            raise BaseError(422,'真实换行归组快照无效')
     changes=payload.get('changes')
     if not isinstance(changes,list) or not 1<=len(changes)<=10000:
         raise BaseError(422,'结构修改行数无效')
@@ -740,9 +760,40 @@ def commit_structure(folder:Path,payload,common):
         db.execute('PRAGMA foreign_keys=ON')
         db.execute('BEGIN IMMEDIATE')
         assert_schema(db)
-        if is_owned_lf(db):raise BaseError(409,'真实换行归组需原子正文/结构事务，待 WP23F')
+        if owned!=is_owned_lf(db):
+            raise BaseError(409,'真实换行归组需 WP23F 原子正文/结构协议')
         old={r['logical_id']:dict(r) for r in db.execute(
-            'SELECT logical_id,parent_id,logical_order,p,b,s FROM logical_block')}
+            'SELECT logical_id,parent_id,logical_order,p,b,s,md_block FROM logical_block ORDER BY logical_order')}
+        if owned:
+            def structure(r):
+                return dict(logicalId=r['logical_id'],parentId=r['parent_id'],
+                    logicalOrder=r['logical_order'],p=r['p'],b=r['b'],s=r['s'])
+            actual=[structure(r) for r in old.values()]
+            if actual!=expected:raise BaseError(409,'PBS 结构已变化，拒绝归组')
+            def boundaries(rows):
+                rows=sorted(rows,key=lambda r:r['logicalOrder'])
+                return {r['logicalId']:(rows[i+1]['logicalId'] if i+1<len(rows) and
+                    (r['p'],r['b'])==(rows[i+1]['p'],rows[i+1]['b']) else None)
+                    for i,r in enumerate(rows)}
+            changed={item['logicalId']:item['after'] for item in changes}
+            prospective=[{**r,**changed.get(r['logicalId'],{})} for r in actual]
+            prior=boundaries(actual);later=boundaries(prospective)
+            boundary_ids={lid for lid in prior if prior[lid]!=later[lid]}
+            expected_by_id={}
+            for item in expected_text:
+                if (not isinstance(item,dict) or set(item)!={'logicalId','before'} or
+                    type(item['logicalId']) is not int or item['logicalId'] in expected_by_id or
+                    not isinstance(item['before'],str)):
+                    raise BaseError(422,'归组边界正文快照无效')
+                expected_by_id[item['logicalId']]=item['before']
+            if set(expected_by_id)!=boundary_ids:
+                raise BaseError(422,'归组边界正文快照不完整')
+            if any(old[lid]['md_block']!=value for lid,value in expected_by_id.items()):
+                raise BaseError(409,'归组边界正文已变化，拒绝覆盖')
+            for item in text_changes:
+                row=old.get(item['logicalId'])
+                if not row or row['md_block']!=item['before']:
+                    raise BaseError(409,'归组正文已被其他会话改变，拒绝覆盖')
         if len(old)<len(changes):raise BaseError(409,'逻辑块数量已变化，禁止覆盖')
         for item in changes:
             row=old.get(item['logicalId'])
@@ -764,12 +815,16 @@ def commit_structure(folder:Path,payload,common):
                 'WHERE logical_id=?',(v['parentId'],v['logicalOrder'],v['p'],
                 v['b'],v['s'],item['logicalId']))
             if updated.rowcount!=1:raise BaseError(409,'结构写入过程中逻辑块消失')
+        if owned:
+            db.executemany('UPDATE logical_block SET md_block=? WHERE logical_id=?',
+                           [(c['after'],c['logicalId']) for c in text_changes])
         records=[dict(r) for r in db.execute(
             'SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type,p,b,s '
             'FROM logical_block ORDER BY logical_order')]
         try:
             groups=validate_pbs(records)
-            from_sql_rows(records)
+            validated=from_sql_rows(records)
+            if owned:to_markdown(validated,format=OWNED_FORMAT)
             for row in records:
                 root=groups[(row['p'],row['b'])][0]
                 if row['parent_id']!=(None if row['s']==0 else root):
@@ -778,7 +833,7 @@ def commit_structure(folder:Path,payload,common):
         if list(db.execute('PRAGMA foreign_key_check')):
             raise BaseError(409,'结构事务破坏基础块引用')
         db.commit()
-        return {'saved':True,'changedRows':len(changes),'logicalCount':len(records)}
+        return {'saved':True,'changedRows':len(changes),'logicalCount':len(records),**({'textChangedRows':len(text_changes)} if owned else {})}
 
 
 def dispatch(operation,method,folder,payload,query,common):
