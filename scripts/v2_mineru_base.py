@@ -881,7 +881,40 @@ def commit_structure(folder:Path,payload,common):
         return {'saved':True,'changedRows':len(changes),'logicalCount':len(records),**({'textChangedRows':len(text_changes)} if owned else {})}
 
 
+def media_dispatch(operation,method,folder,payload,query,common):
+    # Same V1 byte-store, scoped only to the F02-authorized V2 book.
+    import v6_media as media
+    expected='POST' if operation=='media-chunk' else 'GET'
+    if method!=expected:raise BaseError(405,'媒体请求方法无效')
+    doc=folder/'.ocr2md-v2-media-scope.md'
+    def arg(name):return payload.get(name) if method=='POST' else query.get(name,[None])[0]
+    try:
+        if operation=='media-inventory':return {'files':media.inventory(doc)}
+        if operation=='media-status':
+            url=arg('url')
+            parsed=media.validate_url(url)
+            if Path(parsed.path).suffix.lower() not in media.EXT:raise ValueError('Unsupported media extension')
+            # V1 status uses paths(), which creates media/. Keep GET read-only
+            # when the directory does not exist.
+            root=folder/'media'
+            if not os.path.lexists(root):return {'state':'pending','bytes':0,'total':None}
+            return media.status(doc,url)
+        if operation=='media-chunk':
+            url=arg('url')
+            media.validate_url(url)
+            common.probe(folder)
+            return media.download_chunk(doc,url)
+        if operation=='media-file':
+            raw=arg('path')
+            if not isinstance(raw,str) or not raw.startswith('media/'):raise ValueError('媒体路径无效')
+            return media.read_local(doc,raw[6:])
+    except (ValueError,FileNotFoundError) as error:raise BaseError(422,str(error)[:300]) from error
+    raise BaseError(404,'未知媒体操作')
+
+
 def dispatch(operation,method,folder,payload,query,common):
+    if operation.startswith('media-'):
+        return media_dispatch(operation,method,folder,payload,query,common)
     if operation=='logical-rebuild':
         if method!='POST':raise BaseError(405,'逻辑表重建只能 POST')
         return rebuild_logical_only(folder,payload,common)
@@ -978,6 +1011,7 @@ def handle(handler,operation,parsed,common):
         folder=common.checked_workspace(path,roots)
         result=dispatch(operation,handler.command,folder,payload,q,common)
         if operation=='pdf':handler.respond(200,result,'application/pdf')
+        elif operation=='media-file':handler.respond(200,result[0],result[1])
         else:respond(200,result)
     except BaseError as error:respond(error.status,{'error':str(error)})
     except common.WorkspaceIOError as error:respond(error.code,{'error':str(error)})

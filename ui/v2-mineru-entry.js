@@ -21,6 +21,9 @@ import './v2-latex.css';
 import {createBreakSession,resolveBreakPair,breakColumns} from './v2-block-break.js';
 import {createBlockBreakReviewCell} from './lab-ocr/block-break-review-cell.js';
 import './v2-block-break.css';
+import {createLabOcrMediaView} from './lab-ocr/media-view.js';
+import {mediaContext,mediaColumns,planMediaEdits,resolveMediaRow} from './v2-media.js';
+import './lab-ocr/media-view.css';
 import {planV2InlineMath} from './v2-inline-math.js';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
@@ -141,7 +144,60 @@ const breakReviewCell=createBlockBreakReviewCell((row,decision)=>{
     report(plan.updates.length?'断块已合并 · 后块保留空行 · 正文可撤销':'断块审阅 · '+decision+' · 仅当前会话','ok');
   }catch(error){report(error.message,'warning');}
 });
-const allForView=()=>agView==='block-break'?breakAll:agView==='latex'?latexAll:agView==='note-match'?noteAll:showAllLogical;
+let mediaAll=true,mediaController=null,mediaBook=null,mediaActive=false,mediaQueued=false,savedMediaFilter=null;
+function resetMedia(){
+  mediaController?.dispose();mediaController=null;mediaBook=null;mediaActive=false;
+  mediaAll=true;savedMediaFilter=null;
+}
+function getMediaController(){
+  const source=sourceForNotes(),book=source?.getWorkspace();
+  if(!book||!source?.getMdLineIndex())throw Error('媒体 View 需要当前工作目录和 MD Line');
+  if(mediaController&&mediaBook===book)return mediaController;
+  resetMedia();mediaBook=book;
+  const controller=createLabOcrMediaView({
+    request:(op,{workspace,...args},post=false)=>{
+      if(workspace!==book||sourceForNotes()?.getWorkspace()!==book)throw Error('书籍已切换');
+      return request(op,book,post?{method:'POST',payload:{workspace,...args}}:{query:args});
+    },
+    read:()=>{
+      const p=sourceForNotes();
+      return p?.getWorkspace()===book?mediaContext(book,p.getMarkdown(),p.getMdLineIndex()):
+        {workspace:'',source:'',mdRows:null,blocks:[]};
+    },
+    replace:edits=>{
+      const p=sourceForNotes();
+      if(p?.getWorkspace()!==book||rebuilding||saveBlocked)throw Error('书籍或保存状态已变化');
+      const plan=planMediaEdits(p.getMdLineIndex(),p.getMarkdown(),edits);
+      if(plan.length)p.replaceMdLines(plan);
+      return {changed:edits.length};
+    },
+    onChanged:()=>{
+      if(mediaQueued)return;mediaQueued=true;
+      queueMicrotask(()=>{
+        mediaQueued=false;
+        if(mediaController===controller&&mediaActive&&agView==='media'&&logicalState)
+          renderGrid(logicalState);
+      });
+    },onStatus:report,
+  });
+  mediaController=controller;return controller;
+}
+function setMediaActive(value){
+  if(value===mediaActive)return;
+  mediaActive=value;
+  if(!value){mediaController?.setActive(false);return;}
+  const controller=getMediaController();
+  mediaActive=true;controller.setActive(true);
+  queueMicrotask(()=>{if(mediaController===controller&&mediaActive)
+    void controller.scan().catch(error=>report('媒体清单刷新失败：'+error.message,'warning'));});
+}
+function focusAGMedia(port,focus){
+  const rows=port.getDisplayedRows();
+  const row=rows.find(r=>r.block_id===focus.logicalId&&r.line_no===focus.sourceLine)||
+    (focus.origin==='pdf'?rows.find(r=>r.block_id===focus.logicalId):null);
+  port.focusRow('media_row_id',row?.media_row_id??null);
+}
+const allForView=()=>agView==='media'?mediaAll:agView==='block-break'?breakAll:agView==='latex'?latexAll:agView==='note-match'?noteAll:showAllLogical;
 const sourceForNotes=()=>$('#workspace #editor')?.v2SourcePort;
 function getNoteProjection(index){
   return noteSession.project(index,Boolean(sourceForNotes()?.getState().dirty));
@@ -171,8 +227,8 @@ function persistedDirectory(){
   catch{return '';}
 }
 function report(message,kind='info'){status.publish(message,kind);}
-async function request(operation,workspace,{method='GET',offset=0,table='mineru_base',payload=null}={}){
-  const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset),table})):'');
+async function request(operation,workspace,{method='GET',offset=0,table='mineru_base',payload=null,query={}}={}){
+  const url=API+operation+(method==='GET'?('?'+new URLSearchParams({workspace,offset:String(offset),table,...query})):'');
   const response=await fetch(url,{method,credentials:'same-origin',cache:'no-store',
     ...(method==='POST'?{headers:{'Content-Type':'application/json'},
       body:JSON.stringify(payload??{workspace,confirm:'import-mineru-base'})}:{})});
@@ -246,7 +302,7 @@ function wireViewPicker(){
     select.title='同一 AG Grid：逻辑块与 MD Line 公共投影';
     select.addEventListener('change',()=>{
       if(!bound||!AG_VIEWS[select.value])return;
-      if((isLineView(select.value)||['note-match','latex','block-break'].includes(select.value))&&!$('#workspace #editor')?.v2SourcePort?.getMdLineIndex()){select.value=agView;return;}
+      if((isLineView(select.value)||['note-match','latex','block-break','media'].includes(select.value))&&!$('#workspace #editor')?.v2SourcePort?.getMdLineIndex()){select.value=agView;return;}
       const next=select.value;
       if(next===agView)return;
       agView=next;selectedTable='logical_block';active=true;offset=0;
@@ -256,7 +312,7 @@ function wireViewPicker(){
     });
   }
   select.disabled=!bound;
-  for(const option of select.options)if(['line','note-match','latex','block-break'].includes(option.value))option.disabled=!currentOwnedLF();
+  for(const option of select.options)if(['line','note-match','latex','block-break','media'].includes(option.value))option.disabled=!currentOwnedLF();
   select.value=agView;
 }
 function sqlActionsDialog(){
@@ -420,7 +476,7 @@ function logicalControls(){
     const input=document.createElement('input');input.type='checkbox';
     input.setAttribute('aria-label','全部逻辑块');
     input.addEventListener('change',()=>{
-      if(agView==='block-break')breakAll=input.checked;else if(agView==='latex')latexAll=input.checked;else if(agView==='note-match')noteAll=input.checked;else showAllLogical=input.checked;
+      if(agView==='media')mediaAll=input.checked;else if(agView==='block-break')breakAll=input.checked;else if(agView==='latex')latexAll=input.checked;else if(agView==='note-match')noteAll=input.checked;else showAllLogical=input.checked;
       if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);
     });
     label.append(input,document.createTextNode('全部'));
@@ -506,6 +562,13 @@ function renderGrid(state){
     unsubscribeGridClick?.();wiredGrid=port;
     unsubscribeGridClick=port.onRowClicked(event=>{
       if(!active||!bound||!event.data)return;
+      if(selectedTable==='logical_block'&&agView==='media'){
+        const source=sourceForNotes(),line=resolveMediaRow(source?.getMdLineIndex(),source?.getMarkdown(),event.data);
+        if(line)document.dispatchEvent(new CustomEvent('v2-ag-row-click',{detail:{
+          table:selectedTable,row:line,workspace:bound,lineRow:true,sourceLine:line.source_line}}));
+        else report(event.data.line_id?'媒体引用位置已过期':'未引用本地媒体 · '+event.data.url,'info');
+        return;
+      }
       if(selectedTable==='logical_block'&&agView==='block-break'){
         const source=sourceForNotes(),index=source?.getMdLineIndex(),row=event.data;
         if(!index||!breakSession.project(index).includes(row))return;
@@ -556,12 +619,16 @@ function renderGrid(state){
   const noteView=logical&&nextView==='note-match';
   const latexView=logical&&nextView==='latex';
   const breakView=logical&&nextView==='block-break';
+  const mediaView=logical&&nextView==='media';
+  const media=mediaView?getMediaController():null;
+  setMediaActive(mediaView);
   const all=allForView();
-  const lineIndex=(lineView||noteView||latexView||breakView)?$('#workspace #editor')?.v2SourcePort?.getMdLineIndex():null;
-  if((lineView||noteView||latexView||breakView)&&!lineIndex)throw Error('MD Line View 需要真实 LF 文档');
+  const lineIndex=(lineView||noteView||latexView||breakView||mediaView)?$('#workspace #editor')?.v2SourcePort?.getMdLineIndex():null;
+  if((lineView||noteView||latexView||breakView||mediaView)&&!lineIndex)throw Error('MD Line View 需要真实 LF 文档');
   const notes=noteView?getNoteProjection(lineIndex):null;
   const formulas=latexView?getLatexRows(lineIndex):null;
   const breaks=breakView?breakSession.project(lineIndex):null;
+  const mediaRows=mediaView?media.rows():null;
   // Only the AG view is reordered. The SQLite ten-column physical schema
   // and server-returned column inventory stay untouched.
   const columnKeys=logical
@@ -573,7 +640,7 @@ function renderGrid(state){
   // The minimum is deliberately smaller than the fitted width: AG Grid's
   // native resize handle must allow both shrinking and expanding.
   const page=logical?filterLogicalAG(state.rows,currentLogicalId(),all):null;
-  const lineRows=breakView?(all?breaks:breaks.filter(r=>r.p===page.p)):latexView?(all?formulas:formulas.filter(r=>r.p===page.p)):noteView?(all?notes.rows:notes.rows.filter(r=>r.p===page.p)):lineView?(all?lineIndex.rows:lineIndex.rows.filter(r=>r.p===page.p)):null;
+  const lineRows=mediaView?(all?mediaRows:mediaRows.filter(r=>lineIndex.atSourceLine(r.line_no)?.p===page.p)):breakView?(all?breaks:breaks.filter(r=>r.p===page.p)):latexView?(all?formulas:formulas.filter(r=>r.p===page.p)):noteView?(all?notes.rows:notes.rows.filter(r=>r.p===page.p)):lineView?(all?lineIndex.rows:lineIndex.rows.filter(r=>r.p===page.p)):null;
   const visibleRows=lineRows||page?.rows||state.rows;
   const gridHost=$('#workspace .ocr-outline-grid');
   const cell=gridHost?.querySelector('.ag-cell');
@@ -608,7 +675,11 @@ function renderGrid(state){
       key==='block_json'?440:key==='original_bytes'?155:undefined,
     pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
-  if(breakView){
+  if(mediaView){
+    columns=mediaColumns(media).map(c=>({...c,resizable:true,filter:EnumCheckboxFilter,
+      filterValueGetter:p=>c.field==='pbs'?(/^p\d+/.exec(p.data?.pbs??'')?.[0]??''):String(p.data?.[c.field]??''),
+      suppressHeaderMenuButton:true,suppressHeaderFilterButton:false}));
+  }else if(breakView){
     columns=breakColumns(breakReviewCell).map(c=>({...c,resizable:true,filter:EnumCheckboxFilter,
       filterValueGetter:p=>c.field==='pbs'?(/^p\d+/.exec(p.data?.pbs??'')?.[0]??''):String(p.data?.[c.field]??''),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false}));
@@ -652,9 +723,9 @@ function renderGrid(state){
       noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
       port.setFilterModel(null);renderGrid(logicalState);
       report('注释格式已应用并重新识别 · 仅当前会话','ok');
-    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,
+    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),
   });
-  noteToolbar?.setVisible(noteView||latexView,latexView?'latex':'note-match');
+  noteToolbar?.setVisible(noteView||latexView||mediaView,mediaView?'media':latexView?'latex':'note-match');
   let view=null;
   if(controls){
     controls.label.hidden=!logical;
@@ -662,10 +733,10 @@ function renderGrid(state){
     controls.label.querySelector('input').checked=all;
   }
   if(logical){
-    view=(lineView||noteView||latexView||breakView)?{p:page.p,rows:lineRows}:page;
+    view=(lineView||noteView||latexView||breakView||mediaView)?{p:page.p,rows:lineRows}:page;
     visibleLogicalP=view.p;
     if(controls)controls.indicator.textContent=all?
-      `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${breakView?breaks.length:latexView?formulas.length:noteView?notes.rows.length:lineView?lineIndex.rows.length:state.rowCount}`;
+      `全部 · ${view.rows.length} 行`:`p${view.p??'?'} · ${view.rows.length} / ${mediaView?mediaRows.length:breakView?breaks.length:latexView?formulas.length:noteView?notes.rows.length:lineView?lineIndex.rows.length:state.rowCount}`;
   }else visibleLogicalP=null;
   const schema=state.tableName+':'+nextView+':'+columns.map(column=>column.field).join(',');
   const switchingView=renderedView!==nextView;
@@ -676,15 +747,16 @@ function renderGrid(state){
     if(renderedView==='note-match')savedNoteFilter=port.getFilterModel();
     if(renderedView==='latex'){savedLatexFilter=port.getFilterModel();paintLatex(null,[]);}
     if(renderedView==='block-break'){savedBreakFilter=port.getFilterModel();paintBreak(null,[]);}
-    if(breakView||renderedView==='block-break'||latexView||renderedView==='latex')port.setRowHeight(breakView?92:latexView?134:35);
+    if(renderedView==='media')savedMediaFilter=port.getFilterModel();
+    if(mediaView||renderedView==='media'||breakView||renderedView==='block-break'||latexView||renderedView==='latex')port.setRowHeight(mediaView?78:breakView?92:latexView?134:35);
     port.setFilterModel(null);
   }
   if(schema!==renderedSchema){port.setColumns(columns,state.tableName+':'+nextView);renderedSchema=schema;}
   renderedView=nextView;
-  const rows=(lineView||noteView||latexView||breakView)?lineRows:logical?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`})):state.rows;
+  const rows=(lineView||noteView||latexView||breakView||mediaView)?lineRows:logical?view.rows.map(row=>({...row,pbs:`p${row.p}b${row.b}s${row.s}`})):state.rows;
   // Switching presets with identical rows must not reload AG rowData.
   // Existing page scope and live CM6 edits may change the common row set.
-  const dataTable=state.tableName+(breakView?':break':latexView?':latex':noteView?':note':lineView?':line':'');
+  const dataTable=state.tableName+(mediaView?':media':breakView?':break':latexView?':latex':noteView?':note':lineView?':line':'');
   const sameRows=renderedDataTable===dataTable&&rows.length===renderedRows.length&&
     rows.every((row,i)=>{
       const old=renderedRows[i],keys=Object.keys(row);
@@ -701,12 +773,13 @@ function renderGrid(state){
   if(switchingView){
     // This is the SAME logical rowData, including non-title blocks. The
     // native AG EnumCheckboxFilter alone determines visible block types.
-    port.setFilterModel(nextView==='frame'?(logical?savedLogicalFilter:null):nextView==='line'?savedLineFilter:breakView?savedBreakFilter:latexView?savedLatexFilter:noteView?savedNoteFilter:viewFilter(nextView,lineView));
+    port.setFilterModel(nextView==='frame'?(logical?savedLogicalFilter:null):nextView==='line'?savedLineFilter:mediaView?savedMediaFilter:breakView?savedBreakFilter:latexView?savedLatexFilter:noteView?savedNoteFilter:viewFilter(nextView,lineView));
     if(nextView==='frame')savedLogicalFilter=null;
   }
-  if(logical&&!noteView&&!latexView&&!breakView)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
+  if(logical&&!noteView&&!latexView&&!breakView&&!mediaView)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
   if(lastFocus){
-    if(breakView)focusAGBreak(port,lastFocus);
+    if(mediaView)focusAGMedia(port,lastFocus);
+    else if(breakView)focusAGBreak(port,lastFocus);
     else if(latexView)focusAGLatex(port,lastFocus);
     else if(noteView)focusAGNote(port,lastFocus);
     else if(lineView)focusAGLine(port,lastFocus);
@@ -731,7 +804,7 @@ function renderGrid(state){
   if(breakView){const selected=breaks.find(r=>r.issue_id===breakFocus);paintBreak(lineIndex,selected?resolveBreakPair(lineIndex,selected)??[]:[]);}
   if(latexView)paintLatex(lineIndex,formulas);
   const math=latexView?latexIndexSummary(formulas):null;
-  report(breakView?`AG 断块 · ${breaks.filter(r=>!r.merged).length} 疑似断块 · ${breaks.filter(r=>r.merged).length} 已合并 · 忽略决定仅当前会话`:latexView?`AG LaTeX · ${math.total} 条 · 原始 ${math.original} · 已匹配/修订 ${math.matched} · 渲染失败 ${formulas.filter(r=>r.render_status==='失败').length} · ${port.getDisplayedRows().length} 行`:noteView?`AG 注释匹配 · ${notes.index.stats.references} 注引 · ${notes.index.stats.bodies} 注文 · ${port.getDisplayedRows().length} 行 · 审阅决定仅当前会话`:logical&&nextView!=='frame'?
+  report(mediaView?`AG 媒体 · ${mediaRows.length} 项 · 远端 ${mediaRows.filter(r=>!r.local).length} · 本地 ${mediaRows.filter(r=>r.local).length}`:breakView?`AG 断块 · ${breaks.filter(r=>!r.merged).length} 疑似断块 · ${breaks.filter(r=>r.merged).length} 已合并 · 忽略决定仅当前会话`:latexView?`AG LaTeX · ${math.total} 条 · 原始 ${math.original} · 已匹配/修订 ${math.matched} · 渲染失败 ${formulas.filter(r=>r.render_status==='失败').length} · ${port.getDisplayedRows().length} 行`:noteView?`AG 注释匹配 · ${notes.index.stats.references} 注引 · ${notes.index.stats.bodies} 注文 · ${port.getDisplayedRows().length} 行 · 审阅决定仅当前会话`:logical&&nextView!=='frame'?
     `AG ${AG_VIEWS[nextView].label} · Type 筛选 · ${port.getDisplayedRows().length} 行`:logical?
     `SQL 逻辑表 · ${showAllLogical?'全部':('p'+visibleLogicalP)} · ${view.rows.length} / ${count} 行 · ${state.columns.length} 列`:
     `SQL ${label}已加载 · ${count} 行 · ${state.columns.length} 列 · BlockID 为整数`,'ok');
@@ -899,7 +972,7 @@ async function ensureBase(path){
       }
     }
     if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
-      renderedSchema='';renderedDataTable='';renderedRows=[];agView='frame';savedLogicalFilter=null;savedLineFilter=null;breakAll=true;breakFocus=null;savedBreakFilter=null;breakSession.reset();paintBreak(null,[]);latexAll=true;latexEvidence=[];latexIndex=null;latexRaw=null;latexRows=[];latexFocus=null;savedLatexFilter=null;noteAll=true;noteSession.reset();noteToolbar?.reset();noteFocusKey=null;savedNoteFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
+      renderedSchema='';renderedDataTable='';renderedRows=[];agView='frame';savedLogicalFilter=null;savedLineFilter=null;resetMedia();breakAll=true;breakFocus=null;savedBreakFilter=null;breakSession.reset();paintBreak(null,[]);latexAll=true;latexEvidence=[];latexIndex=null;latexRaw=null;latexRows=[];latexFocus=null;savedLatexFilter=null;noteAll=true;noteSession.reset();noteToolbar?.reset();noteFocusKey=null;savedNoteFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());
     acknowledgedText=textCopy(port.getBlocks());
@@ -946,7 +1019,8 @@ document.addEventListener('v2-sync-focus',event=>{
     }
     visibleLogicalP=logical.p;
     const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
-    if(port&&agView==='block-break')focusAGBreak(port,row);
+    if(port&&agView==='media')focusAGMedia(port,row);
+    else if(port&&agView==='block-break')focusAGBreak(port,row);
     else if(port&&agView==='latex')focusAGLatex(port,row);
     else if(port&&agView==='note-match')focusAGNote(port,row);
     else if(port&&isLineView(agView))focusAGLine(port,row);
@@ -974,7 +1048,7 @@ document.addEventListener('v2-cm-protected-separator',()=>
   report('跨块编辑归属不明确，已拒绝；完整行删除仍保留逻辑块','warning'));
 document.addEventListener('v2-cm-session',event=>{
   const {kind,dirty,blocks}=event.detail||{};
-  if(kind==='clear'){paintBreak(null,[]);paintLatex(null,[]);lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;}
+  if(kind==='clear'){resetMedia();paintBreak(null,[]);paintLatex(null,[]);lastFocus=null;acknowledged=null;acknowledgedText=null;clearTimeout(saveTimer);saveTimer=null;}
   if(kind==='load'){
     const port=$('#workspace #editor')?.v2SourcePort;
     acknowledged=structureCopy(port?.getStructureRows()||[]);

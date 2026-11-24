@@ -25,6 +25,7 @@ base.CARD='''      <article id="lab-ocr-v2"><div class="kind">15 · OCR V2 · MD
 # v2_mineru_base module can still serve the old 120-row SQL logical projection.
 V2_BACKEND_FILES=(
     'scripts/v2_mineru_base.py',
+    'scripts/v6_media.py',
     'scripts/v2_logical_contract.py',
     'scripts/v2_md_block.py',
     'scripts/v2_table_recovery.py',

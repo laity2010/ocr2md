@@ -9,6 +9,7 @@ export const AG_VIEWS=Object.freeze({
   'note-match':Object.freeze({label:'注释匹配'}),
   latex:Object.freeze({label:'LaTeX'}),
   'block-break':Object.freeze({label:'断块'}),
+  media:Object.freeze({label:'媒体'}),
 });
 export function titleClickLine(row){
   return Number.isInteger(row?.source_line)?row.source_line:null;

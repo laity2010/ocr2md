@@ -20,6 +20,7 @@ const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
 const inlineMode=process.env.V2_TEST_INLINE_MATH==='1';
 const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
 const breakMode=process.env.V2_TEST_BREAK_VIEW==='1';
+const mediaMode=process.env.V2_TEST_MEDIA_VIEW==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
@@ -27,7 +28,7 @@ const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
 const copyFrom=(legacyEditMode||uiRestoreMode||inlineMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode||breakMode;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode||breakMode||mediaMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
 const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -48,7 +49,9 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=breakMode?py(
+   const initial=mediaMode?py(
+     'import base64,hashlib\nprepare_owned_book(folder)\nold=load(folder)[0]\nurl="https://cdn-mineru.openxlab.org.cn/wp29-fixture.png"\npath="media/"+hashlib.sha256(url.encode()).hexdigest()[:24]+".png"\n(folder/"media").mkdir()\ndata=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7xkAAAAASUVORK5CYII=")\n(folder/path).write_bytes(data)\n(folder/"media"/("b"*24+".png")).write_bytes(data)\nowned_commit(folder,[dict(logicalId=old.logical_id,before=old.markdown_text,after="![WP29](<"+url+">) and ![repeat]("+url+")\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
+     breakMode?py(
      'from test_v2_owned_structure import packet\nprepare_owned_book(folder)\nbase.commit_structure(folder,packet(folder),Stub())\nold=load(folder)\nwith closing(sqlite3.connect(folder/base.DB_NAME)) as db: db.execute("UPDATE logical_block SET block_type=\'text\' WHERE logical_id IN (?,?)",(old[0].logical_id,old[1].logical_id)); db.commit()\nowned_commit(folder,[dict(logicalId=old[0].logical_id,before=old[0].markdown_text,after="The invest-\\n"),dict(logicalId=old[1].logical_id,before=old[1].markdown_text,after="ment continues.\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      noteConversionMode?py(
      'prepare_owned_book(folder)\nrows=load(folder)\nselected=[r for r in rows if r.block_type=="text" and r.s==0][:6]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n","Duplicate reference<sup>705</sup>.\\n\\n","705. Duplicate A\\n\\n","705. Duplicate B\\n\\n"]\nvalues={r.logical_id:t for r,t in zip(selected,texts)}\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=values.get(r.logical_id,"\\n\\n")) for r in rows if r.markdown_text!=values.get(r.logical_id,"\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
@@ -84,11 +87,15 @@ try{
      const req=route.request(),u=new URL(req.url()),op=u.pathname.split('/').at(-1);
      if(op==='pdf')return pdfMode?route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes}):fulfill(route,{error:'No PDF in disposable fixture'},404);
      const payload=req.method()==='POST'?req.postDataJSON():{};
+     if(mediaMode&&op==='media-file'){
+       const result=py('import base64\ndata,kind=base.dispatch("media-file","GET",folder,{},args["query"],Stub())\nprint(json.dumps({"body":base64.b64encode(data).decode(),"kind":kind}))',folder,{query:{path:[u.searchParams.get('path')]}});
+       return route.fulfill({status:200,contentType:result.kind,body:Buffer.from(result.body,'base64')});
+     }
      if(req.method()==='POST'&&initMode){
        assert.equal(op,'logical-rebuild');
        assert.equal(payload.confirm,'initialize-v2-owned-logical');
        writes.push({op,payload});
-     }else if(req.method()==='POST'){
+     }else if(req.method()==='POST'&&!(mediaMode&&op==='media-chunk')){
        if(pdfMode&&!titleMode)assert(['md-commit','structure-commit'].includes(op));
        else assert.equal(op,'md-commit');
        assert.equal(payload.confirm,op==='structure-commit'?'commit-v2-owned-structure':'commit-v2-owned-md');
@@ -152,6 +159,52 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(mediaMode){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const remote='https://cdn-mineru.openxlab.org.cn/wp29-fixture.png';
+     await page.route('https://cdn-mineru.openxlab.org.cn/**',r=>r.abort());
+     await picker.selectOption('media');
+     const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     await page.waitForFunction(url=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().filter(r=>r.url===url&&r.status==='已下载').length===2,remote,{timeout:20000});
+     let rows=await read(),refs=rows.filter(r=>r.url===remote);
+     assert.equal(refs.length,2);assert.equal(refs[0].line_no,1);assert.equal(refs[0].pbs,before.rows[0].p===0?'p0b'+before.rows[0].b+'s0':refs[0].pbs);
+     assert(rows.some(r=>r.adopted==='未引用'&&!r.line_id));
+     assert.equal(writes.length,0);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned).map(c=>[c.colId,c.pinned])),[['line_no','left'],['pbs','left'],['action','right']]);
+     const local=refs[0].preview_path;
+     assert(/^media\/[0-9a-f]{24}\.png$/.test(local));
+     const rowIndex=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('media_row_id',id);return p.getDisplayedRows().findIndex(r=>r.media_row_id===id);},refs[0].media_row_id);
+     await grid.locator('.ag-row[row-index="'+rowIndex+'"] [col-id="line_no"]').click();
+     const thumb=grid.locator('.ocr-lab-media-thumb').first();
+     await thumb.waitFor({state:'attached'});
+     assert((await thumb.getAttribute('src')).includes('/lab-ocr-v2/api/mineru-base/media-file?'));
+     await grid.locator('.ag-row[row-index="'+rowIndex+'"] [col-id="action"] button').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     const after=await snapshot();
+     assert.equal(after.doc,before.doc.split(remote).join(local));
+     assert.equal(writes.length,1);assert.equal(writes[0].payload.changes.length,1);
+     assert.deepEqual(after.rows.slice(1),before.rows.slice(1));
+     const preview=page.locator('#workspace .ocr-preview-md-scroll img[src*="media-file"]');
+     await preview.first().waitFor({state:'attached',timeout:10000});
+     await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ocr-preview-md-scroll img[src*="media-file"]')].some(img=>img.complete&&img.naturalWidth>0),null,{timeout:10000});
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert.equal((await snapshot()).doc,before.doc);
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert.equal((await snapshot()).doc,after.doc);
+     await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+     await page.getByRole('menuitem',{name:'刷新媒体清单'}).click();
+     await page.waitForFunction(path=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().filter(r=>r.url===path&&r.local).length===2,local);
+     await picker.selectOption('title');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().slice(0,3).map(c=>[c.colId,c.pinned])),[['md_line',null],['source_line',null],['pbs',null]]);
+     await loadPage();assert.equal((await snapshot()).doc,after.doc);
+     await preview.first().waitFor({state:'attached',timeout:10000});
+     assert.equal(writes.length,3);assert.deepEqual(errors,[]);
+     console.log('WP29_MEDIA_BROWSER_PASS',name,'actual media rows/preview/adoption, repeated URL one atomic save, undo/redo/reopen, title unchanged');
+     continue;
+   }
    if(breakMode){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');

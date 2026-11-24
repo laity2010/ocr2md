@@ -149,6 +149,11 @@
 - 由同一修订的公共 MD Line 派生同组相邻正文块疑似断词/续接；不跨独立父块、不跨非正文或空块屏障。A/B 当前行引用与全文证据核对，源码字符着色、原始物理 PDF 覆盖框双端定位。MD 预览保留 V1 普通定位，不另建界面。
 - 审阅待定/断块合并/忽略；合并只接受 V1 安全条件（物理行相邻、后块单非空正文行），现有 CM6 replaceMdLines 原生事务使 A 承接正文、B 清空并保留真实 LF 与 ID/PBS，局部 SQL CAS 保存、Undo/Redo。原始坐标不变，空块原有虚线。未增加第三张表；人工忽略和已合并审阅回执仅当前会话，刷新重新派生未合并候选，合并正文长期保存。详见 [WP28](docs/v2/WP28_BLOCK_BREAK.md)。
 
+### 3.2d 媒体 View（WP29）
+- 复用 V1 bf32515 的 media-view、media-module 与 v6_media 字节服务；列定义为预览、源码行、PBS、来源、状态、进度、引用、媒体链接、操作；源码行/PBS 左固定、操作右固定、78px 行高、默认全文、原生多选过滤。功能菜单保留下载并替换全部、刷新媒体清单；切换回其它 View 恢复行高与既有布局。
+- 清单从唯一 CM6 正文的公共 MD Line 与当前书籍 media/ 文件动态派生；链接按当前源码偏移及旧值核验，多引用同一 URL 统一替换，保留 Markdown 定界符和其它字符；一笔 replaceMdLines 原生事务、原 SQLite CAS 保存及 Undo/Redo。未引用本地文件不制造源码位置，撤销链接不删除文件。MD 预览使用 V2 书籍授权的媒体文件 URL。
+- 新增 F02 已授权工作目录下的 media-inventory/status/chunk/file API，沿用 V1 512 KiB 分块、partial 文件、校验及安全路径策略，仅下载明确允许的 MinerU CDN，不允许任意 URL 或路径；状态读取不主动建立媒体目录。无新增 SQL 表或第二正文。实际下载仅在隔离 loopback 夹具验证；真实 CDN、用户原书及 iPad 实机未执行。详见 [WP29](docs/v2/WP29_MEDIA_VIEW.md)。
+
 ### 3.3 已发布旧实现的历史记录（有冲突者已废止）
 
 - **WP13 [历史实现，已被 3.1 取代]**：旧版使用 `groupEndPad` 投影虚拟 LF，不落盘。保留其历史证据 [WP13](docs/v2/WP13_CHILD_SINGLE_NEWLINE.md)，不得复用虚拟补尾设计。

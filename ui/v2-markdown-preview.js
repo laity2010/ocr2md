@@ -8,6 +8,7 @@ import morphdom from 'morphdom';
 import {createFootnotePopover} from './footnote-popover.js';
 import {mountV2PaneFocus,focusSourceLine} from './v2-pane-focus.js';
 import './v2-markdown-preview.css';
+import {mediaFileUrl} from './v2-media.js';
 
 const SOURCE='#workspace #editor';
 export function mountV2MarkdownPreview(scroller){
@@ -75,6 +76,11 @@ export function mountV2MarkdownPreview(scroller){
       folds.set(detail.dataset.sourceStart+':'+detail.dataset.callout,detail.open);
     const fresh=article.cloneNode(false);
     fresh.innerHTML=html;
+    // Same V1 book-scoped local image resolver; Markdown itself is unchanged.
+    for(const img of fresh.querySelectorAll('img[src]')){
+      const url=mediaFileUrl(port.getWorkspace(),img.getAttribute('src'));
+      if(url)img.setAttribute('src',url);
+    }
     // Markdown-it offsets are PREVIEW lines, not the single-LF CM6 lines.
     // Convert before coordinator/highlight sees them; no parallel document.
     for(const el of fresh.querySelectorAll('[data-source-start][data-source-end]')){
