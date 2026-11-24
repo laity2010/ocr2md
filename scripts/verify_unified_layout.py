@@ -50,18 +50,34 @@ def check_core(root: Path):
         require((root / folder).is_dir(), f'missing root directory: {folder}')
     require(not (root / 'dev').exists(), 'old redundant dev shortcut must not reappear')
     labs = discover_labs(root)
+    # First constitutional layer and exactly two authoritative peer contracts.
+    # All three real source inodes are tracked in Main; the unified root
+    # hard-links them so all Labs inherit one law, not another editable copy.
     agents = root / 'AGENTS.md'
-    components = root / 'CROSS_VERSION_COMPONENTS.md'
-    for file in (agents, components, main / 'AGENTS.md',
+    build = root / 'BUILD.md'
+    comm = root / 'COMM.md'
+    for name in ('AGENTS.md', 'BUILD.md', 'COMM.md'):
+        for file in (root / name, main / name):
+            require(file.is_file() and not file.is_symlink(),
+                    f'missing or linked-to-symlink contract: {file}')
+        require(same_inode(root / name, main / name),
+                f'Main {name} is not the shared constitutional contract inode')
+    # Compatibility alias is a link to COMM, never a third editable contract.
+    for file in (root / 'CROSS_VERSION_COMPONENTS.md',
                  main / 'CROSS_VERSION_COMPONENTS.md'):
-        require(file.is_file() and not file.is_symlink(), f'missing or linked-to-symlink contract: {file}')
-    require(same_inode(agents, main / 'AGENTS.md'), 'Main AGENTS.md is not the shared constitution inode')
-    require(same_inode(components, main / 'CROSS_VERSION_COMPONENTS.md'),
-            'Main cross-version components spec is not the shared contract inode')
-    require('## 10. 同级工程规范文件目录与职责' in agents.read_text(),
-            'AGENTS.md does not register the shared constitution index')
-    require('EnumCheckboxFilter' in components.read_text(),
-            'cross-version components spec is empty or unrelated to V1 AG Grid')
+        require(file.is_symlink() and file.readlink() == Path('COMM.md') and
+                same_inode(file, comm),
+                f'legacy components alias must resolve to COMM.md: {file}')
+    ag_text = agents.read_text(encoding='utf-8')
+    require('## 10. 两层宪法与同级契约目录' in ag_text and
+            '`BUILD.md`' in ag_text and '`COMM.md`' in ag_text,
+            'AGENTS.md does not register the two constitutional peer contracts')
+    require('一构建一 Git' in build.read_text(encoding='utf-8') and
+            '回退' in build.read_text(encoding='utf-8') and
+            '偏离' in build.read_text(encoding='utf-8'),
+            'BUILD.md is missing mandatory one-build-one-Git / rollback-on-drift policy')
+    require('EnumCheckboxFilter' in comm.read_text(encoding='utf-8'),
+            'COMM.md does not preserve the real V1 AG filter component contract')
     for tree in [main, *labs]:
         readme = tree / 'README.md'
         ag = tree / 'AGENTS.md'
@@ -77,8 +93,13 @@ def check_core(root: Path):
     print('LAB_AUTO_DISCOVERY_PASS', len(labs), 'labs', ','.join(p.name for p in labs))
     print('SHARED_AGENTS_PASS', agents.stat().st_ino,
           hashlib.sha256(agents.read_bytes()).hexdigest()[:12])
-    print('SHARED_COMPONENTS_SPEC_PASS', components.stat().st_ino,
-          hashlib.sha256(components.read_bytes()).hexdigest()[:12])
+    print('SHARED_BUILD_PASS', build.stat().st_ino,
+          hashlib.sha256(build.read_bytes()).hexdigest()[:12])
+    print('SHARED_COMM_PASS', comm.stat().st_ino,
+          hashlib.sha256(comm.read_bytes()).hexdigest()[:12])
+    # Preserve older automation's summary token during the rename.
+    print('SHARED_COMPONENTS_SPEC_PASS', comm.stat().st_ino,
+          hashlib.sha256(comm.read_bytes()).hexdigest()[:12])
     return labs
 
 

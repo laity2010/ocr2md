@@ -25,11 +25,15 @@ class DynamicWorktreeLayoutTests(unittest.TestCase):
         for n in ['main','labs','release','archive']:
             (self.root/n).mkdir()
         self.agent=self.root/'AGENTS.md'
-        self.agent.write_text('## 10. 同级工程规范文件目录与职责\n')
-        self.spec=self.root/'CROSS_VERSION_COMPONENTS.md'
-        self.spec.write_text('# Cross version\nEnumCheckboxFilter\n')
-        os.link(self.agent,self.root/'main/AGENTS.md')
-        os.link(self.spec,self.root/'main/CROSS_VERSION_COMPONENTS.md')
+        self.agent.write_text('## 10. 两层宪法与同级契约目录\n`BUILD.md` `COMM.md`\n')
+        self.build=self.root/'BUILD.md'
+        self.build.write_text('# Build\n一构建一 Git、偏离就回退\n')
+        self.comm=self.root/'COMM.md'
+        self.comm.write_text('# Common UI\nEnumCheckboxFilter\n')
+        for name in ('AGENTS.md','BUILD.md','COMM.md'):
+            os.link(self.root/name,self.root/'main'/name)
+        for folder in (self.root,self.root/'main'):
+            (folder/'CROSS_VERSION_COMPONENTS.md').symlink_to('COMM.md')
         self.initialize_tree(self.root/'main')
         self.make_lab('lab-ocr')
     def tearDown(self):self.tmp.cleanup()
@@ -67,9 +71,31 @@ class DynamicWorktreeLayoutTests(unittest.TestCase):
         (self.root/'labs/lab-ocr/README.md').unlink()
         with self.assertRaisesRegex(AssertionError,'missing project README'):
             check_core(self.root)
-    def test_missing_shared_components_contract_fails_closed(self):
-        (self.root/'CROSS_VERSION_COMPONENTS.md').unlink()
+    def test_missing_shared_build_contract_fails_closed(self):
+        self.build.unlink()
         with self.assertRaisesRegex(AssertionError,'missing or linked-to-symlink contract'):
+            check_core(self.root)
+    def test_missing_shared_components_contract_fails_closed(self):
+        self.comm.unlink()
+        with self.assertRaisesRegex(AssertionError,'missing or linked-to-symlink contract'):
+            check_core(self.root)
+    def test_detached_main_build_inode_is_rejected(self):
+        original=self.root/'main/BUILD.md'
+        original.unlink();original.write_text(self.build.read_text())
+        with self.assertRaisesRegex(AssertionError,'not the shared constitutional contract inode'):
+            check_core(self.root)
+    def test_legacy_alias_must_point_to_comm(self):
+        old=self.root/'CROSS_VERSION_COMPONENTS.md'
+        old.unlink();old.symlink_to('BUILD.md')
+        with self.assertRaisesRegex(AssertionError,'legacy components alias'):
+            check_core(self.root)
+    def test_constitution_must_register_both_peers(self):
+        self.agent.write_text('## 10. 两层宪法与同级契约目录\nCOMM only\n')
+        with self.assertRaisesRegex(AssertionError,'does not register'):
+            check_core(self.root)
+    def test_build_contract_cannot_omit_rollback_policy(self):
+        self.build.write_text('only commit code, no rollback agreement\n')
+        with self.assertRaisesRegex(AssertionError,'one-build-one-Git'):
             check_core(self.root)
     def test_modified_release_file_fails_while_ds_store_ignored(self):
         labs=check_core(self.root)

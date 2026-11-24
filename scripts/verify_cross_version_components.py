@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-version AG Grid contract gate, declared by CROSS_VERSION_COMPONENTS.md.
+"""Cross-version AG Grid contract gate, declared by COMM.md.
 
 A missing/incompatible Type filter blocks the named Lab's release before any
 publish side effects. Source checks are conservative and browser behavior is
@@ -16,12 +16,12 @@ import sys
 
 def baseline_issues(root: Path):
     problems=[]
-    spec=root/'CROSS_VERSION_COMPONENTS.md'
+    spec=root/'COMM.md'
     source=root/'labs/lab-ocr/ui/enum-checkbox-filter.js'
     tests=(root/'labs/lab-ocr/tests/enum-checkbox-filter-transient-empty.test.mjs',
            root/'labs/lab-ocr/tests/outline-browser.test.mjs')
     if not spec.is_file() or 'EnumCheckboxFilter' not in spec.read_text():
-        problems.append('missing root CROSS_VERSION_COMPONENTS.md V1 filter contract')
+        problems.append('missing root COMM.md V1 filter contract')
     if not source.is_file():
         problems.append('missing V1 EnumCheckboxFilter implementation')
     else:
