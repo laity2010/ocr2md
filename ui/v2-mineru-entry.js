@@ -7,6 +7,7 @@ import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
 import {AG_VIEWS,viewColumns,viewFilter} from './v2-ag-views.js';
+import {effectiveBlockType} from './v2-live-block-type.js';
 import './v2-ag-views.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
@@ -513,9 +514,13 @@ function overlayCMStructure(){
   const lines=new Map(source.getIntervals().map(row=>[row.logicalId,source.getLineAtOffset(row.from)]));
   logicalState.rows=logicalState.rows.map(record=>{
     const row=live.get(record.logical_id);
-    return row?{...record,parent_id:row.parentId,logical_order:row.logicalOrder,
+    if(!row)return record;
+    const md=texts.get(row.logicalId)??record.md_block;
+    const storedType=record.stored_block_type??record.block_type;
+    return {...record,parent_id:row.parentId,logical_order:row.logicalOrder,
       p:row.p,b:row.b,s:row.s,source_line:lines.get(row.logicalId),
-      md_block:texts.get(row.logicalId)??record.md_block}:record;
+      md_block:md,stored_block_type:storedType,
+      block_type:effectiveBlockType(storedType,md)};
   }).sort((a,b)=>a.logical_order-b.logical_order);
 }
 function scheduleStructureSave(){

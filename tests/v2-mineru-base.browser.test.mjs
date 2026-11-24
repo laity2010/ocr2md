@@ -213,12 +213,30 @@ try{
      assert.equal((await rows()).length,224);
      await picker.selectOption('title');
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===2);
-     await source.evaluate(el=>{
-       const p=el.v2SourcePort,r=p.getIntervals().find(r=>r.logicalId===2);
-       p.getEditorView().dispatch({changes:{from:r.from,insert:'### '}});
-     });
-     assert.deepEqual((await rows()).map(r=>r.logical_id),[1,23],'MD syntax does not alter stored block_type');
+     const replacePrefix=(id,remove,insert)=>source.evaluate((el,{id,remove,insert})=>{
+       const p=el.v2SourcePort,r=p.getIntervals().find(r=>r.logicalId===id);
+       p.getEditorView().dispatch({changes:{from:r.from,to:r.from+remove,insert}});
+     },{id,remove,insert});
+     const ids=async()=> (await rows()).map(r=>r.logical_id);
+     await replacePrefix(1,2,'');
+     assert.deepEqual(await ids(),[23],'title demotion must remove the row immediately');
+     await replacePrefix(23,3,'');
+     assert.deepEqual(await ids(),[],'last title removed, native preset remains active');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getFilterModel()),{block_type:{values:['title']}});
+     await replacePrefix(2,0,'### ');
+     assert.deepEqual(await ids(),[2],'text-to-title must appear even when the previous filter result was empty');
      await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual(await ids(),[]);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual(await ids(),[23]);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual(await ids(),[1,23]);
+     // Real empty logical MD block is already an editable block. It can be
+     // promoted without creating a new SQL row, unlike a virtual separator.
+     await replacePrefix(3,0,'#### New heading');
+     assert.deepEqual(await ids(),[1,3,23]);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.deepEqual(await ids(),[1,23]);
      assert.equal(structurePosts,0);
      assert.equal(requestedPages.length,beforeReq);
      assert.deepEqual(errors,[]);
