@@ -17,7 +17,7 @@ const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode;
-const port=5431,url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
+const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
 let log='';server.stdout.on('data',x=>log+=x);server.stderr.on('data',x=>log+=x);

@@ -7,9 +7,15 @@ import {pathToFileURL} from 'node:url';
 const here=process.cwd();
 const frame=resolve(here,'../lab-frame');
 const sha=execFileSync('git',['-C',frame,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
-assert.equal(sha,'da903ef8e37e98931d4809e65e6052c653be7f1b');
+const baseline='da903ef8e37e98931d4809e65e6052c653be7f1b';
+// Frame's later constitution-only commits do not change the audited code.
+// Require the original baseline ancestry AND no runtime tree changes;
+// retain all byte comparisons against the current Frame working tree below.
+assert.equal(execFileSync('git',['-C',frame,'merge-base',sha,baseline],{encoding:'utf8'}).trim(),baseline);
+const changed=execFileSync('git',['-C',frame,'diff','--name-only',baseline,sha],{encoding:'utf8'}).trim().split('\n').filter(Boolean);
+assert(changed.every(path=>path==='AGENTS.md'),'Frame baseline has non-constitution changes: '+changed.join(', '));
 const ours=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
-assert.equal(execFileSync('git',['merge-base',ours,sha],{encoding:'utf8'}).trim(),sha);
+assert.equal(execFileSync('git',['merge-base',ours,baseline],{encoding:'utf8'}).trim(),baseline);
 function walk(root,prefix=''){
  return readdirSync(join(root,prefix)).flatMap(name=>{
   const target=join(prefix,name);

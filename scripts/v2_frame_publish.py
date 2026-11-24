@@ -15,8 +15,8 @@ from urllib.request import urlopen
 import v6_frame_publish as base
 
 base.NAME='lab-ocr-v2'
-base.CARD='''      <article id="lab-ocr-v2"><div class="kind">15 · OCR V2 · 真实多行逻辑块</div><h2>lab-ocr-v2 · PBS + MD Block</h2>
-        <p>复用 Lab-Frame 四窗与权限；AG 依次显示 PBS（固定）、Type（列值筛选）与 MD Block；CM6 多行正文、真实空行、父子块归组、显式分割与多行标题；通过 SQL 组显式初始化逻辑表，共用 Undo/Redo 与增量 SQLite 持久化。原 Raw Block 仅供只读比对。</p>
+base.CARD='''      <article id="lab-ocr-v2"><div class="kind">15 · OCR V2 · MD Line</div><h2>lab-ocr-v2 · PBS + MD Block</h2>
+        <p>复用 Lab-Frame 四窗与权限；AG 依次显示 PBS（固定）、Type（列值筛选）与 MD Block；CM6 真实 MD Line 行级编辑、父子块归组、公共行索引与行级标题；通过 SQL 组显式初始化逻辑表，共用 Undo/Redo 与增量 SQLite 持久化。原 Raw Block 仅供只读比对。</p>
         <a class="open" href="/labs/lab-ocr-v2/">进入 V2 工作台</a></article>
 '''
 

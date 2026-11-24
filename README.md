@@ -2,7 +2,7 @@
 
 > **接手前必读**：先读取 OCR2MD 统一根目录联邦 `AGENTS.md`、`BUILD.md`、`COMM.md`，再读 V2 本州 `AGENTS.md`、本 `README.md`，然后按任务查阅 `docs/v2/`、实际源码和测试。此处区分 **[已实现] / [仍待实现] / [风险已修复]**。历史 WP 文档不得推翻当前契约；README 本身不替代代码和可执行门禁。未经测试，不得把目标描述成已上线功能。
 >
-> **2026-11-24 用户最新批准 [架构目标，待 WP25 实施]：PDF 以逻辑块为单位，Markdown 以真实硬回车行（MD Line）为单位。每行有 PBS、块内行偏移、CM6 物理行号及继承的 Block Type；新增行继承上一行的 PBS，取消显式 PBS 分割和人工新增逻辑块 ID。以第 3.1 节为唯一现行目标；第 3.2 节为实施航路。WP24 已发布基线 `0b29707`（261124-162918）仍是旧块级编辑/标题交互，不能冒称已实施 WP25。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；统一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。
+> **2026-11-24 用户最新批准 [WP25A–G 集成验收 PASS]：PDF 以逻辑块为单位，Markdown 以真实硬回车行（MD Line）为单位。每行有 PBS、块内行偏移、CM6 物理行号及继承的 Block Type；新增行继承上一行的 PBS，取消显式 PBS 分割和人工新增逻辑块 ID。以第 3.1 节为唯一现行目标；第 3.2 节为实施航路。WP24 `0b29707` 为发布恢复基线；WP25 已通过集成门禁，实际发布身份以统一 manifest 为准，用户 iPad 实机验收仍待完成。** V2 工作树：`labs/lab-ocr-v2`；Git 分支：`experiment/lab-ocr-v2`；统一开发入口：`https://ocr2md.laity.bid/labs/lab-ocr-v2/`。
 
 ## 1. 版本身份、框架和边界
 
@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | V0 | `main` | 历史主线工作台，**不是** V1 源码；Git 分支/工作树名称不作改名 |
 | V1 | `lab-ocr` | 现有已验证交互、PDF 动态多轨 PBS、手势和样式的**复用基线** |
-| V2 | `lab-ocr-v2` | 当前 **2 Tables + N Derived Views（两实体表 + N 个前端派生视图）** 的独立实验工作台和唯一 V2 发布目标；WP24 标题 View 仍为块级预设；WP25 将统一行级审阅投影，其他 View 待逐项实施 |
+| V2 | `lab-ocr-v2` | 当前 **2 Tables + N Derived Views（两实体表 + N 个前端派生视图）** 的独立实验工作台和唯一 V2 发布目标；WP25 已统一行级审阅投影及标题 View；其他 View 待逐项实施 |
 | Frame | `lab-frame` | 原四窗、全局设置、目录授权、导航和 AG Grid 的基础框架 |
 
 - V2 是 **框架型 Lab**，不是 V0/Main 的镜像。优先复用真实 V1 `lab-ocr` 的原组件及公开 API，不得把 V0 的 `ui/pdf-preview.js` 固定双轨误当 V1；业务数据用隔离适配器接入，不额外制作平行 PDF、AG、Settings、导航、状态栏或 CM6 实例。
@@ -36,11 +36,11 @@
 
 1. **SQLite · 唯一持久化权威 [已实现]**：只维护 MinerU 无损原始资料、当前逻辑块正文/顺序/归属及**经明确设计并验收后**需要长期保留的逻辑审阅状态；仍以 `mineru_base`、`logical_block` 两张应用物理表为底座。不得为了标题/LaTeX/断行等每新增一个审阅模块就再建一张表、额外存派生结果或未经授权修改 Schema。
 2. **CM6 · 当前会话唯一可编辑正文 [已实现]**：`logical_block.md_block` 是持久化正文，加载后由唯一 CM6 EditorState 表示正在编辑的最新正文；适配器从**当前 CM6 正文快照及 `logical_id`/PBS 位置映射**读取，而不是从可能滞后的 SQL 查询结果自行构造第二个可写正文。正文/结构写回仍使用已有 CM6 事务、原生 Undo/Redo、`md-commit` / `structure-commit` 及旧值冲突保护；派生 View 无权绕开正式写入口。
-3. **同一 AG Grid + 两种通用投影 [WP25 目标]**：逻辑块审阅仍用现有 Block 行集（PBS/Type/MD Block）；MD Line View 是唯一共享行级投影，由当前 CM6 正文与逻辑区间派生，不是第三张实体表、第二个正文或专属标题数据集。标题及未来行级审阅预设在同一 MD Line 行集上应用原生 EnumCheckboxFilter、列序及样式。每行继承持久化 Block Type，行自身的 Markdown 类型另由语法派生为 Line Type；不因输入标题而改写整块类型。两个投影共用一个 AG Grid 实例、当前页/全部范围、原生过滤和现有定位契约。实际接口和测试见第 3.1–3.2 节。WP24 已实现的块级 Type/标题预设仅为历史基线。
+3. **同一 AG Grid + 两种通用投影 [WP25 已实现]**：逻辑块审阅仍用现有 Block 行集（PBS/Type/MD Block）；MD Line View 是唯一共享行级投影，由当前 CM6 正文与逻辑区间派生，不是第三张实体表、第二个正文或专属标题数据集。标题及未来行级审阅预设在同一 MD Line 行集上应用原生 EnumCheckboxFilter、列序及样式。每行继承持久化 Block Type，行自身的 Markdown 类型另由语法派生为 Line Type；不因输入标题而改写整块类型。两个投影共用一个 AG Grid 实例、当前页/全部范围、原生过滤和现有定位契约。实际接口和测试见第 3.1–3.2 节。WP24 已实现的块级 Type/标题预设仅为历史基线。
 
 **审阅决定的持久化例外 [待设计、未实现]**：例如「忽略 / 待核实 / 已匹配 / 已转换」若要求刷新、重开后仍保留，必须有按稳定身份定位的受控持久化契约、历史/冲突语义及迁移/回归测试。当前 `logical_block` 十列**未提供这些新模块的通用审阅状态字段**；不得假定已有持久化能力，也不得静默添加第三张物理表、额外 SQLite View、将状态写入原文或以 AG 过滤状态冒充已保存的仲裁结果。各模块实施前先提交方案取得授权。
 
-**当前与后续范围**：WP24 已发布两表、真实 LF、块级 AG、CM6、PDF/Markdown 联动和显式初始化。WP25 先完成行级共同接口、编辑与定位、退役分割，再以同一 MD Line 行集复现标题 View；此前暂停其他 View，不将旧 WP23H 的“同一块内堆叠标题”误作新目标。
+**当前与后续范围**：WP24 已发布两表、真实 LF、块级 AG、CM6、PDF/Markdown 联动和显式初始化。WP25 已完成行级共同接口、编辑与定位、退役分割，并以同一 MD Line 行集复现标题 View；其他 View 待单独授权，不将旧 WP23H 的“同一块内堆叠标题”误作新目标。
 
 **旧实现证据（仅历史）**：WP23B/C 使用块级有效 Type 筛选，详见 [WP23B](docs/v2/WP23B_AG_TYPE_VIEW.md)、[WP23C](docs/v2/WP23C_LIVE_TYPE.md)；WP23H 块级多标题交互详见 [WP23H](docs/v2/WP23H_OWNED_TITLES.md)。这些已验证的原生筛选器、着色、字号与跨窗定位能力应保留；旧行粒度和混合块整体改为 title 的语义被第 3.1 节取代。
 
@@ -51,7 +51,7 @@
 | 物理表 | 当前列与来源 | 作用 |
 | --- | --- | --- |
 | `mineru_base` | **18 列**；`blockid` 为全局稳定整数索引；`blockid=0` 是非业务源文件档案 | 无损保留三类 MinerU 原始块（`preproc_blocks`、`discarded_blocks`、`para_blocks`）、原始 JSON 字节及 SHA256、完整 `block_json`、原始页码和 bbox；不因逻辑编辑而改变 |
-| `logical_block` | **10 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`md_block`、`block_type`、`p`、`b`、`s`、`raw_path` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，持久化来源类型见 `logical_block.block_type`，WP25 目标中 MD Line 继承此 Block Type，另派生 Line Type；当前 WP24 仍有旧有效块 Type |
+| `logical_block` | **10 列**：`logical_id`、`base_blockid`、`parent_id`、`logical_order`、`md_block`、`block_type`、`p`、`b`、`s`、`raw_path` | 当前逻辑块文本、顺序和类型；`logical_id` 为内部稳定身份，`base_blockid` 引用原始基础块，持久化来源类型见 `logical_block.block_type`，WP25 MD Line 继承此 Block Type，另派生 Line Type；旧未标记库保持兼容块级投影 |
 
 - **WP22 · V2 默认逻辑块审阅与右侧 PDF 2/3 布局 [已实现；待 iPad Safari 实机验收]**：此为 V2 **本版独有**的布局/文字标牌改动，仅在 `labs/lab-ocr-v2/vite.config.mjs` 对 Frame 的真实 `ui/frame/layout.js`、`ui/frame/index.html` 做**精确原文校验的构建期适配**，不改 Frame/V1 工作树、统一四窗组件或相关 API。AG 自有顶栏去掉冗余文字「AG 表」，保留既有下拉和右侧「全部」/页码工具；原「空白框架」模块在 V2 下拉和启动状态改为「逻辑块审阅」，保持 `frame` 的内部稳定模块 ID 与全局设置入口。右侧**上源码约 1/3、下 PDF 预览约 2/3**（通过 Dockview 原生 `panel.api.setSize({height:约 2/3})` 在首次显示时设置，用户可继续拖动改尺寸），启动默认**三个 Panel、不切分**，预览类型选择框默认 PDF；同一个 PDF.js 预览实例保留在原预览窗，Markdown 预览在下拉中继续可切换；现有切分按钮保留供用户手动选择，但**不再默认拆出第四窗**。不修改现有 SQL / PBS / CMD 原文、PDF 绘制/坐标/缓存或 V1 公共 Frame 基线。真实 Buffett 267 块 Chromium/iPad-WebKit 浏览器验收：Panel 数 3、V1 PDF.js 实例 1、AG 无冗余标签、模块名准确、右侧 Preview 高度比例 Chromium 0.66628/iPad-WebKit 0.66698，并复测可选切分/恢复不重建 PDF。详见 [WP22 默认 PDF 与逻辑块审阅布局](docs/v2/WP22_DEFAULT_PDF_2THIRDS_REVIEW.md)。
 - **WP21 · PDF 提取替换后 CM6 源码可视区域稳定 [已发布；虚拟组尾处理待按 3.1 改造]**：WP20 的「提取文本替换/插入」曾使用 `{from:0,to:整篇,insert:全篇}` 修改**唯一 CM6 文档**，即使仅一个逻辑块改动也会使 CM6 丢失局部高度/滚动锚点：真实 Buffett 267 块样本在源码**第 60 行**操作时，Chromium 从第 60 行跳到第 1 行，`scrollTop` 由 `2532` 变 `252`。WP21 改为只替换选中 `logical_id` 的**局部 `[from,to)`（包含该块的虚拟组尾 LF）**，提交前强制用 `composeLogicalSource` 比对整个目标源码完全一致，不允许引入 WP18 的块边界错位；使用唯一 CM6 原生 `EditorView.scrollSnapshot()` 映射局部 ChangeSet 保持视觉锚点，替换时保留当前逻辑行内光标偏移、CM6 Undo/Redo 和 SQL 旧值差量。行号菜单/API 在源码窗失焦后调用现有 V1 `scroll-sync.js` 的 `sourceEditGesture()`，**让正在操作的源码窗保持滚动主导权**，Markdown 重绘不能反向拖走源码。没有新滚动实例、数据库字段、Frame/V1 公共源码改动。真实267块第60行测试：Chromium `scrollTop=2123`、行位置约`95px`操作前后相等；iPad-WebKit `scrollTop=2831`、行位置约`297px`操作前后相等；撤销/重做、3次 SQL MD 提交及 267 个逻辑身份验证通过。相关说明 [WP21 PDF 替换视口稳定](docs/v2/WP21_PDF_SOURCE_VIEWPORT_STABILITY.md)。
@@ -70,9 +70,9 @@
 
 ### 3.1 唯一现行目标 [已批准；尚待实施]
 
-**实施进度**：WP25A–F 已通过隔离验收；公共行索引接入 CM6、PDF 操作及 AG 行级标题预设；WP25G 待集成验收及发布。
+**实施进度**：WP25A–G 已通过隔离及集成验收；公共行索引接入 CM6、PDF 操作及 AG 行级标题预设；发布身份以统一 manifest 为准。详见 [WP25G 集成证据](docs/v2/WP25G_INTEGRATION_RELEASE.md)。
 
-本节取代 WP08/WP13/WP14/WP18/WP23C 的虚拟 LF、单块单行和旧编辑限制，也取代 WP23G 的显式分割、人工 logical_id 库存增删，以及 WP23H 的块级有效 Type 与同一单元格堆叠标题。已验收的历史代码和 Git 证据不删除，不再作为新构建目标。现行发布仍为 WP24，不因文档更新改变运行行为。
+本节取代 WP08/WP13/WP14/WP18/WP23C 的虚拟 LF、单块单行和旧编辑限制，也取代 WP23G 的显式分割、人工 logical_id 库存增删，以及 WP23H 的块级有效 Type 与同一单元格堆叠标题。已验收的历史代码和 Git 证据不删除，不再作为新构建目标。WP24 保留为恢复基线；运行身份必须核对统一 manifest，不因文档更新改变运行行为。
 
 **A. 两表不变、行级公共投影**
 
@@ -116,7 +116,7 @@
 
 ### 3.2 实施航路（WP25，逐航点验证、一构建一 Git）
 
-固定基线 `0b29707`（WP24 已发布）。本 README 提交是规划检查点，不是源码发布。下一航点从当前规划提交建立隔离测试，保留 WP24 恢复点。各航点先确定公开 API/事件及独立测试、再做真实 UI；不同时重写 Frame、PDF、SQL 和全部 View。一个航点只有在独立测试、必要交互/数据回归、Git 留痕及门禁通过后才完成；不发布破坏已有行为的过渡版本。
+固定基线 `0b29707`（WP24 已发布）。各航点均从上一检查点建立隔离测试，保留 WP24 恢复点。各航点先确定公开 API/事件及独立测试、再做真实 UI；不同时重写 Frame、PDF、SQL 和全部 View。一个航点只有在独立测试、必要交互/数据回归、Git 留痕及门禁通过后才完成；不发布破坏已有行为的过渡版本。
 
 | 航点 | 最小目标与验收 |
 | --- | --- |
@@ -126,7 +126,7 @@
 | WP25D · PDF 归组与行级操作回归 [隔离 PASS] | 保留 V1 拖放、组末真实空行和已验证归组原子保存；验证行偏移/物理行号随重排实时更新，行号菜单的删除、PDF 插入/替换以行定位，原始 bbox 与非目标文字不变。 |
 | WP25E · 通用 AG MD Line View [隔离 PASS] | 同一 AG 实例新增公共行级行集预设，保留块审阅原列序、页范围/全部及 V1 原生多选过滤；准确行号/偏移、继承 Block Type、AG/CM6/MD/PDF 双向定位、同块跨行焦点、滚动不抢焦点。禁止新 SQL 查询或专属正文。 |
 | WP25F · 标题 View 行级复现 [隔离 PASS] | 对同一 MD Line 行集应用 Line Type=title 原生过滤，逐标题一行、V1 标题着色与全局字号；任意空行输入/删除标题实时更新，围栏排除，多标题同 PBS 不堆叠、不拆块；切回块审阅不改正文，保存重开一致。 |
-| WP25G · 集成验收与发布 | Chromium/iPad-WebKit 真实工作台跑完整 A–F 及 WP24 初始化、旧库保护、归组、编辑、标题、持久化/冲突回滚；核对两表、全量正文、身份、PDF 坐标、V1 组件和统一布局门禁。提交/推送并通过统一发布器核对实际 SHA 后，交用户 iPad 人工验收；未获授权不改用户库。 |
+| WP25G · 集成验收与发布 [集成 PASS；发布以 manifest 为准] | Chromium/iPad-WebKit 真实工作台跑完整 A–F 及 WP24 初始化、旧库保护、归组、编辑、标题、持久化/冲突回滚；核对两表、全量正文、身份、PDF 坐标、V1 组件和统一布局门禁。提交/推送并通过统一发布器核对实际 SHA 后，交用户 iPad 人工验收；未获授权不改用户库。 |
 
 验收未完成必须继续在本航点执行或按联邦 BUILD 保全故障证据回退，不跳到后续功能。各航点只实施约定范围；WP25G 完成之前暂停其他元素 View。
 
@@ -144,7 +144,7 @@
 - **默认 `s0` 与 `s1+`**：每个 `para_blocks` 顶层基础块仍是唯一 `s0`，其原始 JSON 直系子元素分别是同组 `s1+`（table_caption/body/footnote、image_body、chart_caption/body/footnote 等）。子行可以和父行共用 `base_blockid`，但 `logical_id` 各自唯一，不能把多个原始类型的 Raw Block 合并为一个 MD Block。没有第三级。
 - **插入槽位顺延（WP07 已接入 V1 手势与 SQL 事务）**：父块 `before` 在目标 `b` 腾槽（目标及后续 `b+1`），`after` 在目标 `b+1` 腾槽（后续 `b+1`）；父块带所有子块一起移动，其 `s` 和 `parent_id` 保持原关系，受顺延的父块子块同步更新 `b`。例如 `p1b3s0` 移至 `p1b4s0` **之后**：目标保持 `p1b4s0`，移动块成为 `p1b5s0`，原 `p1b5s0` 及其后所有同页父块成为 `p1b6s0` 等。旧 `p1b3` 留空不补号。子块 `before/after` 对目标 `s/s+1` 腾槽，后续同组 `s+1`；`child` 在目标 `s+1` 腾槽，归入多行父块组时按插入行数顺延后续 `s`，不产生孙块。**即使原编号有空号，也统一顺延，不因空号停止**。不在整个页上重新从零编号；只修改受影响的逻辑行。PBS 可有空号，不要求连续。
 - **WP07 iPad 实机 no-op 修复**：CM6 文本顺序不变**不等于**结构没变化。旧版曾只移动 `logical_order`、PBS 保持旧编号；遇到此类已按目标排列但 `b/s` 仍颠倒的状态，拖动必须允许**只更正 PBS**，经同一 CM6 StateEffect/Undo/Redo 和空闲 SQL 差量事务写回。只有块序已符合目标且 PBS 同级顺序也正确时，重复放置才是真正无操作；不创建 CM6 历史、不标脏、不写 SQL，状态栏提示「已在目标位置」，不可报「写入失败」。回归见 `tests/v2-structure-move.test.mjs` 和 `tests/v2-mineru-base.browser.test.mjs`。
-- **结构/状态职责**：`p,b,s` 管当前归属编号，`logical_id` 不变；CM6 的 StateField / StateEffect 负责内存结构、正文和同一原生 Undo/Redo；当前 WP24 源码窗仍按块归属编辑；WP25 以第 3.1 节 MD Line 行级操作为目标，禁止无归属字符及任何编辑新增逻辑块身份。SQL 仅存最新状态，不加历史表。空闲后 `structure-commit` 使用 Frame F02 目录权限、旧值乐观冲突检查、`BEGIN IMMEDIATE` 事务、局部五列 `UPDATE`，冲突回滚、CM6 当前状态保留并警告；已保存的 Undo/Redo 也作为新的增量变更写回。
+- **结构/状态职责**：`p,b,s` 管当前归属编号，`logical_id` 不变；CM6 的 StateField / StateEffect 负责内存结构、正文和同一原生 Undo/Redo；WP25 源码窗已按第 3.1 节 MD Line 行级操作，禁止无归属字符及任何编辑新增逻辑块身份。SQL 仅存最新状态，不加历史表。空闲后 `structure-commit` 使用 Frame F02 目录权限、旧值乐观冲突检查、`BEGIN IMMEDIATE` 事务、局部五列 `UPDATE`，冲突回滚、CM6 当前状态保留并警告；已保存的 Undo/Redo 也作为新的增量变更写回。
 - **当前范围和起点**：只将 `para_blocks` 根及其直接子元素初始化为逻辑块；其余原始块组保留在基础表。PBS 根按原始 PDF 页顺序初始化 `p/b/s0`，原生子元素依源顺序标 `s1+`。PDF 子块优先投影自己的原始 bbox，没有可用子 bbox 再沿用原始父块 bbox。
 - **WP07 验收门禁**：真实 V1 PDF 标签拖动，包括 `p1b3s0 → p1b4s0 之后` 的根块和后续 `b+1`、同组子块 `s+1`、父块带子块、缺号仍顺延、跨页原 bbox 保持原位、无孙块、AG/CM6/MD/PDF 联动、同源 CM6 Undo/Redo、SQL 延迟增量事务、冲突回滚；并单独验证 iPad-WebKit 和正文编辑不破坏 PBS。**拆分新文本子块不属于 WP07**。
 
