@@ -14,6 +14,7 @@ const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
+const noteMode=process.env.V2_TEST_NOTE_MATCH==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
@@ -21,7 +22,7 @@ const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
 const copyFrom=(legacyEditMode||uiRestoreMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
 const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -42,7 +43,9 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=(legacyEditMode||uiRestoreMode&&copyFrom)?py(copyFrom?
+   const initial=noteMode?py(
+     'prepare_owned_book(folder)\nrows=[r for r in load(folder) if r.block_type=="text" and r.s==0][:3]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n"]\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=t) for r,t in zip(rows,texts)])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
+     (legacyEditMode||uiRestoreMode&&copyFrom)?py(copyFrom?
      'import sqlite3\nfrom contextlib import closing\noriginal=Path(args["copyFrom"]).resolve()\nwith closing(sqlite3.connect(original.as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
      'from test_v2_owned_split import prepare_retired_split_book\nprint(json.dumps(prepare_retired_split_book(folder),ensure_ascii=False))',
      folder,{copyFrom}):py(initMode?
@@ -140,6 +143,57 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(noteMode){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const all=page.getByRole('checkbox',{name:'全部逻辑块'});
+     assert(!await all.isChecked());
+     await picker.selectOption('note-match');
+     assert(await all.isChecked());
+     let rows=await read();
+     const selected=rows.filter(r=>['701','702','703'].includes(r.number));
+     assert.deepEqual(selected.map(r=>[r.number,r.kind]),[['701','注引'],['701','注文'],['702','缺号'],['703','注引'],['703','注文']]);
+     assert(selected[0].source_line!==selected[1].source_line);
+     assert.equal(selected[0].match_state,'已匹配');assert.equal(selected[2].source_ref,null);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned).map(c=>[c.colId,c.pinned])),[['number','left'],['match_state','right']]);
+     const actual=await grid.evaluate(el=>[...el.querySelectorAll('.ag-header-cell[col-id]')].filter(n=>n.getBoundingClientRect().width>0).sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left).map(n=>n.getAttribute('col-id')));
+     assert.equal(actual[0],'number');
+     assert(actual.includes('kind'));
+     console.log('WP26A_HEADERS',name,JSON.stringify(actual));
+     const choose=async r=>{
+       const at=await grid.evaluate((el,id)=>{
+         const port=el.v2BaseGridPort;port.focusRow('note_row_id',id);
+         return port.getDisplayedRows().findIndex(r=>r.note_row_id===id);
+       },r.note_row_id);
+       await grid.locator('.ag-row[row-index="'+at+'"] [col-id="number"]').click();
+     };
+     for(const r of selected.slice(0,2)){
+       await choose(r);
+       await page.waitForFunction(line=>{
+         const v=document.querySelector('#workspace #editor').v2SourcePort.getEditorView();
+         return v.state.doc.lineAt(v.state.selection.main.head).number===line;
+       },r.source_line);
+       assert.equal(await pdf.evaluate(el=>el.v2PDFPort.getState().selectedId),r.logical_id);
+     }
+     const cursor=await source.evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head);
+     await choose(selected[2]);
+     assert.equal(await source.evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),cursor);
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel({number:{values:['701','703']}}));
+     assert.deepEqual((await read()).map(r=>r.number),['701','701','703','703']);
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
+     await picker.selectOption('title');assert(!await all.isChecked());
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().slice(0,3).map(c=>[c.colId,c.pinned])),[['md_line',null],['source_line',null],['pbs',null]]);
+     await picker.selectOption('frame');assert(!await all.isChecked());
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().find(c=>c.colId==='pbs').pinned),'left');
+     await picker.selectOption('note-match');assert(await all.isChecked());
+     assert.deepEqual((await read()).filter(r=>['701','702','703'].includes(r.number)).map(r=>[r.number,r.kind]),selected.map(r=>[r.number,r.kind]));
+     assert.deepEqual((await snapshot()).rows,before.rows);assert.equal(writes.length,0);
+     assert.deepEqual(errors,[]);
+     console.log('WP26A_REAL_NOTE_MATCH_PASS',name,'two-ended source/PDF focus, actual headers, missing gap, native filter, view roundtrip, zero writes');
+     continue;
+   }
    if(uiRestoreMode){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});

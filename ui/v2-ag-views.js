@@ -6,6 +6,7 @@ export const AG_VIEWS=Object.freeze({
   frame:Object.freeze({label:'逻辑块审阅'}),
   line:Object.freeze({label:'MD Line'}),
   title:Object.freeze({label:'标题'}),
+  'note-match':Object.freeze({label:'注释匹配'}),
 });
 export function titleClickLine(row){
   return Number.isInteger(row?.source_line)?row.source_line:null;

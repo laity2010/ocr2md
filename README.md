@@ -135,6 +135,10 @@
 
 **历史基线与证据**：WP23D [真实 LF](docs/v2/WP23D_OWNED_LF.md)、WP23E [真实多行编辑](docs/v2/WP23E_OWNED_EDIT.md)、WP23F [归组原子事务](docs/v2/WP23F_OWNED_STRUCTURE.md) 均通过隔离验收，应继承无冲突成果。WP23G [显式分割](docs/v2/WP23G_OWNED_SPLIT.md) 及 WP23H [块级多标题](docs/v2/WP23H_OWNED_TITLES.md) 当时通过隔离验收，但本次架构已明确淘汰其人工分割和标题堆叠方案。WP24 [全新初始化](docs/v2/WP24_FRESH_OWNED_INIT.md) 已发布（0b29707），真实 Chromium/iPad-WebKit 初始化和重开通过，用户实机验收未完成；此前 v3 协议及真实 LF 安全规则保持。
 
+### 3.2a 注释匹配 View（WP26）
+- WP26A 已通过隔离验收：复用 V1 bf32515 识别与配对算法、双端表格、注号排序、页范围、原生表头筛选及当前修订端点定位。默认全文；无新 SQL 业务表或独立正文，不改变标题 View。详见 [WP26A](docs/v2/WP26A_NOTE_MATCH.md)。
+- WP26B 规则选择及人工确认；WP26C 复用 V1 安全脚注转换计划，经唯一 CM6 原生行事务写回。V1 独立审阅/规则表不得照搬进 V2；持久化审阅元数据另行确定，不擅自新增实体表或修改原始表。
+
 ### 3.3 已发布旧实现的历史记录（有冲突者已废止）
 
 - **WP13 [历史实现，已被 3.1 取代]**：旧版使用 `groupEndPad` 投影虚拟 LF，不落盘。保留其历史证据 [WP13](docs/v2/WP13_CHILD_SINGLE_NEWLINE.md)，不得复用虚拟补尾设计。

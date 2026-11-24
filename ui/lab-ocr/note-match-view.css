@@ -1,0 +1,117 @@
+/* Same AG grid and CM6; no second Markdown renderer or pane. */
+#workspace .ocr-ag-extra-action{flex:none;height:27px;padding:2px 9px;
+  font:inherit;background:#344a42;border:1px solid #769281;border-radius:4px;
+  color:#d3c6aa;cursor:pointer}
+#workspace .ocr-ag-extra-action[hidden]{display:none}
+#workspace .ocr-note-match-source-active{background:rgba(101,207,196,.26);
+  box-shadow:0 0 0 1px rgba(130,218,205,.7) inset;border-radius:2px}
+#workspace .ocr-note-match-text{white-space:normal;overflow:hidden;text-overflow:ellipsis;
+  font:inherit;line-height:1.5}
+#workspace .ocr-note-match-text[data-kind="注引"]{color:#dfc484}
+/* End-point identity is BLUE; review uncertainty is ORANGE and boxed.
+ * Different hue + shape for iPad low-brightness readability. */
+#workspace .ocr-note-match-text[data-kind="注文"]{color:#84b7ff;
+  border-left:3px solid #478bd8;padding-left:5px;background:rgba(58,102,169,.13)}
+#workspace .ocr-note-match-status[data-status="已匹配"]{color:#a7c080}
+#workspace .ocr-note-match-status[data-status="待核实"]{
+  color:#ff9b62;background:rgba(198,78,42,.20);border:1px solid rgba(246,134,85,.55);
+  border-radius:4px;padding:2px 5px;font-weight:700}
+#workspace .ocr-note-match-status[data-status="缺注文"],
+#workspace .ocr-note-match-status[data-status="缺注引"]{color:#efc96f}
+#workspace .ocr-note-match-status[data-status="编号冲突"]{color:#ed9b89}
+.ocr-note-match-rules-dialog{position:fixed;inset:auto;margin:auto;
+  width:min(640px,calc(100vw - 24px));max-height:90vh;overflow:auto;
+  border:1px solid #65786f;border-radius:9px;background:#273338;color:#d3c6aa;
+  padding:16px;font:13px/1.5 "OCR2MD Sarasa",monospace}
+.ocr-note-match-rules-dialog::backdrop{background:rgba(0,0,0,.68)}
+.ocr-note-match-rules-dialog h2{font-size:16px;margin:0 0 6px}
+.ocr-note-match-rules-dialog p{margin:5px 0 12px}
+.ocr-note-rule-set{border:1px solid #4b6157;border-radius:5px;
+  display:flex;flex-wrap:wrap;gap:5px 13px;margin:8px 0;padding:9px}
+.ocr-note-rule-set legend{font-weight:bold}
+.ocr-note-rule-set label,.ocr-note-rule-weak{display:flex;align-items:center;gap:5px}
+.ocr-note-rule-choices{display:flex;flex-wrap:wrap;gap:9px;margin:10px 0}
+.ocr-note-rule-choices>label{display:flex;align-items:center;gap:5px}
+.ocr-note-rule-choices select,.ocr-note-match-rules-dialog textarea{color:#d3c6aa;
+  background:#1d2c30;border:1px solid #64776d;border-radius:4px;padding:5px}
+.ocr-note-match-rules-dialog textarea{box-sizing:border-box;width:100%;resize:vertical}
+.ocr-note-rule-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+.ocr-note-rule-actions button{padding:7px 12px;border:1px solid #678477;border-radius:5px;
+  background:#34483f;color:#d3c6aa}
+.ocr-note-rule-feedback{color:#e9c46a;min-height:1.5em}
+
+/* A number gap is an inference, not a physical source block or a completed
+ * review. Keep the entire placeholder visibly distinct but fully filterable. */
+#workspace .ocr-note-match-status[data-status="疑似缺号"]{color:#efba60;font-weight:700}
+#workspace .ocr-note-match-text[data-kind="缺号"]{color:#e7ba71;font-style:italic}
+
+#workspace .ocr-ag-review-toggle{display:flex;align-items:center;gap:4px;
+  color:#c0c8cc;white-space:nowrap;font-size:11px}
+#workspace .ocr-ag-review-toggle[hidden]{display:none}
+#workspace .ocr-note-review-cell{display:inline-flex;align-items:center;height:100%}
+#workspace .ocr-note-review-trigger{font:inherit;color:#e3ddce;
+  background:#39454e;border:1px solid #667887;border-radius:5px;
+  padding:4px 7px;white-space:nowrap;cursor:pointer}
+#workspace .ocr-note-review-trigger[data-review="忽略"]{color:#aaaeb3;background:#36383a}
+#workspace .ocr-note-review-trigger[data-review="待转换"]{color:#a9dc9d;border-color:#719576}
+#workspace .ocr-note-review-trigger[data-review="需复核"]{color:#ff9b62;border-color:#bb7254}
+.ocr-note-review-menu{position:fixed;z-index:10040;min-width:242px;max-width:min(310px,96vw);
+  background:#29333b;border:1px solid #72859a;border-radius:6px;
+  padding:5px;box-shadow:0 8px 26px rgba(0,0,0,.65);color:#eee8dc}
+.ocr-note-review-option{display:block;width:100%;padding:9px 7px;text-align:left;
+  font:12px/1.4 "OCR2MD Sarasa",monospace;border:0;border-radius:4px;
+  color:#eee8dc;background:transparent;cursor:pointer}
+.ocr-note-review-option:hover,.ocr-note-review-option:focus{background:#445c6b}
+.ocr-note-review-hint{font-size:11px;color:#e6bd8c;margin:7px}
+#workspace .ocr-note-match-status[data-status="已忽略"]{color:#acafb4}
+#workspace .ocr-note-match-status[data-status="已确认"]{color:#a4dc9e;font-weight:700}
+
+/* A four-pane iPad can leave the AG toolbar narrow. Only the Note Match
+ * toolbar wraps controls; all other views retain the original one-line bar. */
+#workspace .ocr-ag-toolbar.ocr-ag-with-review-toggle{height:auto;min-height:34px;
+  flex-wrap:wrap;align-content:center;column-gap:7px;row-gap:4px}
+#workspace .ocr-ag-with-review-toggle .ocr-ag-toolbar-label{display:none}
+#workspace .ocr-ag-with-review-toggle .ocr-ag-module-select{width:132px;
+  flex:1 1 104px;min-width:84px}
+#workspace .ocr-ag-with-review-toggle .ocr-ag-review-toggle{flex:none}
+
+#workspace .ocr-note-review-trigger[data-review="已转换"]{color:#92d3e7;
+  border-color:#5589a2;background:#293f49}
+#workspace .ocr-note-match-status[data-status="已转换"]{color:#92d3e7;
+  font-weight:700}
+
+/* Three-choice match status inside AG, native-select for iPad/WebKit. */
+#workspace .ocr-note-match-status-select{height:28px;max-width:100%;min-width:92px;
+  padding:3px 4px;background:#324147;border:1px solid #7b8e90;
+  border-radius:5px;color:#e0e7df;font:12px/1.3 "OCR2MD Sarasa",monospace}
+#workspace .ocr-note-match-status-select[data-status="已匹配"]{
+  color:#a7d69a;border-color:#719774}
+#workspace .ocr-note-match-status-select[data-status="待核实"]{
+  color:#ff9b62;border-color:#d77d58;background:#51372f}
+#workspace .ocr-note-match-status-select[data-status="忽略"]{
+  color:#aeb3b8;border-color:#667079}
+#workspace .ocr-note-match-status-select:disabled{opacity:.75}
+#workspace .ocr-note-body-choice{max-width:136px;height:28px;
+  color:#b7d5f1;background:#263844;border:1px solid #648eb2;border-radius:4px}
+#workspace .ocr-note-converted-marker{color:#9cd6dd;font-weight:bold;padding:0 3px}
+
+#workspace .ocr-note-match-status-select[data-status="已转换"]{
+  color:#8bd8dd;border-color:#4b949e;background:#28474b;font-weight:700}
+#workspace .ocr-note-match-status-select[data-status="转换失败"]{
+  color:#ffb778;border:1px solid #e47a48;background:#593328;font-weight:700}
+#workspace .ocr-note-match-status[data-status="转换失败"]{color:#ffb778;font-weight:700}
+#workspace .ocr-note-match-status[data-status="已转换"]{color:#8bd8dd}
+
+/* Book format setup: exactly two selectors, each with a visible example and
+ * the *actual* built-in expression. No checkbox forest or JSON form. */
+.ocr-note-match-rules-dialog{width:min(540px,calc(100vw - 24px))}
+.ocr-note-rule-choice{display:flex;flex-direction:column;gap:5px;
+  margin:11px 0;padding:10px;border:1px solid #526c62;border-radius:7px}
+.ocr-note-rule-choice>label{display:flex;flex-direction:column;gap:5px;font-weight:700}
+.ocr-note-rule-choice select{width:100%;max-width:100%;min-height:38px;
+  padding:7px;background:#192c30;color:#dce4d8;border:1px solid #708b7d;
+  border-radius:5px;font:13px/1.4 "OCR2MD Sarasa",monospace}
+.ocr-note-rule-sample{color:#c4dbb1;font-size:13px;overflow-wrap:anywhere}
+.ocr-note-rule-regex{display:block;color:#b1c6dd;white-space:pre-wrap;
+  overflow-wrap:anywhere;font-size:11px;line-height:1.6}
+.ocr-note-rule-hint{color:#adbbc1;font-size:11px;line-height:1.5}
