@@ -39,3 +39,23 @@
   background:rgba(235,163,82,.20)!important;
   box-shadow:inset 0 1px rgba(235,163,82,.4),inset 0 -1px rgba(235,163,82,.4);
 }
+
+/* WP24: AG title coloring exactly matches V1 source Heading 1–6 palette.
+   Unlike CM6 reading pane, title View does not scale headings by level. */
+#workspace .ocr-outline-grid .v2-ag-title-text,
+#workspace .ocr-outline-grid .v2-ag-title-level{
+  display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font:500 var(--ocr-frame-font-size,16px)/1.1 "OCR2MD Sarasa",monospace!important;
+}
+#workspace .ocr-outline-grid [data-heading-level="1"].v2-ag-title-text,
+#workspace .ocr-outline-grid [data-heading-level="1"].v2-ag-title-level{color:#da6362}
+#workspace .ocr-outline-grid [data-heading-level="2"].v2-ag-title-text,
+#workspace .ocr-outline-grid [data-heading-level="2"].v2-ag-title-level{color:#d77f48}
+#workspace .ocr-outline-grid [data-heading-level="3"].v2-ag-title-text,
+#workspace .ocr-outline-grid [data-heading-level="3"].v2-ag-title-level{color:#bf983d}
+#workspace .ocr-outline-grid [data-heading-level="4"].v2-ag-title-text,
+#workspace .ocr-outline-grid [data-heading-level="4"].v2-ag-title-level{color:#899c40}
+#workspace .ocr-outline-grid [data-heading-level="5"].v2-ag-title-text,
+#workspace .ocr-outline-grid [data-heading-level="5"].v2-ag-title-level{color:#569d79}
+#workspace .ocr-outline-grid [data-heading-level="6"].v2-ag-title-text,
+#workspace .ocr-outline-grid [data-heading-level="6"].v2-ag-title-level{color:#b87b9d}

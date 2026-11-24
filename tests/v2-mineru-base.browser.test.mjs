@@ -12,7 +12,8 @@ try{
    if(i===99)throw Error('V2 start failed '+log);
    await sleep(200);
  }
- for(const [kind,browserType] of [['chromium',chromium],['webkit',webkit]]){
+ for(const [kind,browserType] of [['chromium',chromium],['webkit',webkit]]
+   .filter(([kind])=>!process.env.V2_TEST_BROWSER||process.env.V2_TEST_BROWSER===kind)){
   const browser=await browserType.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
@@ -200,6 +201,79 @@ try{
      ...logicalCols.filter(key=>key!=='block_type'&&key!=='md_block'),'raw_block'],
      'logical AG puts PBS, Type, MD Block first; Raw Block is external only');
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .ag-row [col-id=\"pbs\"]')?.textContent?.trim()==='p0b0s0',null,{timeout:12000});
+   if(process.env.V2_TEST_WP24_ONLY){
+     const grid=page.locator('#workspace .ocr-outline-grid');
+     const picker=page.locator('#workspace .ocr-ag-module-select');
+     assert.equal(await picker.isEnabled(),true);
+     assert.deepEqual(await picker.locator('option').evaluateAll(nodes=>nodes.map(x=>x.textContent)),
+       ['逻辑块审阅','标题']);
+     await picker.selectOption('title');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getColumns()[0]?.field==='md_block',null,{timeout:12000});
+     const cols=await grid.evaluate(el=>el.v2BaseGridPort.getColumns());
+     assert.deepEqual(cols.slice(0,4).map(c=>c.field),['md_block','level','block_type','pbs']);
+     assert.deepEqual(cols.slice(0,3).map(c=>c.headerName),['MD Block','level','type']);
+     const first=grid.locator('.v2-ag-title-text').first();
+     assert.equal(await first.textContent(),'# WP04 Chapter 🧪');
+     assert.equal(await grid.locator('.v2-ag-title-level').first().textContent(),'#');
+     assert.equal(await first.evaluate(el=>getComputedStyle(el).color),'rgb(218, 99, 98)');
+     assert.equal(await first.evaluate(el=>getComputedStyle(el).fontSize),'16px');
+     assert.equal(await page.evaluate(()=>{
+       document.documentElement.style.setProperty('--ocr-frame-font-size','22px');
+       return getComputedStyle(document.querySelector('#workspace .v2-ag-title-text')).fontSize;
+     }),'22px');
+     await page.evaluate(()=>document.documentElement.style.setProperty('--ocr-frame-font-size','16px'));
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows().length),1);
+     await page.locator('#workspace #editor').evaluate(el=>{
+       const p=el.v2SourcePort,row=p.getIntervals().find(r=>r.logicalId===2);
+       p.getEditorView().dispatch({changes:{from:row.from,insert:'## '}});
+     });
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===2,null,{timeout:12000});
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows().map(r=>({
+       id:r.logical_id,level:r.level,text:r.md_block,type:r.block_type}))),
+       [{id:1,level:'#',text:'# WP04 Chapter 🧪',type:'title'},
+        {id:2,level:'##',text:'## Original text',type:'text'}]);
+     assert.equal(await grid.locator('.v2-ag-title-text').nth(1).evaluate(el=>getComputedStyle(el).color),
+       'rgb(215, 127, 72)');
+     await page.evaluate(()=>{window.__wp24AG=[];document.addEventListener('v2-ag-row-click',e=>
+       window.__wp24AG.push(e.detail?.row?.logical_id));});
+     await grid.locator('.ag-row [col-id="md_block"]').nth(1).click();
+     await page.waitForFunction(()=>window.__wp24AG?.includes(2),null,{timeout:8000});
+     assert.equal(await page.locator('#workspace #editor').evaluate(el=>{
+       const p=el.v2SourcePort,pos=p.getEditorView().state.selection.main.head;
+       return p.getIntervals().find(r=>r.from===pos)?.logicalId;
+     }),2,'AG derived title click preserves logicalId');
+     await page.locator('#workspace #undo').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===1,null,{timeout:12000});
+     await page.locator('#workspace #redo').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===2,null,{timeout:12000});
+     await page.locator('#workspace #undo').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getDisplayedRows().length===1,null,{timeout:12000});
+     await picker.selectOption('frame');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getColumns()[0]?.field==='pbs',null,{timeout:12000});
+     // Mandatory negative regression from the rejected WP23 implementation:
+     // WebKit must still resize original Type via the AG-native handle.
+     const nativeResize=grid.locator('.ag-header-cell[col-id="block_type"] .ag-header-cell-resize');
+     const before=await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().find(c=>c.colId==='block_type').width);
+     const rect=await nativeResize.boundingBox();
+     assert(rect,'AG original Type native resize must be present');
+     await page.mouse.move(rect.x+rect.width/2,rect.y+rect.height/2);
+     await page.mouse.down();
+     await page.mouse.move(rect.x+rect.width/2+70,rect.y+rect.height/2,{steps:9});
+     await page.mouse.up();
+     await page.waitForFunction(before=>document.querySelector('#workspace .ocr-outline-grid')
+       ?.v2BaseGridPort?.getColumnState().find(c=>c.colId==='block_type')?.width>=before+30,
+       before,{timeout:12000});
+     assert.equal(structurePosts,0,'title view cannot mutate SQL structure');
+     assert.deepEqual(errors,[]);
+     console.log('WP24_TITLE_AND_ORIGINAL_AG_RESIZE_BROWSER_PASS',kind,{before,structurePosts,mdCommitPosts});
+     continue;
+   }
    const derivedPBS=await page.locator('#workspace .ocr-outline-grid').evaluate(el=>{
      const columns=el.v2BaseGridPort.getColumns();
      const row=el.querySelector('.ag-row[row-index="0"]');
