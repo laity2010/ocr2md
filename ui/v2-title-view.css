@@ -1,0 +1,14 @@
+/* V1 title-view renderer + existing V2 CM6 Everforest palette.
+ * Only the title cell uses the global base font, never H1-H6 multipliers. */
+#workspace .v2-ag-title-text .ocr-ag-title-source{
+  display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:"OCR2MD Sarasa","Sarasa Fixed SC",monospace;
+  font-size:var(--ocr-frame-font-size);font-weight:500;line-height:inherit;
+}
+#workspace .v2-ag-title-text .ocr-ag-title-source span{font-size:inherit;color:inherit}
+#workspace .v2-ag-title-text .cm-ob-heading-line-1{color:#da6362}
+#workspace .v2-ag-title-text .cm-ob-heading-line-2{color:#d77f48}
+#workspace .v2-ag-title-text .cm-ob-heading-line-3{color:#bf983d}
+#workspace .v2-ag-title-text .cm-ob-heading-line-4{color:#899c40}
+#workspace .v2-ag-title-text .cm-ob-heading-line-5{color:#569d79}
+#workspace .v2-ag-title-text .cm-ob-heading-line-6{color:#b87b9d}
