@@ -16,11 +16,15 @@ const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode;
-const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
-const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
+const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
+const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
+const copyFrom=legacyEditMode?process.env.V2_TEST_COPY_FROM:null;
+const expectedCount=legacyEditMode?268:267;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode;
+const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
+const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
-let log='';server.stdout.on('data',x=>log+=x);server.stderr.on('data',x=>log+=x);
+let log='';server?.stdout.on('data',x=>log+=x);server?.stderr.on('data',x=>log+=x);
 const py=(code,folder,input={})=>JSON.parse(execFileSync('python3',['-c',
  'import sys,json\nfrom pathlib import Path\nsys.path.insert(0,"tests")\nfrom test_v2_owned_edit import *\nfolder=Path(sys.argv[1])\nargs=json.load(sys.stdin)\n'+code,folder],
  {input:JSON.stringify(input),encoding:'utf8',maxBuffer:32*1024*1024}));
@@ -37,7 +41,10 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=py(initMode?
+   const initial=legacyEditMode?py(copyFrom?
+     'import sqlite3\nfrom contextlib import closing\noriginal=Path(args["copyFrom"]).resolve()\nwith closing(sqlite3.connect(original.as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
+     'from test_v2_owned_split import prepare_retired_split_book\nprint(json.dumps(prepare_retired_split_book(folder),ensure_ascii=False))',
+     folder,{copyFrom}):py(initMode?
      'make_book(folder);print(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
      'print(json.dumps(prepare_owned_book(folder),ensure_ascii=False))',folder);
    const projection=pdfMode?api(folder,'pdf-map','GET').body:null;
@@ -71,14 +78,14 @@ try{
        if(pdfMode&&!titleMode)assert(['md-commit','structure-commit'].includes(op));
        else assert.equal(op,'md-commit');
        assert.equal(payload.confirm,op==='structure-commit'?'commit-v2-owned-structure':'commit-v2-owned-md');
-       assert.equal(payload.expectedStructure.length,267);
+       assert.equal(payload.expectedStructure.length,expectedCount);
        writes.push(pdfMode?{op,payload}:payload.changes);
      }
      const query={};for(const [k,v] of u.searchParams)query[k]=[v];
      const result=api(folder,op,req.method(),payload,query);
      return fulfill(route,result.body,result.status);
    });
-   const loadPage=async(count=267,owned=true)=>{
+   const loadPage=async(count=expectedCount,owned=true)=>{
      await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
      await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});
      await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
@@ -88,7 +95,7 @@ try{
        return p?.getState().loaded&&p.getState().ownedLF===owned&&p.getBlocks().length===count&&
         document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12;},{count,owned},{timeout:30000});
    };
-   await loadPage(267,!initMode);
+   await loadPage(expectedCount,!initMode);
    const source=page.locator('#workspace #editor');
    const snapshot=()=>source.evaluate(el=>{
      const p=el.v2SourcePort,doc=p.getMarkdown(),intervals=p.getIntervals(),rows=p.getBlocks();
@@ -131,6 +138,76 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(legacyEditMode){
+     const ids=before.rows.map(r=>r.logicalId);
+     const legacy=ids.filter(id=>id>=2**48&&id<2**49);
+     assert.equal(ids.length,268);assert.equal(legacy.length,1);
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const geometry=()=>pdf.evaluate(el=>el.v2PDFPort.getCovers().map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0]));
+     const oldGeometry=await geometry();
+     assert.equal(oldGeometry.length,267);
+     const normal=ids.find(id=>id!==legacy[0]);
+     const typeAt=async(id,marker)=>{
+       const target=await source.evaluate((el,id)=>{
+         const p=el.v2SourcePort,idx=p.getMdLineIndex(),r=idx.forBlock(id).find(r=>r.md_line.length>0)||idx.forBlock(id)[0];
+         p.locateSourceLine(r.source_line);
+         return {line:r.source_line,from:r.from,to:r.textTo};
+       },id);
+       // Public source navigation sets the native caret/focus. Do not
+       // attach attributes to CM6's virtualized lines: WebKit can replace
+       // those DOM nodes when a pane scrolls. Editing itself MUST come from
+       // the native browser keyboard, never view.dispatch or a SQL write.
+       await page.waitForFunction(({from,to})=>{
+         const p=document.querySelector('#workspace #editor')?.v2SourcePort,v=p?.getEditorView();
+         return v&&v.hasFocus&&v.contentDOM.isContentEditable&&
+           v.state.selection.main.head>=from&&v.state.selection.main.head<=to;
+       },target,{timeout:10000});
+       const focused=await snapshot();
+       assert(focused.head>=target.from&&focused.head<=target.to,'native caret belongs to intended line');
+       await page.keyboard.insertText(marker);
+       const changed=await snapshot();
+       if(blockedRelease){
+         assert.equal(changed.doc,before.doc);assert(changed.state.readOnly);assert.equal(writes.length,0);
+         return;
+       }
+       assert(changed.doc!==focused.doc,'native keyboard must edit');
+       assert(changed.complete);
+       assert(changed.rows.find(r=>r.logicalId===id).markdownText.includes(marker));
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       const now=await snapshot();
+       assert.equal(api(folder,'markdown','GET').body.markdown,now.doc);
+       assert.deepEqual(now.rows.map(r=>r.logicalId),ids);
+       assert.deepEqual(now.rows.filter(r=>r.logicalId!==id),focused.rows.filter(r=>r.logicalId!==id));
+       assert.deepEqual(await geometry(),oldGeometry);
+       console.log('WP25H_KEYBOARD_SQL_PASS',name,id===normal?'original':'historical');
+     };
+     if(blockedRelease){
+       assert(before.state.readOnly);
+       await typeAt(normal,'WP25H_BLOCKED_PROBE');
+       console.log('WP25H_OLD_RELEASE_REPRODUCED',name,'268 existing IDs, 1 artificial ID, real keyboard blocked, no writes');
+       continue;
+     }
+     assert(!before.state.readOnly);
+     assert.equal(before.state.legacyArtificialCount,1);
+     await typeAt(normal,'WP25H_NORMAL');
+     await typeAt(legacy[0],'WP25H_LEGACY');
+     const changed=await snapshot();
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert(!(await snapshot()).rows.find(r=>r.logicalId===legacy[0]).markdownText.includes('WP25H_LEGACY'));
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert.deepEqual((await snapshot()).rows,changed.rows);
+     await loadPage();assert.deepEqual((await snapshot()).rows,changed.rows);
+     assert.equal(writes.length,4);assert.deepEqual(errors,[]);
+     const rejected=api(folder,'structure-commit','POST',{workspace:folder,confirm:'commit-v2-owned-inventory'});
+     assert.equal(rejected.status,409);
+     assert.deepEqual((await snapshot()).rows,changed.rows);
+     assert.deepEqual(api(folder,'pdf-map','GET').body.covers.map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0]),oldGeometry);
+     console.log('WP25H_REAL_LEGACY_KEYBOARD_PASS',name,copyFrom?'actual book copy':'synthetic fixture','268 unchanged IDs, both original and historical blocks editable, 4 saves and reopen, 267 original PDF covers');
+     continue;
+   }
    if(lineEditMode){
      const expectedIds=before.rows.map(r=>r.logicalId);
      const edit=async(a,b,insert)=>source.evaluate((el,{a,b,insert})=>{
@@ -555,4 +632,4 @@ try{
    console.log('WP23E_REAL_EDITOR_SQL_PASS',name,'267 blocks',writes.length,'real SQLite delta commits / reopen');
   }finally{await browser.close();rmSync(folder,{recursive:true,force:true});}
  }
-}finally{server.kill();}
+}finally{server?.kill();}

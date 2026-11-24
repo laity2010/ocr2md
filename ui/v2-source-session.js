@@ -24,7 +24,7 @@ import {createMdLineGutter} from './v2-md-line-gutter.js';
 import './v2-source-session.css';
 
 export function mountV2Source(host){
-  let book='',loaded=false,blocks=[],dirty=false,programmatic=false,ownedLF=false,legacyReadOnly=false;
+  let book='',loaded=false,blocks=[],dirty=false,programmatic=false,ownedLF=false;
   let persistedStructureSignature='',persistedTextSignature='';
   const structureEffect=StateEffect.define();
   const dragEffect=StateEffect.define();
@@ -85,7 +85,7 @@ export function mountV2Source(host){
   };
   let editor;
   const lineGutter=createMdLineGutter({
-    isMarkdown:state=>!legacyReadOnly&&Boolean(state.field(structureField).length),
+    isMarkdown:state=>Boolean(state.field(structureField).length),
     focusLineAt:state=>state.doc.lineAt(state.selection.main.head).number,
     lineIdAt:lineNo=>{
       const line=editor?.state.doc.line(lineNo);
@@ -147,7 +147,6 @@ export function mountV2Source(host){
     // BEFORE CM6 accepts the edit; otherwise its SQL could lose all later
     // blocks' first two characters (observed real p1b11+ live incident).
     EditorState.transactionFilter.of(tr=>{
-      if(loaded&&legacyReadOnly&&tr.docChanged)return [];
       if(!loaded||!tr.docChanged||tr.effects.some(e=>
         e.is(dragEffect)||e.is(blockTextEffect)))return tr;
       if(ownedLF){
@@ -235,7 +234,6 @@ export function mountV2Source(host){
     const next=EditorState.create({doc:created.source,extensions});
     loaded=false; // state replacement is not a user edit/history step
     ownedLF=snapshot.schema==='v2-logical-md/v3';
-    legacyReadOnly=created.blocks.some(r=>isSyntheticId(r.logicalId));
     editor.setState(next);
     editor.dispatch({effects:structureEffect.of(created.blocks),
       annotations:Transaction.addToHistory.of(false)});
@@ -254,7 +252,6 @@ export function mountV2Source(host){
   const onRedo=()=>{if(loaded&&redoDepth(editor.state))redo(editor);refresh();};
   const applyDrag=intent=>{
     if(!loaded)throw Error('工作目录未绑定');
-    if(legacyReadOnly)throw Error('历史人工逻辑块仅可只读审阅，请明确初始化后再编辑');
     const result=moveLogicalBlocks(logicalTextRows(editor.state.doc.toString(),blocks),intent,{ownedLF});
     // A repeated drop at the correct position is a successful no-op, not a
     // failed SQL write. No CM6 history entry, dirty flag or idle commit.
@@ -284,7 +281,7 @@ export function mountV2Source(host){
   // logical_id for EACH line; clearing only its MD text is the safe analogue.
   // The virtual LF, logical order, PBS identity and PDF geometry never move.
   const deleteLogicalLine=(logicalId,lineRef=null)=>{
-    if(!loaded||legacyReadOnly||!Number.isSafeInteger(logicalId))return false;
+    if(!loaded||!Number.isSafeInteger(logicalId))return false;
     const row=blocks.find(r=>r.logicalId===logicalId);
     if(!row)return false;
     if(ownedLF){
@@ -305,7 +302,6 @@ export function mountV2Source(host){
   // V1's PDF.js callback contains ONLY text collected from its currently
   // highlighted bbox; V2 restores one physical text row per logical block.
   const insertPdfText=({blockId,text,mode='insert',lineRef=null})=>{
-    if(legacyReadOnly)throw Error('历史人工逻辑块仅可只读审阅');
     if(!['insert','replace'].includes(mode))throw Error('PDF 文本操作类型无效');
     if(!loaded||typeof text!=='string'||!text.trim())
       throw Error('尚未加载正文或 PDF 文字层无可提取文本');
@@ -382,7 +378,6 @@ export function mountV2Source(host){
     return inserted.length;
   };
   const applyTableRecovery=candidates=>{
-    if(legacyReadOnly)throw Error('历史人工逻辑块仅可只读审阅');
     if(ownedLF)throw Error('真实换行模式的表格恢复待兼容验收');
     if(!loaded||dirty)throw Error('请先保存正文或结构后再恢复表格');
     if(!Array.isArray(candidates)||!candidates.length||candidates.length>10000)
@@ -467,7 +462,7 @@ export function mountV2Source(host){
     getIntervals:()=>blocks.map(({logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,groupEndPad})=>({
       logicalId,baseBlockId,logicalOrder,blockType,p,b,s,from,to,...(ownedLF?{}:{groupEndPad})})),
     getWorkspace:()=>book,
-    getState:()=>({book,loaded,dirty,readOnly:legacyReadOnly,blockCount:blocks.length,
+    getState:()=>({book,loaded,dirty,readOnly:false,legacyArtificialCount:blocks.filter(r=>isSyntheticId(r.logicalId)).length,blockCount:blocks.length,
       undo:undoDepth(editor.state),redo:redoDepth(editor.state),
       ownedLF,separator:ownedLF?'':BLOCK_END,groupEndMinimum:BLOCK_END}),
     undo:onUndo,redo:onRedo,

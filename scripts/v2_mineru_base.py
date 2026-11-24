@@ -710,7 +710,6 @@ def commit_md(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             assert_schema(db)
-            reject_legacy_artificial_blocks(db)
             if owned!=is_owned_lf(db):
                 raise BaseError(409,'正文协议与数据库不一致，请刷新；拒绝旧客户端修改真实换行')
             if owned:
@@ -740,12 +739,6 @@ SYNTHETIC_ID_MIN=2**48
 SYNTHETIC_ID_MAX=2**49-1
 def synthetic_id(value):
     return type(value) is int and SYNTHETIC_ID_MIN<=value<=SYNTHETIC_ID_MAX
-
-def reject_legacy_artificial_blocks(db):
-    if db.execute('SELECT 1 FROM logical_block WHERE logical_id BETWEEN ? AND ? LIMIT 1',
-                  (SYNTHETIC_ID_MIN,SYNTHETIC_ID_MAX)).fetchone():
-        raise BaseError(409,'历史人工逻辑块仅可只读审阅，请明确初始化逻辑表')
-
 
 def commit_structure(folder:Path,payload,common):
     """WP07: optimistic, changed-rows-only SQL transaction. Never write text/base.
@@ -812,7 +805,6 @@ def commit_structure(folder:Path,payload,common):
         db.execute('PRAGMA foreign_keys=ON')
         db.execute('BEGIN IMMEDIATE')
         assert_schema(db)
-        reject_legacy_artificial_blocks(db)
         if owned!=is_owned_lf(db):
             raise BaseError(409,'真实换行归组需 WP23F 原子正文/结构协议')
         old={r['logical_id']:dict(r) for r in db.execute(

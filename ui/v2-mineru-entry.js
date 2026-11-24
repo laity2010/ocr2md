@@ -572,8 +572,8 @@ async function flushStructure(){
   if(!source?.getState().loaded||source.getWorkspace()!==bound)return;
   const current=structureCopy(source.getStructureRows());
   const original=new Map(acknowledged.map(r=>[r.logicalId,r]));
-  if(source.getState().readOnly||current.length!==original.size||current.some(r=>!original.has(r.logicalId))){
-    report('逻辑块库存不允许改变或存在历史人工块，拒绝 SQL 写入','error');saveBlocked=true;return;
+  if(current.length!==original.size||new Set(current.map(r=>r.logicalId)).size!==original.size||current.some(r=>!original.has(r.logicalId))){
+    report('逻辑块库存不允许改变，拒绝 SQL 写入','error');saveBlocked=true;return;
   }
   const changes=current.flatMap(row=>{
     const old=original.get(row.logicalId);
@@ -705,7 +705,7 @@ async function ensureBase(path){
     revealPhysicalTables(state.tables);
     wireViewPicker();
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
-    if(port.getState().readOnly)report('发现历史人工逻辑块 · 只读保留 · 如需编辑请明确初始化逻辑表','warning');
+    if(port.getState().legacyArtificialCount)report('保留历史逻辑块 · 正文可编辑 · 不再允许分割或增删逻辑 ID','ok');
     if(active)await fetchPage();
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}

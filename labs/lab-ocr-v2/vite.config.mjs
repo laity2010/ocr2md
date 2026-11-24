@@ -122,7 +122,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp25g-md-line',
+        stage:'wp25h-edit-compat',
       })+'\n'});
     },
   }],
