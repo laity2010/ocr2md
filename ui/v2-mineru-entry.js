@@ -7,7 +7,7 @@ import './v2-mineru-base.css';
 import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
 import {AG_VIEWS,viewColumns,viewFilter,titleClickLine,usesMdLines,mdLineColumns} from './v2-ag-views.js';
-import {effectiveBlockType,collectOwnedHeadings,ownedBlockType} from './v2-live-block-type.js';
+import {effectiveBlockType} from './v2-live-block-type.js';
 import './v2-ag-views.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
@@ -106,6 +106,8 @@ function revealPhysicalTables(tables){
   }
 }
 function picker(){return $('#workspace .ocr-ag-toolbar');}
+const currentOwnedLF=()=>Boolean($('#workspace #editor')?.v2SourcePort?.getState().ownedLF);
+const isLineView=view=>usesMdLines(view,currentOwnedLF());
 function wireViewPicker(){
   const select=picker()?.querySelector('.ocr-ag-module-select');
   if(!select)return;
@@ -117,7 +119,7 @@ function wireViewPicker(){
     select.title='同一 AG Grid：逻辑块与 MD Line 公共投影';
     select.addEventListener('change',()=>{
       if(!bound||!AG_VIEWS[select.value])return;
-      if(usesMdLines(select.value)&&!$('#workspace #editor')?.v2SourcePort?.getMdLineIndex()){select.value=agView;return;}
+      if(isLineView(select.value)&&!$('#workspace #editor')?.v2SourcePort?.getMdLineIndex()){select.value=agView;return;}
       const next=select.value;
       if(next===agView)return;
       agView=next;selectedTable='logical_block';active=true;offset=0;
@@ -127,7 +129,7 @@ function wireViewPicker(){
     });
   }
   select.disabled=!bound;
-  for(const option of select.options)if(usesMdLines(option.value))option.disabled=!$('#workspace #editor')?.v2SourcePort?.getState().ownedLF;
+  for(const option of select.options)if(option.value==='line')option.disabled=!currentOwnedLF();
   select.value=agView;
 }
 function sqlActionsDialog(){
@@ -371,14 +373,14 @@ function renderGrid(state){
       if(!active||!bound||!event.data)return;
       document.dispatchEvent(new CustomEvent('v2-ag-row-click',{
         detail:{table:selectedTable,row:event.data,workspace:bound,
-          lineRow:selectedTable==='logical_block'&&usesMdLines(agView),
-          sourceLine:selectedTable==='logical_block'?(usesMdLines(agView)?event.data.source_line:
+          lineRow:selectedTable==='logical_block'&&isLineView(agView),
+          sourceLine:selectedTable==='logical_block'?(isLineView(agView)?event.data.source_line:
             agView==='title'?titleClickLine(event.data,event.event?.target):null):null}}));
     });
   }
   const logical=state.tableName==='logical_block';
   const nextView=logical?agView:'frame';
-  const lineView=logical&&usesMdLines(nextView);
+  const lineView=logical&&isLineView(nextView);
   const lineIndex=lineView?$('#workspace #editor')?.v2SourcePort?.getMdLineIndex():null;
   if(lineView&&!lineIndex)throw Error('MD Line View 需要真实 LF 文档');
   // Only the AG view is reordered. The SQLite ten-column physical schema
@@ -428,7 +430,7 @@ function renderGrid(state){
     pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
   if(lineView){
-    columns=mdLineColumns().map(c=>({...c,headerTooltip:c.field,tooltipField:c.field,
+    columns=mdLineColumns(nextView).map(c=>({...c,headerTooltip:c.field,tooltipField:c.field,
       resizable:true,sortable:!['pbs','block_type','line_type'].includes(c.field),
       filter:EnumCheckboxFilter,filterValueGetter:p=>String(p.data?.[c.field]??''),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false,
@@ -492,7 +494,7 @@ function renderGrid(state){
   if(switchingView){
     // This is the SAME logical rowData, including non-title blocks. The
     // native AG EnumCheckboxFilter alone determines visible block types.
-    port.setFilterModel(nextView==='frame'?(logical?savedLogicalFilter:null):nextView==='line'?savedLineFilter:viewFilter(nextView));
+    port.setFilterModel(nextView==='frame'?(logical?savedLogicalFilter:null):nextView==='line'?savedLineFilter:viewFilter(nextView,lineView));
     if(nextView==='frame')savedLogicalFilter=null;
   }
   if(logical)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
@@ -547,20 +549,16 @@ function overlayCMStructure(){
   const intervals=source.getIntervals();
   const lines=new Map(intervals.map(row=>[row.logicalId,source.getLineAtOffset(row.from)]));
   const owned=source.getState().ownedLF;
-  const headings=owned?collectOwnedHeadings(source.getMarkdown(),intervals):null;
-  const originals=new Map(logicalState.rows.map(r=>[r.logical_id,r]));
   const records=logicalState.rows;
   logicalState.rows=records.map(record=>{
     const row=live.get(record.logical_id);
     if(!row)return record;
     const md=texts.get(row.logicalId)??record.md_block;
     const storedType=record.stored_block_type??record.block_type;
-    const titles=headings?.get(row.logicalId)||[];
     return {...record,parent_id:row.parentId,logical_order:row.logicalOrder,
-      p:row.p,b:row.b,s:row.s,source_line:titles[0]?.line??lines.get(row.logicalId),
+      p:row.p,b:row.b,s:row.s,source_line:lines.get(row.logicalId),
       md_block:md,stored_block_type:storedType,
-      ...(owned?{heading_lines:JSON.stringify(titles)}:{}),
-      block_type:owned?ownedBlockType(storedType,titles):effectiveBlockType(storedType,md)};
+      block_type:owned?storedType:effectiveBlockType(storedType,md)};
   }).sort((a,b)=>a.logical_order-b.logical_order);
   if(source.getState().ownedLF)logicalState.rowCount=logicalState.logicalCount=logicalState.rows.length;
 }
@@ -729,7 +727,7 @@ document.addEventListener('v2-sync-focus',event=>{
     }
     visibleLogicalP=logical.p;
     const port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
-    if(port&&usesMdLines(agView))focusAGLine(port,row);
+    if(port&&isLineView(agView))focusAGLine(port,row);
     else port?.focusRow('logical_id',row.logicalId);
     return;
   }
