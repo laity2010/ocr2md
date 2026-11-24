@@ -40,6 +40,7 @@ try{
    // CM6 source is automatically populated with all 224 logical rows.
    const fragments=Array.from({length:224},(_,i)=>
      i===0?'# WP04 Chapter 🧪':i===1?'Original text':i===2?'':
+     process.env.V2_TEST_AG_VIEWS&&i===22?'## Second page title':
      i===3?'中文😀 content':i===4?'$$\nx^2+1\n$$':
      i===5?'<table><tr><td>V1 Table</td></tr></table>':
      i===6?'> [!note] V1 Callout\n> V1 callout body':
@@ -53,7 +54,7 @@ try{
      const startUtf16=markdown.length;
      markdown+=fragments[i];
      segments.push({logicalId:i+1,baseBlockId:i+1,parentId:null,logicalOrder:i+1,
-       blockType:i===0?'title':'text',p:Math.floor(i/10),b:i%10,s:0,
+       blockType:i===0||process.env.V2_TEST_AG_VIEWS&&i===22?'title':'text',p:Math.floor(i/10),b:i%10,s:0,
        startUtf16,endUtf16:markdown.length});
    }
    const mdSnapshot={schema:'v2-logical-md/v2',markdown,rowCount:224,segments};
@@ -112,7 +113,7 @@ try{
         columns:logical?logicalCols:cols,rows:logical?(logicalReady?
           Array.from({length:224},(_,i)=>({
             logical_id:i+1,base_blockid:i+1,parent_id:null,
-            logical_order:i+1,md_block:fragments[i],block_type:i===0?'title':i===22?'interline_equation':'text',raw_path:'$',raw_block:'ORIGINAL '+i,
+            logical_order:i+1,md_block:fragments[i],block_type:i===0||process.env.V2_TEST_AG_VIEWS&&i===22?'title':i===22?'interline_equation':'text',raw_path:'$',raw_block:'ORIGINAL '+i,
             p:Math.floor(i/10),b:i%10,s:0})):[]):
           Array.from({length:Math.max(0,Math.min(120,539-pageOffset))},(_,i)=>({
             ...rows[0],blockid:pageOffset+i+1})),
@@ -161,6 +162,69 @@ try{
    await page.waitForFunction(()=>!document.querySelector('#workspace')?.hidden&&
       document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12,
       null,{timeout:30000});
+   if(process.env.V2_TEST_AG_VIEWS){
+     const picker=page.locator('#workspace .ocr-ag-module-select');
+     const grid=page.locator('#workspace .ocr-outline-grid');
+     const source=page.locator('#workspace #editor');
+     const rows=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const scope=page.getByRole('checkbox',{name:'全部逻辑块'});
+     await scope.check();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===224);
+     await grid.evaluate(el=>{window.__wp23FirstRow=el.v2BaseGridPort.getDisplayedRows()[0];});
+     const beforeReq=requestedPages.length;
+     await picker.selectOption('title');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===2);
+     assert.equal(requestedPages.length,beforeReq,'view activation must not query SQL again');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getFilterModel()),{block_type:{values:['title']}});
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,4).map(c=>c.headerName)),['MD Block','PBS','源码行号','Type']);
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().some(c=>c.field==='level')),false);
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows()[0]===window.__wp23FirstRow),true,'view does not reload rowData');
+     assert.deepEqual((await rows()).map(r=>r.logical_id),[1,23]);
+     assert.deepEqual((await rows()).map(r=>r.source_line),await source.evaluate(el=>[1,23].map(id=>el.v2SourcePort.getLineAtOffset(el.v2SourcePort.getIntervals().find(r=>r.logicalId===id).from))));
+     const heading=grid.locator('.ocr-ag-title-source').filter({hasText:'# WP04 Chapter'});
+     const secondHeading=grid.locator('.ocr-ag-title-source').filter({hasText:'## Second page title'});
+     await heading.waitFor();await secondHeading.waitFor();
+     assert.equal(await heading.evaluate(el=>getComputedStyle(el).fontSize),'16px');
+     assert.equal(await heading.evaluate(el=>getComputedStyle(el).color),'rgb(218, 99, 98)');
+     assert.equal(await secondHeading.evaluate(el=>getComputedStyle(el).color),'rgb(215, 127, 72)');
+     await secondHeading.click();
+     await page.waitForFunction(()=>{
+       const p=document.querySelector('#workspace #editor').v2SourcePort;
+       return p.getEditorView().state.selection.main.head===p.getIntervals().find(r=>r.logicalId===23).from;
+     },null,{timeout:5000});
+     // Native Type popup sees non-title blocks because there is no title dataset.
+     // The Type column can be horizontally virtualized on iPad.
+     await grid.locator('.ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=500);
+     const button=grid.locator('.ag-header-cell[col-id="block_type"] .ag-header-cell-filter-button');
+     await button.waitFor({timeout:10000});
+     await button.click();
+     const popup=page.locator('.ocr-enum-filter[aria-label="Type 筛选"]:visible');
+     await popup.waitFor();
+     assert.equal(await popup.locator('[data-filter-value="title"] input').isChecked(),true);
+     assert.equal(await popup.locator('[data-filter-value="text"] input').isChecked(),false);
+     await popup.locator('[data-filter-value="all"] input').check();
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===224);
+     await page.keyboard.press('Escape');
+     await picker.selectOption('frame');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getColumns()[0].field==='pbs');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumns().slice(0,3).map(c=>c.headerName)),['PBS','Type','MD Block']);
+     assert.equal(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().find(c=>c.colId==='pbs').pinned),'left');
+     assert.equal(await grid.locator('.ocr-ag-title-source').count(),0);
+     assert.equal((await rows()).length,224);
+     await picker.selectOption('title');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===2);
+     await source.evaluate(el=>{
+       const p=el.v2SourcePort,r=p.getIntervals().find(r=>r.logicalId===2);
+       p.getEditorView().dispatch({changes:{from:r.from,insert:'### '}});
+     });
+     assert.deepEqual((await rows()).map(r=>r.logical_id),[1,23],'MD syntax does not alter stored block_type');
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     assert.equal(structurePosts,0);
+     assert.equal(requestedPages.length,beforeReq);
+     assert.deepEqual(errors,[]);
+     console.log('WP23B_AG_TYPE_VIEW_BROWSER_PASS',kind,'same rows / native Type / exact columns / scope / focus / return');
+     continue;
+   }
    if(process.env.V2_TEST_CROSS_FILTER){
      // Mandatory cross-version release gate. Drive the actual AG Grid Type
      // header icon and popup on Chromium and iPad WebKit, not a static mock.
