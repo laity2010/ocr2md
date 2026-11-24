@@ -11,6 +11,7 @@ import {effectiveBlockType} from './v2-live-block-type.js';
 import './v2-ag-views.css';
 import {resolveV2NoteEndpoint,noteMatchColumns} from './v2-note-match.js';
 import {createV2NoteSession} from './v2-note-session.js';
+import {planV2NoteConversion} from './v2-note-conversion.js';
 import {createNoteMatchStatusCell} from './lab-ocr/note-pair-review-cell.js';
 import {mountNoteToolbar} from './v2-note-toolbar.js';
 import './lab-ocr/note-match-view.css';
@@ -39,6 +40,22 @@ let agView='frame',savedLogicalFilter=null,renderedView='frame';
 let savedLineFilter=null;
 let noteAll=true,noteFocusKey=null,savedNoteFilter=null,noteToolbar=null;
 const noteSession=createV2NoteSession();
+function convertMatchedNotes(){
+  const source=sourceForNotes();
+  if(agView!=='note-match'||!logicalState||!source?.getState().loaded)
+    throw Error('请先打开注释匹配 View');
+  if(source.getState().dirty||saving||saveBlocked||rebuilding)
+    throw Error('请先确认当前正文已保存，再转换匹配');
+  const index=source.getMdLineIndex(),plan=planV2NoteConversion(noteSession,index);
+  for(const item of plan.failures){
+    if(item.bodyId)noteSession.recordIssue(index,item.row.reference_id,item.bodyId,item.reason);
+  }
+  if(plan.updates.length)source.replaceMdLines(plan.updates);
+  renderGrid(logicalState);
+  report(plan.converted||plan.failures.length?
+    `注释匹配 · 已转换 ${plan.converted} 个 · 失败 ${plan.failures.length} 个${plan.converted?' · 正文待写 SQL':''}`:
+    '注释匹配 · 当前没有可转换的已匹配注引',plan.failures.length?'warning':'ok');
+}
 const allForView=()=>agView==='note-match'?noteAll:showAllLogical;
 const sourceForNotes=()=>$('#workspace #editor')?.v2SourcePort;
 function getNoteProjection(index){
@@ -508,7 +525,7 @@ function renderGrid(state){
       noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
       port.setFilterModel(null);renderGrid(logicalState);
       report('注释格式已应用并重新识别 · 仅当前会话','ok');
-    },onStatus:report,
+    },onStatus:report,onConvert:convertMatchedNotes,
   });
   noteToolbar?.setVisible(noteView);
   let view=null;
@@ -820,6 +837,7 @@ document.addEventListener('v2-cm-session',event=>{
     acknowledged=structureCopy(port?.getStructureRows()||[]);
     acknowledgedText=textCopy(port?.getBlocks()||[]);
   }
+  if(kind==='saved'&&agView==='note-match'&&active&&logicalState&&selectedTable==='logical_block')renderGrid(logicalState);
   if(kind==='structure'||kind==='edit'){
     overlayCMStructure();
     if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);

@@ -46,3 +46,14 @@ session.configure({...session.getConfig(),referenceRules:['ref.parenthesis','ref
 assert.equal(session.project(idx).index.stats.references,0);
 session.reset();assert.equal(session.project(idx).index.stats.references,2);
 console.log('WP26B_NOTE_REVIEW_SESSION_DIRECT_PASS');
+const {planV2NoteConversion}=await import('../ui/v2-note-conversion.js');
+const conversionSession=createV2NoteSession();
+const plan=planV2NoteConversion(conversionSession,idx);
+assert.equal(plan.converted,2);assert.equal(plan.failures.length,0);
+const mapped=plan.updates.map(u=>({line:idx.resolve(u.ref).source_line,before:u.beforeText,after:u.afterText}));
+assert.equal(mapped.find(x=>x.line===1).after,'An example[^7] and more[^9].');
+assert(mapped.some(x=>x.after==='[^7]: Footnote body'));
+assert(mapped.some(x=>x.after==='    Continuation'));
+assert(mapped.some(x=>x.after==='[^9]: Another footnote'));
+assert.equal(doc.toString(),composed.source);
+console.log('WP26C_NOTE_CONVERSION_PLAN_PASS');

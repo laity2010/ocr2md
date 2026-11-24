@@ -51,7 +51,7 @@ export function createV2NoteSession(){
     }).map(pair=>pair.reference_id));
     projection=Object.freeze({...scan,rows:Object.freeze(decorated.map(row=>{
       if(canonical.has(row.reference_id))return Object.freeze({...row,
-        review:'已转换',match_state:'已转换',status:'已转换',
+        review:dirty?'转换待保存':'已转换',match_state:dirty?'待核实':'已转换',status:dirty?'转换待保存':'已转换',
         review_note:'当前正文已是标准 Obsidian 脚注；不依赖额外转换回执'});
       const saved=reviews.get(row.reference_id);
       if(saved?.decision==='待定'&&saved.valid)return Object.freeze({...row,match_state:'待核实',status:'待核实'});

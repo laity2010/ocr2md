@@ -3,7 +3,7 @@
 import {EditorState,StateField,StateEffect,Transaction,ChangeSet} from '@codemirror/state';
 import {EditorView,Decoration} from '@codemirror/view';
 import {basicSetup} from 'codemirror';
-import {undo,redo,undoDepth,redoDepth,invertedEffects} from '@codemirror/commands';
+import {undo,redo,undoDepth,redoDepth,invertedEffects,isolateHistory} from '@codemirror/commands';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
@@ -445,7 +445,31 @@ export function mountV2Source(host){
     finally{programmatic=false;}
     selectedId=id;selectedLine=editor.state.doc.lineAt(pos).number;editor.focus();return true;
   };
+  // Public line-edit command for business views. The immutable reference
+  // and exact preimage are validated against the SAME current CM6 state.
+  const replaceMdLines=updates=>{
+    if(!loaded||!ownedLF||!Array.isArray(updates)||!updates.length)
+      throw Error('MD Line 替换需要已加载的真实 LF 正文');
+    const idx=getMdLineIndex(),seen=new Set(),changes=[];
+    for(const u of updates){
+      const line=idx.resolve(u?.ref);
+      if(!line||seen.has(line.source_line)||typeof u.beforeText!=='string'||
+         typeof u.afterText!=='string'||/[\r\n]/.test(u.afterText)||
+         line.md_line!==u.beforeText||u.beforeText===u.afterText)
+        throw Error('MD Line 替换证据已过期或包含非法改写');
+      seen.add(line.source_line);
+      changes.push({from:line.from,to:line.textTo,insert:u.afterText});
+    }
+    changes.sort((a,b)=>a.from-b.from);
+    const planned=ChangeSet.of(changes,editor.state.doc.length);
+    const expected=planned.apply(editor.state.doc).toString();
+    document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.beforeSourceEdit?.();
+    editor.dispatch({changes:planned,annotations:[Transaction.userEvent.of('input.note-convert'),isolateHistory.of('full')]});
+    if(editor.state.doc.toString()!==expected)throw Error('MD Line 替换未通过原生 CM6 事务门禁');
+    return changes.length;
+  };
   const port=Object.freeze({
+    replaceMdLines,
     load,clear,locateSourceLine,locateLogicalId,setFocusedId:id=>setFocused(blocks.find(row=>row.logicalId===id)),
     applyDrag,countMultiline,normalizeLines,applyTableRecovery,
     deleteLogicalLine,insertPdfText,getStructureRows:()=>blocks.map(({logicalId,parentId,logicalOrder,p,b,s})=>({

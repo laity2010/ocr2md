@@ -14,7 +14,8 @@ const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
-const noteReviewMode=process.env.V2_TEST_NOTE_REVIEW==='1';
+const noteConversionMode=process.env.V2_TEST_NOTE_CONVERSION==='1';
+const noteReviewMode=process.env.V2_TEST_NOTE_REVIEW==='1'||noteConversionMode;
 const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
@@ -44,7 +45,9 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=noteMode?py(
+   const initial=noteConversionMode?py(
+     'prepare_owned_book(folder)\nrows=load(folder)\nselected=[r for r in rows if r.block_type=="text" and r.s==0][:6]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n","Duplicate reference<sup>705</sup>.\\n\\n","705. Duplicate A\\n\\n","705. Duplicate B\\n\\n"]\nvalues={r.logical_id:t for r,t in zip(selected,texts)}\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=values.get(r.logical_id,"\\n\\n")) for r in rows if r.markdown_text!=values.get(r.logical_id,"\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
+     noteMode?py(
      'prepare_owned_book(folder)\nrows=[r for r in load(folder) if r.block_type=="text" and r.s==0][:3]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n"]\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=t) for r,t in zip(rows,texts)])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      (legacyEditMode||uiRestoreMode&&copyFrom)?py(copyFrom?
      'import sqlite3\nfrom contextlib import closing\noriginal=Path(args["copyFrom"]).resolve()\nwith closing(sqlite3.connect(original.as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
@@ -218,6 +221,51 @@ try{
        assert.equal((await currentRef()).match_state,'已匹配');
        assert.equal(writes.length,0);
        console.log('WP26B_REAL_RULES_REVIEW_PASS',name,'actual rule samples and status dropdown, no writes');
+     }
+     if(noteConversionMode){
+       const row705= (await read()).find(r=>r.number==='705'&&r.kind==='注引');
+       assert.equal(row705.body_choices.length,2);
+       const at=await grid.evaluate((el,id)=>{
+         const port=el.v2BaseGridPort;port.focusRow('note_row_id',id);
+         return port.getDisplayedRows().findIndex(x=>x.note_row_id===id);
+       },row705.note_row_id);
+       await grid.locator('.ag-row[row-index="'+at+'"] [col-id="match_state"] select').selectOption('已匹配');
+       await page.getByLabel('注号 705 选择对应注文').selectOption(row705.body_choices[0].id);
+       const beforeGeometry=await pdf.evaluate(el=>el.v2PDFPort.getCovers().map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0]));
+       await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+       await page.getByRole('menuitem',{name:'转换匹配'}).click();
+       await page.waitForFunction(()=>document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       const converted=await snapshot();
+       const ids=new Set(selected.filter(r=>r.kind!=='缺号').map(r=>r.logical_id));
+       assert.equal(ids.size,3);
+       assert.deepEqual(converted.rows.filter(r=>!ids.has(r.logicalId)),before.rows.filter(r=>!ids.has(r.logicalId)));
+       assert(converted.doc.includes('WP26 reference[^701] and [^703].'));
+       assert(converted.doc.includes('[^701]: WP26 first body\n    Continuation'));
+       assert(converted.doc.includes('[^703]: WP26 second body'));
+       assert(converted.doc.includes('Duplicate reference<sup>705</sup>'));
+       assert.equal(api(folder,'markdown','GET').body.markdown,converted.doc);
+       assert.equal(writes.length,1);assert.equal(writes[0].payload.changes.length,3);
+       assert.deepEqual((await read()).filter(r=>r.kind==='注引'&&['701','703'].includes(r.number)).map(r=>r.match_state),['已转换','已转换']);
+       const failed=(await read()).find(r=>r.kind==='注引'&&r.number==='705');
+       assert.equal(failed.match_state,'转换失败');assert(failed.conversion_error.includes('相同注号'));
+       await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel({match_state:{values:['转换失败']}}));
+       assert((await read()).every(r=>r.number==='705'));
+       await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
+       await source.evaluate(el=>el.v2SourcePort.undo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       assert.deepEqual((await snapshot()).rows,before.rows);
+       await source.evaluate(el=>el.v2SourcePort.redo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       assert.deepEqual((await snapshot()).rows,converted.rows);
+       assert.equal(writes.length,3);
+       assert.deepEqual(await pdf.evaluate(el=>el.v2PDFPort.getCovers().map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0])),beforeGeometry);
+       await loadPage();await picker.selectOption('note-match');
+       assert.deepEqual((await snapshot()).rows,converted.rows);
+       assert.deepEqual((await read()).filter(r=>r.kind==='注引'&&['701','703'].includes(r.number)).map(r=>r.match_state),['已转换','已转换']);
+       assert.deepEqual(errors,[]);
+       console.log('WP26C_REAL_CONVERSION_PASS',name,'same-line pair group, 3 block updates, duplicate failure, native undo/redo, save/reopen, no inventory/geometry change');
+       continue;
      }
      await picker.selectOption('title');assert(!await all.isChecked());
      assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().slice(0,3).map(c=>[c.colId,c.pinned])),[['md_line',null],['source_line',null],['pbs',null]]);
