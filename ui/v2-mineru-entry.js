@@ -18,6 +18,7 @@ import './lab-ocr/note-match-view.css';
 import {projectV2Latex,resolveV2Formula,latexIndexSummary} from './v2-latex.js';
 import {decorateLatexRows,latexColumns} from './lab-ocr/latex-view.js';
 import './v2-latex.css';
+import {planV2InlineMath} from './v2-inline-math.js';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './ag-enum-filter-shared.css';
@@ -58,6 +59,17 @@ function convertMatchedNotes(){
   report(plan.converted||plan.failures.length?
     `注释匹配 · 已转换 ${plan.converted} 个 · 失败 ${plan.failures.length} 个${plan.converted?' · 正文待写 SQL':''}`:
     '注释匹配 · 当前没有可转换的已匹配注引',plan.failures.length?'warning':'ok');
+}
+function completeInlineMath(){
+  const source=sourceForNotes();
+  if(agView!=='latex'||!source?.getState().loaded||!logicalState)
+    throw Error('请先打开 LaTeX View');
+  if(source.getState().dirty||saving||saveBlocked||rebuilding)
+    throw Error('请先保存当前正文，再补全行内公式');
+  if(!latexEvidence.length)throw Error('原始公式证据尚未就绪');
+  const index=source.getMdLineIndex(),plan=planV2InlineMath(index,latexEvidence);
+  if(plan.updates.length)source.replaceMdLines(plan.updates);
+  report(`行内公式 · 补全 ${plan.formulaCount} 条 / ${plan.updates.length} 行 · 已有 ${plan.already.length} 块 · 跳过 ${plan.skipped.length} 块${plan.updates.length?' · 可撤销':''}`,plan.skipped.length?'warning':'ok');
 }
 let latexAll=true,latexEvidence=[],latexIndex=null,latexRaw=null,latexRows=[],latexFocus=null,savedLatexFilter=null;
 let latexPaint=null,latexPaintQueued=false;
@@ -586,9 +598,9 @@ function renderGrid(state){
       noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
       port.setFilterModel(null);renderGrid(logicalState);
       report('注释格式已应用并重新识别 · 仅当前会话','ok');
-    },onStatus:report,onConvert:convertMatchedNotes,
+    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,
   });
-  noteToolbar?.setVisible(noteView);
+  noteToolbar?.setVisible(noteView||latexView,latexView?'latex':'note-match');
   let view=null;
   if(controls){
     controls.label.hidden=!logical;

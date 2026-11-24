@@ -142,7 +142,7 @@
 ### 3.2b LaTeX View（WP27）
 - 复用 V1 bf32515 的 latex-index、latex-view、latex-scan、KaTeX 及原 PDF.js 公式截图接口；列序严格为源码、渲染、类型、预览、截图、PBS、行号、来源、错误 / 边界、定界。默认全文、134px 行高、原生过滤；退出恢复原视图行高、范围和列布局。
 - 唯一 CM6 公共 MD Line 派生公式；原始 Span 通过 base_blockid + raw_path 取证，使用物理页和真实 bbox，不以 PBS 猜测原始位置。仅 OCR / 仅 MD / 已匹配 / 已修订 / 有歧义保留 V1 判断。真实 MD 行及范围按当前修订验证；不新增实体表、独立正文或公式编辑状态。
-- 公式审阅为只读，正文修订在 CM6 进行；即时更新公式与渲染状态；V1 中间色高亮全部公式，选中不重复填色；原 Markdown 渲染策略不变。详见 [WP27](docs/v2/WP27_LATEX_VIEW.md)。
+- 公式审阅为只读，正文修订在 CM6 进行；即时更新公式与渲染状态；V1 中间色高亮全部公式，选中不重复填色；WP27B 恢复 V1 原生行内公式定界与预览：新初始化按 typed inline_equation Span 生成 `$...$`；已存在的正文不自动覆盖，在 LaTeX 功能菜单显式补全经完整原始段落证据核对的行，通过唯一 CM6 事务保存，可撤销；人工修改或证据不明确的段落跳过。详见 [WP27](docs/v2/WP27_LATEX_VIEW.md) 与 [WP27B](docs/v2/WP27B_NATIVE_INLINE_MATH.md)。
 
 ### 3.3 已发布旧实现的历史记录（有冲突者已废止）
 

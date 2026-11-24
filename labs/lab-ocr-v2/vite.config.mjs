@@ -122,7 +122,7 @@ export default defineConfig({
     generateBundle(){
       this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({
         schema:'ocr2md-frame/v1',name,version,commit,frameBaseline,
-        stage:'wp27-latex-view',
+        stage:'wp27b-native-inline-math',
       })+'\n'});
     },
   }],

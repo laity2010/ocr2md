@@ -20,3 +20,22 @@ assert.equal(rows[2].pdf_bbox,null);
 for(const row of rows){assert(resolveV2Formula(index,row));assert.equal(doc.sliceString(row.source_from,row.source_from+row.formula.length),row.formula);}
 assert.equal(resolveV2Formula(createMdLineIndex(doc,source.blocks),rows[0]),null);
 console.log('WP27_FORMULA_PROJECTION_PASS');
+const {planV2InlineMath,inlineMath}=await import('../ui/v2-inline-math.js');
+const {projectReviewedInlineLatex}=await import('../ui/latex-inline-preview.js');
+assert.equal(inlineMath('$x$'),'$x$');
+assert.equal(inlineMath('cost $5'),'cost $5');
+assert.equal(inlineMath('x^2'),'$x^2$');
+const legacy=composeOwnedSource([
+ {logicalId:1,baseBlockId:1,logicalOrder:1,parentId:null,p:0,b:0,s:0,blockType:'text',markdownText:'Value x^2 end.\n\n'},
+ {logicalId:2,baseBlockId:2,logicalOrder:2,parentId:null,p:0,b:1,s:0,blockType:'text',markdownText:'Hand edited x^2.\n\n'}
+]);
+const evidence=[original[0],{...original[0],block_id:2,base_blockid:2}];
+const oldIndex=createMdLineIndex(EditorState.create({doc:legacy.source}).doc,legacy.blocks);
+const fix=planV2InlineMath(oldIndex,evidence);
+assert.equal(fix.formulaCount,1);assert.equal(fix.updates.length,1);assert.equal(fix.skipped.length,1);
+assert.equal(fix.updates[0].afterText,'Value $x^2$ end.');
+assert.equal(oldIndex.resolve(fix.updates[0].ref).logical_id,1);
+assert.equal(projectReviewedInlineLatex('Value $x^2$.',{nativeInlineMath:true}).fragments.length,1);
+assert.equal(projectReviewedInlineLatex('Value $x^2$.').fragments.length,0);
+assert.equal(projectReviewedInlineLatex('~~~\n$x^2$\n~~~',{nativeInlineMath:true}).fragments.length,0);
+console.log('WP27B_NATIVE_INLINE_DIRECT_PASS');

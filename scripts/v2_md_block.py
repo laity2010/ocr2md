@@ -49,9 +49,40 @@ def single_line_md(text):
     return re.sub(r'[ \t]*[\r\n]+[ \t]*',' ',text).strip()
 
 
+def inline_math(text):
+    """V1 native delimiters, preserving exact MinerU formula characters."""
+    if not text or '\n' in text or '\r' in text:
+        return text
+    if text.startswith('$') and text.endswith('$') and not text.startswith('$$'):
+        return text
+    if any(ch == '$' and (i == 0 or text[i-1] != '\\')
+           for i, ch in enumerate(text)):
+        return text
+    return '$' + text + '$'
+
+
+def inline_span_projection(element):
+    """Retain V2 raw-element text order; wrap only typed inline equation spans."""
+    lines=[]
+    for line in element.get('lines',[]) or []:
+        parts=[]
+        for span in line.get('spans',[]) or []:
+            for key in ('content','html','image_path'):
+                value=span.get(key)
+                if isinstance(value,str) and value:
+                    parts.append(inline_math(value) if key=='content' and span.get('type')=='inline_equation' else value)
+                    break
+        lines.append(''.join(parts))
+    return '\n'.join(lines)
+
+
 def initial_md(raw,kind,element):
     """A single original OCR element produces exactly one editable MD line."""
     if not isinstance(raw,str) or not isinstance(kind,str):raise ValueError('OCR 文本类型无效')
+    # A table recovery override is not the original element's text.
+    # Never discard recovered content by reprojecting a different element.
+    if kind not in ('image_body','image','inline_equation','interline_equation') and raw==raw_element_text(element):
+        raw=inline_span_projection(element)
     raw=single_line_md(raw)
     if not raw:return ''
     if kind=='title':
@@ -64,7 +95,7 @@ def initial_md(raw,kind,element):
         # V1 Markdown renderer recognizes a whole-line $$formula$$ token.
         return '$$'+raw+'$$'
     if kind=='inline_equation':
-        return '$'+raw+'$'
+        return inline_math(raw)
     # Table/html/footnote content uses its own logical line. No leading or
     # trailing LF is embedded; CM6 supplies exactly one LF between rows.
     return raw

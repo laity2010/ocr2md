@@ -17,13 +17,14 @@ const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const noteConversionMode=process.env.V2_TEST_NOTE_CONVERSION==='1';
 const noteReviewMode=process.env.V2_TEST_NOTE_REVIEW==='1'||noteConversionMode;
 const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
-const latexMode=process.env.V2_TEST_LATEX_VIEW==='1';
+const inlineMode=process.env.V2_TEST_INLINE_MATH==='1';
+const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
 const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
-const copyFrom=(legacyEditMode||uiRestoreMode)?process.env.V2_TEST_COPY_FROM:null;
+const copyFrom=(legacyEditMode||uiRestoreMode||inlineMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
 const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
@@ -50,7 +51,7 @@ try{
      'prepare_owned_book(folder)\nrows=load(folder)\nselected=[r for r in rows if r.block_type=="text" and r.s==0][:6]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n","Duplicate reference<sup>705</sup>.\\n\\n","705. Duplicate A\\n\\n","705. Duplicate B\\n\\n"]\nvalues={r.logical_id:t for r,t in zip(selected,texts)}\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=values.get(r.logical_id,"\\n\\n")) for r in rows if r.markdown_text!=values.get(r.logical_id,"\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      noteMode?py(
      'prepare_owned_book(folder)\nrows=[r for r in load(folder) if r.block_type=="text" and r.s==0][:3]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n"]\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=t) for r,t in zip(rows,texts)])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
-     (legacyEditMode||uiRestoreMode&&copyFrom)?py(copyFrom?
+     (legacyEditMode||(uiRestoreMode||inlineMode)&&copyFrom)?py(copyFrom?
      'import sqlite3\nfrom contextlib import closing\noriginal=Path(args["copyFrom"]).resolve()\nwith closing(sqlite3.connect(original.as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
      'from test_v2_owned_split import prepare_retired_split_book\nprint(json.dumps(prepare_retired_split_book(folder),ensure_ascii=False))',
      folder,{copyFrom}):py(initMode?
@@ -158,6 +159,40 @@ try{
      const all=page.getByRole('checkbox',{name:'全部逻辑块'});
      assert(await all.isChecked());
      let rows=await read();
+     if(inlineMode){
+       const initialInline=rows.filter(r=>r.kind==='行内'&&r.match_status==='已匹配');
+       assert(initialInline.length>0);
+       const activate=async()=>{
+         await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+         await page.getByRole('menuitem',{name:'补全行内公式定界'}).click();
+       };
+       await activate();
+       await page.waitForFunction(()=>document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:10000});
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       const after=await snapshot();
+       assert.equal(writes.length,1);assert(after.complete);
+       assert.equal(api(folder,'markdown','GET').body.markdown,after.doc);
+       const changed=after.rows.filter((r,i)=>r.markdownText!==before.rows[i].markdownText);
+       assert(changed.length>0);assert.equal(changed.length,writes[0].payload.changes.length);
+       assert.deepEqual(after.rows.map(r=>r.logicalId),before.rows.map(r=>r.logicalId));
+       const wrapped=(await read()).filter(r=>r.kind==='行内'&&r.syntax==='$'&&r.match_status==='已匹配');
+       assert(wrapped.length>0);
+       const preview=page.locator('#workspace .ocr-preview-md-scroll .ocr-reviewed-inline-latex .katex');
+       await preview.first().waitFor({state:'attached',timeout:10000});
+       const renderCount=await preview.count();assert(renderCount>0);
+       await activate();assert.equal(writes.length,1);
+       await source.evaluate(el=>el.v2SourcePort.undo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       assert.deepEqual((await snapshot()).rows,before.rows);
+       await source.evaluate(el=>el.v2SourcePort.redo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       assert.deepEqual((await snapshot()).rows,after.rows);
+       await loadPage();await preview.first().waitFor({state:'attached',timeout:10000});
+       assert.equal((await snapshot()).doc,after.doc);
+       assert.equal(writes.length,3);assert.deepEqual(errors,[]);
+       console.log('WP27B_REAL_INLINE_PASS',name,JSON.stringify({changedBlocks:changed.length,wrapped:wrapped.length,renderCount}),'native menu, actual preview, atomic save, idempotent, undo/redo/reopen');
+       continue;
+     }
      assert(rows.length>0);
      assert(rows.some(r=>r.kind==='行内'));assert(rows.some(r=>r.kind==='独立'));
      assert(rows.some(r=>r.render_status==='成功'));assert(rows.some(r=>r.pdf_bbox));

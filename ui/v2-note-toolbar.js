@@ -1,14 +1,14 @@
 /** Note-only adapter of the V1 action menu. No changes to Frame layout. */
 import {createNoteMatchRulesDialog} from './lab-ocr/note-match-rules-dialog.js';
 import './v2-note-toolbar.css';
-export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert}){
+export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert,onInlineMath}){
   const trigger=document.createElement('button');
   trigger.type='button';trigger.className='ocr-ag-function-select';
   trigger.setAttribute('aria-label','当前 AG View 功能');
   trigger.setAttribute('aria-haspopup','menu');trigger.setAttribute('aria-expanded','false');
   trigger.textContent='功能 ▾';trigger.hidden=true;
   bar.querySelector('.ocr-ag-module-select').after(trigger);
-  let menu=null,dialog=null;
+  let menu=null,dialog=null,mode=null;
   const close=()=>{
     menu?.remove();menu=null;trigger.setAttribute('aria-expanded','false');
     document.removeEventListener('pointerdown',outside,true);
@@ -30,7 +30,7 @@ export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert}){
     e.stopPropagation();if(menu){close();return;}
     menu=document.createElement('div');menu.className='ocr-ag-function-menu';
     menu.setAttribute('role','menu');menu.setAttribute('aria-label','当前 AG View 功能');
-    const items=[['rules','注释格式',rules],...(onConvert?[['convert','转换匹配',onConvert]]:[])];
+    const items=mode==='latex'?[['inline-math','补全行内公式定界',onInlineMath]]:[['rules','注释格式',rules],...(onConvert?[['convert','转换匹配',onConvert]]:[])];
     for(const [id,label,run] of items){
       const option=document.createElement('button');option.type='button';option.className='ocr-ag-function-item';
       option.setAttribute('role','menuitem');option.dataset.action=id;option.textContent=label;
@@ -43,6 +43,6 @@ export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert}){
     document.body.append(menu);trigger.setAttribute('aria-expanded','true');
     document.addEventListener('pointerdown',outside,true);document.addEventListener('keydown',escape,true);
   });
-  return Object.freeze({setVisible(visible){trigger.hidden=!visible;if(!visible){close();dialog?.dispose();dialog=null;}},
+  return Object.freeze({setVisible(visible,nextMode='note-match'){const next=visible?nextMode:null;if(mode!==next){close();dialog?.dispose();dialog=null;}mode=next;trigger.hidden=!visible;},
     reset(){close();dialog?.dispose();dialog=null;}});
 }

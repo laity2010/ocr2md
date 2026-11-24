@@ -66,7 +66,7 @@ export function mountV2MarkdownPreview(scroller){
     const render=port.getState().ownedLF?
       {source,map:(first,last)=>({start:Number(first),end:Number(last)})}:
       previewLineProjection(rows,id=>port.getLineAtOffset(intervals.get(id)?.from??0));
-    const html=source?renderMarkdown(render.source):'';
+    const html=source?renderMarkdown(render.source,{nativeInlineMath:true}):'';
     footnotes.close();
     const ratio=scroller.scrollHeight>scroller.clientHeight
       ?scroller.scrollTop/(scroller.scrollHeight-scroller.clientHeight):0;
