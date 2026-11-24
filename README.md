@@ -8,6 +8,16 @@ OCR2MD V6 是运行于 Mac 的 Markdown 校阅工作台，当前业务模块为*
 
 V6 独立起步，不继承 V5 及更早版本的旧组件、AEL 或工程备忘，也不以 V5 作为运行后备。旧实现仅供按需只读参考。
 
+## 局域网与 Tailnet 访问入口（2026-11-24）
+
+- **唯一发布源不变**：Main 和所有已登记 Lab 仍由已有 OCR2MD 网关和统一 `release/` manifest 提供，不额外复制或构建任何业务资源。
+- 原局域网入口：`https://192.168.1.10:4443/`；统一 Lab 门户：`/labs/`。现有 LAN TLS LaunchAgent 和证书保持不变。
+- Shadowrocket 内置 Tailscale 无法在 macOS 暴露一个可直接 `bind()` 的 `100.x` 地址。新增**纯传输边缘适配器** `scripts/v6_tailnet_https_ingress.py`，由用户级 LaunchAgent `com.laity.ocr2md-tailnet-ingress.plist` 运行，使用 `https://100.82.183.98:4456/`（同样共享 `/labs/`）。
+- 适配器仅把通过严格 Host 校验及写入请求同源校验的 HTTPS 请求转发至**原有** `192.168.1.10:4443`，再由原有 Main/Lab 网关处理权限与数据；上游 TLS 使用根 CA 验证。禁止将它扩展为新静态发布源、Lab 业务网关或独立数据服务。
+- 因 Shadowrocket 的网络扩展限制，监听地址必须使用 `0.0.0.0:4456`，所以该 TCP 端口也可能从普通 Wi-Fi 局域网到达；只有 Tailscale 私有 IP 匹配的 TLS 主机名及严格 Host 才能完成正常网页请求。**不能把它描述成系统防火墙层面仅限 Tailnet**；外网接入仍需 Tailnet 权限与网络边界，不做路由器端口映射。
+- Tailnet 服务器证书由原 `OCR2MD Local LAN Root CA` 签发，证书仅授权 `100.82.183.98`，存放在 Mac 的 `~/Library/Application Support/ocr2md/lan-tls/`，私钥不得加入 Git 或发布目录。证书有效期至 2027-11-19；IP 改变则必须重新签发并更新 LaunchAgent。iPad 须信任相同的本地根 CA；服务端本机回环验收不代替 iPad 真机连通验收。
+- 定向安全测试：`python3 -m unittest tests.test_v6_tailnet_https_ingress tests.test_v6_lan_lab_proxy_host -v`；运行验收：本机以 `curl --connect-to 100.82.183.98:4456:127.0.0.1:4456 --cacert <本地根CA路径>` 验证 Main、`/labs/`、V2 页面均 HTTP 200，再从 iPad 的 Shadowrocket Tailnet 直连确认。旧 `4443` 必须同步回归。
+
 ## 当前工作台
 
 - **Dockview 三窗／四窗切换**：左侧 AG Grid 章节表、右上 CodeMirror 6（CM6）源码、右下共用预览窗。预览栏默认用下拉框切换 Markdown 阅读预览或 PDF.js 原文；勾选「拆分」后 PDF 成为右下独立 Dockview 窗格，与 Markdown 预览左右并排，可拖动分隔线调宽；取消勾选回到原共用窗。PDF.js 实例、缩放和 OCR 定位保持不变，切换无需重新创建 PDF Viewer。
