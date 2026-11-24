@@ -18,7 +18,7 @@ try{
    const page=await browser.newPage({viewport:kind==='webkit'?{width:834,height:1112}:{width:1280,height:850},
      hasTouch:true,...(kind==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
    const errors=[];page.on('pageerror',e=>errors.push(e.message));
-   const books='/demo/books/my-book';let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0,rebuildPosts=0,mdCommitPosts=0;const requestedPages=[];
+   const books='/demo/books/my-book';let resetOwned=false;let exists='retired-v2',postCount=0,structurePosts=0,logicalReady=false,mdRequests=0,probeCount=0,rebuildPosts=0,mdCommitPosts=0;const requestedPages=[];
    await page.addInitScript(path=>localStorage.setItem('ocr2md.lab-ocr-v2-frame.settings.json.v1',
      JSON.stringify({settings:{
       'globalUi.font.family':{key:'family',category1:'全局 UI',category2:'字体',comment:'Sarasa',value:'Sarasa',range:{kind:'readonly'}},
@@ -58,6 +58,13 @@ try{
        startUtf16,endUtf16:markdown.length});
    }
    const mdSnapshot={schema:'v2-logical-md/v2',markdown,rowCount:224,segments};
+   let fresh='';
+   const ownedSegments=segments.map((r,i)=>{
+     const startUtf16=fresh.length;
+     fresh+=fragments[i]+'\n\n';
+     return {...r,startUtf16,endUtf16:fresh.length};
+   });
+   const ownedSnapshot={schema:'v2-logical-md/v3',markdown:fresh,rowCount:224,segments:ownedSegments};
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',route=>{
     const request=route.request();const op=new URL(request.url()).pathname.split('/').at(-1);
     if(op==='md-commit'){
@@ -76,14 +83,14 @@ try{
         body:JSON.stringify({saved:true,changedRows:changes.length,logicalCount:224})});
     }
     if(op==='logical-rebuild'){
-      rebuildPosts++;
+      rebuildPosts++;resetOwned=true;
       assert.deepEqual(request.postDataJSON(),
-        {workspace:books,confirm:'rebuild-v2-logical-only'},
+        {workspace:books,confirm:'initialize-v2-owned-logical'},
         'only the verified current workspace may trigger a logic-only reset');
       assert.equal(request.method(),'POST');
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
         rebuilt:true,baseChanged:false,previousLogicalCount:224,
-        logicalCount:224,blockCount:539,dbFile:'ocr2md.v2.sqlite'})});
+        logicalCount:224,blockCount:539,dbFile:'ocr2md.v2.sqlite',schema:'v2-logical-md/v3',backupFile:'.backup.sqlite'})});
     }
     if(op==='import'){
       postCount++;assert.equal(request.postDataJSON().confirm,'import-mineru-base');
@@ -96,7 +103,7 @@ try{
       mdRequests++;assert(logicalReady,'Markdown should only be rendered from initialized logical rows');
       assert.equal(request.method(),'GET');
       return route.fulfill({status:200,contentType:'application/json',
-        body:JSON.stringify(mdSnapshot)});
+        body:JSON.stringify(resetOwned?ownedSnapshot:mdSnapshot)});
     }
     if(op==='logical-init')throw Error('Deprecated manual initialization must never be requested');
     if(op==='state'&&exists==='retired-v2')return route.fulfill({status:409,contentType:'application/json',body:JSON.stringify({error:'现有 SQLite 不符合 V2 两表结构，拒绝覆盖'})});
@@ -147,7 +154,7 @@ try{
    const sqlActions=page.locator('#v2-sql-actions-dialog');
    assert.equal(await sqlActions.isVisible(),true,'clicking SQL group opens modal');
    assert.equal(await sqlActions.getByRole('button',{name:'导入基础表'}).isEnabled(),true);
-   assert.equal(await sqlActions.getByRole('button',{name:'重建逻辑表（覆盖编辑）'}).isEnabled(),true);
+   assert.equal(await sqlActions.getByRole('button',{name:'初始化逻辑表（覆盖编辑）'}).isEnabled(),true);
    assert.equal(await sqlActions.getByRole('button',{name:'仅整理正文断行（不重建）'}).isDisabled(),true,
      'single-line cleanup is only applicable to the loaded logical table');
    assert.equal(await page.locator('#workspace .v2-logical-rebuild').count(),0,
@@ -827,16 +834,7 @@ try{
      .filter({hasText:/^SQL$/}).first().tap();
    else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
      .filter({hasText:/^SQL$/}).first().click();
-   const beforeMD=mdRequests;
-   await dialog.getByRole('button',{name:'重建逻辑表（覆盖编辑）'}).click();
-   assert.equal(rebuildPosts,0,'first click must not overwrite the logical table');
-   await dialog.getByRole('button',{name:'确认覆盖重建逻辑表'}).click();
-   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
-     ?.v2SourcePort?.getState().loaded&&document.querySelector('#status')
-     ?.textContent.includes('逻辑表已从原始 para_blocks 重建'),null,{timeout:15000});
-   assert.equal(rebuildPosts,1);
-   assert.equal(mdRequests,beforeMD+1,'single CM6 refreshed after rebuild');
-   assert.equal(postCount,3,'logic-only rebuild must NOT import the original base');
+   await dialog.getByRole('button',{name:'取消'}).click();
    // WP14: one logical row/one real CM6 source line, legacy imported data
    // is never silently changed. Existing line breaks require two explicit
    // SQL-group clicks and one native CM6 Undo/Redo transaction.
@@ -888,7 +886,25 @@ try{
      el.v2SourcePort.getDoc().lines),449,'newline insertion was rejected');
 
 
-   assert.equal(await page.getByRole('button',{name:'初始化逻辑表'}).count(),0);
+   // Activate the newly initialized protocol after the legacy-only checks.
+   await page.locator('#workspace .ts-wrapper.ocr-navigation-files .ts-control').click();
+   if(kind==='webkit')await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().tap();
+   else await page.locator('.ocr-navigation-popup-files:visible .optgroup-header')
+     .filter({hasText:/^SQL$/}).first().click();
+   const beforeMD=mdRequests;
+   await dialog.getByRole('button',{name:'初始化逻辑表（覆盖编辑）'}).click();
+   assert.equal(rebuildPosts,0,'first click must not overwrite the logical table');
+   await dialog.getByRole('button',{name:'确认初始化逻辑表'}).click();
+   await page.waitForFunction(()=>document.querySelector('#workspace #editor')
+     ?.v2SourcePort?.getState().loaded&&document.querySelector('#status')
+     ?.textContent.includes('真实换行逻辑表已初始化'),null,{timeout:15000});
+   assert.equal(rebuildPosts,1);
+   assert.equal(mdRequests,beforeMD+1,'single CM6 refreshed after rebuild');
+   assert.equal(postCount,3,'logic-only rebuild must NOT import the original base');
+
+   assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getState().ownedLF),true);
+   assert.equal(await page.getByRole('button',{name:'初始化逻辑表',exact:true}).count(),0);
    assert.deepEqual(errors,[]);
    console.log('V2_LEGACY_SQLITE_AUTO_REPLACE_BROWSER_PASS',kind,JSON.stringify({physicalTables:sqlOptions.length,baseColumns:headers.length,logicalColumns:logicalHeaders.length,postCount,mdRequests,probeCount}));
   }finally{await browser.close();}

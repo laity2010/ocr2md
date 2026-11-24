@@ -40,12 +40,18 @@ class LogicalInitTest(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM mineru_base').fetchone()[0],540)
             self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
                 {'mineru_base','logical_block'})
-            originals=list(db.execute('SELECT blockid,block_group,block_json FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
+            originals=list(db.execute('SELECT blockid,block_group,block_json,block_type,page_index,source_path FROM mineru_base WHERE blockid>0 ORDER BY blockid'))
             expected=initial_rows(originals)
             actual=[tuple(r) for r in db.execute('SELECT logical_id,base_blockid,parent_id,logical_order,md_block,block_type FROM logical_block ORDER BY logical_order')]
             self.assertEqual(len(actual),267)
+            from v2_table_recovery import table_overrides
+            bindings=raw_bindings(originals)
+            recovered=table_overrides(originals)
             self.assertEqual(actual,[(r.logical_id,r.base_blockid,r.parent_id,r.logical_order,
-                initial_md(r.markdown_text,r.block_type,raw_bindings(originals)[r.logical_id][2]),r.block_type) for r in expected])
+                initial_md(recovered.get((r.base_blockid,bindings[r.logical_id][1]),(r.markdown_text,""))[0],r.block_type,bindings[r.logical_id][2])+
+                ('\n' if i+1<len(expected) and expected[i+1].base_blockid==r.base_blockid else '\n\n'),
+                r.block_type) for i,r in enumerate(expected)])
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],base.OWNED_LF_VERSION)
             self.assertFalse(list(db.execute('PRAGMA foreign_key_check')))
         self.assertEqual(self.source.read_bytes(),self.original)
         self.assertFalse(list(self.folder.glob('.ocr2md-v2-*.tmp')))
@@ -128,7 +134,7 @@ class LogicalInitTest(unittest.TestCase):
 
     def make_five_column_database(self, *,empty=False):
         # Reproduce the exact WP03 five-column schema and all its existing rows.
-        self.import_book()
+        base.new_book(self.folder)
         with closing(sqlite3.connect(self.db_path)) as db:
             db.execute('CREATE TABLE previous_logic('
                        'logical_id INTEGER PRIMARY KEY, base_blockid INTEGER,'
@@ -144,8 +150,8 @@ class LogicalInitTest(unittest.TestCase):
             db.execute('ALTER TABLE previous_logic RENAME TO logical_block')
             db.commit()
             old=[tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')]
-            base=[tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')]
-        return old,base
+            baseline=[tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')]
+        return old,baseline
 
     def test_migrate_populated_five_columns_preserves_edits_and_original(self):
         old,baseline=self.make_five_column_database()

@@ -13,7 +13,8 @@ import {makePDF} from './v2-pdf-fixture.mjs';
 const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
-const pdfMode=structureMode||splitMode||titleMode;
+const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
+const pdfMode=structureMode||splitMode||titleMode||initMode;
 const port=5431,url='http://127.0.0.1:'+port+'/labs/lab-ocr-v2/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -34,7 +35,9 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=py('print(json.dumps(prepare_owned_book(folder),ensure_ascii=False))',folder);
+   const initial=py(initMode?
+     'make_book(folder);print(json.dumps(base.existing_markdown(folder),ensure_ascii=False))':
+     'print(json.dumps(prepare_owned_book(folder),ensure_ascii=False))',folder);
    const projection=pdfMode?api(folder,'pdf-map','GET').body:null;
    const pdfBytes=projection?makePDF(projection.pageSizes):null;
    const page=await browser.newPage({viewport:name==='webkit'?{width:834,height:1112}:{width:1280,height:850},
@@ -58,7 +61,11 @@ try{
      const req=route.request(),u=new URL(req.url()),op=u.pathname.split('/').at(-1);
      if(op==='pdf')return pdfMode?route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes}):fulfill(route,{error:'No PDF in disposable fixture'},404);
      const payload=req.method()==='POST'?req.postDataJSON():{};
-     if(req.method()==='POST'){
+     if(req.method()==='POST'&&initMode){
+       assert.equal(op,'logical-rebuild');
+       assert.equal(payload.confirm,'initialize-v2-owned-logical');
+       writes.push({op,payload});
+     }else if(req.method()==='POST'){
        if(pdfMode&&!titleMode)assert(['md-commit','structure-commit'].includes(op));
        else assert.equal(op,'md-commit');
        assert.equal(payload.confirm,op==='structure-commit'?(splitMode?'commit-v2-owned-inventory':'commit-v2-owned-structure'):'commit-v2-owned-md');
@@ -70,17 +77,17 @@ try{
      const result=api(folder,op,req.method(),payload,query);
      return fulfill(route,result.body,result.status);
    });
-   const loadPage=async(count=267)=>{
+   const loadPage=async(count=267,owned=true)=>{
      await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
      await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});
      await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
        select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
      });
-     await page.waitForFunction(count=>{const p=document.querySelector('#workspace #editor')?.v2SourcePort;
-       return p?.getState().loaded&&p.getState().ownedLF&&p.getBlocks().length===count&&
-        document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12;},count,{timeout:30000});
+     await page.waitForFunction(({count,owned})=>{const p=document.querySelector('#workspace #editor')?.v2SourcePort;
+       return p?.getState().loaded&&p.getState().ownedLF===owned&&p.getBlocks().length===count&&
+        document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12;},{count,owned},{timeout:30000});
    };
-   await loadPage();
+   await loadPage(267,!initMode);
    const source=page.locator('#workspace #editor');
    const snapshot=()=>source.evaluate(el=>{
      const p=el.v2SourcePort,doc=p.getMarkdown(),intervals=p.getIntervals(),rows=p.getBlocks();
@@ -88,6 +95,39 @@ try{
        doc.slice(r.from,r.to)===rows[i].markdownText&&!Object.hasOwn(r,'groupEndPad');at=r.to;return ok;})&&at===doc.length;
      return {doc,rows,intervals,complete,state:p.getState(),head:p.getEditorView().state.selection.main.head};
    });
+   if(initMode){
+     const before=await snapshot();
+     assert(!before.state.ownedLF);
+     assert(before.doc.includes('手工修改'));
+     const oldPdf=api(folder,'pdf-map','GET').body;
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     await page.locator('#workspace .ts-wrapper.ocr-navigation-files .ts-control').click();
+     const header=page.locator('.ocr-navigation-popup-files:visible .optgroup-header').filter({hasText:/^SQL$/}).first();
+     if(name==='webkit')await header.tap();else await header.click();
+     const dialog=page.locator('#v2-sql-actions-dialog');
+     await dialog.getByRole('button',{name:'初始化逻辑表（覆盖编辑）'}).click();
+     assert.equal(writes.length,0);
+     await dialog.getByRole('button',{name:'确认初始化逻辑表'}).click();
+     await page.waitForFunction(()=>{
+       const p=document.querySelector('#workspace #editor').v2SourcePort;
+       return p.getState().ownedLF&&p.getBlocks().length===267&&
+         document.querySelector('#status')?.textContent.includes('真实换行逻辑表已初始化');
+     },null,{timeout:30000});
+     const after=await snapshot();assert(after.complete);
+     assert(!after.doc.includes('手工修改'));assert(!after.doc.includes('新标题'));
+     assert.equal(after.doc,api(folder,'markdown','GET').body.markdown);
+     assert.equal(writes.length,1);
+     assert.deepEqual(api(folder,'pdf-map','GET').body.covers.map(r=>[r.logicalId,r.physicalPageIndex,r.bbox]),
+       oldPdf.covers.map(r=>[r.logicalId,r.physicalPageIndex,r.bbox]));
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     await loadPage();
+     assert.equal((await snapshot()).doc,after.doc);
+     assert.equal(writes.length,1,'reopen never resets again');
+     assert.deepEqual(errors,[]);
+     console.log('WP24_REAL_FRESH_INITIALIZE_PASS',name,'267 blocks, real LF, explicit backup/reset and reopen');
+     continue;
+   }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
    if(titleMode){

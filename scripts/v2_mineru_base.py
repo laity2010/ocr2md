@@ -17,13 +17,13 @@ from urllib.parse import parse_qs
 from v2_logical_contract import initial_rows, validate_initial, raw_element_text
 from v2_md_block import initial_md, raw_bindings, raw_at
 from v2_table_recovery import table_overrides
-from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown, OWNED_FORMAT, FORMAT
+from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown, preview_owned_migration, OWNED_FORMAT, FORMAT
 from v2_pdf_projection import project_pdf, PDFProjectionError
 from v2_pbs import initial_pbs, validate_pbs
 
 DB_NAME='ocr2md.v2.sqlite'
 # Explicit database header marker, not an extra table or inferred state.
-# WP23E never sets it on an existing book. Activation/migration is separate.
+# WP24 sets it only during fresh initialization or explicitly confirmed reset.
 OWNED_LF_VERSION=2303
 def is_owned_lf(db):
     return db.execute('PRAGMA user_version').fetchone()[0]==OWNED_LF_VERSION
@@ -192,7 +192,19 @@ def write_initial_logical(db):
     return inserted
 
 
-def new_book(folder:Path,*,overwrite=False):
+def finish_fresh_owned_logical(db):
+    """Only on freshly compiled rows, within the same initialization transaction.
+    Reuse the validated real LF layout; never pass previously edited rows here.
+    """
+    rows=from_sql_rows(db.execute('SELECT * FROM logical_block ORDER BY logical_order'))
+    plan=preview_owned_migration(rows)
+    db.executemany('UPDATE logical_block SET md_block=? WHERE logical_id=?',
+                   [(c['after'],c['logicalId']) for c in plan['changes']])
+    to_markdown(from_sql_rows(db.execute('SELECT * FROM logical_block ORDER BY logical_order')),format=OWNED_FORMAT)
+    db.execute('PRAGMA user_version='+str(OWNED_LF_VERSION))
+
+
+def new_book(folder:Path,*,overwrite=False,owned=False):
     files=mineru_sources(folder)
     archive,rows=prepare_rows(files)
     archive_data=compact({'schema':SCHEMA,'sources':[{k:v for k,v in f.items() if k!='contentBase64'} for f in archive]})
@@ -229,6 +241,7 @@ def new_book(folder:Path,*,overwrite=False):
                 # Base and initial logical content commit together in the
                 # private staged database. Neither table is published alone.
                 logical_count=write_initial_logical(db)
+                if owned:finish_fresh_owned_logical(db)
                 assert_schema(db)
                 if db.execute('SELECT count(*) FROM mineru_base WHERE blockid>0').fetchone()[0]!=len(rows):
                     raise BaseError(500,'基础表入库数量核验失败')
@@ -490,6 +503,7 @@ def migrate_legacy_type_column(folder: Path, common):
             db.executemany('UPDATE logical_block SET md_block=?,raw_path=? WHERE logical_id=?',edits)
         else:
             existing=write_initial_logical(db)
+            finish_fresh_owned_logical(db)
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS logical_block_pbs_unique ON logical_block(p,b,s)')
         assert_schema(db)
         if list(db.execute('PRAGMA foreign_key_check')):
@@ -502,7 +516,7 @@ def migrate_legacy_type_column(folder: Path, common):
                 'logicalCount':existing,'sourceCount':len(archive['sources']),'dbFile':DB_NAME}
 
 
-def backfill_empty_logical(folder: Path, common):
+def backfill_empty_logical(folder: Path, common, *, owned=False):
     """Auto-complete an older valid V2 DB without touching its base archive.
 
     Invoked only through the already-authorized, explicitly confirmed `import`
@@ -530,6 +544,7 @@ def backfill_empty_logical(folder: Path, common):
             return {'created':False,'preserved':True,'logicalCount':existing,
                     'dbFile':DB_NAME,'baseChanged':False}
         count=write_initial_logical(db)
+        if owned:finish_fresh_owned_logical(db)
         db.commit()
         return {'created':True,'preserved':False,'logicalCount':count,
                 'dbFile':DB_NAME,'baseChanged':False}
@@ -540,7 +555,8 @@ def rebuild_logical_only(folder:Path,payload,common):
     The DELETE and INSERT use a single transaction. Failure restores all
     previous logical rows. Never replace the complete SQLite file.
     """
-    if payload.get('confirm')!='rebuild-v2-logical-only' or set(payload)!={'workspace','confirm'}:
+    owned=payload.get('confirm')=='initialize-v2-owned-logical'
+    if payload.get('confirm') not in ('rebuild-v2-logical-only','initialize-v2-owned-logical') or set(payload)!={'workspace','confirm'}:
         raise BaseError(422,'缺少仅覆盖逻辑表的明确确认')
     path=folder/DB_NAME
     if path.is_symlink():raise BaseError(403,'V2 SQLite 不允许符号链接')
@@ -556,15 +572,36 @@ def rebuild_logical_only(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             meta=assert_schema(db)
-            if is_owned_lf(db):raise BaseError(409,'真实换行模式禁止旧版逻辑表重建')
+            if is_owned_lf(db) and not owned:raise BaseError(409,'真实换行模式禁止旧版逻辑表重建')
             expected=[(item['path'],item['sha256']) for item in meta['sources']]
             if [(rel,sha(raw)) for rel,raw,_ in sources]!=expected:
                 raise BaseError(409,'原始 MinerU 文件与基础表档案不一致，拒绝覆盖逻辑表')
             base_snapshot=[tuple(row) for row in db.execute(
                 'SELECT * FROM mineru_base ORDER BY blockid')]
             previous=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
+            backup=None
+            if owned and previous:
+                # A private, separate SQLite backup (not an application table).
+                # BEGIN IMMEDIATE blocks concurrent writers; a second read-only
+                # connection copies the last committed database consistently.
+                backup=folder/('.ocr2md-v2-before-init-'+secrets.token_hex(8)+'.sqlite')
+                fd=os.open(backup,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600)
+                os.close(fd)
+                with closing(sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True)) as reader, closing(sqlite3.connect(backup)) as copy:
+                    reader.backup(copy)
+                    if copy.execute('PRAGMA integrity_check').fetchone()[0]!='ok':
+                        raise BaseError(500,'旧逻辑表备份完整性检查失败')
+                    for table,order in [('mineru_base','blockid'),('logical_block','logical_order')]:
+                        if copy.execute('SELECT * FROM '+table+' ORDER BY '+order).fetchall()!=[
+                            tuple(r) for r in db.execute('SELECT * FROM '+table+' ORDER BY '+order)]:
+                            raise BaseError(409,'初始化前备份与原表不一致')
+                with backup.open('rb') as saved:os.fsync(saved.fileno())
+                fd_dir=os.open(folder,os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+                try:os.fsync(fd_dir)
+                finally:os.close(fd_dir)
             db.execute('DELETE FROM logical_block')
             rebuilt=write_initial_logical(db)
+            if owned:finish_fresh_owned_logical(db)
             assert_schema(db)
             records=db.execute('SELECT * FROM logical_block ORDER BY logical_order').fetchall()
             from_sql_rows(records)
@@ -578,7 +615,8 @@ def rebuild_logical_only(folder:Path,payload,common):
             db.commit()
             return {'rebuilt':True,'previousLogicalCount':previous,
                     'logicalCount':rebuilt,'blockCount':len(base_snapshot)-1,
-                    'baseChanged':False,'dbFile':DB_NAME}
+                    'baseChanged':False,'dbFile':DB_NAME,
+                    **({'schema':OWNED_FORMAT,'backupFile':backup.name if backup else None} if owned else {})}
         except BaseException:
             db.rollback()
             raise
@@ -987,7 +1025,7 @@ def dispatch(operation,method,folder,payload,query,common):
                 sources=mineru_sources(folder)
                 if [(v['path'],v['sha256']) for v in result['sources']]==[(p,sha(b)) for p,b,_ in sources]:
                     if result['logicalCount']==0:
-                        completed=backfill_empty_logical(folder,common)
+                        completed=backfill_empty_logical(folder,common,owned=True)
                         return {'created':False,'replaced':False,'blockCount':result['blockCount'],
                             'logicalCount':completed['logicalCount'],'backfilled':completed['created'],
                             'sourceCount':result['sourceCount'],'dbFile':DB_NAME}
@@ -999,7 +1037,7 @@ def dispatch(operation,method,folder,payload,query,common):
                         raise BaseError(409,'逻辑表已有最新状态，禁止自动覆盖重建 V2 SQLite')
         # Reuse the same F02 read/write/cleanup probe before atomic replacement.
         common.probe(folder)
-        return new_book(folder,overwrite=exists)
+        return new_book(folder,overwrite=exists,owned=True)
     raise BaseError(404,'未知 V2 导入操作')
 
 def handle(handler,operation,parsed,common):

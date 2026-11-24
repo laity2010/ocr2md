@@ -141,7 +141,7 @@ function sqlActionsDialog(){
   importBtn.className='v2-sql-action-import';importBtn.textContent='导入基础表';
   importBtn.title='使用当前工作目录的 MinerUJSON；同源已有数据保持不变';
   const rebuildBtn=document.createElement('button');rebuildBtn.type='button';
-  rebuildBtn.className='v2-sql-action-rebuild';rebuildBtn.textContent='重建逻辑表（覆盖编辑）';
+  rebuildBtn.className='v2-sql-action-rebuild';rebuildBtn.textContent='初始化逻辑表（覆盖编辑）';
   rebuildBtn.title='危险：从原始 para_blocks 重新生成逻辑表，覆盖当前 MD Block 和 PBS 关系；基础表及原件不变';
   const normalizeBtn=document.createElement('button');normalizeBtn.type='button';
   normalizeBtn.className='v2-sql-action-normalize';
@@ -208,7 +208,7 @@ function sqlActionsDialog(){
     }catch(error){report('表格恢复被拒绝：'+error.message,'error');}
   });
   const warning=document.createElement('p');warning.className='v2-sql-actions-warning';
-  warning.textContent='「重建逻辑表」会丢失当前 MD Block 修改及 PBS 关系；「仅整理正文断行」不重建、不修改 PBS。基础表、PDF、MinerUJSON 均保持不变。';
+  warning.textContent='「初始化逻辑表」从原始资料重新生成真实换行正文，旧编辑留在备份中。基础表、PDF、MinerUJSON 均保持不变。';
   const close=document.createElement('button');close.type='button';
   close.className='v2-sql-action-close';close.textContent='取消';
   close.addEventListener('click',()=>dialog.close());
@@ -218,8 +218,8 @@ function sqlActionsDialog(){
   rebuildBtn.addEventListener('click',()=>{
     if(rebuildBtn.dataset.confirm!=='yes'){
       rebuildBtn.dataset.confirm='yes';
-      rebuildBtn.textContent='确认覆盖重建逻辑表';
-      info.textContent='危险操作：将从原始 para_blocks 重建全部逻辑块，丢失现有 MD Block 修改和 PBS 拖动关系。只想清除正文断行，请使用「仅整理正文断行（不重建）」。';
+      rebuildBtn.textContent='确认初始化逻辑表';
+      info.textContent='将从原始 para_blocks 全新初始化真实换行逻辑表，不迁移现有 MD Block 和 PBS 编辑；先保留旧库备份，原始基础表及原件不变。';
       return;
     }
     dialog.close();void rebuildLogicalOnly();
@@ -239,7 +239,7 @@ function openSQLActions(){
   tableRepair.dataset.confirm='';tableRepair._candidatePlan=null;
   tableRepair.textContent='恢复跨页表格正文（不重建）';
   const rebuild=dialog.querySelector('.v2-sql-action-rebuild');
-  rebuild.dataset.confirm='';rebuild.textContent='重建逻辑表（覆盖编辑）';
+  rebuild.dataset.confirm='';rebuild.textContent='初始化逻辑表（覆盖编辑）';
   dialog.querySelector('.v2-sql-actions-info').textContent=workspace?
     '当前工作目录：'+workspace:'请先在全局设置中绑定并验证工作目录';
   const busy=rebuilding||saving||Boolean(pending)||
@@ -251,7 +251,6 @@ function openSQLActions(){
   normal.disabled=!workspace||busy||selectedTable!=='logical_block'||!sourceState?.loaded||sourceState.ownedLF;
   tableRepair.disabled=normal.disabled;
   if(sourceState?.ownedLF){
-    rebuild.disabled=true;
     normal.title='真实换行模式不允许单行整理';
     tableRepair.title='真实换行模式表格修复待兼容验收';
   }
@@ -316,14 +315,17 @@ async function rebuildLogicalOnly(){
   report('正在仅从 para_blocks 重建逻辑表（覆盖旧逻辑行；原始基础表不变）…','warning');
   try{
     const result=await request('logical-rebuild',path,{method:'POST',
-      payload:{workspace:path,confirm:'rebuild-v2-logical-only'}});
-    if(!result?.rebuilt||result.baseChanged!==false)throw Error('重建回执不完整');
+      payload:{workspace:path,confirm:'initialize-v2-owned-logical'}});
+    if(!result?.rebuilt||result.baseChanged!==false||result.schema!=='v2-logical-md/v3')throw Error('真实换行初始化回执不完整');
     const source=$('#workspace #editor')?.v2SourcePort;
     source?.clear();
+    $('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.clear();
     bound='';lastFocus=null;logicalState=null;renderedSchema='';
     await ensureBase(path);
-    report('✓ 逻辑表已从原始 para_blocks 重建 · '+result.previousLogicalCount+
-      ' → '+result.logicalCount+' 行 · 基础表与原件未修改','ok');
+    if(!source?.getState().ownedLF||source.getBlocks().length!==result.logicalCount)
+      throw Error('已初始化但新正文尚未加载，请重新打开工作目录');
+    report('✓ 真实换行逻辑表已初始化 · '+result.previousLogicalCount+
+      ' → '+result.logicalCount+' 行 · 基础表与原件未修改'+(result.backupFile?' · 已保留旧库备份':''),'ok');
   }catch(error){
     report('逻辑表重建未完成：'+error.message+' · 原始基础表未修改','error');
     // Failure after the server commit may leave stale CM6 state. Reset the
