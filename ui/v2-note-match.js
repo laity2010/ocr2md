@@ -23,7 +23,7 @@ export function projectV2NoteMatch(index,config=DEFAULT_NOTE_MATCH_CONFIG){
       match_state:row.status==='已匹配'?'已匹配':'待核实',
       conversion_error:''});
   });
-  return Object.freeze({...projection,rows:Object.freeze(rows)});
+  return Object.freeze({...projection,mdRows:Object.freeze(mdRows),blockRows:Object.freeze([...blocks.values()]),rows:Object.freeze(rows)});
 }
 export function resolveV2NoteEndpoint(index,row){
   if(!index||!row?.source_ref||!Number.isInteger(row.from)||
@@ -33,7 +33,7 @@ export function resolveV2NoteEndpoint(index,row){
     row.to<=line.md_line.length&&line.md_line.slice(row.from,row.to)===row.raw?line:null;
 }
 const comparePBS=(a,b)=>String(a??'').localeCompare(String(b??''),'en',{numeric:true});
-export function noteMatchColumns(){
+export function noteMatchColumns(statusRenderer=null){
   return [
     {field:'number',headerName:'注号',width:74,sortable:true,sort:'asc',comparator:compareNoteNumbers,pinned:'left',lockPinned:true,lockPosition:'left'},
     {field:'kind',headerName:'端点',width:72,sortable:true},
@@ -44,11 +44,11 @@ export function noteMatchColumns(){
         node.textContent=params.value??'';node.title='点击这一行定位该端点，原文不会修改';return node;
       }},
     {field:'match_state',headerName:'匹配状态',width:132,minWidth:112,sortable:false,pinned:'right',lockPinned:true,lockPosition:'right',
-      cellRenderer:params=>{
+      cellRenderer:statusRenderer??(params=>{
         const node=document.createElement('span');
         node.className='ocr-note-match-status';node.dataset.status=params.value??'';
         node.textContent=params.value??'';return node;
-      }},
+      })},
     {field:'pbs',headerName:'PBS',width:125,sortable:true,comparator:comparePBS,
       filterValueGetter:p=>p.data?.p==null?'':String(p.data.p)},
     {field:'line_no',headerName:'源码行',width:92,sortable:true},

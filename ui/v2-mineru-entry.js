@@ -9,7 +9,10 @@ import {filterLogicalAG} from './v2-logical-ag-filter.js';
 import {AG_VIEWS,viewColumns,viewFilter,titleClickLine,usesMdLines,mdLineColumns} from './v2-ag-views.js';
 import {effectiveBlockType} from './v2-live-block-type.js';
 import './v2-ag-views.css';
-import {projectV2NoteMatch,resolveV2NoteEndpoint,noteMatchColumns} from './v2-note-match.js';
+import {resolveV2NoteEndpoint,noteMatchColumns} from './v2-note-match.js';
+import {createV2NoteSession} from './v2-note-session.js';
+import {createNoteMatchStatusCell} from './lab-ocr/note-pair-review-cell.js';
+import {mountNoteToolbar} from './v2-note-toolbar.js';
 import './lab-ocr/note-match-view.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
@@ -34,12 +37,26 @@ let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBloc
 let rebuilding=false;
 let agView='frame',savedLogicalFilter=null,renderedView='frame';
 let savedLineFilter=null;
-let noteAll=true,noteIndex=null,noteProjection=null,noteFocusKey=null,savedNoteFilter=null;
+let noteAll=true,noteFocusKey=null,savedNoteFilter=null,noteToolbar=null;
+const noteSession=createV2NoteSession();
 const allForView=()=>agView==='note-match'?noteAll:showAllLogical;
+const sourceForNotes=()=>$('#workspace #editor')?.v2SourcePort;
 function getNoteProjection(index){
-  if(index!==noteIndex){noteProjection=projectV2NoteMatch(index);noteIndex=index;noteFocusKey=null;}
-  return noteProjection;
+  return noteSession.project(index,Boolean(sourceForNotes()?.getState().dirty));
 }
+const noteStatusRenderer=createNoteMatchStatusCell((row,choice,bodyId)=>{
+  try{
+    if(agView!=='note-match')return false;
+    const source=sourceForNotes();
+    noteSession.choose(source.getMdLineIndex(),row,choice,bodyId,source.getState().dirty);
+    renderGrid(logicalState);report('注释审阅决定已应用 · 仅当前会话','ok');return true;
+  }catch(error){report(error.message,'warning');return false;}
+});
+const renderNoteStatus=params=>{
+  const el=noteStatusRenderer(params),select=el.querySelector('select');
+  if(select)select.title='人工决定仅当前会话有效；不写入正文或额外 SQL 表';
+  return el;
+};
 let renderedDataTable='',renderedRows=[];
 const STRUCT_FIELDS=['parentId','logicalOrder','p','b','s'];
 const textCopy=rows=>new Map(rows.map(r=>[r.logicalId,r.markdownText]));
@@ -458,7 +475,7 @@ function renderGrid(state){
     pinned:!logical&&index===0?'left':undefined,
     valueFormatter:key==='original_bytes'?()=>'(存于 BlockID=0)':undefined}));
   if(noteView){
-    columns=noteMatchColumns().map(c=>({...c,resizable:true,filter:EnumCheckboxFilter,
+    columns=noteMatchColumns(renderNoteStatus).map(c=>({...c,resizable:true,filter:EnumCheckboxFilter,
       filterValueGetter:c.filterValueGetter??(p=>String(p.data?.[c.field]??'')),
       suppressHeaderMenuButton:true,suppressHeaderFilterButton:false}));
   }else if(lineView){
@@ -484,6 +501,16 @@ function renderGrid(state){
     }
   }
   const controls=logicalControls();
+  if(!noteToolbar&&picker())noteToolbar=mountNoteToolbar(picker(),{
+    getConfig:()=>noteSession.getConfig(),
+    onConfig:config=>{
+      if(agView!=='note-match'||!logicalState)throw Error('注释视图已关闭');
+      noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
+      port.setFilterModel(null);renderGrid(logicalState);
+      report('注释格式已应用并重新识别 · 仅当前会话','ok');
+    },onStatus:report,
+  });
+  noteToolbar?.setVisible(noteView);
   let view=null;
   if(controls){
     controls.label.hidden=!logical;
@@ -552,7 +579,7 @@ function renderGrid(state){
     next.disabled=state.offset+state.rows.length>=count;
   }
   const label=tableLabel(state.tableName);
-  report(noteView?`AG 注释匹配 · ${notes.index.stats.references} 注引 · ${notes.index.stats.bodies} 注文 · ${port.getDisplayedRows().length} 行 · 只读识别`:logical&&nextView!=='frame'?
+  report(noteView?`AG 注释匹配 · ${notes.index.stats.references} 注引 · ${notes.index.stats.bodies} 注文 · ${port.getDisplayedRows().length} 行 · 审阅决定仅当前会话`:logical&&nextView!=='frame'?
     `AG ${AG_VIEWS[nextView].label} · Type 筛选 · ${port.getDisplayedRows().length} 行`:logical?
     `SQL 逻辑表 · ${showAllLogical?'全部':('p'+visibleLogicalP)} · ${view.rows.length} / ${count} 行 · ${state.columns.length} 列`:
     `SQL ${label}已加载 · ${count} 行 · ${state.columns.length} 列 · BlockID 为整数`,'ok');
@@ -720,7 +747,7 @@ async function ensureBase(path){
       }
     }
     if(bound!==path){logicalState=null;showAllLogical=false;lastFocus=null;
-      renderedSchema='';renderedDataTable='';renderedRows=[];agView='frame';savedLogicalFilter=null;savedLineFilter=null;noteAll=true;noteIndex=null;noteProjection=null;noteFocusKey=null;savedNoteFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
+      renderedSchema='';renderedDataTable='';renderedRows=[];agView='frame';savedLogicalFilter=null;savedLineFilter=null;noteAll=true;noteSession.reset();noteToolbar?.reset();noteFocusKey=null;savedNoteFilter=null;clearTimeout(saveTimer);saveTimer=null;saveBlocked=false;}
     bound=path;
     acknowledged=structureCopy(port.getStructureRows());
     acknowledgedText=textCopy(port.getBlocks());

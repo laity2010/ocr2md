@@ -14,7 +14,8 @@ const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
-const noteMode=process.env.V2_TEST_NOTE_MATCH==='1';
+const noteReviewMode=process.env.V2_TEST_NOTE_REVIEW==='1';
+const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
@@ -183,6 +184,41 @@ try{
      await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel({number:{values:['701','703']}}));
      assert.deepEqual((await read()).map(r=>r.number),['701','701','703','703']);
      await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
+     if(noteReviewMode){
+       const currentRef=async()=> (await read()).find(r=>r.kind==='注引'&&r.number==='701');
+       const setStatus=async value=>{
+         const r=await currentRef();
+         const at=await grid.evaluate((el,id)=>{
+           const port=el.v2BaseGridPort;port.focusRow('note_row_id',id);
+           return port.getDisplayedRows().findIndex(x=>x.note_row_id===id);
+         },r.note_row_id);
+         await grid.locator('.ag-row[row-index="'+at+'"] [col-id="match_state"] select').selectOption(value);
+       };
+       await setStatus('忽略');
+       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().filter(r=>r.number==='701').every(r=>r.match_state==='忽略'));
+       await setStatus('待核实');
+       assert.equal((await currentRef()).match_state,'待核实');
+       await setStatus('已匹配');
+       assert.equal((await currentRef()).match_state,'已匹配');
+       const openRules=async()=>{
+         await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+         await page.getByRole('menuitem',{name:'注释格式'}).click();
+       };
+       await openRules();
+       await page.getByLabel('注号格式').selectOption('ref.parenthesis');
+       assert((await page.locator('.ocr-note-rule-sample').first().textContent()).includes('正文(7)'));
+       await page.getByRole('button',{name:'应用并重新识别'}).click();
+       await page.waitForFunction(()=>!document.querySelector('.ocr-note-match-rules-dialog[open]'));
+       assert(!(await read()).some(r=>r.kind==='注引'&&r.number==='701'));
+       await openRules();
+       await page.getByLabel('注号格式').selectOption('ref.html-sup');
+       await page.getByLabel('注文格式').selectOption('body.number-dot');
+       await page.getByRole('button',{name:'应用并重新识别'}).click();
+       await page.waitForFunction(()=>!document.querySelector('.ocr-note-match-rules-dialog[open]'));
+       assert.equal((await currentRef()).match_state,'已匹配');
+       assert.equal(writes.length,0);
+       console.log('WP26B_REAL_RULES_REVIEW_PASS',name,'actual rule samples and status dropdown, no writes');
+     }
      await picker.selectOption('title');assert(!await all.isChecked());
      assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().slice(0,3).map(c=>[c.colId,c.pinned])),[['md_line',null],['source_line',null],['pbs',null]]);
      await picker.selectOption('frame');assert(!await all.isChecked());
