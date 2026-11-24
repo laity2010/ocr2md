@@ -8,7 +8,6 @@ import {pageForLogical,logicalAtOffset} from './v2-focus-map.js';
 import {filterLogicalAG} from './v2-logical-ag-filter.js';
 import {AG_VIEWS,viewColumns,viewFilter,titleClickLine} from './v2-ag-views.js';
 import {effectiveBlockType,collectOwnedHeadings,ownedBlockType} from './v2-live-block-type.js';
-import {isSyntheticId} from './v2-structure-split.js';
 import './v2-ag-views.css';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
@@ -526,14 +525,7 @@ function overlayCMStructure(){
   const owned=source.getState().ownedLF;
   const headings=owned?collectOwnedHeadings(source.getMarkdown(),intervals):null;
   const originals=new Map(logicalState.rows.map(r=>[r.logical_id,r]));
-  const liveRows=source.getBlocks();
-  const records=source.getState().ownedLF?liveRows.map(row=>{
-    const record=originals.get(row.logicalId);
-    if(record)return record;
-    if(!isSyntheticId(row.logicalId))throw Error('CM6 原始逻辑块缺少 SQL 来源');
-    return {logical_id:row.logicalId,base_blockid:row.baseBlockId,
-      raw_path:null,raw_block:null,block_type:row.blockType};
-  }):logicalState.rows;
+  const records=logicalState.rows;
   logicalState.rows=records.map(record=>{
     const row=live.get(record.logical_id);
     if(!row)return record;
@@ -558,43 +550,8 @@ async function flushStructure(){
   if(!source?.getState().loaded||source.getWorkspace()!==bound)return;
   const current=structureCopy(source.getStructureRows());
   const original=new Map(acknowledged.map(r=>[r.logicalId,r]));
-  const currentIds=new Set(current.map(r=>r.logicalId));
-  const inventoryChanged=current.length!==original.size||current.some(r=>!original.has(r.logicalId));
-  if(inventoryChanged){
-    if(!source.getState().ownedLF){
-      report('CM6 结构数量改变，拒绝 SQL 写入','error');saveBlocked=true;return;
-    }
-    const workspace=bound,textRows=source.getBlocks(),expectedStructure=acknowledged;
-    const expectedTexts=acknowledgedText;
-    const removeIds=expectedStructure.filter(r=>!currentIds.has(r.logicalId)).map(r=>r.logicalId);
-    const upserts=textRows.filter(row=>{
-      const old=original.get(row.logicalId);
-      return !old||STRUCT_FIELDS.some(k=>old[k]!==row[k])||
-        expectedTexts.get(row.logicalId)!==row.markdownText;
-    });
-    saving=true;
-    try{
-      const bytes=new TextEncoder().encode(JSON.stringify(expectedStructure.map(r=>
-        [r.logicalId,expectedTexts.get(r.logicalId)])));
-      const digest=await crypto.subtle.digest('SHA-256',bytes);
-      const expectedTextSha256=Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
-      const result=await request('structure-commit',workspace,{method:'POST',
-        payload:{workspace,confirm:'commit-v2-owned-inventory',expectedStructure,
-          expectedTextSha256,upserts,removeIds}});
-      if(!result?.saved||result.changedRows!==upserts.length||result.removedRows!==removeIds.length||
-        result.logicalCount!==current.length)throw Error('分割原子写入回执不完整');
-      if(bound!==workspace||source.getWorkspace()!==workspace)return;
-      acknowledged=current;acknowledgedText=textCopy(textRows);
-      source.markPersisted(current);source.markTextPersisted(textRows);
-      report('✓ SQLite 分割事务已保存 · '+current.length+' 逻辑块','ok');
-    }catch(error){
-      saveBlocked=true;
-      report('分割 SQL 写回失败，CM6 内存已保留：'+error.message,'error');
-    }finally{
-      saving=false;
-      if(!saveBlocked&&bound===workspace&&source.getState().dirty)scheduleStructureSave();
-    }
-    return;
+  if(source.getState().readOnly||current.length!==original.size||current.some(r=>!original.has(r.logicalId))){
+    report('逻辑块库存不允许改变或存在历史人工块，拒绝 SQL 写入','error');saveBlocked=true;return;
   }
   const changes=current.flatMap(row=>{
     const old=original.get(row.logicalId);
@@ -726,6 +683,7 @@ async function ensureBase(path){
     revealPhysicalTables(state.tables);
     wireViewPicker();
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
+    if(port.getState().readOnly)report('发现历史人工逻辑块 · 只读保留 · 如需编辑请明确初始化逻辑表','warning');
     if(active)await fetchPage();
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}

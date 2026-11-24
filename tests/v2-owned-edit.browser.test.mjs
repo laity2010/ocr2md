@@ -68,9 +68,8 @@ try{
      }else if(req.method()==='POST'){
        if(pdfMode&&!titleMode)assert(['md-commit','structure-commit'].includes(op));
        else assert.equal(op,'md-commit');
-       assert.equal(payload.confirm,op==='structure-commit'?(splitMode?'commit-v2-owned-inventory':'commit-v2-owned-structure'):'commit-v2-owned-md');
-       if(splitMode)assert([267,268].includes(payload.expectedStructure.length));
-       else assert.equal(payload.expectedStructure.length,267);
+       assert.equal(payload.confirm,op==='structure-commit'?'commit-v2-owned-structure':'commit-v2-owned-md');
+       assert.equal(payload.expectedStructure.length,267);
        writes.push(pdfMode?{op,payload}:payload.changes);
      }
      const query={};for(const [k,v] of u.searchParams)query[k]=[v];
@@ -231,55 +230,21 @@ try{
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
      const geometry=()=>pdf.evaluate(el=>el.v2PDFPort.getCovers().map(c=>[c.logicalId,c.physicalPageIndex,c.bbox]).sort((a,b)=>a[0]-b[0]));
-     const oldGeometry=await geometry();
-     assert.equal(oldGeometry.length,267);
-     const check=async(count)=>{
-       await page.waitForFunction(count=>{const p=document.querySelector('#workspace #editor').v2SourcePort;
-         return p.getBlocks().length===count&&!p.getState().dirty;},count,{timeout:15000});
-       const now=await snapshot();assert(now.complete);
-       const disk=api(folder,'markdown','GET').body;
-       assert.equal(disk.markdown,now.doc);
-       assert.deepEqual(disk.segments.map(r=>[r.logicalId,r.baseBlockId,r.p,r.b,r.s,r.parentId]),
-         now.rows.map(r=>[r.logicalId,r.baseBlockId,r.p,r.b,r.s,r.parentId]));
-       assert.deepEqual(await geometry(),oldGeometry);
-       return now;
-     };
-     // Real gutter button and explicit split menu. No split from normal typing.
+     const oldGeometry=await geometry();assert.equal(oldGeometry.length,267);
      await source.evaluate(el=>el.v2SourcePort.locateSourceLine(2));
      const lineButton=page.locator('#workspace #editor .ocr-cm-line-number-button[data-line-no="2"]');
      await lineButton.waitFor({state:'visible',timeout:10000});
      await lineButton.click();
-     await page.getByRole('menuitem',{name:'在此分割逻辑块'}).click();
-     const divided=await check(268);
-     const created=divided.rows[1],id=created.logicalId;
-     assert(id>=2**48&&id<2**49);
-     assert.equal(divided.doc,before.doc,'interior real blank split must not change source bytes');
-     assert.equal(created.baseBlockId,before.rows[0].baseBlockId);
-     assert.equal(divided.rows[0].markdownText,'# 标题🧪\n\n');
-     assert.equal(created.markdownText,'手工修改\n\n\n');
-     assert.equal(writes.length,1);
-     assert.equal(writes[0].payload.confirm,'commit-v2-owned-inventory');
-     const ag=page.locator('#workspace .ocr-outline-grid');
-     await page.waitForFunction(id=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().some(r=>r.logical_id===id),id);
-     const agRow=await ag.evaluate((el,id)=>el.v2BaseGridPort.getDisplayedRows().find(r=>r.logical_id===id),id);
-     assert.equal(agRow.raw_block,null);
-     assert.equal(agRow.source_line,3);
-     assert.equal(agRow.pbs,'p0b1s0');
-     assert.equal(await pdf.evaluate((el,id)=>el.v2PDFPort.getCovers().some(r=>r.logicalId===id),id),false);
-     assert.equal(await pdf.evaluate(el=>el.v2PDFPort.getState().selectedId),null);
-     await source.evaluate(el=>el.v2SourcePort.undo());
-     const undone=await check(267);
-     assert.deepEqual(undone.rows,before.rows);
-     assert.equal(writes.length,2);
-     await source.evaluate(el=>el.v2SourcePort.redo());
-     const redone=await check(268);assert.deepEqual(redone.rows,divided.rows);
-     assert.equal(writes.length,3);
-     // New row persists, while original geometry and original row IDs remain.
-     await loadPage(268);
-     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
-     const reopened=await check(268);assert.deepEqual(reopened.rows,divided.rows);
-     assert.deepEqual(errors,[]);
-     console.log('WP23G_REAL_GUTTER_SPLIT_SQL_PASS',name,'267→268→267→268',writes.length,'atomic commits, same source and PDF coordinates');
+     assert.equal(await page.getByRole('menuitem',{name:'在此分割逻辑块'}).count(),0);
+     assert.equal(await page.getByRole('menuitem',{name:'删除当前行'}).count(),1);
+     assert.equal(await source.evaluate(el=>typeof el.v2SourcePort.splitAtLine),'undefined');
+     const rejected=api(folder,'structure-commit','POST',{workspace:folder,confirm:'commit-v2-owned-inventory'});
+     assert.equal(rejected.status,409);
+     assert.deepEqual((await snapshot()).rows,before.rows);
+     assert.equal(api(folder,'markdown','GET').body.markdown,before.doc);
+     assert.deepEqual(await geometry(),oldGeometry);
+     assert.equal(writes.length,0);assert.deepEqual(errors,[]);
+     console.log('WP25B_REAL_GUTTER_SPLIT_RETIRED_PASS',name,'267 unchanged blocks, no writes');
      continue;
    }
    if(structureMode){

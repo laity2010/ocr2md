@@ -710,6 +710,7 @@ def commit_md(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             assert_schema(db)
+            reject_legacy_artificial_blocks(db)
             if owned!=is_owned_lf(db):
                 raise BaseError(409,'正文协议与数据库不一致，请刷新；拒绝旧客户端修改真实换行')
             if owned:
@@ -740,89 +741,10 @@ SYNTHETIC_ID_MAX=2**49-1
 def synthetic_id(value):
     return type(value) is int and SYNTHETIC_ID_MIN<=value<=SYNTHETIC_ID_MAX
 
-def commit_owned_inventory(folder:Path,payload,common):
-    """WP23G inventory delta via existing structure-commit endpoint.
-    CAS covers the complete old structure and exact per-block text hash;
-    original source metadata and identities cannot be deleted or rewritten.
-    """
-    keys={'workspace','confirm','expectedStructure','expectedTextSha256','upserts','removeIds'}
-    if set(payload)!=keys:raise BaseError(422,'分割事务字段不完整')
-    expected=payload['expectedStructure'];digest=payload['expectedTextSha256']
-    updates=payload['upserts'];removals=payload['removeIds']
-    if (not isinstance(expected,list) or not isinstance(digest,str) or len(digest)!=64
-        or not isinstance(updates,list) or not isinstance(removals,list)
-        or not 1<=len(updates)+len(removals)<=10000):
-        raise BaseError(422,'分割事务清单无效')
-    if any(not synthetic_id(lid) for lid in removals) or len(set(removals))!=len(removals):
-        raise BaseError(422,'只能撤销人工新增逻辑块，不能删除原始 OCR 块')
-    ids=set(removals);total=0
-    fields={'logicalId','baseBlockId','parentId','logicalOrder','p','b','s','blockType','markdownText'}
-    for r in updates:
-        if (not isinstance(r,dict) or set(r)!=fields or
-            any(type(r[k]) is not int or not 0<r[k]<2**53 for k in ('logicalId','baseBlockId','logicalOrder')) or
-            any(type(r[k]) is not int or not 0<=r[k]<2**53 for k in ('p','b','s')) or
-            (r['parentId'] is not None and (type(r['parentId']) is not int or not 0<r['parentId']<2**53)) or
-            not isinstance(r['blockType'],str) or not isinstance(r['markdownText'],str) or r['logicalId'] in ids):
-            raise BaseError(422,'分割逻辑块字段或 ID 无效')
-        ids.add(r['logicalId']);total+=len(r['markdownText'].encode('utf-8'))
-    if total>4*1024*1024:raise BaseError(413,'分割正文差量超过上限')
-    path=folder/DB_NAME
-    if path.is_symlink():raise BaseError(403,'V2 SQLite 禁止符号链接')
-    fd=os.open(path,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0))
-    try:
-        st=os.fstat(fd)
-        if not stat.S_ISREG(st.st_mode) or st.st_nlink!=1:
-            raise BaseError(422,'V2 SQLite 必须是单一普通文件')
-    finally:os.close(fd)
-    common.probe(folder)
-    with closing(sqlite3.connect('file:'+str(path)+'?mode=rw',uri=True,timeout=5)) as db:
-        db.row_factory=sqlite3.Row;db.execute('PRAGMA foreign_keys=ON')
-        try:
-            db.execute('BEGIN IMMEDIATE');assert_schema(db)
-            if not is_owned_lf(db):raise BaseError(409,'旧数据库不得使用分割协议')
-            old={r['logical_id']:dict(r) for r in db.execute('SELECT * FROM logical_block ORDER BY logical_order')}
-            actual=[dict(logicalId=r['logical_id'],parentId=r['parent_id'],
-                logicalOrder=r['logical_order'],p=r['p'],b=r['b'],s=r['s']) for r in old.values()]
-            old_digest=sha(compact([[r['logical_id'],r['md_block']] for r in old.values()]).encode('utf-8'))
-            if actual!=expected or digest!=old_digest:
-                raise BaseError(409,'分割前正文或结构已变化，保留当前 CM6')
-            for lid in removals:
-                if lid not in old or old[lid]['raw_path'] is not None:
-                    raise BaseError(409,'禁止删除具有原始 OCR 来源的逻辑块')
-            created=[r for r in updates if r['logicalId'] not in old]
-            if not created and not removals:raise BaseError(422,'分割协议仅用于新增或撤销新增块')
-            valid_base={r['base_blockid'] for r in old.values() if r['raw_path'] is not None}
-            for r in updates:
-                previous=old.get(r['logicalId'])
-                if previous:
-                    if r['baseBlockId']!=previous['base_blockid'] or r['blockType']!=previous['block_type']:
-                        raise BaseError(409,'原始来源和已存类型不可改写')
-                elif not synthetic_id(r['logicalId']) or r['baseBlockId'] not in valid_base or r['blockType']!='text':
-                    raise BaseError(422,'新增块来源或人工逻辑身份无效')
-            # Park only changed existing rows to avoid transient PBS collisions.
-            max_p=max((r['p'] for r in old.values()),default=0)+1
-            for i,r in enumerate(updates):
-                if r['logicalId'] in old:
-                    db.execute('UPDATE logical_block SET p=?,b=?,s=0 WHERE logical_id=?',(max_p,i,r['logicalId']))
-            db.executemany('DELETE FROM logical_block WHERE logical_id=?',[(lid,) for lid in removals])
-            for r in updates:
-                values=(r['parentId'],r['logicalOrder'],r['markdownText'],r['p'],r['b'],r['s'])
-                if r['logicalId'] in old:
-                    db.execute('UPDATE logical_block SET parent_id=?,logical_order=?,md_block=?,p=?,b=?,s=? WHERE logical_id=?',
-                        (*values,r['logicalId']))
-                else:
-                    db.execute('INSERT INTO logical_block(logical_id,base_blockid,parent_id,logical_order,md_block,p,b,s,block_type,raw_path) VALUES (?,?,?,?,?,?,?,?,?,NULL)',
-                        (r['logicalId'],r['baseBlockId'],*values,'text'))
-            records=from_sql_rows(db.execute('SELECT * FROM logical_block ORDER BY logical_order'))
-            to_markdown(records,format=OWNED_FORMAT)
-            if list(db.execute('PRAGMA foreign_key_check')):raise ValueError('分割破坏原始引用')
-            if len(records)!=len(old)+len(created)-len(removals):raise ValueError('分割清单数量不一致')
-            db.commit()
-        except (ValueError,sqlite3.IntegrityError) as error:
-            db.rollback();raise BaseError(409,'分割原子事务被拒绝：'+str(error)) from error
-        except BaseException:
-            db.rollback();raise
-    return dict(saved=True,changedRows=len(updates),removedRows=len(removals),logicalCount=len(records))
+def reject_legacy_artificial_blocks(db):
+    if db.execute('SELECT 1 FROM logical_block WHERE logical_id BETWEEN ? AND ? LIMIT 1',
+                  (SYNTHETIC_ID_MIN,SYNTHETIC_ID_MAX)).fetchone():
+        raise BaseError(409,'历史人工逻辑块仅可只读审阅，请明确初始化逻辑表')
 
 
 def commit_structure(folder:Path,payload,common):
@@ -832,7 +754,7 @@ def commit_structure(folder:Path,payload,common):
     current focus view; another editor/session cannot be silently overwritten.
     """
     if payload.get('confirm')=='commit-v2-owned-inventory':
-        return commit_owned_inventory(folder,payload,common)
+        raise BaseError(409,'显式分割及逻辑块库存增删已退役')
     owned=payload.get('confirm')=='commit-v2-owned-structure'
     if payload.get('confirm') not in ('commit-v2-structure','commit-v2-owned-structure'):
         raise BaseError(422,'缺少 V2 结构事务确认')
@@ -890,6 +812,7 @@ def commit_structure(folder:Path,payload,common):
         db.execute('PRAGMA foreign_keys=ON')
         db.execute('BEGIN IMMEDIATE')
         assert_schema(db)
+        reject_legacy_artificial_blocks(db)
         if owned!=is_owned_lf(db):
             raise BaseError(409,'真实换行归组需 WP23F 原子正文/结构协议')
         old={r['logical_id']:dict(r) for r in db.execute(

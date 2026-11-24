@@ -25,7 +25,7 @@ export function focusedLineHasAction(lineNo,focusLineNo,mdLoaded,lineId){
 /** Native CM6 line-number gutter: one button follows the highlighted focus
  * line. The same immutable document/line-ID authority owns its menu action.
  */
-export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,getPdfText=null,onPdfText=null,canSplit=null,onSplit=null}){
+export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,getPdfText=null,onPdfText=null}){
   if(typeof lineIdAt!=='function'||typeof isMarkdown!=='function'||
      typeof focusLineAt!=='function'||typeof onDelete!=='function')
     throw Error('CM6 line gutter port invalid');
@@ -49,15 +49,6 @@ export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,get
       event.stopPropagation();close();onDelete(lineId);
     });
     root.append(item);
-    if(canSplit?.(lineId,lineNo)&&typeof onSplit==='function'){
-      const split=document.createElement('button');split.type='button';
-      split.className='ocr-cm-line-split';split.setAttribute('role','menuitem');
-      split.textContent='在此分割逻辑块';
-      split.addEventListener('click',event=>{
-        event.stopPropagation();close();onSplit(lineId,lineNo);
-      });
-      root.append(split);
-    }
     // V2-only addition to the copied V1 Frame gutter. Never insert PDF
     // text through the old PDF selection: this menu carries the clicked
     // immutable logical ID, so scrolling does not retarget the operation.

@@ -32,31 +32,32 @@ class SplitTest(unittest.TestCase):
             new.extend(dict(row(r),logicalOrder=r.logical_order+1,
                            b=r.b+1 if r.p==target.p else r.b) for r in old[1:])
             payload=packet(folder,new)
-            bad=dict(payload,expectedTextSha256='0'*64)
-            with self.assertRaisesRegex(base.BaseError,'正文或结构已变化'):base.commit_structure(folder,bad,Stub())
-            self.assertEqual(load(folder),old)
-            invalid=[*new];invalid[1]=dict(invalid[1],markdownText='no LF')
-            with self.assertRaisesRegex(base.BaseError,'分割原子事务被拒绝'):
-                base.commit_structure(folder,dict(payload,upserts=invalid),Stub())
-            self.assertEqual(load(folder),old)
-            result=base.commit_structure(folder,payload,Stub())
-            self.assertEqual(result['logicalCount'],268)
-            self.assertEqual(base.existing_markdown(folder)['markdown'],initial['markdown'])
-            pdf=base.existing_pdf_map(folder);self.assertEqual(geom(pdf),old_geometry)
-            self.assertIn(new_id,pdf['unmappedLogicalIds'])
-            self.assertEqual(pdf['mappedCount'],267)
-            sql=base.existing_state(folder,table='logical_block')
-            rec=next(r for r in sql['rows'] if r['logical_id']==new_id)
-            self.assertIsNone(rec['raw_path']);self.assertIsNone(rec['raw_block'])
-            self.assertEqual(rec['base_blockid'],target.base_blockid)
-            with self.assertRaisesRegex(base.BaseError,'不能删除原始'):
-                base.commit_structure(folder,packet(folder,[],[target.logical_id]),Stub())
-            undo=packet(folder,[row(r) for r in old],[new_id])
-            self.assertEqual(base.commit_structure(folder,undo,Stub())['logicalCount'],267)
-            self.assertEqual(base.existing_markdown(folder),initial)
-            self.assertEqual(evidence(folder),before)
-            redo=packet(folder,new)
-            self.assertEqual(base.commit_structure(folder,redo,Stub())['logicalCount'],268)
+            for request in (payload,packet(folder,[],[target.logical_id]),dict(payload,expectedTextSha256='0'*64)):
+                with self.assertRaisesRegex(base.BaseError,'已退役'):
+                    base.commit_structure(folder,request,Stub())
+                self.assertEqual(load(folder),old)
+                self.assertEqual(evidence(folder),before)
+                self.assertEqual(geom(base.existing_pdf_map(folder)),old_geometry)
+            # Reproduce an old WP23G persisted synthetic row in a disposable
+            # fixture only, never via a production write interface.
+            import sqlite3
+            from contextlib import closing
+            with closing(sqlite3.connect(folder/base.DB_NAME)) as db:
+                db.execute('UPDATE logical_block SET b=b+1000 WHERE p=?',(target.p,))
+                for r in new:
+                    if r['logicalId']==new_id:
+                        db.execute('INSERT INTO logical_block(logical_id,base_blockid,parent_id,logical_order,md_block,p,b,s,block_type,raw_path) VALUES(?,?,?,?,?,?,?,?,?,NULL)',
+                        (new_id,r['baseBlockId'],r['parentId'],r['logicalOrder'],r['markdownText'],r['p'],r['b'],r['s'],r['blockType']))
+                    else:
+                        db.execute('UPDATE logical_block SET logical_order=?,b=?,md_block=? WHERE logical_id=?',(r['logicalOrder'],r['b'],r['markdownText'],r['logicalId']))
+                db.commit()
+            existing=base.existing_markdown(folder)
+            self.assertEqual(existing['markdown'],initial['markdown'])
             self.assertIn(new_id,base.existing_pdf_map(folder)['unmappedLogicalIds'])
+            self.assertEqual(geom(base.existing_pdf_map(folder)),old_geometry)
+            with self.assertRaisesRegex(base.BaseError,'仅可只读'):
+                base.commit_md(folder,dict(workspace=str(folder),confirm='commit-v2-owned-md',expectedStructure=structure(folder),
+                    changes=[dict(logicalId=new_id,before=right,after='X\n\n')]),Stub())
+            self.assertEqual(base.existing_markdown(folder),existing)
 
 if __name__=='__main__':unittest.main()

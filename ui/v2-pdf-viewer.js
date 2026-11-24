@@ -5,7 +5,7 @@
 import {mountLabOcrPdf} from './lab-ocr/pdf-viewer.js';
 import {projectV2PDFEvidence,emptyLogicalIds} from './v2-pdf-evidence-adapter.js';
 import {focusLogical} from './v2-pane-focus.js';
-import {isSyntheticId} from './v2-structure-split.js';
+import {isSyntheticId} from './v2-legacy-block-id.js';
 import './v2-pdf-viewer.css';
 
 const PDF_URL='/labs/lab-ocr-v2/api/mineru-base/pdf?';
