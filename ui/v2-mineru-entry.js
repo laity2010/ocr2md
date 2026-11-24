@@ -175,8 +175,10 @@ function getMediaController(){
       if(mediaQueued)return;mediaQueued=true;
       queueMicrotask(()=>{
         mediaQueued=false;
-        if(mediaController===controller&&mediaActive&&agView==='media'&&logicalState)
+        if(mediaController===controller&&mediaActive&&agView==='media'&&logicalState){
           renderGrid(logicalState);
+          document.dispatchEvent(new Event('v2-media-preview-refresh'));
+        }
       });
     },onStatus:report,
   });

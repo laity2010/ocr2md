@@ -8,7 +8,7 @@ import morphdom from 'morphdom';
 import {createFootnotePopover} from './footnote-popover.js';
 import {mountV2PaneFocus,focusSourceLine} from './v2-pane-focus.js';
 import './v2-markdown-preview.css';
-import {mediaFileUrl} from './v2-media.js';
+import {mediaFileUrl,resolveMediaPreviewUrl} from './v2-media.js';
 
 const SOURCE='#workspace #editor';
 export function mountV2MarkdownPreview(scroller){
@@ -53,6 +53,33 @@ export function mountV2MarkdownPreview(scroller){
   };
   document.addEventListener('v2-sync-focus',onFocus);
 
+  // The AG media controller and reader use the same authorized byte store.
+  // A remote reference remains remote in CM6 until explicit adoption; only
+  // the rendered image may use its already downloaded local counterpart.
+  const pendingMedia=new Map();
+  const resolveRemoteImages=()=>{
+    const workspace=sourcePort()?.getWorkspace();
+    if(!workspace||disposed)return;
+    for(const img of article.querySelectorAll('img[src]')){
+      const remote=img.getAttribute('src');
+      if(!remote?.startsWith('https://cdn-mineru.openxlab.org.cn/'))continue;
+      const key=JSON.stringify([workspace,remote]);
+      if(pendingMedia.has(key))continue;
+      const request=resolveMediaPreviewUrl(workspace,remote);
+      pendingMedia.set(key,request);
+      void request.then(local=>{
+        if(!local||disposed||sourcePort()?.getWorkspace()!==workspace)return;
+        for(const current of article.querySelectorAll('img[src]')){
+          if(current.getAttribute('src')!==remote)continue;
+          current.addEventListener('error',()=>{
+            if(current.getAttribute('src')===local)current.setAttribute('src',remote);
+          },{once:true});
+          current.setAttribute('src',local);
+        }
+      }).finally(()=>pendingMedia.delete(key));
+    }
+  };
+  document.addEventListener('v2-media-preview-refresh',resolveRemoteImages);
   const refresh=()=>{
     if(disposed)return;
     const port=document.querySelector(SOURCE)?.v2SourcePort;
@@ -96,6 +123,7 @@ export function mountV2MarkdownPreview(scroller){
       if(folds.has(key))detail.open=folds.get(key);
     }
     lastSource=source;renderCount++;
+    resolveRemoteImages();
     highlight(focusedId);
     if(location)coordinator.port.afterRender(location);
     else{
@@ -130,6 +158,7 @@ export function mountV2MarkdownPreview(scroller){
   return Object.freeze({dispose(){
     disposed=true;clearTimeout(timer);
     document.removeEventListener('v2-cm-session',onSession);
+    document.removeEventListener('v2-media-preview-refresh',resolveRemoteImages);
     document.removeEventListener('v2-sync-focus',onFocus);
     coordinator.dispose();
     delete scroller.v2MarkdownPreviewPort;

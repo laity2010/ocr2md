@@ -163,6 +163,11 @@ try{
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      const remote='https://cdn-mineru.openxlab.org.cn/wp29-fixture.png';
      await page.route('https://cdn-mineru.openxlab.org.cn/**',r=>r.abort());
+     // WP29B: before opening Media View or adopting, the two remote images
+     // must render from the existing local file despite blocked CDN access.
+     await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ocr-preview-md-scroll img[src*="media-file"]')].filter(img=>img.complete&&img.naturalWidth>0).length===2,null,{timeout:15000});
+     assert.equal((await snapshot()).doc,before.doc);
+     assert.equal(writes.length,0);
      await picker.selectOption('media');
      const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
      await page.waitForFunction(url=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().filter(r=>r.url===url&&r.status==='已下载').length===2,remote,{timeout:20000});
@@ -179,7 +184,9 @@ try{
      await thumb.waitFor({state:'attached'});
      assert((await thumb.getAttribute('src')).includes('/lab-ocr-v2/api/mineru-base/media-file?'));
      await grid.locator('.ag-row[row-index="'+rowIndex+'"] [col-id="action"] button').click();
-     await page.waitForFunction(()=>document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+     // Assert durable document result, not a potentially missed transient dirty flag.
+     try{await page.waitForFunction(expected=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===expected,before.doc.split(remote).join(local),{timeout:10000});}
+     catch(error){console.error('WP29B_ADOPTION_FAILURE',name,JSON.stringify({status:await page.locator('#status').textContent(),state:(await snapshot()).state,writes,errors,rows:(await read()).filter(r=>r.url===remote)}));throw error;}
      await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
      const after=await snapshot();
      assert.equal(after.doc,before.doc.split(remote).join(local));
@@ -191,6 +198,7 @@ try{
      await source.evaluate(el=>el.v2SourcePort.undo());
      await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
      assert.equal((await snapshot()).doc,before.doc);
+     await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ocr-preview-md-scroll img[src*="media-file"]')].filter(img=>img.complete&&img.naturalWidth>0).length===2,null,{timeout:15000});
      await source.evaluate(el=>el.v2SourcePort.redo());
      await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
      assert.equal((await snapshot()).doc,after.doc);
