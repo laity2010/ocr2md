@@ -69,6 +69,17 @@ export function mountV2Source(host){
       return value;
     },provide:f=>EditorView.decorations.from(f),
   });
+  const breakEffect=StateEffect.define();
+  const breakField=StateField.define({
+    create:()=>Decoration.none,
+    update(value,tr){
+      if(tr.docChanged||tr.effects.some(e=>e.is(structureEffect)))value=Decoration.none;
+      for(const effect of tr.effects)if(effect.is(breakEffect))
+        value=Decoration.set(effect.value.filter(r=>Number.isInteger(r.from)&&r.to>r.from).map(r=>
+          Decoration.mark({class:'ocr-block-break-source-'+r.side}).range(r.from,r.to)),true);
+      return value;
+    },provide:f=>EditorView.decorations.from(f)
+  });
   let selectedId=null,selectedLine=null;
   let indexedDoc=null,indexedBlocks=null,lineIndex=null;
   const getMdLineIndex=(state=editor?.state)=>{
@@ -149,7 +160,7 @@ export function mountV2Source(host){
     EditorView.contentAttributes.of({spellcheck:'false'}),
     markdown({base:markdownLanguage}),obsidianMarkdown,
     syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),
-    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,structureField,latexField,
+    obsidianSourceSyntax,obsidianHeadingMarkers,focusField,structureField,latexField,breakField,
     invertedEffects.of(tr=>[
       ...(tr.effects.some(e=>e.is(structureEffect))?
         [structureEffect.of(tr.startState.field(structureField))]:[]),
@@ -480,6 +491,10 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     replaceMdLines,
+    setBreakPair(index,pair){
+      if(index&&index!==getMdLineIndex())return false;
+      editor.dispatch({effects:breakEffect.of(pair),annotations:Transaction.addToHistory.of(false)});return true;
+    },
     setLatexHighlights(index,rows){
       if(index&&index!==getMdLineIndex())return false;
       editor.dispatch({effects:latexEffect.of(rows),annotations:Transaction.addToHistory.of(false)});

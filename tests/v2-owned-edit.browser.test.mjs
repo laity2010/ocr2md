@@ -19,6 +19,7 @@ const noteReviewMode=process.env.V2_TEST_NOTE_REVIEW==='1'||noteConversionMode;
 const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
 const inlineMode=process.env.V2_TEST_INLINE_MATH==='1';
 const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
+const breakMode=process.env.V2_TEST_BREAK_VIEW==='1';
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
@@ -26,7 +27,7 @@ const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
 const copyFrom=(legacyEditMode||uiRestoreMode||inlineMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode;
+const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode||breakMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
 const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -47,7 +48,9 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=noteConversionMode?py(
+   const initial=breakMode?py(
+     'from test_v2_owned_structure import packet\nprepare_owned_book(folder)\nbase.commit_structure(folder,packet(folder),Stub())\nold=load(folder)\nwith closing(sqlite3.connect(folder/base.DB_NAME)) as db: db.execute("UPDATE logical_block SET block_type=\'text\' WHERE logical_id IN (?,?)",(old[0].logical_id,old[1].logical_id)); db.commit()\nowned_commit(folder,[dict(logicalId=old[0].logical_id,before=old[0].markdown_text,after="The invest-\\n"),dict(logicalId=old[1].logical_id,before=old[1].markdown_text,after="ment continues.\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
+     noteConversionMode?py(
      'prepare_owned_book(folder)\nrows=load(folder)\nselected=[r for r in rows if r.block_type=="text" and r.s==0][:6]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n","Duplicate reference<sup>705</sup>.\\n\\n","705. Duplicate A\\n\\n","705. Duplicate B\\n\\n"]\nvalues={r.logical_id:t for r,t in zip(selected,texts)}\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=values.get(r.logical_id,"\\n\\n")) for r in rows if r.markdown_text!=values.get(r.logical_id,"\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      noteMode?py(
      'prepare_owned_book(folder)\nrows=[r for r in load(folder) if r.block_type=="text" and r.s==0][:3]\ntexts=["WP26 reference<sup>701</sup> and <sup>703</sup>.\\n\\n","701. WP26 first body\\nContinuation\\n\\n","703. WP26 second body\\n\\n"]\nowned_commit(folder,[dict(logicalId=r.logical_id,before=r.markdown_text,after=t) for r,t in zip(rows,texts)])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
@@ -149,6 +152,50 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(breakMode){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const geometry=()=>pdf.evaluate(el=>el.v2PDFPort.getCovers().map(r=>[r.logicalId,r.physicalPageIndex,r.bbox]).sort((a,b)=>a[0]-b[0]));
+     const originalGeo=await geometry();
+     await picker.selectOption('block-break');
+     const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const target=()=>read().then(rows=>rows.find(r=>r.before_block_id===before.rows[0].logicalId&&r.after_block_id===before.rows[1].logicalId));
+     let row=await target();assert(row);assert.equal(row.kind,'跨块断词');
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned).map(c=>[c.colId,c.pinned])),[['pbs','left'],['review','right']]);
+     const at=async()=>grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('issue_id',id);return p.getDisplayedRows().findIndex(r=>r.issue_id===id);},row.issue_id);
+     await grid.locator('.ag-row[row-index="'+await at()+'"] [col-id="pbs"]').click();
+     await page.waitForFunction(()=>document.querySelector('#workspace #editor .ocr-block-break-source-before')&&document.querySelector('#workspace #editor .ocr-block-break-source-after'));
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host [data-review-pair-side="before"]')&&document.querySelector('#workspace .ocr-preview-pdf-host [data-review-pair-side="after"]'));
+     const choose=async decision=>{
+       row=await target();
+       await grid.locator('.ag-row[row-index="'+await at()+'"] [col-id="review"] button').click();
+       await page.getByRole('option',{name:decision,exact:true}).click();
+     };
+     await choose('忽略');assert.equal((await target()).review,'忽略');assert.equal(writes.length,0);
+     await choose('待定');assert.equal((await target()).review,'待定');
+     await choose('断块合并');
+     await page.waitForFunction(()=>document.querySelector('#workspace #editor').v2SourcePort.getState().dirty);
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     const merged=await snapshot();assert.equal(merged.rows[0].markdownText,'The investment continues.\n');assert.equal(merged.rows[1].markdownText,'\n\n');
+     assert.deepEqual(merged.rows.slice(2),before.rows.slice(2));assert.deepEqual(merged.rows.map(r=>r.logicalId),before.rows.map(r=>r.logicalId));
+     assert.equal(writes.length,1);assert.equal(writes[0].payload.changes.length,2);
+     assert.equal((await target()).merged,true);
+     assert.deepEqual(await geometry(),originalGeo);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert.deepEqual((await snapshot()).rows,before.rows);assert(!(await target()).merged);
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+     assert.deepEqual((await snapshot()).rows,merged.rows);
+     await picker.selectOption('title');
+     await page.waitForFunction(()=>!document.querySelector('#workspace').classList.contains('v2-break-active'));
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().slice(0,3).map(c=>[c.colId,c.pinned])),[['md_line',null],['source_line',null],['pbs',null]]);
+     await loadPage();assert.deepEqual((await snapshot()).rows,merged.rows);
+     await picker.selectOption('block-break');assert.equal(await target(),undefined);
+     assert.deepEqual(errors,[]);console.log('WP28_REAL_BREAK_PASS',name,'A/B marks, review, atomic 2-block save, undo/redo/reopen, geometry and title unchanged');
+     continue;
+   }
    if(latexMode){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');

@@ -1,0 +1,80 @@
+#workspace.v2-break-active .cm-line .ocr-block-break-source-before {
+  background:rgba(232,184,87,.14);border-bottom:2px solid #eec45b;
+  border-radius:2px;font-weight:600;
+}
+#workspace.v2-break-active .cm-line .ocr-block-break-source-after {
+  background:rgba(133,205,201,.13);border-bottom:2px solid #80cdc8;
+  border-radius:2px;font-weight:600;
+}
+#workspace.v2-break-active .lab-ocr-pdf-overlay-box[data-review-pair-side],
+#workspace.v2-break-active .lab-ocr-pdf-overlay-box[data-review-pair-side][data-selected="true"] {
+  background:transparent;opacity:1;
+  outline:2px dashed #eec45b;outline-offset:1px;
+}
+#workspace.v2-break-active .lab-ocr-pdf-overlay-box[data-review-pair-side="after"],
+#workspace.v2-break-active .lab-ocr-pdf-overlay-box[data-review-pair-side="after"][data-selected="true"] {
+  outline-color:#80cdc8;
+}
+#workspace.v2-break-active .lab-ocr-pdf-overlay-box[data-review-pair-side="both"] {
+  outline-color:#b7d7a4;
+}
+#workspace.v2-break-active .lab-ocr-pdf-pbs-tag[data-review-pair-side="before"] {
+  box-shadow:0 0 0 2px #eec45b;
+}
+#workspace.v2-break-active .lab-ocr-pdf-pbs-tag[data-review-pair-side="after"] {
+  box-shadow:0 0 0 2px #80cdc8;
+}
+
+/* WP2 correction: A/B join preview belongs to AG only. The shared Markdown
+ * and PDF preview pane retains its original two-row CSS grid and PDF.js size. */
+#workspace .ocr-outline-grid .ocr-ag-block-break-preview .ag-cell-wrapper,
+#workspace .ocr-outline-grid .ocr-ag-block-break-preview .ag-cell-value {
+  align-items:flex-start;white-space:normal;overflow:hidden;
+  height:100%;width:100%;
+}
+#workspace .ocr-outline-grid .ocr-block-break-ag-join {
+  display:block;max-width:100%;padding:5px 0;
+  font:inherit;line-height:1.45;white-space:normal;
+  overflow-wrap:anywhere;color:#d8d2bc;
+}
+#workspace .ocr-outline-grid .ocr-block-break-ag-before-token {
+  background:rgba(232,184,87,.20);color:#ffe09a;
+  border-bottom:2px solid #eec45b;font-weight:700;border-radius:2px;
+}
+#workspace .ocr-outline-grid .ocr-block-break-ag-after-token {
+  background:rgba(133,205,201,.20);color:#a1f2e8;
+  border-bottom:2px solid #80cdc8;font-weight:700;border-radius:2px;
+}
+#workspace .ocr-outline-grid .ocr-block-break-ag-before-context,
+#workspace .ocr-outline-grid .ocr-block-break-ag-after-context {color:#c4c9bb;}
+#workspace .ocr-outline-grid .ocr-block-break-ag-join-space {white-space:pre;}
+
+/* WCP43 WP3: colored review options live in one AG cell. The listbox is
+ * fixed to document.body so AG Grid's row virtualizer cannot clip it. */
+#workspace .ocr-break-review-cell {display:flex;align-items:center;height:100%;}
+#workspace .ocr-break-review-trigger {
+  width:100%;min-width:0;border:1px solid #6c7671;border-radius:6px;
+  color:#e4dbca;background:#364148;padding:6px 5px;min-height:34px;
+  font:inherit;cursor:pointer;white-space:nowrap;
+}
+#workspace .ocr-break-review-trigger[data-review="断块合并"],
+.ocr-break-review-option[data-review="断块合并"] {
+  color:#f5d690;background:#594a2e;border-color:#c39b55;
+}
+#workspace .ocr-break-review-trigger[data-review="忽略"],
+.ocr-break-review-option[data-review="忽略"] {
+  color:#97d7c9;background:#2b514c;border-color:#75ad9e;
+}
+.ocr-break-review-menu {
+  position:fixed;z-index:100000;width:190px;box-sizing:border-box;
+  border:1px solid #718279;border-radius:8px;padding:5px;
+  background:#273339;box-shadow:0 6px 24px #111b20bb;
+  display:flex;flex-direction:column;gap:4px;
+}
+.ocr-break-review-option {
+  min-height:38px;border:1px solid transparent;border-radius:5px;
+  padding:6px 10px;text-align:left;font:14px "OCR2MD Sarasa",sans-serif;
+  cursor:pointer;background:#39434b;color:#cdd5c9;
+}
+.ocr-break-review-option[aria-selected="true"]{outline:2px solid #a7c080;}
+.ocr-break-review-option:focus-visible{outline:2px solid #eec45b;}

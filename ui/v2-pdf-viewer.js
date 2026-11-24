@@ -206,6 +206,13 @@ export function mountV2PDF(host,{toolbar}={}){
     getCovers:()=>projection?.map.covers||[],
     getV1Preview:()=>native,
     focusId,updateStructure,syncTextEmpty,getNativeTextForLogicalId,
+    setBreakPair(pair){
+      if(!native)return false;
+      if(!pair?.length)return native.setReviewPair(null);
+      const targets=pair.map(r=>{const cover=projection?.byId.get(r.blockId);
+        return cover?{side:r.side,blockId:r.blockId,page:cover.physicalPageIndex+1}:null;});
+      return native.setReviewPair(targets.every(Boolean)?targets:null);
+    },
     getFormulaBlocks:()=>projection?.map.formulaBlocks||[],
     renderFormulaCrop:target=>native?.renderFormulaCrop(target)??Promise.resolve(null),
     setFormulaHighlights:rows=>native?.setFormulaHighlights(rows)??0,

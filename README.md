@@ -144,6 +144,11 @@
 - 唯一 CM6 公共 MD Line 派生公式；原始 Span 通过 base_blockid + raw_path 取证，使用物理页和真实 bbox，不以 PBS 猜测原始位置。仅 OCR / 仅 MD / 已匹配 / 已修订 / 有歧义保留 V1 判断。真实 MD 行及范围按当前修订验证；不新增实体表、独立正文或公式编辑状态。
 - 公式审阅为只读，正文修订在 CM6 进行；即时更新公式与渲染状态；V1 中间色高亮全部公式，选中不重复填色；WP27B 恢复 V1 原生行内公式定界与预览：新初始化按 typed inline_equation Span 生成 `$...$`；已存在的正文不自动覆盖，在 LaTeX 功能菜单显式补全经完整原始段落证据核对的行，通过唯一 CM6 事务保存，可撤销；人工修改或证据不明确的段落跳过。详见 [WP27](docs/v2/WP27_LATEX_VIEW.md) 与 [WP27B](docs/v2/WP27B_NATIVE_INLINE_MATH.md)。
 
+### 3.2c 断块 View（WP28）
+- 复用 V1 bf32515 的 block-break-view、block-break-merge、block-break-review-cell，列序为逻辑块 PBS、接续预览 A/B、审阅、前块、后块、前行、后行、类型、前文末尾、后文开头、检测依据（原固定列、92px 行高、默认全文及原生筛选）。切出恢复现有 View。
+- 由同一修订的公共 MD Line 派生同组相邻正文块疑似断词/续接；不跨独立父块、不跨非正文或空块屏障。A/B 当前行引用与全文证据核对，源码字符着色、原始物理 PDF 覆盖框双端定位。MD 预览保留 V1 普通定位，不另建界面。
+- 审阅待定/断块合并/忽略；合并只接受 V1 安全条件（物理行相邻、后块单非空正文行），现有 CM6 replaceMdLines 原生事务使 A 承接正文、B 清空并保留真实 LF 与 ID/PBS，局部 SQL CAS 保存、Undo/Redo。原始坐标不变，空块原有虚线。未增加第三张表；人工忽略和已合并审阅回执仅当前会话，刷新重新派生未合并候选，合并正文长期保存。详见 [WP28](docs/v2/WP28_BLOCK_BREAK.md)。
+
 ### 3.3 已发布旧实现的历史记录（有冲突者已废止）
 
 - **WP13 [历史实现，已被 3.1 取代]**：旧版使用 `groupEndPad` 投影虚拟 LF，不落盘。保留其历史证据 [WP13](docs/v2/WP13_CHILD_SINGLE_NEWLINE.md)，不得复用虚拟补尾设计。
