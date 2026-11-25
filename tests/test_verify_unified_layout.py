@@ -25,14 +25,15 @@ class DynamicWorktreeLayoutTests(unittest.TestCase):
         for n in ['main','labs','release','archive']:
             (self.root/n).mkdir()
         self.agent=self.root/'AGENTS.md'
-        self.agent.write_text('## 10. 联邦 / 州宪法继承与同级联邦契约\n`BUILD.md` `COMM.md` 州宪法\n')
+        self.agent.write_text('## 10. 联邦 / 州宪法继承与同级联邦契约\n`BUILD.md` `COMM.md` `GIT.md` 州宪法\n')
         self.build=self.root/'BUILD.md'
         self.build.write_text('# Build\n一构建一 Git、偏离就回退\n')
         self.comm=self.root/'COMM.md'
         self.comm.write_text('# Common UI\nEnumCheckboxFilter\n')
         (self.root/'main/constitution').mkdir()
         os.link(self.agent,self.root/'main/constitution/AGENTS.md')
-        for name in ('BUILD.md','COMM.md'):
+        (self.root/'GIT.md').write_text('# Federal Git contract\n')
+        for name in ('BUILD.md','COMM.md','GIT.md'):
             os.link(self.root/name,self.root/'main'/name)
         self.write_state(self.root/'main','../')
         for folder in (self.root,self.root/'main'):
@@ -109,6 +110,14 @@ class DynamicWorktreeLayoutTests(unittest.TestCase):
     def test_missing_shared_components_contract_fails_closed(self):
         self.comm.unlink()
         with self.assertRaisesRegex(AssertionError,'missing or linked-to-symlink contract'):
+            check_core(self.root)
+    def test_missing_shared_git_contract_is_rejected(self):
+        (self.root/'GIT.md').unlink()
+        with self.assertRaisesRegex(AssertionError,'missing or linked-to-symlink contract'):
+            check_core(self.root)
+    def test_detached_main_git_contract_inode_is_rejected(self):
+        p=self.root/'main/GIT.md';p.unlink();p.write_text((self.root/'GIT.md').read_text())
+        with self.assertRaisesRegex(AssertionError,'not the shared federal contract inode'):
             check_core(self.root)
     def test_detached_main_build_inode_is_rejected(self):
         original=self.root/'main/BUILD.md'

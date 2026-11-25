@@ -57,12 +57,13 @@ def check_core(root: Path):
     federal_git = main / 'constitution/AGENTS.md'
     build = root / 'BUILD.md'
     comm = root / 'COMM.md'
+    git_contract = root / 'GIT.md'
     for file in (agents, federal_git):
         require(file.is_file() and not file.is_symlink(),
                 f'missing or linked-to-symlink federal constitution: {file}')
     require(same_inode(agents, federal_git),
             'federal AGENTS.md must share inode with Main constitution/AGENTS.md')
-    for name in ('BUILD.md', 'COMM.md'):
+    for name in ('BUILD.md', 'COMM.md', 'GIT.md'):
         for file in (root / name, main / name):
             require(file.is_file() and not file.is_symlink(),
                     f'missing or linked-to-symlink contract: {file}')
@@ -76,7 +77,7 @@ def check_core(root: Path):
                 f'legacy components alias must resolve to COMM.md: {file}')
     ag_text = agents.read_text(encoding='utf-8')
     require('## 10. 联邦 / 州宪法继承与同级联邦契约' in ag_text and
-            '`BUILD.md`' in ag_text and '`COMM.md`' in ag_text and
+            '`BUILD.md`' in ag_text and '`COMM.md`' in ag_text and '`GIT.md`' in ag_text and
             '州宪法' in ag_text,
             'federal AGENTS.md does not register the federal/state hierarchy')
     require('一构建一 Git' in build.read_text(encoding='utf-8') and
@@ -106,9 +107,10 @@ def check_core(root: Path):
                        f'federal={prefix}AGENTS.md build={prefix}BUILD.md '
                        f'comm={prefix}COMM.md -->')
         text = state.read_text(encoding='utf-8')
-        require(declaration in text and '不得覆盖联邦宪法' in text,
+        declaration_v2 = declaration.replace('v1 ', 'v2 ').replace(' -->', f' git={prefix}GIT.md -->')
+        require((declaration in text or declaration_v2 in text) and '不得覆盖联邦宪法' in text,
                 f'state AGENTS.md missing federal inheritance declaration: {state}')
-        for filename in ('AGENTS.md', 'BUILD.md', 'COMM.md'):
+        for filename in ('AGENTS.md', 'BUILD.md', 'COMM.md', 'GIT.md'):
             ref = (tree / (prefix + filename)).resolve()
             require(ref == (root / filename).resolve() and ref.is_file(),
                     f'state AGENTS.md federal reference does not reach root: {state}: {filename}')
@@ -121,6 +123,7 @@ def check_core(root: Path):
     print('STATE_CONSTITUTIONS_PASS', len(state_ids), 'distinct state AGENTS files')
     print('SHARED_BUILD_PASS', build.stat().st_ino,
           hashlib.sha256(build.read_bytes()).hexdigest()[:12])
+    print('SHARED_GIT_PASS', git_contract.stat().st_ino, hashlib.sha256(git_contract.read_bytes()).hexdigest()[:12])
     print('SHARED_COMM_PASS', comm.stat().st_ino,
           hashlib.sha256(comm.read_bytes()).hexdigest()[:12])
     # Preserve older automation's summary token during the rename.
