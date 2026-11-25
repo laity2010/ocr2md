@@ -1,0 +1,28 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：18f5325d0670570fa8c2bec25bb592aaaa8e64e4
+原提交标题：Revert "feat(v2): derive WP23 title review from live CM6 blocks"
+父提交：0c6cbbe7b5575a0b8a745311a674ef6d46b9157e
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+D	docs/v2/WP23_TITLE_VIEW.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+D	tests/v2-title-view.test.mjs
+D	ui/lab-ocr/md-ag-projection.js
+D	ui/lab-ocr/title-view.js
+M	ui/v2-mineru-entry.js
+D	ui/v2-title-view.css
+D	ui/v2-title-view.js
+
+已核实问题及后续处理：回退：明确撤销 0c6cbbe。原任务 checkpoint 2026-11-24T03:31:06Z 记录树与 b604609 一致及直接回归 PASS；旧线上尚在，故源码回退已证实、即时线上回退未证实。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_76193936105b3267 2026-11-24T03:31:06.076901Z: completed=[rollback], current=implement: 用户纠偏：同一 AG 行集，用 block_type 原生筛选；不按正文重分类、无独立标题行模型、无 Level。已 git revert 0c6cbbe -> 18f5325，内容与 b604609 完全一致，直接回归 PASS。旧线上版本仍在，待新构建通过后统一替换。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+删除/回退记录：docs/v2/WP23_TITLE_VIEW.md；原版本见父提交及原构建 Notes。
