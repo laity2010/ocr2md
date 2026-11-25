@@ -1,0 +1,18 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：65c5095b4078da5552bc3fe81f5f5631fd90d4fc
+原提交标题：feat(v2): replace legacy OCR V2 with isolated verified Lab-Frame shell
+父提交：bf03bfd13db9be9951776f7e4a393f9052221676
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	labs/lab-ocr-v2/vite.config.mjs
+A	scripts/v2_frame_publish.py
+M	scripts/v6_frame_publish.py
+A	tests/v2-clean-frame-isolation.test.mjs
+A	tests/v2-clean-frame.browser.test.mjs
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
