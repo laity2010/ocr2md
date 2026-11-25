@@ -1,0 +1,48 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：cff15e8f1922e70a238342c51e9ee56d8e691b4a
+原提交标题：feat(v2): WP23B use native Type filter and column presets on shared AG rows
+父提交：18f5325d0670570fa8c2bec25bb592aaaa8e64e4
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP23B_AG_TYPE_VIEW.md
+M	labs/lab-ocr-v2/vite.config.mjs
+A	tests/v2-ag-views.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+A	ui/lab-ocr/md-ag-projection.js
+A	ui/lab-ocr/title-view.js
+A	ui/v2-ag-views.css
+A	ui/v2-ag-views.js
+M	ui/v2-mineru-entry.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_f7b0c6c93ec3f559 2026-11-24T03:57:06.428283Z: completed=[inspect], current=type: 在 cff15e8 上真实 Chromium 复现：删除标题 # 后 AG IDs [1,23]，预期 [23]，测试失败证据已取得。CM6 虚拟 LF 无持久化身份，新增块需独立事务；现有结构 CAS 拒绝新增/删除 ID，禁止解除 WP18 保护。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP23B_AG_TYPE_VIEW.md
+来源提交：cff15e8f1922e70a238342c51e9ee56d8e691b4a
+SHA256：6307edcbcf54a8eaa4b53a6cd8f4af028cf8a7a383024cb6fc4f9bbe8145754b
+--- BEGIN ORIGINAL ---
+# WP23B · 同一 AG 行集的 Type 筛选预设
+
+## 纠偏依据
+用户明确要求所有 View 直接在 AG 表按 block_type 筛选，调整列序和样式。WP23 独立标题投影偏离意图，历史保留于 0c6cbbe；18f5325 revert 与 b604609 基线逐字节一致。本航点从该基线独立实施。
+
+## 实施
+- 同一逻辑块 rowData，AG 原生 EnumCheckboxFilter。
+- 标题预设：block_type = title；列序 MD Block、PBS、源码行号、Type、其余列，不设 Level。
+- V1 原 renderer 仅用于显示标题源码及着色；CM6 全局基础字号。不从 # 重分类 Type。
+- 源码行号由现有 CM6 区间映射读取；保持页码范围、定位、原逻辑表列布局。
+- 切换相同行集的预设不重新 setRows，不请求 SQL。清除原生 Type 筛选立即显示同一行集其他类型。
+- 不修改 Schema、SQL 后端、PDF 或 Frame 共享源码。
+
+## 验收
+- node tests/v2-ag-views.test.mjs PASS。
+- V2_TEST_AG_VIEWS=1 node tests/v2-mineru-base.browser.test.mjs Chromium / iPad-WebKit PASS：同一行对象、原生 Type 模型、精确列序、着色和字号、源码行号和点击定位、清除筛选恢复全部类型、返回原逻辑块视图、无额外 SQL 查询。
+- 实机 iPad Safari 待核对。
+
+--- END ORIGINAL ---
