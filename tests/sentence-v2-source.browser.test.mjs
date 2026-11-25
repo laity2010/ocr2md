@@ -23,7 +23,7 @@ try{
    const metadata=await (await page.request.get(url+"release-version.json")).json();
    assert.equal(metadata.name,"lab-sentence");
    assert.match(metadata.commit,/^[0-9a-f]{40}$/);
-   assert.equal(await page.locator("#settings-workspace").isVisible(),true);
+   assert.equal(await page.locator("#workspace").isVisible(),true);
    await page.waitForFunction(n=>document.querySelector("#status")?.textContent.includes("V2 已保存逻辑表 · "+n+" 块"),fixture.rowCount,{timeout:30000});
    console.log("SENTENCE_V2_SNAPSHOT_PASS",name,fixture.rowCount);
   }finally{await b.close();}

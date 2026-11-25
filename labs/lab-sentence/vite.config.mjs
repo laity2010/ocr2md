@@ -38,7 +38,12 @@ export default defineConfig({
       if(!source.includes(probe))throw Error("Frame F02 signature changed");
       return "import {createSnapshotSession} from '../sentence/snapshot.js';\n"+source
         .replace("const build=__FRAME_BUILD_VERSION__;","const sentenceSource=createSnapshotSession({report:topStatus});\nconst build=__FRAME_BUILD_VERSION__;")
-        .replace(probe,probe+"\n    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);");
+        .replace(probe,probe+"\\n    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);")
+        .replace("import {createFrameWorkspace} from './layout.js';","import {createFrameWorkspace} from '../sentence/layout.js';")
+        .replace("if(select.value==='settings')void showModule('settings');","if(select.value==='settings')void showModule('settings');else if(select.value==='frame')void showModule('frame');")
+        .replace("frameFileSelect.value='';","frameFileSelect.value='frame';")
+        .replace("空白四窗框架已就绪 · 可由源码导航进入 settings.json","分句工作台 · 四窗布局 · 原文显示待接入")
+        .replace("showModule('settings');\\n// Reuse Main Settings","showModule('frame');\\nvoid getSettings().then(module=>{if(currentModule==='frame')void verifyWorkspaceIO(module.get('workspace.dataDirectory'));}).catch(error=>topStatus('全局设置加载失败：'+error.message,'error'));\\n// Reuse Main Settings");
     }
     if(id.endsWith("/ui/frame/refresh.js")){
       const old="remote?.name==='lab-frame'";
