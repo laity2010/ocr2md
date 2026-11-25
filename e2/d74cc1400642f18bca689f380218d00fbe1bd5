@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"5857bf332c6d43378b6e33fc29724b11","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"START","utc":"2026-11-25T13:23:47.709887+00:00","wp":"WP02","goal":"复用旧分句Lab三个真实引擎，针对V2逻辑块各自分句，保护非正文、保留源字符位置和完整分片，无损重构；仅分句层，尚不仲裁和持久化。","retrospective":false}
