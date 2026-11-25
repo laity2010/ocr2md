@@ -3,6 +3,7 @@ import '../styles.css';
 import '../obsidian-everforest.css';
 import './frame.css';
 import {createFrameWorkspace} from './layout.js';
+import {createSnapshotSession} from '../sentence/snapshot.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
@@ -12,12 +13,13 @@ import {enhanceNavigationSelect} from '../wcp-navigation-select.js';
 const $=id=>document.getElementById(id);
 const globalStatus=createFrameStatus($('status'));
 const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
+const sentenceSource=createSnapshotSession({report:topStatus});
 const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.
 $('build-version').textContent=build.match(/(\d{8}-\d{4})\d{2}$/)?.[1]??build;
 let publishedDirectory='';
-const io=createFrameSettingsIO(localStorage,'lab-frame',()=>publishedDirectory,
+const io=createFrameSettingsIO(localStorage,'lab-sentence',()=>publishedDirectory,
   path=>frameDirectoryPort.browse(path));
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
@@ -42,6 +44,7 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
     await frameWorkspaceIO.probe(selected);
     if(generation===probeGeneration)topStatus(
       (afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':''),'ok');
+    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);
   }catch(error){
     if(generation===probeGeneration)topStatus(
       (afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
@@ -126,7 +129,7 @@ function mountSettingsNavigation(){
   // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
   select.append(...[...frameFileSelect.children].map(child=>child.cloneNode(true)));
   select.value='settings';
-  select.addEventListener('change',()=>{if(select.value==='settings')void showModule('settings');});
+  select.addEventListener('change',()=>{if(select.value==='settings')void showModule('settings');else if(select.value==='frame')void showModule('frame');});
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
   for(const [name,action,label] of [['undo',()=>settings?.undo(),'撤销'],
@@ -160,11 +163,11 @@ async function showModule(name){
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
   }else{
     // Leaving Settings does not add a second file to the single-file menu.
-    frameFileSelect.value='';
+    frameFileSelect.value='frame';
     // The native select is the Main NavigationSelect public business port.
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
-    topStatus('空白四窗框架已就绪 · 可由源码导航进入 settings.json');
+    topStatus('分句工作台 · 四窗布局 · 原文显示待接入');
 
   }
 }
@@ -179,6 +182,7 @@ $('global-save').addEventListener('click',async()=>{
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
 // No engineering dialog or dirty-state confirmation intercepts navigation.
 startFrameAutoUpdate({version:build,report:topStatus});
-showModule('settings');
+showModule('frame');
+void getSettings().then(module=>{if(currentModule==='frame')void verifyWorkspaceIO(module.get('workspace.dataDirectory'));}).catch(error=>topStatus('全局设置加载失败：'+error.message,'error'));
 // Reuse Main Settings / CM6 with frame-local IO. No beforeunload/dirty gate,
 // SQL, media or source-document writer. No implicit per-slider save.

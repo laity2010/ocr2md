@@ -30,16 +30,6 @@ export default defineConfig({
   build:{outDir,emptyOutDir:true},
   plugins:[federalBuildRegistration,{name:"sentence-frame-identity",enforce:"pre",
   transform(code,id){
-    if(id.endsWith("/ui/frame/frame.js")){
-      const old="createFrameSettingsIO(localStorage,'lab-frame'";
-      if(!code.includes(old))throw Error("Frame settings signature changed");
-      const source=code.replace(old,"createFrameSettingsIO(localStorage,'lab-sentence'");
-      const probe="await frameWorkspaceIO.probe(selected);";
-      if(!source.includes(probe))throw Error("Frame F02 signature changed");
-      return "import {createSnapshotSession} from '../sentence/snapshot.js';\n"+source
-        .replace("const build=__FRAME_BUILD_VERSION__;","const sentenceSource=createSnapshotSession({report:topStatus});\nconst build=__FRAME_BUILD_VERSION__;")
-        .replace(probe,probe+"\n    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);");
-    }
     if(id.endsWith("/ui/frame/refresh.js")){
       const old="remote?.name==='lab-frame'";
       if(!code.includes(old))throw Error("Frame refresh signature changed");
