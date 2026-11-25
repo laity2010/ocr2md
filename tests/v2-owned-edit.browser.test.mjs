@@ -223,7 +223,8 @@ try{
        const p=el.v2SourcePort,index=p.getMdLineIndex();
        return p.getIntervals().filter(r=>r.blockType.toLowerCase().includes('table')).map(r=>({
          id:r.logicalId,pbs:index.forBlock(r.logicalId)[0].pbs,
-         type:r.blockType,line:index.forBlock(r.logicalId).find(l=>l.md_line.trim())?.source_line??null
+         type:r.blockType,line:index.forBlock(r.logicalId).find(l=>l.md_line.trim())?.source_line??null,
+         text:index.forBlock(r.logicalId).find(l=>l.md_line.trim())?.md_line??null
        }));
      });
      assert.equal(expected.length,32);
@@ -236,16 +237,24 @@ try{
      for(const row of actual){
        const ref=byId.get(row.logical_id),cover=coverMap.get(row.logical_id);
        assert(ref);assert.equal(row.pbs,ref.pbs);assert.equal(row.block_type,ref.type);
-       assert.equal(row.line_no,ref.line);assert.equal(row.block_id,ref.id);
+       assert.equal(row.line_no,ref.line);assert.equal(row.block_id,ref.id);assert.equal(row.text,ref.text);
        assert.equal(row.global_page,cover?.physicalPageIndex??null);
        assert.equal(row.block_bbox_json,cover?JSON.stringify(cover.bbox):null);
        assert.equal(row.merged_into_block_id,null);
      }
      assert.deepEqual(Object.fromEntries(['table','table_body','table_caption','table_footnote'].map(t=>[t,actual.filter(r=>r.block_type===t).length])),{table:9,table_body:9,table_caption:8,table_footnote:6});
      assert.equal(actual.filter(r=>r.line_no==null).length,10);
-     const order=['pbs','block_type','content_preview','line_no','global_page','block_id','parent_block_id','merged_into_block_id','block_bbox_json'];
+     const order=['line_no','pbs','block_type','text','content_preview','global_page','block_id','parent_block_id','merged_into_block_id','block_bbox_json'];
      assert.deepEqual((await columns()).filter(c=>!c.hide).map(c=>c.colId),order);
-     assert.deepEqual((await columns()).filter(c=>c.pinned).map(c=>c.colId),['pbs']);
+     assert.deepEqual((await columns()).filter(c=>c.pinned).map(c=>c.colId),['line_no','pbs']);
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .ag-header-cell[col-id="line_no"]')?.getBoundingClientRect().width>0,null,{timeout:15000});
+     const headers=await grid.evaluate(el=>{
+       const nodes=[...el.querySelectorAll('.ag-header-cell[col-id]')].filter(n=>n.getBoundingClientRect().width>0);
+       return nodes.sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left).map(n=>({id:n.getAttribute('col-id'),label:n.textContent.trim(),x:n.getBoundingClientRect().left}));
+     });
+     console.log('WP30A_ACTUAL_HEADERS',name,JSON.stringify(headers));
+     assert.deepEqual(headers.slice(0,4).map(n=>n.id),order.slice(0,4));
+     for(const [i,label] of ['源码行号','PBS','Type','MD Line'].entries())assert(headers[i].label.includes(label),JSON.stringify(headers[i]));
      assert.equal((await columns()).find(c=>c.colId==='pbs').sort,'asc');
      async function clickRow(ref){
        const i=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('logical_id',id);return p.getDisplayedRows().findIndex(r=>r.logical_id===id);},ref.logical_id);
@@ -275,7 +284,7 @@ try{
      assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
      assert.equal(api(folder,'markdown','GET').body.markdown,before.doc);
      assert.deepEqual(errors,[]);
-     console.log('WP30_REAL_TABLE_VIEW_PASS',name,'32 blocks / 10 PDF-only / V1 columns / PBS sort / three source targets / PDF-only / filter scope / no writes');
+     console.log('WP30_REAL_TABLE_VIEW_PASS',name,'32 blocks / 10 PDF-only / requested columns and current MD Line / PBS sort / three source targets / PDF-only / filter scope / no writes');
      continue;
    }
    if(realMediaBook){

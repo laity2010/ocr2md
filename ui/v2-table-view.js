@@ -16,11 +16,13 @@ const comparePBS=(left,right)=>{
   return a.length-b.length;
 };
 export const TABLE_COLUMNS=Object.freeze([
+  {field:'line_no',headerName:'源码行号',width:105,sortable:true,
+    pinned:'left',lockPinned:true,lockPosition:'left'},
   {field:'pbs',headerName:'PBS',width:125,sortable:true,sort:'asc',
     comparator:comparePBS,pinned:'left',lockPinned:true,lockPosition:'left'},
-  {field:'block_type',headerName:'Block Type',width:139,sortable:true},
-  {field:'content_preview',headerName:'摘要',minWidth:210,flex:1,sortable:false},
-  {field:'line_no',headerName:'源码行',width:91,sortable:true},
+  {field:'block_type',headerName:'Type',width:139,sortable:true},
+  {field:'text',headerName:'MD Line',minWidth:210,flex:1,sortable:false},
+  {field:'content_preview',headerName:'摘要',width:210,sortable:false},
   {field:'global_page',headerName:'PDF 页（0起）',width:110,sortable:true},
   {field:'block_id',headerName:'BlockID',width:102,sortable:true},
   {field:'parent_block_id',headerName:'ParentID',width:115,sortable:true},

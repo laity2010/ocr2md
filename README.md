@@ -166,7 +166,7 @@
 - 新增 F02 已授权工作目录下的 media-inventory/status/chunk/file API，沿用 V1 512 KiB 分块、partial 文件、校验及安全路径策略，仅下载明确允许的 MinerU CDN，不允许任意 URL 或路径；状态读取不主动建立媒体目录。无新增 SQL 表或第二正文。实际下载仅在隔离 loopback 夹具验证；真实 CDN、用户原书及 iPad 实机未执行。详见 WP29（Git `4d81b21`）。
 
 ### 3.2e 表格 View（WP30）
-- 复用 V1 `projectTableBlockRows` 和原列契约：PBS（固定左列、数值升序）、Block Type、摘要、源码行、PDF 页（0起）、BlockID、ParentID、已合并至 BlockID、Block BBox；默认全部、58px 行高、原生 AG 多选筛选。每个逻辑 `table*` 块一行，包括空白父块及空白注释块，不按 HTML 内容猜测类型。
+- 复用 V1 `projectTableBlockRows`；列序：源码行号、PBS、Type、MD Line、摘要、PDF 页（0起）、BlockID、ParentID、已合并至 BlockID、Block BBox。行号与 PBS 固定左侧（保留 PBS 数值升序），MD Line 直接显示同一块第一条非空的当前 CM6 源码行，空白块留空；原摘要列保留；默认全部、58px 行高、原生 AG 多选筛选。每个逻辑 `table*` 块一行，包括空白父块及空白注释块，不按 HTML 内容猜测类型。
 - V2 由当前逻辑行、公共 MD Line 与已有 PDF covers 只读派生。BlockID 是稳定 logical_id，摘要优先原始 Raw Block，源码行是同一块第一条非空物理 MD Line；空白块不借用子块行，直接定位 PDF。物理 PDF 页/BBox 与逻辑 PBS p 分别独立；无证据留空。V2 无 V1 历史吸收字段，合并目标列保留空值，不新增持久化字段。
 - 只读审阅，不新增 SQLite 表、不改正文或原书；有源码行时走既有四窗定位，空白块只选原 PDF/AG，不移动源码窗或 Markdown 预览。
 
