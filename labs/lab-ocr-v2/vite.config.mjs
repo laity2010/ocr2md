@@ -17,11 +17,22 @@ const exact=(source,oldText,newText,contract)=>{
   if(source.split(oldText).length!==2)throw Error('Lab-Frame '+contract+' contract drift: refusing parallel implementation');
   return source.replace(oldText,newText);
 };
+// Federal construction registration: build only, never dev-server/reader traffic.
+import {existsSync as federalBuildExists} from 'node:fs';
+import {fileURLToPath as federalBuildPath} from 'node:url';
+import {execFileSync as federalBuildExec} from 'node:child_process';
+const federalBuildRegistration={name:'ocr2md-federal-build-record',enforce:'pre',config(_config,{command}){
+  if(command!=='build')return;
+  const federalRoot=new URL('../../../../',import.meta.url);
+  if(!federalBuildExists(new URL('main/constitution/',federalRoot))||!federalBuildExists(new URL('labs/',federalRoot)))return;
+  federalBuildExec('python3',[federalBuildPath(new URL('.ops/git-gate.py',federalRoot)),
+    'check-start','--tree',federalBuildPath(new URL('../../',import.meta.url))],{stdio:'inherit'});
+}};
 export default defineConfig({
   root,publicDir:false,base:`/labs/${name}/`,
   define:{__FRAME_BUILD_VERSION__:JSON.stringify(version),__FRAME_SOURCE_COMMIT__:JSON.stringify(commit)},
   build:{outDir,emptyOutDir:true},
-  plugins:[{
+  plugins:[federalBuildRegistration,{
     name:'v2-frame-base-import-adapter',enforce:'pre',
     transformIndexHtml:{order:'pre',handler(html){
       html=exact(html,'<title>OCR2MD V6 · Lab Frame</title>',
