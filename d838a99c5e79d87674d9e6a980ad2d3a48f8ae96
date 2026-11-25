@@ -1,0 +1,14 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：d838a99c5e79d87674d9e6a980ad2d3a48f8ae96
+原提交标题：docs(v2): inherit shared AGENTS and reference cross-version components
+父提交：62ebf0f06ab96161b22e107d8f9404ede2421794
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	AGENTS.md
+M	README.md
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
