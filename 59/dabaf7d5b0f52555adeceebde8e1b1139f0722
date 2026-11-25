@@ -5,3 +5,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/h
 WP30/30A 缺陷证据：实际原书只读SQL：p7b0s3 logical_id181 parent_id180 block_type=text；p7b0s0 logical_id180 block_type=table；现有V2和V1投影均按Type含table过滤，遗漏该子块。32表格类型块+1非table子块。冻结已发布基线59dabaf，另开WP30B定向修正，不改写原验收记录。
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"59dabaf7d5b0f52555adeceebde8e1b1139f0722","event":"RUN_START","utc":"2026-11-25T07:58:36.016936+00:00","phase":"WP30B 最小修正结构收录及直接/双浏览器验收","step":"8e23ec153f504919bf2bf8e0d628afe1"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"59dabaf7d5b0f52555adeceebde8e1b1139f0722","event":"RUN_EXIT","utc":"2026-11-25T07:59:17.932363+00:00","phase":"WP30B 最小修正结构收录及直接/双浏览器验收","step":"8e23ec153f504919bf2bf8e0d628afe1","exit_code":1}
