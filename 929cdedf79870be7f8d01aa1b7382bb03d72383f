@@ -1,0 +1,13 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：929cdedf79870be7f8d01aa1b7382bb03d72383f
+原提交标题：chore(v2): stamp WP13 child line break in build identity
+父提交：5c61bb49e5a1f6d2849c499658cbe851d8970eec
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	labs/lab-ocr-v2/vite.config.mjs
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
