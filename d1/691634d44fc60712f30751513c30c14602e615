@@ -1,3 +1,5 @@
 WP30B 发布闭环：20261125-160156，d1691634d44fc60712f30751513c30c14602e615，releaseId 0ba22fcc669ed3a670b635759d7ffb5aba216371ba3ab36bb00d4dc972c6d22f；直接测试及双浏览器33块含p7b0s3原Type和定位PASS，首次测试夹具失败如实记录；正式构建、跨版本门禁、普通push、九州布局八Lab哈希及线上HTTP200/SHA核验通过，发布run退出0同步2483347；原有stage标记及字体包体警告未改，物理iPad未验。
 
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"START","utc":"2026-11-25T08:26:11.401890+00:00","wp":"WP30C","goal":"表格View功能菜单组织当前选中表格组：一级引用标题、image占位、二级[! ds-html]- HTML Table及HTML、一级引用注释；保留稳定逻辑块、Type、原内容和其他View，不改原书；原生单次Undo/Redo。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_START","utc":"2026-11-25T08:27:21.392487+00:00","phase":"WP30C 表格源码组织与既有CM6事务接入","step":"d1f0796adadd49a6af34826177398554"}
