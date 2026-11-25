@@ -11,3 +11,6 @@ M	labs/lab-ocr-v2/vite.config.mjs
 
 历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
 
+
+补充历史检查点证据：原注记的历史证据不足状态由以下可核对记录补充；并非本轮重测。
+tsk_80e448df5da7f4ce 2026-11-23T09:38:33.676623Z: completed=[4]: WP13 已提交 5c61bb4 + 929cded 并推送，V2 发布成功；最新 manifest/release-version/public HTTP SHA 均匹配 929cded；70 资源 hash 通过；其他 6 个 Lab 未变；公网 HTTP 200，gateway releaseId 一致
