@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 ROOT=Path(__file__).resolve().parents[1]
 NAME='lab-frame'
@@ -38,6 +39,9 @@ def fingerprints(folder):
     return files,total
 
 def publish(release):
+    if ROOT.parent.name == 'labs' and (ROOT.parent.parent / 'main').is_dir():
+        gate = ROOT.parent.parent / '.ops/git-gate.py'
+        subprocess.run([sys.executable, str(gate), 'check-release', '--tree', str(ROOT), '--commit', 'HEAD'], check=True)
     source=ROOT/'labs'/NAME/'dist'
     if not source.is_dir():raise RuntimeError('Build lab-frame first')
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
