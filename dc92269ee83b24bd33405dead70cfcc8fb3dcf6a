@@ -1,0 +1,13 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：dc92269ee83b24bd33405dead70cfcc8fb3dcf6a
+原提交标题：build(v2): identify PBS nine-column stage in release metadata
+父提交：c69e5352ee9c8c223e35ea3f0d4c40ca091c2a3e
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	labs/lab-ocr-v2/vite.config.mjs
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
