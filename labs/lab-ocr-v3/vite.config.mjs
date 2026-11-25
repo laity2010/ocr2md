@@ -149,6 +149,8 @@ export default defineConfig({
             "setRows:(rows)=>{grid.setGridOption('rowData',rows);},"+
             "getColumns:()=>grid.getColumnDefs(),"+
             "getColumnState:()=>grid.getColumnState(),"+
+            "resetColumnState:()=>grid.resetColumnState(),"+
+            "applyColumnState:(params)=>grid.applyColumnState(params),"+
             "getFilterModel:()=>grid.getFilterModel(),"+
             "setFilterModel:(model)=>grid.setFilterModel(model),"+
             "getDisplayedRows:()=>{const rows=[];for(let i=0;i<grid.getDisplayedRowCount();i++)rows.push(grid.getDisplayedRowAtIndex(i)?.data);return rows;},"+
@@ -180,7 +182,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp06-ag-dual-projection',
+            stage:'wp07-derived-views',
           })+'\n',
         });
       },

@@ -7,6 +7,7 @@
  */
 import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
 import {focusV3LogicalBlock} from './pane-focus.js';
+import {createV3DerivedViewAdapters} from './view-adapters.js';
 
 export const V3_LOGICAL_COLUMNS = Object.freeze([
   {
@@ -109,7 +110,8 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
   const port = gridHost?.v3GridPort;
   if (!port) return null;
 
-  let currentViewMode = 'logical'; // 'logical' | 'mdline'
+  const derivedAdapters = createV3DerivedViewAdapters();
+  let currentViewMode = 'logical'; // 'logical' | 'mdline' | 'headings' | 'footnotes'
   let showAllPages = false;
   let currentPage = 0;
   let activeColsKey = '';
@@ -134,6 +136,9 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
   viewSelect.setAttribute('aria-label', 'AG 投影视图');
   viewSelect.add(new Option('逻辑块', 'logical'));
   viewSelect.add(new Option('MD Line', 'mdline'));
+  for (const adapter of Object.values(derivedAdapters)) {
+    viewSelect.add(new Option(adapter.label, adapter.id));
+  }
   viewSelect.value = currentViewMode;
 
   controls.append(allLabel, viewSelect);
@@ -147,8 +152,8 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
       if (col.field === 'pbs') {
         const w = measureMaxTextWidth(['PBS', ...rows.slice(0, 300).map((r) => r.pbs)]);
         widths.push({key: 'pbs', newWidth: Math.max(68, Math.min(148, w + 26))});
-      } else if (col.field === 'block_type' || col.field === 'blockType') {
-        const w = measureMaxTextWidth(['Type', ...rows.slice(0, 300).map((r) => r[col.field])]);
+      } else if (col.field === 'block_type' || col.field === 'blockType' || col.field === 'pairStatus') {
+        const w = measureMaxTextWidth([col.headerName || 'Type', ...rows.slice(0, 300).map((r) => r[col.field])]);
         // 额外预留原生过滤按钮宽度 38px
         widths.push({key: col.field, newWidth: Math.max(78, Math.min(200, w + 46))});
       }
@@ -158,11 +163,25 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
     }
   }
 
+  function resolveViewSpec(mode) {
+    if (mode === 'mdline') {
+      return {id: 'mdline', columns: V3_MDLINE_COLUMNS, resetColumnState: true, focusBy: 'sourceLine'};
+    }
+    if (derivedAdapters[mode]) {
+      return derivedAdapters[mode];
+    }
+    return {id: 'logical', columns: V3_LOGICAL_COLUMNS, resetColumnState: true, focusBy: 'logical_id'};
+  }
+
   function buildRows() {
     const srcPort = getSourcePort();
     if (!srcPort) return [];
     const struct = srcPort.getStructure();
     if (!struct || struct.blocks.length === 0) return [];
+
+    if (derivedAdapters[currentViewMode]) {
+      return derivedAdapters[currentViewMode].buildRows(srcPort, {showAllPages, currentPage});
+    }
 
     if (currentViewMode === 'mdline') {
       const lineRows = srcPort.getLineIndex().rows;
@@ -186,9 +205,19 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
   }
 
   function renderProjection({forceColumns = false} = {}) {
-    const colDefs = currentViewMode === 'mdline' ? V3_MDLINE_COLUMNS : V3_LOGICAL_COLUMNS;
+    const spec = resolveViewSpec(currentViewMode);
+    const colDefs = spec.columns;
     if (forceColumns || activeColsKey !== currentViewMode) {
+      // 先清空列定义，彻底销毁前一视图残留的列实例与 pinned/列序状态（符合 VIEWS.md 第 2 节）
+      port.setColumns([]);
       port.setColumns(colDefs.map((c) => ({...c})));
+      if (spec.resetColumnState) {
+        port.resetColumnState?.();
+        port.applyColumnState?.({
+          state: colDefs.map((c) => ({colId: c.field, pinned: c.pinned ?? null})),
+          applyOrder: true,
+        });
+      }
       activeColsKey = currentViewMode;
     }
     const rows = buildRows();
@@ -197,7 +226,8 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
   }
 
   function focusMatchingRow(logicalId, sourceLine) {
-    if (currentViewMode === 'mdline' && sourceLine != null) {
+    const spec = resolveViewSpec(currentViewMode);
+    if (spec.focusBy === 'sourceLine' && sourceLine != null) {
       if (port.focusRow('sourceLine', sourceLine)) return true;
       return port.focusRow('logicalId', logicalId);
     }
@@ -215,7 +245,7 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
     const data = event?.data;
     if (!data) return;
     const lid = data.logicalId ?? data.logical_id;
-    const line = data.sourceLine ?? null;
+    const line = data.sourceLine ?? data.source_line ?? null;
     if (lid != null) {
       focusV3LogicalBlock(lid, {source: 'ag', sourceLine: line, reveal: true});
     }
@@ -226,7 +256,8 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
     renderProjection();
   };
   const onViewChange = () => {
-    currentViewMode = viewSelect.value === 'mdline' ? 'mdline' : 'logical';
+    const val = viewSelect.value;
+    currentViewMode = val === 'mdline' || derivedAdapters[val] ? val : 'logical';
     renderProjection({forceColumns: true});
   };
   allCheckbox.addEventListener('change', onAllToggle);
@@ -264,7 +295,7 @@ export function mountV3AgRouter({gridHost, toolbarHost, getSourcePort}) {
   return Object.freeze({
     getState: () => ({viewMode: currentViewMode, showAllPages, currentPage, userResizedCols: Array.from(userResizedCols)}),
     setViewMode(mode) {
-      viewSelect.value = mode === 'mdline' ? 'mdline' : 'logical';
+      viewSelect.value = mode === 'mdline' || derivedAdapters[mode] ? mode : 'logical';
       onViewChange();
     },
     setShowAll(enabled) {
