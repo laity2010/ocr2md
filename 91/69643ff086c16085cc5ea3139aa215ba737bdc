@@ -3,3 +3,5 @@
 FEDERAL_BUILD_EVENT_V1 {"event":"START","id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","utc":"2026-11-25T03:56:30.538658+00:00","goal":"联邦先登记再构建，Git留痕优先；不改业务运行及用户数据","wp":"FED-GIT-START"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","event":"RUN_START","utc":"2026-11-25T04:01:45.093449+00:00","phase":"最终联邦生命周期及既有执法回归","step":"05935d886a87456eb1cc7e8b751b4bf8"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","event":"RUN_EXIT","utc":"2026-11-25T04:05:30.392945+00:00","phase":"最终联邦生命周期及既有执法回归","step":"05935d886a87456eb1cc7e8b751b4bf8","exit_code":0}
