@@ -35,3 +35,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"63992955e3ec4b7a8d67c5007ad93421","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"63992955e3ec4b7a8d67c5007ad93421","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_START","utc":"2026-11-25T14:06:06.442668+00:00","phase":"preserve-failure","step":"f92ae3413cbb4284a55fc0da5d90abab"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"63992955e3ec4b7a8d67c5007ad93421","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_EXIT","utc":"2026-11-25T14:06:28.444021+00:00","phase":"preserve-failure","step":"f92ae3413cbb4284a55fc0da5d90abab","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"63992955e3ec4b7a8d67c5007ad93421","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"END","utc":"2026-11-25T14:06:43.432352+00:00","result":"FAIL","commit":"977f8b28d3cfeefaa3ea335533ba256511a3c6f6","evidence":"快照单测3/3通过；正式构建因Frame变换转义语法错误失败，浏览器及发布未执行；失败独立证据分支已推送，依BUILD恢复WP01。","release":"FORBIDDEN","remote_ref":"refs/heads/evidence/sentence-wp01b-failed-20261125"}
