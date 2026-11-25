@@ -1,0 +1,1 @@
+WP30C 发布闭环：20261125-180508，9e643daece7be1c654403ed38e492152bf05f82e，releaseId c62e864c6374dff8289f665d6c9c2852d409edf7cda75cf3faa05a02e67a0323；直接测试与双浏览器真实书隔离副本精确源码、3稳定逻辑块、折叠展开、幂等、Undo/Redo/重开、33行原回归通过；三次失败及中断事实保留。正式构建发布、普通push、九州布局八Lab哈希、线上HTTP200及SHA验证通过，发布run退出0同步c69abc1。旧stage标记wp29-media-view与字体包体警告未改；物理iPad及原PDF未实机验收。
