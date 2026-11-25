@@ -27,6 +27,13 @@ def git(*args, cwd=ROOT):
 
 
 def install(source, commit):
+    # Federal gate; isolated external test repositories are not active states.
+    if ROOT.name == 'main' and (ROOT.parent / 'labs').is_dir():
+        gate = ROOT.parent / '.ops/git-gate.py'
+        cmd = [sys.executable, str(gate), 'check-release', '--tree', str(source.parent), '--commit', commit]
+        if source.parent != ROOT:
+            cmd.append('--legacy-rollback')
+        subprocess.run(cmd, check=True)
     if not (source / 'index.html').is_file() or not (source / 'release-version.json').is_file():
         raise RuntimeError('Incomplete V6 output, refusing publication')
     if STAGING.exists() or OLD.exists():
