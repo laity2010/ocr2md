@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"8e16e86d963b456db43e6958396da955","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"8e16e86d963b456db43e6958396da955","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"b4a8223f3e659e73093e9f39828aad62717a695e","event":"RUN_START","utc":"2026-11-25T07:35:07.812468+00:00","phase":"WP30A 精确列序和当前MD Line双浏览器回归","step":"d7dc6b550f1c41f18a0f3b71b837f3bd"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"8e16e86d963b456db43e6958396da955","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"b4a8223f3e659e73093e9f39828aad62717a695e","event":"RUN_EXIT","utc":"2026-11-25T07:36:13.714323+00:00","phase":"WP30A 精确列序和当前MD Line双浏览器回归","step":"d7dc6b550f1c41f18a0f3b71b837f3bd","exit_code":1}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"8e16e86d963b456db43e6958396da955","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"b4a8223f3e659e73093e9f39828aad62717a695e","event":"RUN_START","utc":"2026-11-25T07:46:40.240585+00:00","phase":"WP30A 首次DOM断言失败，沿用既有col-id和真实坐标核验表头","step":"bb632b12eb7d4bd7b935f348735fe40d"}
