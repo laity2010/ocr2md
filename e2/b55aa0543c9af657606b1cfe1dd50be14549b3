@@ -13,3 +13,6 @@ A	tests/test_v2_gateway_publish_sync.py
 
 历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
 
+
+补充历史检查点证据：原注记的历史证据不足状态由以下可核对记录补充；并非本轮重测。
+tsk_1f015e921f8adafb 2026-11-23T02:18:23.002915Z: completed=[deliver]: Gateway 重启后 V2 逻辑表全量 224 行通过真实授权请求的关键断言；更新发布脚本的 Python 变更条件重启与 health ID 校验。新提交 e2b55aa 推送 GitHub，统一发布版本 20261123-101646；静态70文件哈希、其他6 Lab 不变、公网 HTTP 200、Mac Chromium 实际打开和无 JS pageerror PASS。无用户 SQLite 修改。
