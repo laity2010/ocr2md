@@ -11,3 +11,6 @@ M	labs/lab-ocr-v2/vite.config.mjs
 
 历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
 
+
+补充历史检查点证据：原注记的历史证据不足状态由以下可核对记录补充；并非本轮重测。
+tsk_c24cc5e66bb4447e 2026-11-23T05:19:03.737562Z: completed=[publish]: WP08 新CM6拼接/末块空行归属已实现并发布原V2 Lab。纯JS/真实224 MinerU文本字节往返、父子块重排及子块光标边界、Chromium/iPad-WebKit实际CM6/AG/SQLite、真实V1 PDF归入子块/UndoRedo/SQL全部PASS；两浏览器完整版V1 PDF回归经独立重测最终PASS，Frame隔离和所有既有Python测试PASS。第一源码提交1000fa686ae228cb05ae94ceaf733e81d117c4d5，随后只修改发布stage的提交feb9bc1f82c34492dabbcf8fb39ccccfa4ea69d3皆普通push。最终公网与manifest 70 asset SHA256匹配，其他6Lab保留，统一网关/公网releaseId f7ac0eea9313451df595ef754f2ab6e72e0d508be21be131ef1ffb8c004c725a，版本v2-lab-frame-20261123-131754，stage wp08-cm6-group-end-owned-blank-no-interblock-separator-readonly-f02，public HTTP200 SHA匹配，Git clean。当前只读；新增自动空行属于CM6末子块显示范围，不宣称已写入SQLite原始正文，用户真实空行字节保留；实机Safari仍需验收。
