@@ -1,0 +1,51 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：65e4a799c7f1e14434e1eb9f273865ef12328268
+原提交标题：fix(v2): WP25J enforce requested title column order
+父提交：3da437af380f13f626b2a16e62f107c35d2b7ce7
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	docs/v2/WP25I_UI_RESTORE.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-ag-views.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/v2-ag-views.js
+
+已核实问题及后续处理：WP25J：任务 tsk_aa5889c77d8dbfb6 的原检查点记录 Chromium/WebKit V2_TEST_UI_RESTORE exit 0、direct AG preset PASS、发布 261124-195959、70 manifest hashes、LAN SHA 一致。后续用户实机发现固定列使实际列序仍错，判为未达预期；9fe720b 修复实际表头。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_aa5889c77d8dbfb6 2026-11-24T12:00:01.200947Z: completed=[change,test], current=publish: Only title preset column order changed. README and assertions updated. Chromium/WebKit V2_TEST_UI_RESTORE exit 0; direct AG preset PASS. Commit 65e4a79, release in progress.
+任务检查点 tsk_aa5889c77d8dbfb6 2026-11-24T12:01:22.121581Z: completed=[publish]: 65e4a79 published 261124-195959; 70 manifest hashes, LAN exact SHA, clean pushed worktree. Both browser UI regressions and direct tests PASS.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25I_UI_RESTORE.md
+来源提交：65e4a799c7f1e14434e1eb9f273865ef12328268
+SHA256：9afb82b26931f45536da02f798183842a073ceb3fcc24bc2d09b62d083efd73f
+--- BEGIN ORIGINAL ---
+# WP25I · 既定 UI 契约恢复
+
+## 故障证据
+实际发布 d261525（261124-191119）和真实 sample 书籍的隔离 SQLite 副本（267 个逻辑块、445 个 CM6 物理行）在 Chromium/WebKit 均复现：
+- 加载时 1 个 gutter、1 个焦点行按钮，标题 View 的实际列序却是通用 MD Line / PBS / 块内偏移 / 源码行号 / Block Type / Line Type / Logical ID / Base ID / 标题层级。WP25F 48217a9 将共享数据误作共享显示布局，未遵循用户指定的正文、Level、Type、其他列。
+- 真实键盘输入并按 Enter 后，浏览器 console 报 CodeMirror plugin crashed: Error: Missing real owned LF，行号 gutter 从 1 变 0，按钮从 1 变 0；重开才恢复。WP25D 2fc547a 的 lineMarker -> lineIdAt -> getMdLineIndex 使用新正文及 updateListener 尚未更新的外部 blocks 缓存；CM6 移除崩溃插件。旧测试只检查 pageerror、数据库等，漏掉 console 捕获的插件异常及连续 UI 存活。
+- 原 d261525 Git 现场保留。停止其他功能，针对两处已明确的 UI 违约恢复原组件契约；不重做 Frame，不变更用户数据、两表或行级数据架构。
+
+## 恢复范围
+- 标题行预设前三列 MD Line、Level（# 至 ######）、Type（行级类型），保留 V1 着色和全局字号，其余字段随后。Level 原生筛选使用同一符号；通用行视图和块视图列布局不变。
+- 原 CM6 行号/按钮组件只从当前 view.state 同修订 doc、structureField 获取行索引，点击时解析当前修订行引用；保留原行号按钮样式及删除/提取菜单，取消显式分割的决定不变。
+- 修正测试的错误列序断言，捕获 CM6 插件崩溃 console；增加 V2_TEST_UI_RESTORE=1 的真实键盘与行号连续存活验收，可选明确授权书籍只读复制。
+
+## 证据
+- 真实 sample 隔离 SQLite 副本：Chromium/WebKit 各 PASS（WP25I_UI_RESTORE_PASS）。标题列序、真实键盘输入/Enter、Undo/Redo、菜单点击、保存重开、267 ID 不变；每次检查可见行号和唯一焦点行按钮，未发生插件崩溃。
+- 直接 AG 预设（Level 显示和筛选符号）、MD Line 索引、行编辑、标题识别测试及联邦布局门禁 PASS。
+- 未触碰原书或其他 Lab。实际发布身份以 manifest 为准。
+
+- WP25F 标题交互矩阵 Chromium/WebKit 均 PASS：独立标题行、原着色字号、精确点击、7 次 SQLite 差量保存及重开、267 个 ID 不变；未发生 CM6 插件崩溃。
+
+> WP25J：用户最新明确指定标题前三列为 MD Line、源码行号、PBS；Level、Type 等其余列顺延。该明确指令取代本历史记录的前三列约定，以当前 README 为准。
+
+--- END ORIGINAL ---
