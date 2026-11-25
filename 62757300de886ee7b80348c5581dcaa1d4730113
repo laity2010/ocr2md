@@ -1,0 +1,46 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：62757300de886ee7b80348c5581dcaa1d4730113
+原提交标题：feat(v2): default to right-side PDF review at two-thirds height
+父提交：ae37ec65cf8e198cb4078b2ce9e71b85a4083259
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP22_DEFAULT_PDF_2THIRDS_REVIEW.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP22_DEFAULT_PDF_2THIRDS_REVIEW.md
+来源提交：62757300de886ee7b80348c5581dcaa1d4730113
+SHA256：58b329c683204e2c9450bdb2fb8dff296e7aa3551424f74e131aba3baf44c85c
+--- BEGIN ORIGINAL ---
+# WP22 · V2「逻辑块审阅」与默认 PDF 2/3 高度
+
+## 用户要求
+
+1. AG 表顶栏不要额外的「AG 表」文本标签。
+2. 原「空白框架」在 V2 显示为「逻辑块审阅」。
+3. 右侧预览窗默认呈现 **PDF 预览**，其高度占右列约三分之二，源码窗占右列约三分之一；**不需要先做 PDF/Markdown 切分**。
+
+## 工程边界
+
+- 仅修改 V2 `labs/lab-ocr-v2/vite.config.mjs` 的版本专属 `exact(...)` 构建适配。Frame 主源码 `ui/frame/layout.js` 和 `ui/frame/index.html`、V1/Main、统一 Dockview/API、Markdown 渲染、PDF.js 原生 viewer/标签/手势、AG Grid 原生筛选组件均保持原样。
+- AG strip 只删 Frame 的冗余 `<span class="ocr-ag-toolbar-label">AG 表</span>`，保留 `.ocr-ag-toolbar`、现有 picker、V2 导入的全部/页码控制和 AG 功能；模块 `<option>` 用户可见名称改为 `逻辑块审阅`，内部 `value="frame"` 不变，`settings` 入口不变；V2 初始化提示不再称「空白框架」。
+- `preview` 的 select 初始值设为 `pdf`，原 `setSplit(true)` 在 V2 构建结果中移除，初始 split checkbox 未勾选。已有 `mountV2PreviewSlot()` 创建唯一 `mountV2PDF(pdfSurface)`，`setSplit(false)` 令同一 PDF surface 在 `.ocr-preview-pane` 显示，Markdown 仍在同一 pane 的下拉中可选择。原切分功能仅在用户**主动点击**时仍可将这个 PDF.js surface 移到第四 Panel，取消切分再搬回而不重新下载或建立第二个 PDF worker。
+- Dockview 顶/底组高度在第一次 `createFrameWorkspace.activate()` 非零 layout 后，由原生 `dockview.getPanel('preview')?.api.setSize({height: Math.round(container.clientHeight * 2 / 3)})` 设置**一次**。不使用覆盖尺寸的 CSS，避免遮挡 toolbar、破坏 PDF 触控和用户随后拖动 sash 调整尺寸。首次没有尺寸时暂不标记成功，真正激活后设置，用户手动改变后不自动强迫重设。
+
+## 验收
+
+- `V2_TEST_WP09_ONLY=1 node tests/v2-real-markdown-preview.browser.test.mjs`：真实 22 页、267 逻辑块，Dockview **3 个 Panel**，PDF在原 `.ocr-preview-pane` 且显示、唯一原 V1 PDF.js，AG无多余 label，picker 用户标签为「逻辑块审阅」，checkbox 默认关闭。Chromium 来源 pane 287px + PDF pane 573px，预览比例 `0.666279`；iPad-WebKit 来源 357px + PDF 715px，比例 `0.666978`。原真实 PDF PBS/子块/公式类型仍匹配。
+- 不绕过原 V2 主浏览器测试：`tests/v2-real-markdown-preview.browser.test.mjs` 应从默认单 PDF 状态**显式打开**旧可选切分，然后验证来回切换期间同一个 PDF.js viewer，原来的 PNG/PBS 覆盖框坐标和标签不变。`tests/v2-mineru-base.browser.test.mjs` 的 AG/CM6/SQlite 与行号、WP15/17/18/19/20/21 相关测试及发布用的 `verify_cross_version_components.py --target lab-ocr-v2 --browser` 必须通过 Chromium 和 iPad-WebKit。
+
+## 不修改
+
+不更换 Frame 共享布局源码或 V1 的 AG/PDF 模块；不增加第二套布局系统；不触碰书籍工作目录、`mineru_base`、`logical_block`、PBS、已保存源码、PDF/MinerU 文件或自动导入/重建数据库。
+
+--- END ORIGINAL ---
