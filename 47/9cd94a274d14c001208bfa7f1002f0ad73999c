@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"b9e3b3fa22754b258c5f5b21eebc6a76","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"479cd94a274d14c001208bfa7f1002f0ad73999c","event":"START","utc":"2026-11-25T11:58:33.155145+00:00","wp":"WP31B","goal":"媒体View：引用列紧随预览，未引用行以蓝色独立选中（保留原橙色联动），功能菜单插入所选本地媒体到选中前源码光标；原CM6单事务，原SQL门禁，其他View/两表/PBS/V1/V3/Frame不变。WP31A实机报告HTTP502根因未定，当前仅前端增量，不触碰原书或重启服务。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"b9e3b3fa22754b258c5f5b21eebc6a76","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"479cd94a274d14c001208bfa7f1002f0ad73999c","event":"RUN_START","utc":"2026-11-25T11:59:18.275169+00:00","phase":"implement","step":"b7bb81817732462eaab2c1a353cb2437"}
