@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"60eca6540e0447a492a22d65176c80bf","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"START","utc":"2026-11-25T12:26:21.900134+00:00","wp":"WP31C","goal":"启动时已授权的现有SQLite存在logical_block，完成原有加载后通过既有导航进入逻辑表和frame逻辑块审阅；仅首次启动，首次无库或手动保存目录仍按现有流程；保留手动选择、设置再打开、两表、CM6、PDF、V1/V3/Frame、后端及用户原书不变。双浏览器真实启动与现有AG门禁。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"60eca6540e0447a492a22d65176c80bf","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"RUN_START","utc":"2026-11-25T12:26:50.835381+00:00","phase":"implement-startup","step":"da5779f442d745eaaef553485a18dd62"}
