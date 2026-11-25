@@ -5,3 +5,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"07b0b49a332d41578aaa8398bb699e98","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"07b0b49a332d41578aaa8398bb699e98","branch":"refs/heads/experiment/lab-sentence","baseline":"de78e9dc7d9939db1e8d9c57ad19cd54b7a0600c","event":"RUN_EXIT","utc":"2026-11-25T15:40:32.586473+00:00","phase":"build-test","step":"be7eaee766bb4e9aa67d5d530b91044d","exit_code":1}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"07b0b49a332d41578aaa8398bb699e98","branch":"refs/heads/experiment/lab-sentence","baseline":"de78e9dc7d9939db1e8d9c57ad19cd54b7a0600c","event":"RUN_START","utc":"2026-11-25T15:41:00.158456+00:00","phase":"test-harness-fix","step":"48569928eb7c4875b9c83254dba72ae3"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"07b0b49a332d41578aaa8398bb699e98","branch":"refs/heads/experiment/lab-sentence","baseline":"de78e9dc7d9939db1e8d9c57ad19cd54b7a0600c","event":"RUN_EXIT","utc":"2026-11-25T15:41:45.745484+00:00","phase":"test-harness-fix","step":"48569928eb7c4875b9c83254dba72ae3","exit_code":0}
