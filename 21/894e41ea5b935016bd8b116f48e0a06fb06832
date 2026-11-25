@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"475511d43f8048b49c3ba4931c72ba71","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"21894e41ea5b935016bd8b116f48e0a06fb06832","event":"START","utc":"2026-11-25T10:39:52.980947+00:00","wp":"WP05","goal":"WP05：在 lab-ocr-v3 中接入默认三窗布局（左 AG、右上源码 1/3、右下 PDF 2/3）与不重建实例的四窗切分、复用 V1 mountLabOcrPdf/layoutPbsLabels 与行号菜单、实现局部 ChangeSpec 结构拖拽归组与 structure-commit 接入，以及显式多窗聚焦分离；ui/frame/*、V1/V2 及其他 Lab 不变。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"475511d43f8048b49c3ba4931c72ba71","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"21894e41ea5b935016bd8b116f48e0a06fb06832","event":"RUN_START","utc":"2026-11-25T10:48:27.669276+00:00","phase":"precommit-full-verify","step":"24a6197cfaac4cec8a4677c7dd7ae7cf"}
