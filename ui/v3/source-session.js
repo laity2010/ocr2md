@@ -9,13 +9,16 @@
 import {defaultKeymap, history, historyKeymap, redo, redoDepth, undo, undoDepth} from '@codemirror/commands';
 import {markdown} from '@codemirror/lang-markdown';
 import {EditorState, Transaction} from '@codemirror/state';
-import {EditorView, keymap, lineNumbers} from '@codemirror/view';
+import {EditorView, keymap} from '@codemirror/view';
 
 import {
   buildInitialStructureState,
   createV3OwnedTransactionFilter,
+  v3ApplyStructureMoveEffect,
   v3LoadStructureEffect,
+  v3StructureCommitAnnotation,
   v3StructureField,
+  v3StructureHistoryExtension,
 } from './cm-structure.js';
 import {createV3MdLineIndex} from './md-line-index.js';
 import {
@@ -23,6 +26,9 @@ import {
   v3BoundaryFlashField,
   v3BoundaryFlashTheme,
 } from './boundary-feedback.js';
+import {createV3LineGutter} from './line-gutter.js';
+import {focusV3LogicalBlock} from './pane-focus.js';
+import {planLocalStructureMove} from './structure-move.js';
 
 const IDLE_SAVE_MS = 850;
 const API_BASE = '/labs/lab-ocr-v3/api/mineru-base/';
@@ -39,10 +45,43 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
   let idleTimer = null;
   let savingPromise = null;
   let cachedLineIndex = null;
+  let cachedLineIndexRev = -1;
+  let savedStructureSha256 = '';
+  const savedStructureSnap = new Map();
   const dirtyIds = new Set();
   const savedHashes = new Map();
   const listeners = new Set();
   const flashCtrl = createBoundaryFlashController();
+
+  function captureStructureSnap(blocks) {
+    savedStructureSnap.clear();
+    for (const b of blocks) {
+      savedStructureSnap.set(b.logicalId, {
+        parentId: b.parentId ?? null,
+        logicalOrder: b.logicalOrder,
+        p: b.p,
+        b: b.b,
+        s: b.s,
+      });
+    }
+  }
+
+  function hasStructureChanges(blocks) {
+    for (const b of blocks) {
+      const prev = savedStructureSnap.get(b.logicalId);
+      if (
+        !prev ||
+        prev.parentId !== (b.parentId ?? null) ||
+        prev.logicalOrder !== b.logicalOrder ||
+        prev.p !== b.p ||
+        prev.b !== b.b ||
+        prev.s !== b.s
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   const publishStatus = (msg, kind = 'info') => {
     if (typeof onStatus === 'function') {
@@ -63,11 +102,12 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
     document.dispatchEvent(new CustomEvent('v3-source-updated', {detail}));
   };
 
-  function getLineIndex() {
-    const struct = view.state.field(v3StructureField);
-    if (!cachedLineIndex || cachedLineIndex._stateRev !== struct.revision) {
-      const idx = createV3MdLineIndex(view.state.doc, struct);
-      cachedLineIndex = Object.assign(idx, {_stateRev: struct.revision});
+  function getLineIndex(stateArg) {
+    const targetState = stateArg || view.state;
+    const struct = targetState.field(v3StructureField);
+    if (!cachedLineIndex || cachedLineIndexRev !== struct.revision) {
+      cachedLineIndex = createV3MdLineIndex(targetState.doc, struct);
+      cachedLineIndexRev = struct.revision;
     }
     return cachedLineIndex;
   }
@@ -77,7 +117,8 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
       clearTimeout(idleTimer);
       idleTimer = null;
     }
-    if (!workspacePath || dirtyIds.size === 0) return;
+    const blocks = view.state.field(v3StructureField).blocks;
+    if (!workspacePath || (dirtyIds.size === 0 && !hasStructureChanges(blocks))) return;
     idleTimer = setTimeout(() => {
       idleTimer = null;
       void saveNow({reason: 'idle'});
@@ -115,11 +156,14 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
     if (update.docChanged) {
       cachedLineIndex = null;
       let loaded = false;
+      let structureMoved = false;
       for (const tr of update.transactions) {
         for (const eff of tr.effects) {
           if (eff.is(v3LoadStructureEffect)) {
             loaded = true;
             dirtyIds.clear();
+          } else if (eff.is(v3ApplyStructureMoveEffect)) {
+            structureMoved = true;
           }
         }
       }
@@ -133,11 +177,46 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
       scheduleIdleSave();
       updateUndoRedoButtons();
       notifyListeners({
-        type: 'docChanged',
-        dirty: dirtyIds.size > 0,
+        type: structureMoved ? 'structureMoved' : loaded ? 'loaded' : 'docChanged',
+        dirty: dirtyIds.size > 0 || hasStructureChanges(curStruct.blocks),
         revision: curStruct.revision,
       });
+    } else if (update.selectionSet) {
+      const head = update.state.selection.main.head;
+      const idx = getLineIndex();
+      const row = idx.atOffset(Math.min(head, Math.max(0, update.state.doc.length - 1)));
+      if (row) {
+        focusV3LogicalBlock(row.logicalId, {source: 'cm6', sourceLine: row.sourceLine, reveal: false});
+      }
     }
+  });
+
+  const lineGutter = createV3LineGutter({
+    getLineIndex,
+    onQuoteAdjust(row, delta) {
+      const nextLine = delta > 0 ? '>' + row.mdLine : row.mdLine.replace(/^>/, '');
+      if (nextLine === row.mdLine) return;
+      view.dispatch({
+        changes: {from: row.from, to: row.textTo, insert: nextLine},
+        scrollIntoView: false,
+      });
+    },
+    onExtractText(row, mode, text) {
+      if (!text) return;
+      if (mode === 'replace') {
+        view.dispatch({
+          changes: {from: row.from, to: row.textTo, insert: text},
+          effects: view.scrollSnapshot(),
+        });
+      } else {
+        const head = view.state.selection.main.head;
+        const pos = head >= row.from && head <= row.textTo ? head : row.textTo;
+        view.dispatch({
+          changes: {from: pos, to: pos, insert: text},
+          effects: view.scrollSnapshot(),
+        });
+      }
+    },
   });
 
   const view = new EditorView({
@@ -145,12 +224,13 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
       doc: '',
       extensions: [
         v3StructureField,
+        v3StructureHistoryExtension,
         v3BoundaryFlashField,
         v3BoundaryFlashTheme,
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         markdown(),
-        lineNumbers(),
+        lineGutter,
         EditorView.lineWrapping,
         ownedFilter,
         updateListener,
@@ -158,6 +238,21 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
     }),
     parent: host,
   });
+
+  const onFocusChanged = (event) => {
+    const detail = event.detail;
+    if (!detail || detail.source === 'cm6') return;
+    const block = view.state.field(v3StructureField).blocks.find((b) => b.logicalId === detail.logicalId);
+    if (!block) return;
+    const anchor = detail.sourceLine
+      ? getLineIndex().atSourceLine(detail.sourceLine)?.from ?? block.from
+      : block.from;
+    view.dispatch({
+      selection: {anchor},
+      scrollIntoView: detail.reveal !== false,
+    });
+  };
+  document.addEventListener('v3-focus-changed', onFocusChanged);
 
   const sourcePane = host.closest('.ocr-source-pane');
   const undoBtn = sourcePane?.querySelector('#undo');
@@ -187,6 +282,8 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
     for (const seg of snapshot.segments) {
       savedHashes.set(seg.logicalId, seg.fragmentSha256);
     }
+    savedStructureSha256 = nextStruct.structureSha256;
+    captureStructureSnap(nextStruct.blocks);
     dirtyIds.clear();
     cachedLineIndex = null;
 
@@ -200,12 +297,30 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
     return nextStruct;
   }
 
+  function applyStructureMove(intent) {
+    const prevStruct = view.state.field(v3StructureField);
+    const plan = planLocalStructureMove(view.state.doc, prevStruct, intent);
+    if (plan.unchanged) {
+      return {unchanged: true};
+    }
+    view.dispatch({
+      changes: plan.changes,
+      annotations: v3StructureCommitAnnotation.of(true),
+      effects: [
+        v3ApplyStructureMoveEffect.of({prevStruct, nextStruct: plan.nextStruct}),
+        view.scrollSnapshot(),
+      ],
+    });
+    return {unchanged: false, revision: plan.nextStruct.revision};
+  }
+
   async function saveNow({reason = 'manual'} = {}) {
     if (savingPromise) return savingPromise;
     if (!workspacePath) {
       return {saved: false, skipped: 'no-workspace'};
     }
-    if (dirtyIds.size === 0) {
+    const curBlocksSnapshot = view.state.field(v3StructureField).blocks;
+    if (dirtyIds.size === 0 && !hasStructureChanges(curBlocksSnapshot)) {
       return {saved: true, changedRows: 0, skipped: 'clean'};
     }
 
@@ -213,6 +328,104 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
       const stateSnapshot = view.state;
       const struct = stateSnapshot.field(v3StructureField);
       const doc = stateSnapshot.doc;
+
+      if (hasStructureChanges(struct.blocks)) {
+        const structChanges = [];
+        for (const b of struct.blocks) {
+          const prev = savedStructureSnap.get(b.logicalId);
+          const cur = {
+            parentId: b.parentId ?? null,
+            logicalOrder: b.logicalOrder,
+            p: b.p,
+            b: b.b,
+            s: b.s,
+          };
+          if (
+            !prev ||
+            prev.parentId !== cur.parentId ||
+            prev.logicalOrder !== cur.logicalOrder ||
+            prev.p !== cur.p ||
+            prev.b !== cur.b ||
+            prev.s !== cur.s
+          ) {
+            structChanges.push({logicalId: b.logicalId, before: prev, after: cur});
+          }
+        }
+
+        const prevOrdered = Array.from(savedStructureSnap.entries())
+          .map(([logicalId, s]) => ({logicalId, ...s}))
+          .sort((a, b) => a.logicalOrder - b.logicalOrder);
+        const oldSucc = new Map();
+        for (let i = 0; i < prevOrdered.length; i += 1) {
+          const nxt = i + 1 < prevOrdered.length ? prevOrdered[i + 1] : null;
+          oldSucc.set(
+            prevOrdered[i].logicalId,
+            nxt && nxt.p === prevOrdered[i].p && nxt.b === prevOrdered[i].b ? nxt.logicalId : null,
+          );
+        }
+        const newSucc = new Map();
+        for (let i = 0; i < struct.blocks.length; i += 1) {
+          const nxt = i + 1 < struct.blocks.length ? struct.blocks[i + 1] : null;
+          newSucc.set(
+            struct.blocks[i].logicalId,
+            nxt && nxt.p === struct.blocks[i].p && nxt.b === struct.blocks[i].b ? nxt.logicalId : null,
+          );
+        }
+
+        const boundaryChecks = [];
+        for (const [lid, succ] of oldSucc.entries()) {
+          if (succ !== newSucc.get(lid)) {
+            const bSha = savedHashes.get(lid);
+            if (bSha) boundaryChecks.push({logicalId: lid, beforeSha256: bSha});
+          }
+        }
+
+        const textChanges = [];
+        const submittedText = new Map();
+        for (const b of struct.blocks) {
+          const afterText = doc.sliceString(b.from, b.to);
+          const beforeSha = savedHashes.get(b.logicalId);
+          if (!beforeSha) continue;
+          const afterSha = await sha256HexUtf8(afterText);
+          if (afterSha !== beforeSha) {
+            textChanges.push({logicalId: b.logicalId, beforeSha256: beforeSha, after: afterText});
+            submittedText.set(b.logicalId, {afterText, afterSha});
+          }
+        }
+
+        publishStatus(reason === 'idle' ? '正在增量保存 V3 结构…' : '正在保存 V3 结构…');
+        const res = await fetcher(`${API_BASE}structure-commit`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          cache: 'no-store',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            workspace: workspacePath,
+            confirm: 'commit-v3-structure',
+            structureSha256: savedStructureSha256,
+            changes: structChanges,
+            textChanges,
+            boundaryChecks,
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          const errMsg = data?.error || `HTTP ${res.status}`;
+          publishStatus(`结构保存冲突，已保留当前编辑：${errMsg}`, 'error');
+          return {saved: false, status: res.status, error: errMsg};
+        }
+
+        savedStructureSha256 = data.structureSha256 || savedStructureSha256;
+        captureStructureSnap(struct.blocks);
+        for (const [lid, info] of submittedText.entries()) {
+          savedHashes.set(lid, data?.updatedHashes?.[String(lid)] || info.afterSha);
+          dirtyIds.delete(lid);
+        }
+        publishStatus(`✓ 已增量保存结构（${structChanges.length} 块）`, 'ok');
+        notifyListeners({type: 'saved', dirty: false, revision: view.state.field(v3StructureField).revision});
+        return data;
+      }
+
       const byId = new Map();
       for (const b of struct.blocks) {
         byId.set(b.logicalId, b);
@@ -303,12 +516,14 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
     getLineIndex,
     getState: () => ({
       workspace: workspacePath,
-      dirty: dirtyIds.size > 0,
+      dirty: dirtyIds.size > 0 || hasStructureChanges(view.state.field(v3StructureField).blocks),
+      structureDirty: hasStructureChanges(view.state.field(v3StructureField).blocks),
       dirtyLogicalIds: Array.from(dirtyIds),
       revision: view.state.field(v3StructureField).revision,
-      structureSha256: view.state.field(v3StructureField).structureSha256,
+      structureSha256: savedStructureSha256 || view.state.field(v3StructureField).structureSha256,
     }),
     loadSnapshot,
+    applyStructureMove,
     saveNow,
     subscribe(fn) {
       listeners.add(fn);
@@ -326,6 +541,7 @@ export function mountV3Source(host, {fetcher = fetch, idleMs = IDLE_SAVE_MS, onS
         idleTimer = null;
       }
       flashCtrl.dispose();
+      document.removeEventListener('v3-focus-changed', onFocusChanged);
       undoBtn?.removeEventListener('click', onUndoClick);
       redoBtn?.removeEventListener('click', onRedoClick);
       delete host.v3SourcePort;

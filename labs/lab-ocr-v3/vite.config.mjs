@@ -86,11 +86,56 @@ export default defineConfig({
         }
         if(id.endsWith('/ui/frame/layout.js')){
           code=exact(code,"import {EditorState} from '@codemirror/state';",
-            "import {mountV3Source} from '../v3/source-session.js';\nimport {EditorState} from '@codemirror/state';",
-            'V3 single CM6 source import');
+            "import {mountV3PreviewSlot,mountV3DetachedPDF} from '../v3/preview-slot.js';\nimport {mountV3Source} from '../v3/source-session.js';\nimport {EditorState} from '@codemirror/state';",
+            'V3 single CM6 source and preview slot import');
           code=exact(code,'element.append(body);owned=()=>mountEmptySource(body);',
             'element.append(body);owned=()=>mountV3Source(body);',
             'V3 single CM6 source mount');
+          code=exact(code,'function blankPane(name,onSplit,onModuleChange){',
+            'function blankPane(name,onSplit,onModuleChange,pdfSlot){',
+            'V3 PDF slot passed into Frame pane');
+          code=exact(code,'  let split=false;\n  const dockview=createDockview',
+            '  let split=false;\n  const pdfSlot={preview:null,detached:null,current:null};\n  const dockview=createDockview',
+            'V3 single PDF.js owner');
+          code=exact(code,'blankPane(name,setSplit,onModuleChange)',
+            'blankPane(name,setSplit,onModuleChange,pdfSlot)',
+            'V3 PDF slot propagation');
+          code=exact(code,'<option value="pdf" disabled>PDF 原文</option>',
+            '<option value="pdf">PDF 原文</option>',
+            'V3 unsplit PDF option');
+          code=exact(code,"    const split=document.createElement('label');split.className='ocr-preview-split-toggle';",
+            "    mode.value='pdf';\n    const split=document.createElement('label');split.className='ocr-preview-split-toggle';",
+            'V3 initial PDF mode');
+          code=exact(code,"checkbox.type='checkbox';checkbox.checked=true;",
+            "checkbox.type='checkbox';checkbox.checked=false;",
+            'V3 initial unsplit preview');
+          code=exact(code,`  setSplit(true);
+  return Object.freeze({setSplit,activate(){if(container.clientWidth&&container.clientHeight)
+    dockview.layout(container.clientWidth,container.clientHeight);},`,
+            `  let sized=false;
+  return Object.freeze({setSplit,activate(){
+    if(!container.clientWidth||!container.clientHeight)return;
+    dockview.layout(container.clientWidth,container.clientHeight);
+    if(!sized){
+      dockview.getPanel('preview')?.api.setSize({height:Math.round(container.clientHeight*2/3)});
+      sized=true;
+    }
+  },`,
+            'V3 initial three-pane 2/3 PDF height');
+          code=exact(code,"element.append(area);\n    element.setAttribute('aria-label','Markdown 预览（空白）');",
+            "const pdfTools=document.createElement('div');pdfTools.className='ocr-preview-mode-tools';pdfTools.dataset.mode='pdf';pdfTools.hidden=true;bar.append(pdfTools);\n"+
+            "const pdfSurface=document.createElement('div');pdfSurface.className='ocr-preview-pdf-host';pdfSurface.dataset.pdfTheme='dark';\n"+
+            "element.append(area,pdfSurface);owned=()=>mountV3PreviewSlot({pane:element,mdScroller:area,modeSelect:mode,pdfSurface,pdfTools,pdfSlot});\n"+
+            "element.setAttribute('aria-label','Markdown / PDF 预览');",
+            'V3 shared preview PDF slot');
+          code=exact(code,"const host=document.createElement('div');host.className='ocr-detached-pdf-host';\n"+
+            "    const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';\n"+
+            "    host.append(surface);element.append(host);",
+            "const host=document.createElement('div');host.className='ocr-detached-pdf-host';\n"+
+            "    const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';\n"+
+            "    host.append(surface);element.append(host);\n"+
+            "    owned=()=>mountV3DetachedPDF({surface,actions,pdfSlot});",
+            'V3 detached split PDF slot');
           code=exact(code,"picker.add(new Option('空白框架','frame'));",
             "picker.add(new Option('V3 工作台','frame'));",'V3 AG module title');
           code=exact(code,"picker.title='空白框架 AG 模块切换不可用';",
@@ -133,7 +178,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp04b-cm6-single-source',
+            stage:'wp05-pdf-local-drag',
           })+'\n',
         });
       },

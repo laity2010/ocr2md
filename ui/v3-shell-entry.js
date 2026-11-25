@@ -65,6 +65,8 @@ async function loadExistingV3Workspace(workspace){
     const snapshot=await mdRes.json();
     if(activeWorkspace===workspace){
       await sourcePort.loadSnapshot(snapshot,{workspace});
+      const pdfPort=document.querySelector('.ocr-preview-pdf-host')?.v3PDFPort;
+      if(pdfPort)void pdfPort.loadWorkspace(workspace);
     }
   }catch{
     // 静默忽略未授权或隔离测试环境下的网络探针失败

@@ -7,6 +7,7 @@
  *    与尾换行不变量校验，严禁在按键路径上调用全书 doc.toString() 或 JSON.stringify。
  */
 import {Annotation, EditorState, StateEffect, StateField} from '@codemirror/state';
+import {invertedEffects} from '@codemirror/commands';
 
 export const V3_STRUCTURE_SCHEMA = 'v3-structure/v1';
 
@@ -18,6 +19,9 @@ export const v3LoadStructureEffect = StateEffect.define();
 
 /** 局部编辑通过门禁后同步更新结构区间与增量脏 ID 的内部 Effect。 */
 export const v3ApplyOwnedEditEffect = StateEffect.define();
+
+/** 局部结构拖拽事务 Effect，携带 {prevStruct, nextStruct} 以支持原生 Undo/Redo 同步逆转。 */
+export const v3ApplyStructureMoveEffect = StateEffect.define();
 
 /** 空文档结构常量。 */
 export const EMPTY_V3_STRUCTURE = Object.freeze({
@@ -176,6 +180,9 @@ export const v3StructureField = StateField.define({
       if (effect.is(v3ApplyOwnedEditEffect)) {
         return effect.value;
       }
+      if (effect.is(v3ApplyStructureMoveEffect)) {
+        return effect.value.nextStruct;
+      }
     }
     if (tr.docChanged) {
       const res = computeNextStructure(state, tr);
@@ -185,6 +192,22 @@ export const v3StructureField = StateField.define({
     }
     return state;
   },
+});
+
+/** 原生 CM6 history() 逆转器：确保 Undo/Redo 同步恢复 v3StructureField 与 doc。 */
+export const v3StructureHistoryExtension = invertedEffects.of((tr) => {
+  const reversed = [];
+  for (const effect of tr.effects) {
+    if (effect.is(v3ApplyStructureMoveEffect)) {
+      reversed.push(
+        v3ApplyStructureMoveEffect.of({
+          prevStruct: effect.value.nextStruct,
+          nextStruct: effect.value.prevStruct,
+        }),
+      );
+    }
+  }
+  return reversed;
 });
 
 /** 依据后端 /markdown 快照构建不可变初始区间状态，并严格核验区间连续性与总长度。 */
