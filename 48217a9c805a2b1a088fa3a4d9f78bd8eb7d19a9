@@ -1,0 +1,34 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：48217a9c805a2b1a088fa3a4d9f78bd8eb7d19a9
+原提交标题：feat(v2): WP25F shared MD Line title preset
+父提交：ab6fa48e4191246fab7d491c944a9482c9d55ab9
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP25F_LINE_TITLES.md
+M	tests/v2-ag-views.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+M	tests/v2-owned-heading.test.mjs
+M	ui/v2-ag-views.css
+M	ui/v2-ag-views.js
+M	ui/v2-mineru-entry.js
+
+已核实问题及后续处理：FAIL / 违宪证据：WP25F 擅用通用 MD Line 列序，偏离既定标题 View；3da437a、65e4a79、9fe720b 后续纠偏。未见本轮先发布回退到已验收基线的证据。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_c14a556ddda50a6c 2026-11-24T09:58:35.90549Z: completed=[F], current=G: WP25F 48217a9 pushed clean; both browsers real line title preset, shared row identity, 7 saves and reopen, 267 IDs and PDF geometry unchanged. Final integrated regression/release next.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25F_LINE_TITLES.md
+来源提交：48217a9c805a2b1a088fa3a4d9f78bd8eb7d19a9
+SHA256：c1f8f892529a65b5b6b466ca649ba8a1886f2445c055ad0401cba427e3bd9cdb
+--- BEGIN ORIGINAL ---
+# WP25F · 行级标题 View
+基线 ab6fa48。真实 LF 的标题预设与 MD Line 共用相同索引行对象，原生 line_type=title 筛选；每标题独立 AG 行，V1 着色和全局字号。块审阅保留持久化 Block Type，不再把含标题的整个块升级为 title；移除堆叠 renderer/CSS。旧未标记库保留历史块级筛选兼容。
+直接测试 PASS。V2_TEST_OWNED_TITLES=1 node tests/v2-owned-edit.browser.test.mjs：Chromium/WebKit 各 7 次实际 SQLite 差量提交，独立标题行、同一索引对象、原生筛选、V1 两级颜色和 16px、精确第 8/10 行点击、标题标记删除、撤销重做、267 原始 ID/类型及 PDF 几何、重开均通过。非实机 iPad。未发布。
+
+--- END ORIGINAL ---
