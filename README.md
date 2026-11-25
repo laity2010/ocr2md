@@ -7,7 +7,7 @@
 - **Lab ID**：`lab-ocr-v3`（框架型 Lab，自 `lab-frame` 基线 `1dbc2b7` 建立）
 - **工作树**：`labs/lab-ocr-v3`；**Git 分支**：`experiment/lab-ocr-v3`
 - **目标统一入口**：`/labs/lab-ocr-v3/`（**[WP01-MOUNT 首次挂载；实机 iPad Safari 尚待验收]**）
-- **当前阶段**：**WP01-MOUNT 首次统一挂载**。统一网关已启用“老路冻结 + 新路动态发现与按 `sourceCommit` 局部热重载”；`lab-ocr-v3` 空壳基线发布至统一 `release/lab-ocr-v3/` 与 `release-manifest.json`，与 V2 零干扰并行。
+- **当前阶段**：**WP02 · V3 SQLite 底座与单轨初始化后端**。已完成 `scripts/lab_backend/` 隔离后端包（`ocr2md.v3.sqlite`、`open_v3_db` 统一连接工厂、`zlib` 压缩归档及解压逐字节 SHA 核验、单轨 `owned-LF` 初始化、结构摘要 `structureSha256` 与只读投影 `state`/`markdown`/`pdf-map`/`pdf`）；WP03 继续实施摘要式增量 CAS（`md-commit` / `structure-commit`）。
 
 ## 2. 现状与待实现清单
 
@@ -15,8 +15,9 @@
 | :--- | :--- | :--- |
 | **工作树与州治理体系** | **[已实现 · WP00-LEGISLATION PASS]** | 独立 worktree、`AGENTS.md`（治理架构）+ 显式登记的 `SQL.md`、`CM.md`、`VIEWS.md` 及本 `README.md` |
 | **V3 空壳基线与 `COMM.md` 门禁** | **[已实现 · WP00-SHELL PASS]** | `labs/lab-ocr-v3/vite.config.mjs`（含 `check-start`）、`ui/v3-shell-entry.js`（原生 V1 `EnumCheckboxFilter`）、`scripts/v3_frame_publish.py`、`tests/cross-version-ag-filter.browser.test.mjs`、`tests/test_v3_frame_publish.py` |
-| **统一网关接入与首次挂载** | **[WP01-MOUNT 已实现；待用户实机核验]** | 网关动态发现与按 commit 局部热重载（8/8 单测通过，V2 零回归）；首次发布至 `/labs/lab-ocr-v3/`（停检点 ①） |
-| **V3 SQLite 底座与摘要式 CAS** | **[仍待实现 · WP02–WP03]** | `ocr2md.v3.sqlite`、`zlib` 归档、`structure_sha256` / `before_sha256`、`open_v3_db` |
+| **统一网关接入与首次挂载** | **[已实现 · WP01-MOUNT PASS；待实机核验]** | 网关动态发现与按 commit 局部热重载（V2 零回归）；已挂载 `/labs/lab-ocr-v3/`（停检点 ①） |
+| **V3 SQLite 物理底座与单轨初始化** | **[已实现 · WP02 PASS]** | `scripts/lab_backend/`（`ocr2md.v3.sqlite`、`open_v3_db`、`zlib` 归档、单轨 `owned-LF` 初始编译、`structureSha256`、`state`/`import`/`markdown`/`pdf-map`/`pdf`）及 `tests/test_v3_sqlite_foundation.py` |
+| **V3 摘要式增量 CAS 写回** | **[仍待实现 · WP03]** | `md-commit`（`structure_sha256` + `before_sha256` + 局部 `O(k)` 尾换行边界核验）、`structure-commit` 与显式安全重置 |
 | **单源 $O(\log N)$ CM6 与局部拖拽** | **[仍待实现 · WP04–WP06]** | 仅读 `structureField`、轻量行索引、二分局部编辑门禁、局部 `ChangeSpec` 拖拽与三窗布局 |
 | **AG 双投影与全套审阅 View** | **[仍待实现 · WP07–WP09、WP11]** | 标题/注释/LaTeX/断块/媒体/HTML 表格 View |
 | **审阅决策持久化** | **[仍待实现 · WP10，待拍板]** | 待用户选定 `SQL.md` 第 5 节方案 A（`review_meta` 列）或方案 B（`review_state` 辅表） |
@@ -27,6 +28,8 @@
   `npx vite build --config labs/lab-ocr-v3/vite.config.mjs`
 - 发布器隔离单测：
   `python3 -m unittest tests/test_v3_frame_publish.py -v`
+- V3 SQLite 底座与动态后端包直接测试：
+  `python3 -m unittest tests/test_v3_sqlite_foundation.py -v`
 - 联邦 `COMM.md` 跨版本组件双浏览器门禁（Chromium + iPad-WebKit）：
   `python3 ../../main/scripts/verify_cross_version_components.py --target lab-ocr-v3 --browser`
 - 联邦布局与继承检查：

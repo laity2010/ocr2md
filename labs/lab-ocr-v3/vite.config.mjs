@@ -127,7 +127,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp01-mount',
+            stage:'wp02-sqlite-foundation',
           })+'\n',
         });
       },
