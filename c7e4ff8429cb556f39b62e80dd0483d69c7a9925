@@ -1,0 +1,130 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：c7e4ff8429cb556f39b62e80dd0483d69c7a9925
+原提交标题：fix(v2 wp03): add only authoritative logical block_type column
+父提交：deb1bb7f6696c528ddcf9b8addae7e2d6a9599ac
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	docs/v2/WP01_LOGICAL_CONTRACT.md
+M	docs/v2/WP02_LOGICAL_INITIALIZATION.md
+A	docs/v2/WP03_BLOCK_TYPE_CONTRACT.md
+M	docs/v2/WP03_MARKDOWN_ROUNDTRIP.md
+M	scripts/v2_logical_contract.py
+M	scripts/v2_markdown_roundtrip.py
+M	scripts/v2_mineru_base.py
+M	tests/test_v2_logical_init.py
+M	tests/test_v2_markdown_roundtrip.py
+M	tests/test_v2_mineru_base.py
+M	tests/v2-clean-frame.browser.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+M	ui/v2-mineru-entry.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP01_LOGICAL_CONTRACT.md
+来源提交：c7e4ff8429cb556f39b62e80dd0483d69c7a9925
+SHA256：82ed3a57f3236f554566a6e2d3e66357ef771ecae31899134fb563a0c9c373e2
+--- BEGIN ORIGINAL ---
+# V2 WP01 · 初始逻辑块映射契约（只读验证）
+
+受审起点：WP00 `309f29b`。仅定义纯转换和验收，不修改 SQLite、用户原件、Frame 或界面。下一航点验收前不迁移既有 SQL Schema。
+
+## 原始组与逻辑层
+
+- `mineru_base` 无损保存 MinerU 的三组基础记录 `preproc_blocks`、`discarded_blocks`、`para_blocks`，含 `blockid=0` 原始文件归档。**三组不是 539 个独立正文**：`preproc` 是前处理证据，`discarded` 含页眉页脚、页码等。不得直接拼成可编辑正文。
+- 初始逻辑块只取 `para_blocks`，每个最终 OCR 块生成一行逻辑记录；初始一对一，样本为 **224** 条逻辑记录，对应 22 页中已归档的 539 条基础记录。其余 315 条原始记录继续可从基础表/源 JSON 恢复，不删除、不伪装成正文。
+- 当前六列结构足以**表达初始扁平逻辑状态**：`logical_id = base_blockid`（稳定原始指针）、`base_blockid` 外键指向来源、`parent_id = NULL`（未经审阅不得推断父子）、`logical_order = 1..N`（PDF 页序 → `para_blocks` 页内顺序）、`markdown_text` 为从原始内容派生的可读 Markdown、`block_type` 初始复制 OCR 判断但以后单独保存可修改的当前类型。跨页不按视觉猜测合并，表格原有 `blocks` 子树仍存在原始 JSON。
+- 块组、原始页码、bbox、OCR spans、score、媒体链接和未知键**只从** `mineru_base.block_json` 查找，不另建扩展物理表；逻辑表只存当前最新编辑状态，不写历史。后续拆分一条来源成多个逻辑块、跨来源归并、父子块、span 光标定位等尚**未验证**，必须在对应航点扩展契约和测试，不能冒充 WP01 完成。
+
+## 文字投影限制
+
+- WP01 的 `project_block` 是有版本约束的**初步可读投影**：正文 span 同行连接、跨行空格；标题对应 `#` 层级；独立公式用 `$$`；表格保留 HTML；媒体用 Markdown 图片链接，复杂父块按 MinerU 原有子块序列展开。空 OCR 块可保留空文本。
+- 此 Markdown **不是原始 MinerUJSON 的无损替身**，不宣称与 V1 的 Markdown 完全一致，也不修改/解析 MinerU 原件。完整恢复权威始终是基础表 `block_json` 与 `blockid=0` 原始字节档案。WP03 的无损往返只指逻辑行→无标签 Markdown+外部内存位置清单→同逻辑行，无论是否包含空块；不是直接从裸 Markdown 恢复所有 OCR 布局信息。
+- 不嵌入 CMD 注释标签，不新建 `md_line` 第三物理表，暂不绑定 CM6 编辑会话；只读导出/往返由 WP03 独立实现、验证。
+
+## WP01 门禁
+
+仅对 fixture 和合成越界样本运行纯函数测试：组别过滤、一对一映射、身份稳定、全覆盖、全类型投影、无块序/隐式父子变更；该航点不可改写磁盘数据库。WP01 通过才允许 WP02 在授权范围内显式初始化逻辑层。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP02_LOGICAL_INITIALIZATION.md
+来源提交：c7e4ff8429cb556f39b62e80dd0483d69c7a9925
+SHA256：cce3bb03464fe36aef7da7ad9236d1b247bf9fa903ad6fce0afeb755593b922b
+--- BEGIN ORIGINAL ---
+# V2 WP02 · 初始逻辑表落盘（基础表生成后自动完成）
+
+基线：WP01 `15f59cb`。**2026-11-21 修订（以本节为准）**：使用现有 `POST /labs/lab-ocr-v2/api/mineru-base/import`（请求正文 `{workspace,confirm:"import-mineru-base"}`）作为**基础表+逻辑表的统一生成入口**，原独立 `logical-init` 接口与 AG 操作按钮已撤除。仅对已保存目录且 Frame F02 读写验证通过的工作区自动发起导入；保留独立授权 Cookie、同源 Origin、白名单校验与真实 F02 probe。未保存的目录不会写 SQL。
+
+## 映射与事务
+
+- WP00 的 `mineru_base` 始终不可变；读取 `WHERE blockid>0 ORDER BY blockid`，按 WP01 规则过滤 `para_blocks`，初始一对一写 `logical_block` 六字段（原五列与 `block_type`）。`logical_id=base_blockid`，`parent_id=NULL`，顺序为唯一的连续 1..N，`markdown_text` 为可读 Markdown 初始投影，`block_type` 从基础表原始类型初始化但未来以逻辑表类型为准。样本：539 基础块+blockid=0 档案，224 逻辑块。
+- 先确认真实 SQLite 普通文件、双表 WP00 Schema、MinerU 来源 SHA 无变化、Frame F02 probe 有效。新库在未发布的**同一个私有 staging SQLite** 中先无损写入基础表，再构造逻辑表，检查两表数量、来源 SHA、原始归档字节与外键全部正确后提交，最后原子发布；任何失败不留下只含基础表的不完整正式库。旧版同源空逻辑表由同一 `POST import` 在已有 SQLite 的 `BEGIN IMMEDIATE` 事务内安全补全，不重新写基础表。绝不修改 PDF、MinerUJSON。
+- 当前 `logical_block` 非空时，不重写任何行：即便有人工编辑、不同父子/排序或未来 SQL 逻辑，也只复用已有数据。若原始 MinerU 来源改变，明确拒绝初始化；如果逻辑表已经有状态，`import` 亦不得因文件变化而自动覆盖 SQLite。用户以后想清空、重建须另订有保护的迁移契约，不能悄悄运行。
+- V2 AG 无「初始化逻辑表」按钮。第一次完成两表导入，或者已保存的旧空表经受控补全后，可从 SQL 导航直接选择「逻辑表 · logical_block」，沿用既有 AG Grid 展示 6 列/样本 224 行。若源确实无 `para_blocks`，0 行合法且无需反复补写。WP02 只初始化扁平结构，没有 CM6 编辑、撤销、跨页合并或父子归属。
+
+## 验收
+
+- 纯转换 WP01 3/3；WP00 12/12。WP02 direct API 测试：新建一次即完成 539 基础块 + 224 逻辑块，原始字节不变、表数恒为 2，初始化转换失败不得产生不完整 SQL；旧空表同源自动补全且基础表逐字段不变；重复打开和人工修改保护，变动来源拒绝覆盖，未授权/缺 confirm/错误 Origin 拒绝；Chromium+WebKit 验证不需要点击初始化，直接显示 6 列/224 行，旧空表刷新后补全。
+- 所有验证使用临时 MinerU 样本和 SQLite。真实工作目录只在用户**已经保存并授权读写**、打开 V2 且现有逻辑表为空时，自动补齐其 `ocr2md.v2.sqlite` 的**逻辑表**，不改基础表；尚未实际打开该目录前，发布代码不代表已经完成用户数据库升级。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP03_BLOCK_TYPE_CONTRACT.md
+来源提交：c7e4ff8429cb556f39b62e80dd0483d69c7a9925
+SHA256：4a5fbd387e8de5a2218f33b86dcfa71bca5063e016c8fb52a643ee65d2d02947
+--- BEGIN ORIGINAL ---
+# V2 · WP03 结构修正：一个 `block_type` 字段
+
+修订日期：2026-11-21。基线 `deb1bb7`；只修改实验 V2，Frame/Main 与用户原始书籍无改动。**不增加类型审核状态列、第三物理表或额外编辑器。**
+
+## 单一当前类型权威
+
+- `mineru_base.block_type`：原始 MinerU 判断，严格只读保存，可能出错。
+- `logical_block.block_type`：**当前、唯一生效的块类型**；在 `logical_id/base_blockid/parent_id/logical_order/markdown_text` 五列末尾新增一列 `TEXT NOT NULL DEFAULT ''`，共六列。
+- 新建两表时逻辑类型从对应基础表自动继承；以后任何人工修正属于逻辑块当前状态，绝不写回基础表。今后标题、表格、LaTeX、审阅 View 的分类必须读取逻辑类型，不得再把原始 OCR 类型当作最新分类。
+- Markdown 内存往返清单包含每段的 `blockType`，`to_markdown`/`from_markdown` 保留当前类型；纯文本 Markdown 不携带类型，不能绕过位置清单推断。此版清单格式为 `v2-logical-md/v2`；重构时仍以已有 `markdown_text` 为唯一文字状态，不因迁移或类型初始化重写编辑过的 Markdown。当前 WP03 AG 只读，**类型下拉编辑/Undo/Redo/CM6 读写联动尚未实现**，后续航点另行验收。
+
+## 五列旧库安全迁移
+
+- Frame F02 已保存、验证读写权限的目录，打开旧五列 V2 SQLite 时，只走**现有确认过的 `POST import`**，精确检测旧列名单、原始源文件和档案 SHA 与数据库身份一致后，在原库一个 SQLite `BEGIN IMMEDIATE` 事务内追加 `block_type`，只将新的类型列用 `mineru_base.block_type` 初始化。**旧五列一字不动**，不重建旧逻辑块，不更改顺序/父子、ID、Markdown 或基础表，也不覆盖 PDF/MinerUJSON。
+- 同源旧五列为空时先追加第六列，再安全初始化逻辑块；已有非空逻辑状态完整保留。如原始来源已变且旧逻辑表有数据，拒绝迁移与覆盖。未知表结构不会假冒五列迁移。
+- 类型修正后再次打开/重新导入不会从基础表复写当前逻辑类型，现有编辑结果仍是权威。升级中 SQL 或源检查失败，SQLite 事务整体回滚，旧逻辑表仍为五列且数据不变。
+- 主动兼容**仅覆盖现有 WP03 的准确五列结构**。如用户已开启或编辑不兼容的实验旧九列结构，沿用对应 WP00 明确的重建策略，绝不把它冒充本次安全五列迁移。
+
+## 回归门禁
+
+覆盖新建六列与 539/224 样本、旧五列原地升级（包括人工修改的 Markdown、真实父子关系）、旧空表补全、来源变动拒绝、ALTER 中途失败回滚、重复导入保持类型修订、原始 OCR 类型不变、只读 Markdown+位置清单严格往返、真实 F02 授权、Chromium/iPad-WebKit 的 AG 六列显示、Frame 源码和统一门户回归。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP03_MARKDOWN_ROUNDTRIP.md
+来源提交：c7e4ff8429cb556f39b62e80dd0483d69c7a9925
+SHA256：be198f75c0ff45a25fce2507b3241060fc970775b02c836c8cd6828382b9f704
+--- BEGIN ORIGINAL ---
+# V2 WP03 · 无标签 Markdown 只读投影与严格往返
+
+起点：WP02 `f939010`。只对已有 `logical_block` 最新状态执行只读重构；**没有**改写基础表、逻辑表、MinerU、PDF、另存 `.md` 或新增第三物理表。新业务端口 `GET /labs/lab-ocr-v2/api/mineru-base/markdown?workspace=...`，仍经过 Frame F02 独立 Cookie 与允许目录校验，拒绝未授权读取。
+
+## 双向契约
+
+`v2_markdown_roundtrip.to_markdown(rows)` 输入已校验、按 `logical_order` 1..N 升序的逻辑块，在内存中生成：
+
+1. **`markdown`**：只读原始 Markdown 字符串，以 `\n\n` 分隔相邻逻辑块；不加 CMD/HTML 标注或可见分隔框。空块仍占据逻辑顺序但未伪造文本。
+2. **`segments`**：随此次投影返回的独立内存映射清单，包含每个块的 `logicalId`、`baseBlockId`、`parentId`、`logicalOrder`、`blockType`、`startChar/endChar`（Python 字符下标）与 `startUtf16/endUtf16`（供未来 CM6 坐标映射使用）及片段 SHA-256。
+3. **`sha256`、`rowCount`、`lengthUtf16`、`schema`**：严格核验与防过时投影；位置清单只返回前端内存，不写入 SQLite/JSON/MD 文件。
+
+`from_markdown(snapshot)` 验证：全文/片段 SHA、块边界、分隔符、Unicode/UTF-16 坐标、连续逻辑顺序、稳定 ID、来源 ID、父节点存在和无循环，重新产生**与原 SQL 完全一致**的六字段逻辑行（包括当前 `block_type`）。导出 API 本身执行 `from_markdown(to_markdown(rows)) == rows` 后才返回。任何内容修改或无位置清单的裸 Markdown，一律**不能**冒充无损还原：WP03 不支持 Markdown 编辑/回写，后续 WP04/05 必须实现受控编辑和增量持久化后才允许写回。
+
+**重要区别：**“无损往返”仅指 `logical_block → Markdown + 外部定位清单 → 同一批 logical_block 行`，**不是** `Markdown → 原始 MinerUJSON 的全字段原样恢复`。后者唯一的权威始终是 `mineru_base.block_json` 和 `blockid=0` 的原始字节档案。初始投影内容来源于 WP01 的保守规则，尚不等价于 V1 的全部排版/表格跨页修补，也不自动推断块的父子关系或合并跨页。
+
+## 界面及门禁
+
+- SQL 导航/AG 仍是原有一套组件。在 `逻辑表` 已有数据时显示「查看 Markdown」按钮；点击 GET 后只向**已有的 CM6 Source EditorView** 注入只读文档内容，物理 Frame 源码不变；未新增 CM6 实例、可编辑状态、保存动作或第二个状态权威。工作目录变更时清空只读文本。
+- HTTP 仅返回 8 MiB 以内的只读重构投影，超过上限明确报错；损坏顺序、空引用、关系环、缺省文本、源库缺失或未初始化均拒绝，绝不默默丢块。
+- WP03 direct tests 覆盖真实 22 页 fixture 224 块、空块、标题、公式/图片/HTML 表、正文无标签、中文和 Emoji UTF-16、哈希篡改、位置变化、断链/父子循环、未授权访问、无数据返回、原 SQL 与 MinerUJSON 字节保持不变。Chromium/iPad-WebKit 验证 read-only CM6 窗、AG/导航复用、按钮和原 WP00/02 功能。
+
+--- END ORIGINAL ---
