@@ -1,1 +1,3 @@
 联动完成：9169643 及其余七州提交全部普通 push，通过联邦 commit-msg / pre-push；6个发布器在隔离联邦 Git 工作树上，拒绝旧/治理候选并允许合规候选进入原产物检查。Frame 2、V1 1、V2 7、PDF 2、统一发布6项定向测试通过；未进行真实产品重发。八活动树干净，七Lab发布哈希及公网V2原版本一致。客户端Hooks可被同时绕过或改配置，未设置GitHub服务器端强制保护；历史旧发布脚本不得作为授权入口，未对所有历史路径开展实际发布演练。
+
+FEDERAL_BUILD_EVENT_V1 {"event":"START","id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","utc":"2026-11-25T03:56:30.538658+00:00","goal":"联邦先登记再构建，Git留痕优先；不改业务运行及用户数据","wp":"FED-GIT-START"}
