@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"4757ed19335a451db4f7bd3c9b470d47","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"7c234625503b8a8de8befd513a90e5abfac6803a","event":"START","utc":"2026-11-25T10:56:40.797008+00:00","wp":"WP06","goal":"WP06：实现统一 AG Grid 双投影（逻辑块审阅与通用 MD Line 行级投影）、可见文本自适应列宽、纯焦点单行选中护栏、SQL 组导航与安全导入入口，以及端到端多窗联动双浏览器回归；ui/frame/*、V1/V2 及其他 Lab 不变。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"4757ed19335a451db4f7bd3c9b470d47","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"7c234625503b8a8de8befd513a90e5abfac6803a","event":"RUN_START","utc":"2026-11-25T11:02:54.990355+00:00","phase":"precommit-full-verify","step":"0b157659dc9a4940a29adc7d418901ab"}
