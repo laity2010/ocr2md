@@ -25,7 +25,7 @@ export function focusedLineHasAction(lineNo,focusLineNo,mdLoaded,lineId){
 /** Native CM6 line-number gutter: one button follows the highlighted focus
  * line. The same immutable document/line-ID authority owns its menu action.
  */
-export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,getPdfText=null,onPdfText=null,captureLine=null}){
+export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,getPdfText=null,onPdfText=null,captureLine=null,captureSelection=null,onQuote=null}){
   if(typeof lineIdAt!=='function'||typeof isMarkdown!=='function'||
      typeof focusLineAt!=='function'||typeof onDelete!=='function')
     throw Error('CM6 line gutter port invalid');
@@ -44,6 +44,21 @@ export function createMdLineGutter({lineIdAt,isMarkdown,focusLineAt,onDelete,get
     root.className='ocr-cm-line-menu';root.setAttribute('role','menu');
     root.setAttribute('aria-label',`第 ${lineNo} 行操作`);
     root.dataset.lineNo=String(lineNo);
+    const range=captureSelection?.();
+    if(range){
+      const summary=document.createElement('div');summary.className='ocr-cm-line-selection-summary';
+      summary.textContent=`第 ${range.first}–${range.last} 行 · 共 ${range.count} 行`;
+      root.append(summary);
+      for(const [mode,label] of [['add','引用>+'],['remove','引用>-']]){
+        const button=document.createElement('button');button.type='button';
+        button.setAttribute('role','menuitem');button.textContent=label;
+        button.disabled=!range.refs.length;
+        button.addEventListener('mousedown',event=>event.preventDefault());
+        button.addEventListener('click',event=>{event.stopPropagation();close();onQuote?.(range,mode);});
+        root.append(button);
+      }
+    }
+
     const item=document.createElement('button');item.type='button';
     item.className='ocr-cm-line-delete';item.setAttribute('role','menuitem');
     item.textContent='删除当前行';

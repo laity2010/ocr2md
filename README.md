@@ -119,6 +119,8 @@
 
 ### 3.2 公共 MD Line API 与回归边界
 
+源码行号按钮菜单显示当前 CM6 主选区物理起止行及行数（选区结束恰在下一行行首时不计该行；无选区为当前行）。「引用>+」「引用>-」分别给选中真实 MD 行行首添加或仅移除一个 `>`，无前缀则减法跳过。通过同一快照的公共 MD Line refs 和一次原生 CM6 事务，保留稳定 logical_id/PBS、Undo/Redo 与 CAS；引用结构性空行时仍由既有原生事务补足必要组尾 LF；EOF 虚拟光标行不参与编辑。旧非真实 LF 库仅显示选区范围，引用操作不可用。
+
 模块 `ui/v2-md-line-index.js`；唯一入口 `createMdLineIndex(doc, intervals)`。输入必须来自同一修订的既有 `v2SourcePort.getDoc()`（CM6 Text）及 `getIntervals()`（owned-LF 格式），不创建第二个 EditorState，不另存正文或增加 SQL 表。调用方须在正文或结构修订后重新生成索引，且只用最新索引解析定位。返回值、行、块行数组及引用均只读；内部 Map 不暴露。
 
 | 接口 | 返回与边界 |

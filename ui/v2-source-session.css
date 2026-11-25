@@ -67,3 +67,5 @@
 
 /* WP20: native PDF options stay visibly unavailable without real PDF text. */
 .ocr-cm-line-menu button:disabled{color:#8b9690;opacity:.65;cursor:not-allowed;}
+
+.ocr-cm-line-selection-summary{padding:5px 10px;color:#b4bf9d;border-bottom:1px solid #697a6b;white-space:nowrap;}

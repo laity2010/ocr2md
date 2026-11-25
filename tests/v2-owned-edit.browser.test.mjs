@@ -12,6 +12,7 @@ import {chromium,webkit} from 'playwright';
 import {makePDF} from './v2-pdf-fixture.mjs';
 const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
+const quoteMode=process.env.V2_TEST_LINE_QUOTE==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const noteConversionMode=process.env.V2_TEST_NOTE_CONVERSION==='1';
@@ -55,6 +56,8 @@ try{
    const initial=realMediaBook?py(
      'import sqlite3,shutil\nfrom contextlib import closing\noriginal=Path(args["book"]).resolve()\nwith closing(sqlite3.connect((original/base.DB_NAME).as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nshutil.copytree(original/"media",folder/"media")\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder,{book:realMediaBook}):mediaMode?py(
      'import base64,hashlib\nprepare_owned_book(folder)\nold=load(folder)[0]\nurl="https://cdn-mineru.openxlab.org.cn/wp29-fixture.png"\npath="media/"+hashlib.sha256(url.encode()).hexdigest()[:24]+".png"\n(folder/"media").mkdir()\ndata=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7xkAAAAASUVORK5CYII=")\n(folder/path).write_bytes(data)\n(folder/"media"/("b"*24+".png")).write_bytes(data)\nowned_commit(folder,[dict(logicalId=old.logical_id,before=old.markdown_text,after="![WP29](<"+url+">) and ![repeat]("+url+")\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
+     quoteMode?py(
+     'prepare_owned_book(folder)\nrows=load(folder)\nowned_commit(folder,[dict(logicalId=rows[0].logical_id,before=rows[0].markdown_text,after="alpha\\n>beta\\n\\n"),dict(logicalId=rows[1].logical_id,before=rows[1].markdown_text,after=">>gamma\\nplain\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      breakMode?py(
      'from test_v2_owned_structure import packet\nprepare_owned_book(folder)\nbase.commit_structure(folder,packet(folder),Stub())\nold=load(folder)\nwith closing(sqlite3.connect(folder/base.DB_NAME)) as db: db.execute("UPDATE logical_block SET block_type=\'text\' WHERE logical_id IN (?,?)",(old[0].logical_id,old[1].logical_id)); db.commit()\nowned_commit(folder,[dict(logicalId=old[0].logical_id,before=old[0].markdown_text,after="The invest-\\n"),dict(logicalId=old[1].logical_id,before=old[1].markdown_text,after="ment continues.\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      noteConversionMode?py(
@@ -164,6 +167,53 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(quoteMode){
+     const open=async(first,last,reverse=false,endAtNext=false)=>{
+       await source.evaluate((el,{first,last,reverse,endAtNext})=>{
+         const v=el.v2SourcePort.getEditorView(),doc=v.state.doc;
+         const from=doc.line(first).from,to=endAtNext?doc.line(last+1).from:doc.line(last).to;
+         v.dispatch({selection:{anchor:reverse?to:from,head:reverse?from:to},scrollIntoView:true});v.focus();
+       },{first,last,reverse,endAtNext});
+       const b=source.locator('.ocr-cm-line-number-button');
+       await b.waitFor({state:'visible',timeout:10000});await b.click();
+       const menu=page.locator('.ocr-cm-line-menu');
+       assert.equal(await menu.locator('.ocr-cm-line-selection-summary').textContent(),`第 ${first}–${last} 行 · 共 ${last-first+1} 行`);
+       assert.equal(await menu.getByRole('menuitem',{name:'删除当前行'}).count(),1);
+       assert.equal(await menu.getByRole('menuitem',{name:'提取文本插入'}).count(),1);
+       return menu;
+     };
+     const saved=async(expected,writeCount)=>{
+       await page.waitForFunction(expected=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===expected,expected,{timeout:10000});
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       const now=await snapshot();assert(now.complete);assert.equal(now.doc,expected);
+       assert.deepEqual(now.rows.map(r=>r.logicalId),before.rows.map(r=>r.logicalId));
+       assert.deepEqual(now.rows.map(r=>[r.p,r.b,r.s]),before.rows.map(r=>[r.p,r.b,r.s]));
+       assert.equal(api(folder,'markdown','GET').body.markdown,expected);assert.equal(writes.length,writeCount);
+       return now;
+     };
+     let menu=await open(1,2,true,true);
+     await menu.getByRole('menuitem',{name:'引用>+'}).click();
+     const quoted='>alpha\n>>beta\n\n'+before.doc.slice(before.intervals[0].to);
+     await saved(quoted,1);
+     menu=await open(1,2);await menu.getByRole('menuitem',{name:'引用>-'}).click();await saved(before.doc,2);
+     await source.evaluate(el=>el.v2SourcePort.undo());await saved(quoted,3);
+     await source.evaluate(el=>el.v2SourcePort.redo());await saved(before.doc,4);
+     // Quote a cross-block selection including the real group-ending blank.
+     menu=await open(2,4);await menu.getByRole('menuitem',{name:'引用>+'}).click();
+     const same=before.rows[0].p===before.rows[1].p&&before.rows[0].b===before.rows[1].b;
+     const cross='alpha\n>>beta\n>\n'+(same?'':'\n')+'>>>gamma\nplain\n\n'+before.doc.slice(before.intervals[1].to);
+     const after=await saved(cross,5);
+     assert.equal(writes.at(-1).length,2);assert.deepEqual(after.rows.slice(2),before.rows.slice(2));
+     await source.evaluate(el=>el.v2SourcePort.undo());await saved(before.doc,6);
+     await source.evaluate(el=>el.v2SourcePort.redo());await saved(cross,7);
+     await loadPage();await saved(cross,7);
+     // A caret on an unquoted line is a one-line selection, remove is no-op.
+     await source.evaluate(el=>{const v=el.v2SourcePort.getEditorView();v.dispatch({selection:{anchor:1},scrollIntoView:true});});
+     await source.locator('.ocr-cm-line-number-button').click();
+     menu=page.locator('.ocr-cm-line-menu');assert.equal(await menu.locator('.ocr-cm-line-selection-summary').textContent(),'第 1–1 行 · 共 1 行');
+     await menu.getByRole('menuitem',{name:'引用>-'}).click();await saved(cross,7);
+     assert.deepEqual(errors,[]);console.log('WP29G_QUOTE_BROWSER_PASS',name,'reverse/half-open, cross-owner blank LF repair, no-op, exact undo/redo/reopen, seven CAS saves');continue;
+   }
    if(realMediaBook){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      const pdf=page.locator('#workspace .ocr-preview-pdf-host');

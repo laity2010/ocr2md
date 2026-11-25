@@ -18,6 +18,7 @@ import {moveLogicalBlocks} from './v2-structure-move.js';
 import {isSyntheticId} from './v2-legacy-block-id.js';
 import {createMdLineIndex} from './v2-md-line-index.js';
 import {planMdLineEdit} from './v2-md-line-edit.js';
+import {captureLineSelection,quoteLineChanges} from './v2-line-quote.js';
 import {singleLineMD} from './v2-single-line.js';
 // Byte-identical V1 Frame source gutter, adapted only via callbacks.
 import {createMdLineGutter} from './v2-md-line-gutter.js';
@@ -118,6 +119,21 @@ export function mountV2Source(host){
         intervals.find(row=>row.from===line.from)?.logicalId)??null;
     },
     captureLine:lineNo=>ownedLF?getMdLineIndex()?.makeRef(lineNo):{legacy:true},
+    captureSelection:()=>captureLineSelection(editor.state.doc,getMdLineIndex(),editor.state.selection.main),
+    onQuote:(range,mode)=>{
+      try{
+        const changes=quoteLineChanges(getMdLineIndex(),range,mode);
+        if(changes.length){
+          const state=editor.state,planned=ChangeSet.of(changes,state.doc.length);
+          const plan=planMdLineEdit(state.doc,state.field(structureField),planned);
+          if(!plan)throw Error('选区无法保留逻辑行归属');
+          document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.beforeSourceEdit?.();
+          editor.dispatch({changes:planned,annotations:[Transaction.userEvent.of('input.quote-lines'),isolateHistory.of('full')]});
+          if(editor.state.doc.toString()!==plan.source)throw Error('引用操作未通过 CM6 事务门禁');
+        }
+        document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{text:`引用${mode==='add'?'增加':'减少'} · ${changes.length} 行${changes.length?' · 可撤销':''}`,kind:'ok'}}));
+      }catch(error){document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{text:'引用操作失败：'+error.message,kind:'error'}}));}
+    },
     onDelete:(logicalId,lineRef)=>{
       if(deleteLogicalLine(logicalId,lineRef))document.dispatchEvent(new CustomEvent('v2-cm-status',{
         detail:{text:'已删除当前 MD 行，逻辑块及 PBS 保留 · CM6 可撤销',kind:'ok'},
