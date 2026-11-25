@@ -19,3 +19,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"RUN_START","utc":"2026-11-25T12:49:11.121518+00:00","phase":"implement-and-test","step":"9dac5d01b2cf4cb988cd76ed8874a099"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"RUN_EXIT","utc":"2026-11-25T12:51:55.914817+00:00","phase":"implement-and-test","step":"9dac5d01b2cf4cb988cd76ed8874a099","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"RUN_START","utc":"2026-11-25T12:52:26.227675+00:00","phase":"commit-build-publish","step":"3f8c39e56d4342cfa5eac363b1b492b1"}
