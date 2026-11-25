@@ -1,0 +1,16 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：b5c13ed5a5f721870015027e53b33c687eaf547d
+原提交标题：docs(v2): adopt real multiline MD block and editable blank line contract
+父提交：3695639ffe3bc0bec4b5fb246fb9fd226a73d2fb
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_3e2fa333e7794673 2026-11-24T05:21:35.647346Z: completed=[inspect], current=model: b5c13ed clean; existing legacy wire v2 injects SEP and browser composer adds virtual LF. WP23D extend existing APIs with explicit owned-LF v3 format and read-only migration plan; no change to live callers or user DB.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
