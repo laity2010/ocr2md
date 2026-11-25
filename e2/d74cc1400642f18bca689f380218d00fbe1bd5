@@ -23,3 +23,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"6d1ef0002039491bab5b015e3c14f16c","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"6d1ef0002039491bab5b015e3c14f16c","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_START","utc":"2026-11-25T13:51:55.737826+00:00","phase":"preserve-failure","step":"662e475fb8ea464aa6511dcc5fc0aef8"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"6d1ef0002039491bab5b015e3c14f16c","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_EXIT","utc":"2026-11-25T13:52:19.251031+00:00","phase":"preserve-failure","step":"662e475fb8ea464aa6511dcc5fc0aef8","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"6d1ef0002039491bab5b015e3c14f16c","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"END","utc":"2026-11-25T13:52:34.051362+00:00","result":"FAIL","commit":"bd1a7d3b9a52befd1aa65bfc4d8df69c9b727d10","evidence":"WP01A前次未闭环，本轮续接；5项接口单测通过，正式Vite构建因遗漏PDF动态依赖pdf-formula-crop.js失败，浏览器及发布未执行；保全失败证据，恢复已发布WP01。","release":"FORBIDDEN","remote_ref":"refs/heads/evidence/sentence-wp01a-failed-20261125"}
