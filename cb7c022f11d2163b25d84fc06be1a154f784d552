@@ -1,0 +1,36 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：cb7c022f11d2163b25d84fc06be1a154f784d552
+原提交标题：feat(v2): WP26C V1 note conversion via atomic CM6 line edits
+父提交：76dcd887f46158a1b23c8f51adcb27bc44fd6562
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP26C_NOTE_CONVERSION.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-note-match.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+A	ui/lab-ocr/note-pair-conversion.js
+M	ui/v2-mineru-entry.js
+A	ui/v2-note-conversion.js
+M	ui/v2-note-session.js
+M	ui/v2-source-session.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_9b84a5644f748efb 2026-11-24T13:23:47.536226Z: completed=[projection,ui], current=publish: WP26A 335fbad, B 76dcd88, C cb7c022: V1 exact reused algorithms, dual browser actual UI and atomic conversion/undo/reopen PASS; real sample readonly scan 12 refs/10 bodies/10 planned matches, zero plan failures; no extra SQL tables or user writes. Review decisions session-only, line-level rather than character-range focus. Build/release pending.
+任务检查点 tsk_9b84a5644f748efb 2026-11-24T13:25:18.527499Z: completed=[publish]: WP26C cb7c022 published 261124-212344; manifest 70 hashes, actual LAN HTTP200 exact SHA, clean pushed tree; A/B/C dual browser tests and V1 shared gate PASS. Session-only review metadata and line-level focus disclosed.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP26C_NOTE_CONVERSION.md
+来源提交：cb7c022f11d2163b25d84fc06be1a154f784d552
+SHA256：9fa85cf247d483523644d96fbbe1e43e23e5f1d642289d82d3fbee7fbc892fc7
+--- BEGIN ORIGINAL ---
+# WP26C · 注释配对转换
+基线 76dcd88。V1 bf32515 note-pair-conversion.js 逐字节复用。转换入口沿用注释 View 功能菜单；当前全部已匹配注引（不受 AG 显示筛选限制）生成安全计划，同一 MD 行的多注引调用 V1 分组算法，重复定义/冲突不转换并显示原因。不同组对同一行的完全相同更新可去重，互相冲突则同时拒绝。唯一 CM6 SourcePort.replaceMdLines 校验同一修订、每一行精确旧值和无硬回车改写，再原生一次事务提交，原有真实 LF 与局部 SQL CAS 门禁不变；独立 Undo/Redo。标准脚注状态由当前正文派生，待保存与已转换区分。规则、人工确认/忽略、失败原因仅会话有效；不擅自增加审阅表、设置文件或正文元数据。原 V1 的持久化审阅与字符级端点着色尚未完整复现（当前为精确 MD Line 定位及 PDF 块高亮）。
+验收：v2-note-match.test.mjs A/B/C PASS；V2_TEST_NOTE_CONVERSION=1 node tests/v2-owned-edit.browser.test.mjs Chromium/WebKit 均 PASS：真实隔离 267 块 SQLite，701/703 同一行双注引 + 两注文/续行，原生菜单转换，一次 3 块差量写回；重复注号 705 人工选注文仍安全拒绝，失败原因筛选有效；Undo/Redo 各一次保存，重开正文与已转换状态一致，非目标块/ID/PDF 几何不变。浏览器 PDF 使用合成渲染夹具。A/B 实际配对、规则、状态及视图切换各双浏览器 PASS。原标题列序、公共索引、行编辑、原正文/归组后端直接回归、联邦布局门禁 PASS。
+真实 sample SQLite 源以 mode=ro 备份到隔离目录，仅扫描与规划：267 块 / 444 行，12 注引 / 10 注文，10 已匹配 / 2 待核实，0 缺注文/缺注引/编号冲突，24 AG 行；全部实际端点映射校验通过，10 个转换计划成功、0 失败。没有转换原书或写原库。实际 iPad 尚未手工验收。
+
+--- END ORIGINAL ---
