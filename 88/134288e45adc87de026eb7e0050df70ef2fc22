@@ -13,3 +13,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"121272a12daf4880bc5e030a20a4383a","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2f146f1ddd3d46f2bb0ceaac438942ec","branch":"refs/heads/experiment/lab-sentence","baseline":"88134288e45adc87de026eb7e0050df70ef2fc22","event":"START","utc":"2026-11-25T14:58:19.129678+00:00","wp":"WP01C2","goal":"从8813428最小接线：已有V2快照成功后左CM6直接载入Markdown，现有导航SQL逻辑表；保留设置和四窗布局，右窗空，不重构目录验证、快照接口或数据库，不写用户资料；双浏览器验收及四步闭环。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2f146f1ddd3d46f2bb0ceaac438942ec","branch":"refs/heads/experiment/lab-sentence","baseline":"88134288e45adc87de026eb7e0050df70ef2fc22","event":"RUN_START","utc":"2026-11-25T14:58:52.305613+00:00","phase":"build-test","step":"806884ac3c994c42ad381da4eed22a35"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2f146f1ddd3d46f2bb0ceaac438942ec","branch":"refs/heads/experiment/lab-sentence","baseline":"88134288e45adc87de026eb7e0050df70ef2fc22","event":"RUN_EXIT","utc":"2026-11-25T14:59:58.947992+00:00","phase":"build-test","step":"806884ac3c994c42ad381da4eed22a35","exit_code":0}
