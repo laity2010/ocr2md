@@ -1,0 +1,13 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：62ebf0f06ab96161b22e107d8f9404ede2421794
+原提交标题：docs(v2): require V1 AG Grid categorical header filter for all views
+父提交：2f5ba27a687c010af5ae806bfa385604fce47329
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
