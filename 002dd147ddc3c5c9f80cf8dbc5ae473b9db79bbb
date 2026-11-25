@@ -1,0 +1,30 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：002dd147ddc3c5c9f80cf8dbc5ae473b9db79bbb
+原提交标题：feat(v2): WP25C native CM6 line ownership and exact history
+父提交：7e95c4105436e9ec470fc6809082558c7d1e81fd
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP25C_MD_LINE_EDIT.md
+A	tests/v2-md-line-edit.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+A	ui/v2-md-line-edit.js
+M	ui/v2-source-session.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_c14a556ddda50a6c 2026-11-24T09:48:54.845596Z: completed=[C], current=D: WP25C 002dd14 pushed clean. Pure line planner and real Chromium/WebKit 9 SQLite delta saves each, unchanged 267 IDs, reopen PASS.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25C_MD_LINE_EDIT.md
+来源提交：002dd147ddc3c5c9f80cf8dbc5ae473b9db79bbb
+SHA256：ca9ef5ee34ed1e1becbf9fd20bfc29afaa590f08bc39085d56b3704bd1a25aff
+--- BEGIN ORIGINAL ---
+# WP25C · CM6 行级编辑
+基线 7e95c41。新公共纯函数 planMdLineEdit 复用 WP25A 索引，按真实行的旧区间归属构建差量。在共享块边界的零宽插入，最后一个 LF 前的完整新增行归前块，剩余未终结前缀归原下一行；无 LF 的输入仍属于原行。EOF 输入归末块，跨块完整行删除可按块拆分，歧义替换/跨块合并拒绝；保留最少真实尾 LF、稳定 ID 及严格重组，原生 Undo/Redo 精确恢复旧区间。SourcePort getMdLineIndex 返回当前修订缓存索引，不增加可写正文。
+直接测试 tests/v2-md-line-edit.test.mjs PASS。V2_TEST_LINE_EDIT=1 node tests/v2-owned-edit.browser.test.mjs：Chromium/WebKit 各 9 次真实 SQLite 差量提交；边界 Enter/多行输入、清空跨块、EOF、撤销重做和重开均一致，267 IDs 不变。WP25A 及原后端差量测试通过。未发布、未动用户库。
+
+--- END ORIGINAL ---
