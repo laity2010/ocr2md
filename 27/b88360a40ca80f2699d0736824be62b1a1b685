@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"617a2619e03c485298a9ef59e6678333","branch":"refs/heads/experiment/lab-pdf","baseline":"27b88360a40ca80f2699d0736824be62b1a1b685","event":"START","utc":"2026-11-25T04:03:50.538156+00:00","wp":"FED-ENTRY-lab-pdf","goal":"仅接入联邦构建前登记校验；保留当前业务、界面、数据、产物与全部发布版本。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"617a2619e03c485298a9ef59e6678333","branch":"refs/heads/experiment/lab-pdf","baseline":"27b88360a40ca80f2699d0736824be62b1a1b685","event":"RUN_START","utc":"2026-11-25T04:06:52.480001+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"b9e3ae65043840b0bee9350dba62ed5f"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"617a2619e03c485298a9ef59e6678333","branch":"refs/heads/experiment/lab-pdf","baseline":"27b88360a40ca80f2699d0736824be62b1a1b685","event":"RUN_EXIT","utc":"2026-11-25T04:08:12.687924+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"b9e3ae65043840b0bee9350dba62ed5f","exit_code":0}
