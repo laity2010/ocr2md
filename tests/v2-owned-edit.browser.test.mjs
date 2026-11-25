@@ -221,19 +221,21 @@ try{
      const columns=()=>grid.evaluate(el=>el.v2BaseGridPort.getColumnState());
      const expected=await source.evaluate(el=>{
        const p=el.v2SourcePort,index=p.getMdLineIndex();
-       return p.getIntervals().filter(r=>r.blockType.toLowerCase().includes('table')).map(r=>({
+       const intervals=p.getIntervals(),ids=new Set(intervals.filter(r=>r.blockType.toLowerCase().includes('table')).map(r=>r.logicalId));
+       const parents=new Map(p.getStructureRows().map(r=>[r.logicalId,r.parentId]));
+       return intervals.filter(r=>ids.has(r.logicalId)||ids.has(parents.get(r.logicalId))).map(r=>({
          id:r.logicalId,pbs:index.forBlock(r.logicalId)[0].pbs,
          type:r.blockType,line:index.forBlock(r.logicalId).find(l=>l.md_line.trim())?.source_line??null,
          text:index.forBlock(r.logicalId).find(l=>l.md_line.trim())?.md_line??null
        }));
      });
-     assert.equal(expected.length,32);
+     assert.equal(expected.length,33);
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
      await picker.selectOption('table');
-     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===32);
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===33);
      const actual=await rows(),byId=new Map(expected.map(r=>[r.id,r]));
      const coverMap=new Map(projection.covers.map(r=>[r.logicalId,r]));
-     assert.equal(new Set(actual.map(r=>r.logical_id)).size,32);
+     assert.equal(new Set(actual.map(r=>r.logical_id)).size,33);
      for(const row of actual){
        const ref=byId.get(row.logical_id),cover=coverMap.get(row.logical_id);
        assert(ref);assert.equal(row.pbs,ref.pbs);assert.equal(row.block_type,ref.type);
@@ -244,6 +246,13 @@ try{
      }
      assert.deepEqual(Object.fromEntries(['table','table_body','table_caption','table_footnote'].map(t=>[t,actual.filter(r=>r.block_type===t).length])),{table:9,table_body:9,table_caption:8,table_footnote:6});
      assert.equal(actual.filter(r=>r.line_no==null).length,10);
+     const textChild=actual.find(r=>r.pbs==='p7b0s3');
+     assert(textChild,'missing table text child p7b0s3');
+     assert.equal(textChild.block_type,'text');
+     assert.equal(textChild.parent_block_id,180);
+     assert.equal(textChild.logical_id,181);
+     assert(textChild.text.startsWith('Notes: Excess return'));
+     assert.equal(actual.filter(r=>r.block_type==='text').length,1);
      const order=['line_no','pbs','block_type','text','content_preview','global_page','block_id','parent_block_id','merged_into_block_id','block_bbox_json'];
      assert.deepEqual((await columns()).filter(c=>!c.hide).map(c=>c.colId),order);
      assert.deepEqual((await columns()).filter(c=>c.pinned).map(c=>c.colId),['line_no','pbs']);
@@ -261,7 +270,7 @@ try{
        await grid.locator('.ag-row[row-index="'+i+'"] [col-id="pbs"]').click();
        await page.waitForFunction(id=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().selectedId===id,ref.logical_id,{timeout:15000});
      }
-     for(const t of ['table_caption','table_body','table_footnote']){
+     for(const t of ['table_caption','table_body','table_footnote','text']){
        const ref=actual.find(r=>r.block_type===t&&r.line_no!=null&&coverMap.has(r.logical_id));
        assert(ref);await clickRow(ref);
        await page.waitForFunction(line=>{const v=document.querySelector('#workspace #editor').v2SourcePort.getEditorView();return v.state.doc.lineAt(v.state.selection.main.head).number===line;},ref.line_no);
@@ -276,15 +285,15 @@ try{
      await picker.selectOption('table');
      assert.equal((await rows()).length,9,'table filter persists independently');
      await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
-     assert.equal((await rows()).length,32);
+     assert.equal((await rows()).length,33);
      await page.locator('.v2-logical-all input').uncheck();
      assert((await rows()).length>0&&(await rows()).every(r=>r.p===blank.p));
      await page.locator('.v2-logical-all input').check();
-     assert.equal((await rows()).length,32);
+     assert.equal((await rows()).length,33);
      assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
      assert.equal(api(folder,'markdown','GET').body.markdown,before.doc);
      assert.deepEqual(errors,[]);
-     console.log('WP30_REAL_TABLE_VIEW_PASS',name,'32 blocks / 10 PDF-only / requested columns and current MD Line / PBS sort / three source targets / PDF-only / filter scope / no writes');
+     console.log('WP30_REAL_TABLE_VIEW_PASS',name,'33 blocks incl p7b0s3 text child / 10 PDF-only / requested columns and current MD Line / PBS sort / three source targets / PDF-only / filter scope / no writes');
      continue;
    }
    if(realMediaBook){

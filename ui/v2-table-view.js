@@ -35,9 +35,12 @@ export function projectV2TableRows(index,logicalRows,covers=[]){
   if(!index||!Array.isArray(logicalRows)||!Array.isArray(covers))
     throw Error('表格 View 需要当前 MD Line、逻辑块及 PDF 证据');
   const byId=new Map(covers.map(r=>[r.logicalId,r]));
+  const isTable=row=>typeof row.block_type==='string'&&row.block_type.toLowerCase().includes('table');
+  const tableIds=new Set(logicalRows.filter(isTable).map(row=>row.logical_id));
   const blocks=[],md=[];
   for(const row of logicalRows){
-    if(typeof row.block_type!=='string'||!row.block_type.toLowerCase().includes('table'))continue;
+    // The current logical relationship is authoritative, not a text/HTML heuristic.
+    if(!tableIds.has(row.logical_id)&&!tableIds.has(row.parent_id))continue;
     const lines=index.forBlock(row.logical_id);
     if(!lines.length)throw Error('表格逻辑块缺少当前 MD Line');
     // V2 owns real blank separator lines even for PDF-only wrappers.
@@ -56,7 +59,7 @@ export function projectV2TableRows(index,logicalRows,covers=[]){
     if(anchor)md.push({block_id:row.logical_id,line_id:anchor.source_line,
       line_no:anchor.source_line,text:anchor.md_line});
   }
-  return projectTableBlockRows(md,blocks);
+  return projectTableBlockRows(md,blocks,()=>true);
 }
 export function resolveV2TableLine(index,row){
   const first=index?.forBlock(row?.logical_id).find(l=>l.md_line.trim()!=='')??null;
