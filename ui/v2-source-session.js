@@ -11,7 +11,7 @@ import {nativeIOSBasicSetup,isIOSWebKit} from './ios-native-selection.js';
 import {obsidianMarkdown} from './obsidian-markdown.js';
 import {obsidianSourceSyntax} from './obsidian-source-syntax.js';
 import {obsidianHeadingMarkers} from './obsidian-heading-markers.js';
-import {composeBlockSource,composeLogicalSource,composeOwnedSource,logicalTextRows,planOwnedTextEdit,BLOCK_END} from './v2-block-source.js';
+import {composeBlockSource,composeLogicalSource,composeOwnedSource,logicalTextRows,planOwnedTextEdit,editOwner,BLOCK_END} from './v2-block-source.js';
 import {documentChanged,selectionChanged,publishFocus} from './view-store.js';
 import {logicalAtOffset} from './v2-focus-map.js';
 import {moveLogicalBlocks} from './v2-structure-move.js';
@@ -20,6 +20,7 @@ import {createMdLineIndex} from './v2-md-line-index.js';
 import {planMdLineEdit} from './v2-md-line-edit.js';
 import {captureLineSelection,quoteLineChanges} from './v2-line-quote.js';
 import {singleLineMD} from './v2-single-line.js';
+import {uploadPastedImage} from './v2-media-paste.js';
 // Byte-identical V1 Frame source gutter, adapted only via callbacks.
 import {createMdLineGutter} from './v2-md-line-gutter.js';
 import './v2-source-session.css';
@@ -168,6 +169,35 @@ export function mountV2Source(host){
   const base=native?nativeIOSBasicSetup:basicSetup;
   const extensions=[
     lineGutter.extension,...base.slice(1),
+    EditorView.domEventHandlers({paste(event,view){
+      const item=[...(event.clipboardData?.items||[])].find(x=>x.kind==='file'&&x.type.startsWith('image/'));
+      if(!item)return false;
+      event.preventDefault();
+      const status=(text,kind)=>document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{text,kind}}));
+      const {doc,selection}=view.state,owner=view.state.field(structureField),workspace=book;
+      const {from,to}=selection.main;
+      if(!loaded||!ownedLF||!editOwner(owner,from,to)){
+        status('请选择同一逻辑块内的图片粘贴位置','warning');return true;
+      }
+      void (async()=>{
+        try{
+          const path=await uploadPastedImage(workspace,item.getAsFile());
+          if(!loaded||book!==workspace||view.state.doc!==doc||view.state.field(structureField)!==owner||!view.dom.isConnected)
+            throw Error('图片上传期间文档已改变，请重新粘贴');
+          const insert='![]('+path+')';
+          // Ordinary native CM6 text edit. Existing transactionFilter, history,
+          // block ownership and SQL listener remain the only authorities.
+          if(doc.sliceString(from,to)!==insert){
+            view.dispatch({changes:{from,to,insert},selection:{anchor:from+insert.length},
+              userEvent:'input.paste',annotations:isolateHistory.of('full')});
+            if(view.state.doc===doc)throw Error('原有正文编辑门禁拒绝图片引用');
+          }
+          document.dispatchEvent(new CustomEvent('v2-media-pasted',{detail:{workspace}}));
+          status('图片引用已插入','ok');
+        }catch(error){status('粘贴图片失败：'+error.message,'error');}
+      })();
+      return true;
+    }}),
     // The native CM6 document is editable. Every textual transaction owns a
     // single logical block (or several independent changes, one each); cross-
     // block deletion/replacement remains forbidden to protect stable IDs.

@@ -884,7 +884,7 @@ def commit_structure(folder:Path,payload,common):
 def media_dispatch(operation,method,folder,payload,query,common):
     # Same V1 byte-store, scoped only to the F02-authorized V2 book.
     import v6_media as media
-    expected='POST' if operation=='media-chunk' else 'GET'
+    expected='POST' if operation in ('media-chunk','media-paste') else 'GET'
     if method!=expected:raise BaseError(405,'媒体请求方法无效')
     doc=folder/'.ocr2md-v2-media-scope.md'
     def arg(name):return payload.get(name) if method=='POST' else query.get(name,[None])[0]
@@ -904,6 +904,9 @@ def media_dispatch(operation,method,folder,payload,query,common):
             media.validate_url(url)
             common.probe(folder)
             return media.download_chunk(doc,url)
+        if operation=='media-paste':
+            common.probe(folder)
+            return media.store_pasted_image(doc,payload['bytes'],payload['mime'])
         if operation=='media-file':
             raw=arg('path')
             if not isinstance(raw,str) or not raw.startswith('media/'):raise ValueError('媒体路径无效')
@@ -997,6 +1000,19 @@ def handle(handler,operation,parsed,common):
             if handler.headers.get('Transfer-Encoding'):raise BaseError(400,'不支持 chunked 请求')
             try:n=int(handler.headers.get('Content-Length','-1'))
             except ValueError:n=-1
+            # Raw image bytes use the existing Main store, not the JSON edit API.
+            if operation=='media-paste':
+                from v6_media import MAX_PASTE,PASTE_TYPES
+                if not 1<=n<=MAX_PASTE:raise BaseError(413,'图片大小不合法（最多 12 MiB）')
+                mime=handler.headers.get('Content-Type','').split(';')[0].strip().lower()
+                if mime not in PASTE_TYPES:raise BaseError(422,'不支持的图片格式')
+                q=parse_qs(parsed.query)
+                roots=common.authorized_roots(handler.headers.get('Cookie',''))
+                folder=common.checked_workspace(q.get('workspace',[None])[0],roots)
+                raw=handler.rfile.read(n)
+                if len(raw)!=n:raise BaseError(400,'图片数据不完整')
+                respond(200,media_dispatch(operation,'POST',folder,{'bytes':raw,'mime':mime},q,common))
+                return
             limit=1024*1024 if operation=='md-commit' else 512*1024 if operation=='structure-commit' else 8192
             if not 2<=n<=limit:raise BaseError(413,'请求大小不合法')
             raw=handler.rfile.read(n)
