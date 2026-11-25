@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"f897cb3996dc41069d4269e4bb71e021","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"c53c299fd06676db03b1983ca808c729420261f7","event":"START","utc":"2026-11-25T09:23:49.501741+00:00","wp":"WP03","goal":"WP03：实现 V3 摘要式增量 CAS 写回（md-commit 含 structure_sha256、before_sha256 与局部 O(k) 尾换行边界核验；structure-commit 含临时坐标停泊、边界块 before_sha256 与外键复核）及完备并发冲突回滚单测；ui/frame/*、V2 及其他 Lab 不变。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"f897cb3996dc41069d4269e4bb71e021","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"c53c299fd06676db03b1983ca808c729420261f7","event":"RUN_START","utc":"2026-11-25T09:34:14.431786+00:00","phase":"unit-tests","step":"e632c0daf6184383aa0f0c742010d385"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"f897cb3996dc41069d4269e4bb71e021","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"c53c299fd06676db03b1983ca808c729420261f7","event":"RUN_EXIT","utc":"2026-11-25T09:34:21.340665+00:00","phase":"unit-tests","step":"e632c0daf6184383aa0f0c742010d385","exit_code":0}
