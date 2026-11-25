@@ -1,0 +1,76 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：d2615251c670eb6ab82cd3665e9eba34ba99f852
+原提交标题：fix(v2): WP25H preserve editing of existing retired split IDs
+父提交：e0c3c16d9503f9c989a522a4442f58a4c24f84de
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	docs/v2/WP25B_RETIRE_SPLIT.md
+M	docs/v2/WP25G_INTEGRATION_RELEASE.md
+A	docs/v2/WP25H_EDIT_COMPAT.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_mineru_base.py
+M	tests/test_v2_owned_split.py
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/v2-mineru-entry.js
+M	ui/v2-source-session.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_11e5ee0f028845e1 2026-11-24T11:13:48.637304Z: completed=[verify]: Published d261525 / 261124-191119, 70 hashes, LAN + localhost HTTP 200, gateway identity and layout verified. Actual released asset native keyboard + real isolated sample SQLite regression Chromium/WebKit exit 0, 268 IDs, 267 covers, 4 saves/reopen. No user DB writes.
+任务检查点 tsk_646513a8928cf217 2026-11-24T11:47:40.130762Z: completed=[audit], current=restore: Published d261525 actual sample 267-block readonly clones: Chromium/WebKit both showed title generic columns and gutter plugin crash Missing real owned LF after Enter, gutters 1→0, reopen restores. WP25D stale outer blocks during CM6 plugin update; WP25F reused general layout. Corrective source reads same state field and independent title preset. No user DB writes.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25B_RETIRE_SPLIT.md
+来源提交：d2615251c670eb6ab82cd3665e9eba34ba99f852
+SHA256：e46338aa17d10411dae0dfce289514a5ba8f71c4e9d0fa7c916600121ba95659
+--- BEGIN ORIGINAL ---
+# WP25B · 退役显式分割
+基线 960e6ad。移除行号菜单分割项、CM6 splitAtLine、人工 ID 生成及库存 SQL 写入实现；旧 commit-v2-owned-inventory 一律 409。保留只读人工 ID 识别和原始 PDF 坐标映射；存在旧人工 ID 时拒绝正文/归组事务，保留原库，状态栏提示明确初始化。普通逻辑块编辑和归组不变。
+直接测试 tests/v2-owned-split.test.mjs、tests/test_v2_owned_split.py PASS：旧请求拒绝且原内容/坐标不变，隔离历史人工块可读、写入拒绝。V2_TEST_OWNED_SPLIT=1 node tests/v2-owned-edit.browser.test.mjs：真实工作台 Chromium/WebKit 的行号菜单不再有分割项，公开 API 消失，267 块/原坐标不变、0 写入。原正文、归组、初始化和公共索引回归 PASS。历史 WP23G 实现保留于 Git，不是当前执行契约。未发布或写用户库。
+
+> WP25H 纠偏：上述整本只读门禁已被实机反馈及真实书籍副本复现证明有误；以 README 第 3.1 节及 WP25H 为准。已有人工 ID 可编辑，库存增删仍禁止。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP25G_INTEGRATION_RELEASE.md
+来源提交：d2615251c670eb6ab82cd3665e9eba34ba99f852
+SHA256：0a8a92d9aa892a202199c42792353ffe78de7d53e64c52f319da995f30ac13f3
+--- BEGIN ORIGINAL ---
+# WP25G · MD Line 集成验收与发布
+基线 48217a9；WP24 发布恢复点 0b29707。各航点独立 Git 检查点：
+A 960e6ad、B 7e95c41、C 002dd14、D 2fc547a、E ab6fa48、F 48217a9。
+G 修改发布标识、门户描述及隔离测试端口配置，无新增持久化业务架构。统一发布实际身份以 release-manifest 为准，不以本文件代替运行核验。
+
+## 自动化验收结果
+- 全部 78 项 Python unittest PASS（隔离数据库、局部 CAS、旧请求拒绝、事务/冲突保护、发布器测试）。
+- 全部 V2 直接 Node 测试及真实 SQL/CM6 索引矩阵 PASS。两份真实 267 块 SQLite 夹具分别 491/497 个真实 MD 行，83383/83337 UTF-16 位置逐一定位、完整重组无遗漏；Node/Chromium/iPad-WebKit 全通过。
+- Chromium/iPad-WebKit 隔离真实工作台最终矩阵：WP24 明确初始化及备份重开 PASS；WP25B 退役分割，267 ID 与坐标不变、零写入 PASS；WP25C 行级编辑各 9 次差量提交、267 ID 不变、重开 PASS；WP25D 行级操作及归组各 6 次原子/差量提交、重开 PASS；WP25E 同一 AG 公共 497 行、原生筛选与精确焦点、零写入 PASS；WP25F 独立标题行、原生筛选与点击、各 7 次差量提交和重开 PASS。全矩阵 exit 0。PDF 几何测试使用合成 PDF，提取命令测试使用提供文本，详见各航点文档。
+- 旧未标记库块级 Type/标题预设、原生过滤、列序、范围和定位：V2_TEST_AG_VIEWS=1 双浏览器 PASS。
+- Frame 源码隔离与继承门禁 PASS：历史 Frame 固定提交 da903ef 后 850ee15 仅有 AGENTS.md 变更；更新旧测试为祖先检查、仅 AGENTS.md 路径许可和当前源码逐字节一致性，未放宽任何运行源码验证。
+- 联邦统一布局、组件规范、档案与发布完整性门禁 PASS。
+
+## 边界
+仍为两张物理表；唯一可编辑 CM6 正文；MD Line、标题是公共派生行集和预设；无第三表、无独立正文。未接触或重建用户数据库，不迁移旧人工 ID；旧人工块只读保护。浏览器 iPad-WebKit 仿真不等于用户 iPad 实机，发布后由用户在实机人工验收。其他元素 View 不在本航点范围。
+
+> WP25H：用户实机反馈表明只测试 267 个正常 ID 的书籍不足以覆盖已有历史分割库存；原线上版本在 268 块、1 历史人工 ID 的真实书籍副本上实际键盘被拦截。整本只读策略已纠偏，后续验收必须包含历史库存。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP25H_EDIT_COMPAT.md
+来源提交：d2615251c670eb6ab82cd3665e9eba34ba99f852
+SHA256：52880c1b2b7fdeca8b9e0bce3b5c3e05a6ecacbfe219fa6e70fc03e1c6eab10b
+--- BEGIN ORIGINAL ---
+# WP25H · 历史库存编辑兼容纠偏
+恢复点 e0c3c16。用户实机反馈源码无法编辑。实际授权目录的 sample 数据库 v3、268 个逻辑块、1 个旧人工 ID；三份同步副本元数据相同。未对用户原库写入。原发布资产（e0c3c16）对正常 267 块测试书籍的真实点击、键盘、Enter、Unicode、保存重开通过，但对当前书籍的只读 SQLite 隔离副本，Chromium/WebKit 均实际键盘被拒绝。根因是 WP25B 错把退休库存创建/删除规则扩展到所有已有块的编辑。
+纠偏：保留所有已存在的 logical_id、PBS、正文、原始几何；撤销整个文档只读及后端全库拒绝写回的门禁。旧 commit-v2-owned-inventory 仍 409；正常事务仅 UPDATE 既有 ID，保留 CAS、真实 LF、原子回滚及前端完整库存集合核验。历史人工块不得产生假 PDF bbox；不自动初始化、合并或迁移。
+验收：
+- Python tests/test_v2_owned_split.py：历史库存普通块/人工块均可编辑，旧增删请求及未知 ID/旧值 CAS 拒绝，基础证据、稳定库存、PDF 几何不变。
+- V2_TEST_LEGACY_EDIT=1（可选 V2_TEST_COPY_FROM 指向明确授权书籍 SQLite，源以 mode=ro 备份到独立临时目录，默认可复现的合成历史库存夹具）tests/v2-owned-edit.browser.test.mjs。原 e0c3c16 使用 V2_TEST_BLOCKED_RELEASE=1 实际旧资产复现。修复版对用户实际书籍隔离副本 Chromium/WebKit 各通过原始块及历史块真实键盘输入、4 次实际 SQLite 差量提交、Undo/Redo、重开，268 个 ID、267 个原 PDF 覆盖框、非目标块不变；PDF 为合成渲染夹具；公共行定位 API 仅设置真实光标及焦点，文本修改经原生浏览器键盘输入而非直接 dispatch。Chromium 另一次实测真实 DOM 点击也通过；WebKit 虚拟化测试标记不稳定，最终使用公共行定位。未进行用户 iPad 实机操作。
+- WP25A/C 直接测试、原正文/归组 Python 回归及联邦布局门禁 PASS。
+- README 将已存在人工 ID 正常编辑及实际存量书籍键盘验收设为当前约定。其他 View 不改。
+
+--- END ORIGINAL ---
