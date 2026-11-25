@@ -62,6 +62,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--git', dest='commit', help='Rebuild this ancestor Git commit to restore it without rewriting HEAD')
     args = parser.parse_args()
+    # The legacy detached checkout rebuilds an old commit's Vite config.
+    # Enforce registration in the actual active Main before creating it.
+    if args.commit and ROOT.name == 'main' and (ROOT.parent/'labs').is_dir():
+        subprocess.run([sys.executable,str(ROOT.parent/'.ops/git-gate.py'),
+                        'check-start','--tree',str(ROOT)],check=True)
     STATE.mkdir(exist_ok=True)
     with (STATE / '.publish.lock').open('w') as lock:
         fcntl.flock(lock.fileno(), fcntl.LOCK_EX)

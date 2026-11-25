@@ -42,12 +42,23 @@ function exclusiveDocWrite(fn){
   docSaveTail=running.catch(()=>{});
   return running;
 }
+// Federal construction registration: build only, never dev-server/reader traffic.
+import {existsSync as federalBuildExists} from 'node:fs';
+import {fileURLToPath as federalBuildPath} from 'node:url';
+import {execFileSync as federalBuildExec} from 'node:child_process';
+const federalBuildRegistration={name:'ocr2md-federal-build-record',enforce:'pre',config(_config,{command}){
+  if(command!=='build')return;
+  const federalRoot=new URL('../',import.meta.url);
+  if(!federalBuildExists(new URL('main/constitution/',federalRoot))||!federalBuildExists(new URL('labs/',federalRoot)))return;
+  federalBuildExec('python3',[federalBuildPath(new URL('.ops/git-gate.py',federalRoot)),
+    'check-start','--tree',federalBuildPath(new URL('./',import.meta.url))],{stdio:'inherit'});
+}};
 export default defineConfig({
   define: {'__V6_BUILD_VERSION__': JSON.stringify(buildVersion)},
   root: 'ui',
   base:lab?.base||'/',
   build: {outDir: lab?`../labs/${lab.name}/dist`:'../dist', emptyOutDir: true},
-  plugins: [
+  plugins: [federalBuildRegistration,
     moduleParityPlugin(root,lab),
     {name:'release-identity',generateBundle() {
       const baseCommit=lab?execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim():undefined;
