@@ -43,6 +43,7 @@ const sourceHeaders={blockid:'BlockID',source_path:'原始文件',source_sha256:
   blocks_json:'blocks',block_json:'完整原始 Block JSON',record_kind:'记录类型',
   original_bytes:'原文件归档字节'};
 let bound='',pending=null,active=false,offset=0,selectedTable='mineru_base';
+let startupVerificationSeen=false;
 let lastFocus=null,unsubscribeGridClick=null,wiredGrid=null;
 let logicalState=null,showAllLogical=false,visibleLogicalP=null,renderedSchema='';
 let acknowledged=null,acknowledgedText=null,saveTimer=null,saving=false,saveBlocked=false;
@@ -1013,7 +1014,7 @@ async function flushStructure(){
     if(!saveBlocked&&bound===workspace&&source.getState().dirty)scheduleStructureSave();
   }
 }
-async function ensureBase(path){
+async function ensureBase(path,{startup=false}={}){
   if(!path||persistedDirectory()!==path)return;
   if(pending===path)return;
   pending=path;
@@ -1027,6 +1028,7 @@ async function ensureBase(path){
       if(error.status!==409)throw error;
       state={exists:false};
     }
+    const openAtStartup=startup&&state.exists&&state.tables?.some(t=>t.name==='logical_block');
     if(!state.exists){
       report('正在从 MinerUJSON 重建两表 V2 SQLite（仅覆盖同名数据库）…');
       await request('import',path,{method:'POST'});
@@ -1083,6 +1085,18 @@ async function ensureBase(path){
     wireViewPicker();
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
     if(port.getState().legacyArtificialCount)report('保留历史逻辑块 · 正文可编辑 · 不再允许分割或增删逻辑 ID','ok');
+    if(openAtStartup&&!active&&$('#settings-workspace')?.hidden===false){
+      // Use the normal workbench navigation, not a second Settings selection.
+      // Frame activation is synchronous; its existing SQL change handler owns
+      // the logical table, review preset and single fetchPage request.
+      const nav=$('#workspace .ocr-source-file-select');
+      if(nav?.querySelector('option[value="sql:logical_block"]')){
+        document.dispatchEvent(new CustomEvent('v2-show-frame'));
+        nav.value=valueForTable('logical_block');
+        nav.dispatchEvent(new Event('change',{bubbles:true}));
+        return;
+      }
+    }
     if(active)await fetchPage();
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}
@@ -1162,8 +1176,11 @@ window.addEventListener('beforeunload',event=>{
 // This event is issued ONLY after the original F02 probe returned readable,
 // writable and verified. Ignore unsaved directory adoptions explicitly.
 document.addEventListener('v2-workspace-verified',event=>{
-  const {path,uncommitted}=event.detail||{};
-  if(!uncommitted&&path===persistedDirectory())void ensureBase(path);
+  const {path,uncommitted,afterSave}=event.detail||{};
+  if(uncommitted||path!==persistedDirectory())return;
+  const startup=!startupVerificationSeen&&!afterSave;
+  startupVerificationSeen=true;
+  void ensureBase(path,{startup});
 });
 // Settings' navigation is asynchronous. It is created before F02 reports
 // successful startup verification; no second settings state is introduced.
