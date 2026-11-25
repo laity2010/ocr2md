@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"5269fabd3003466fae062e429af181b3","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"cd66a2f2a76468fdef5417b550cc45fde327ba66","event":"START","utc":"2026-11-25T08:29:54.496098+00:00","wp":"WP02","goal":"WP02：实现 V3 SQLite 物理底座（ocr2md.v3.sqlite）、open_v3_db 统一连接工厂、zlib 压缩归档及解压逐字节 SHA 核验、单轨 owned-LF 初始化与只读投影后端包 scripts/lab_backend/；ui/frame/*、V2 数据库及所有其他 Lab 不变。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"5269fabd3003466fae062e429af181b3","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"cd66a2f2a76468fdef5417b550cc45fde327ba66","event":"RUN_START","utc":"2026-11-25T09:08:03.538507+00:00","phase":"unit-tests","step":"1dc51f645b214b6dba06517f8302953b"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"5269fabd3003466fae062e429af181b3","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"cd66a2f2a76468fdef5417b550cc45fde327ba66","event":"RUN_EXIT","utc":"2026-11-25T09:08:10.540590+00:00","phase":"unit-tests","step":"1dc51f645b214b6dba06517f8302953b","exit_code":0}
