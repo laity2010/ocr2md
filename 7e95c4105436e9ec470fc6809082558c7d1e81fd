@@ -1,0 +1,38 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：7e95c4105436e9ec470fc6809082558c7d1e81fd
+原提交标题：feat(v2): WP25B retire explicit split and inventory writes
+父提交：960e6ad0e9ea66456b7114d72c989f7987f15c4c
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP25B_RETIRE_SPLIT.md
+M	scripts/v2_mineru_base.py
+M	tests/test_v2_owned_split.py
+M	tests/v2-owned-edit.browser.test.mjs
+M	tests/v2-owned-split.test.mjs
+A	ui/v2-legacy-block-id.js
+M	ui/v2-md-line-gutter.js
+M	ui/v2-mineru-entry.js
+M	ui/v2-pdf-viewer.js
+M	ui/v2-source-session.js
+D	ui/v2-structure-split.js
+
+已核实问题及后续处理：FAIL（用户现场反馈）：退役人工 logical_id 库存变更时不应导致旧库整本只读；d261525 后续恢复正常编辑并验收。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_c14a556ddda50a6c 2026-11-24T09:46:18.688122Z: completed=[B], current=C: WP25B 7e95c41 pushed and clean, Node/Python retirement, actual Chromium/WebKit 267 unchanged/no writes, original edit/structure/init regression and layout PASS.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25B_RETIRE_SPLIT.md
+来源提交：7e95c4105436e9ec470fc6809082558c7d1e81fd
+SHA256：f98c1be3cf83d6cba16d4a022fc8a929543cdee33652b0cc34ea7239041eb3e3
+--- BEGIN ORIGINAL ---
+# WP25B · 退役显式分割
+基线 960e6ad。移除行号菜单分割项、CM6 splitAtLine、人工 ID 生成及库存 SQL 写入实现；旧 commit-v2-owned-inventory 一律 409。保留只读人工 ID 识别和原始 PDF 坐标映射；存在旧人工 ID 时拒绝正文/归组事务，保留原库，状态栏提示明确初始化。普通逻辑块编辑和归组不变。
+直接测试 tests/v2-owned-split.test.mjs、tests/test_v2_owned_split.py PASS：旧请求拒绝且原内容/坐标不变，隔离历史人工块可读、写入拒绝。V2_TEST_OWNED_SPLIT=1 node tests/v2-owned-edit.browser.test.mjs：真实工作台 Chromium/WebKit 的行号菜单不再有分割项，公开 API 消失，267 块/原坐标不变、0 写入。原正文、归组、初始化和公共索引回归 PASS。历史 WP23G 实现保留于 Git，不是当前执行契约。未发布或写用户库。
+
+--- END ORIGINAL ---
