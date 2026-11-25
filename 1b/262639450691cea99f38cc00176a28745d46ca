@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"18b6be20cbc84e318f90766fd723fc44","branch":"refs/heads/experiment/sentence-benchmark","baseline":"1b262639450691cea99f38cc00176a28745d46ca","event":"START","utc":"2026-11-25T04:03:59.721909+00:00","wp":"FED-ENTRY-sentence-benchmark","goal":"仅接入联邦构建前登记校验；保留当前业务、界面、数据、产物与全部发布版本。","retrospective":false}
