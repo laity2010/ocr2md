@@ -49,6 +49,12 @@ export function createSnapshotSession({report=()=>{},reader=readV2Snapshot}={}){
     if(seq!==generation)return null;
     current=snapshot;
     report('V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · '+snapshot.documentVersion.slice(0,12),'ok');
+    const {splitSnapshot}=await import('./split.js');
+    const results=splitSnapshot(snapshot);
+    if(seq!==generation)return null;
+    const failures=results.flatMap(r=>r.candidates).filter(c=>c.error).length;
+    report('分句候选已生成 · '+snapshot.blocks.length+' 块 · '+failures+' 个引擎失败待审','ok');
+
     return snapshot;
    }catch(error){if(seq===generation){current=null;report('分句快照读取失败：'+error.message,'error');}return null;}
   },

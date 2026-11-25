@@ -9,6 +9,8 @@
 - WP01：保存的资料目录通过原 Frame F02 验证后，以现有 V2 公开 GET markdown 接口只读加载，校验完整 SHA、块哈希、逻辑 ID、父子和 UTF-16/字符位置；快照版本包含块顺序及来源映射，暂存在独立会话内。无 V2 写请求；未提交的目录不加载。尚无分句、仲裁、翻译。
 - 后续按 WP01–05 逐步验证 V2 快照、三个引擎、仲裁、增量重分及句表输出；WP06–07 为界面与集成，未实施。
 
+- WP02：旧分句 Lab 原三个引擎（Intl、Sentence Splitter 5.0.1、Wink NLP 2.4.0）按 V2 逻辑块分别执行；每个候选完整保存 raw/sentence 分片，rebuildBlock 逐字符还原；引擎错误显式保留，尚不自动采用。固定依赖见 ui/sentence/package-lock.json，独立 npm ci --prefix ui/sentence。
+
 ## 构建和验收
 
 使用联邦 .ops/git-gate.py；正式构建使用 labs/lab-sentence/vite.config.mjs，发布使用 scripts/sentence_publish.py。无用户资料测试。F02 使用原 Frame 公共授权 API。
