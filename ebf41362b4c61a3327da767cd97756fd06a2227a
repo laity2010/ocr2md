@@ -1,0 +1,85 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：ebf41362b4c61a3327da767cd97756fd06a2227a
+原提交标题：fix(v2 wp04): one blank line per block and reuse V1 Markdown preview live
+父提交：da2c33e2dc3d5bc629b768a4aacc9a48a3fc94e7
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	docs/v2/WP04_CM6_SOURCE_CONTRACT.md
+A	docs/v2/WP04_V1_MD_PREVIEW.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-block-source.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+A	tests/v2-real-markdown-preview.browser.test.mjs
+M	ui/v2-block-source.js
+A	ui/v2-markdown-preview.js
+M	ui/v2-source-session.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP04_CM6_SOURCE_CONTRACT.md
+来源提交：ebf41362b4c61a3327da767cd97756fd06a2227a
+SHA256：9fe7b6643a9d07d9602829b4ed596bb90da72ee59a9d56b8a7290c03a92fc309
+--- BEGIN ORIGINAL ---
+# OCR2MD V2 · WP04/18 · 逻辑块连续源码窗 + 内存编辑 / Undo / Redo
+
+基线：`c7e4ff8`（WP03 logical block type）。Lab V2 独立执行；共享 `ui/frame/*`、Frame 发行和 Main 均不得修改，V2 的 Vite build adapter 有精确源码接口断言。**本航点不写 SQLite；WP05 才实现安全持久化。**
+
+## 编辑器与 V1 外观
+
+复用 Frame 四窗版面里的**原有单个** `#workspace #editor` CM6 源码宿主，并在 V2 构建装配时将它的 *空白 EditorView mount* 替换为 V2 专用 CM6 编辑会话。没有第二套 editor、AG、导航或状态持久化；Frame 公共源码逐字节不变。使用与 V1 `ui/main.js` 相同的 CM6 `basicSetup`/iPad native selection 配置、`@codemirror/lang-markdown`、`obsidianMarkdown`、`obsidianSourceSyntax` 和 `obsidianHeadingMarkers`、One Dark sTeX fallback，直接复用仓库 `ui/obsidian-everforest.css` 与 Frame 全局 Sarasa 字号。原有 `#undo/#redo` 按钮通过官方 CM6 `undo/redo/undoDepth/redoDepth` API 连接本次会话，键盘 Undo/Redo 也由既有 CM6 keymaps 处理。
+
+## 数据投影与强制分隔
+
+- 只能从已有 Frame F02 已验证、已保存的工作目录读取 `GET /labs/lab-ocr-v2/api/mineru-base/markdown`。该 API 在 WP03 已保证从现存 `logical_block` 表按 `logical_order` 构造 Markdown + **独立 UTF-16 逻辑位置清单**，不在正文写标签、不生成第三物理表。
+- WP04 `ui/v2-block-source.js` 纯函数 `composeBlockSource` 根据清单逐一抽取每个逻辑块正文。**每块末尾（含空块及最后一块）固定追加 `\n\n`，即一个完整空白行；不再追加两个空行。** 只有编辑器内存投影使用这一强制块尾；不修改 WP03 Backend 的原始 Markdown、逻辑块内容或原始字节。
+- 一份完整 CM6 文档按逻辑块顺序连续渲染；每个块的 stable `logicalId/baseBlockId/parentId/logicalOrder/blockType`、`from/to` 在**独立内存区间清单**里，不可见于 Markdown。字符坐标使用 CM6 原生 UTF-16，中文、Emoji、原有多行、空字符串块均被保留。
+- `ui/v2-source-session.js` 的 `changeFilter` 仅放行发生在**某一个逻辑块正文范围内**的修改，不允许任何一次修改删除强制空白分隔符、跨两个块或覆盖末尾空行。非法操作不给文本副作用，并在全局状态栏说明 WP04 不能跨块合并；块归入/拆分/重排是以后独立航点。
+- 每一次编辑、撤销/重做都经 CM6 原生 ChangeSet 更新全部块的内存区间；API `getBlocks()` 读取当前逻辑块内容，`getIntervals()` 只暴露 ID 与精确区间。不因编辑推断/改写 OCR `block_type`；最终生效类型始终来自逻辑表。
+
+## 持久化边界与切换
+
+- 源码窗第一次读取 SQL 后**自动加载**，无需点击 WP03 的「查看 Markdown」按钮，那个按钮已撤除。选择 AG 基础表/逻辑表、重复读取 F02、设置窗口来回切换、导航重新展示，不会重置相同工作目录的内存编辑或 Undo 栈。切换到其他**已经验证的**目录时，新建那本书的内存会话；页面刷新/浏览器关闭时 WP04 未保存编辑消失，属本航点已知限制。
+- 本 WP 只有 `GET markdown` 和既有 `GET state`，数据层没有新增编辑/保存 POST。唯一可能写 SQLite 的场景仍是早期 WP02 的**首次建库或五列旧库验证升级**，不属于 WP04 编辑回写。原 Frame 顶栏「全局保存」仍只负责全局设置，不保存源码，状态栏提示“内存修改 · 尚未写入 SQL”。
+- 此阶段 AG 表依旧只读，Markdown 预览和 PDF 仍是 Frame 空壳，不宣称完整 V1 多窗联动与逻辑编辑持久化完成；WP05 才通过可审计 API 写回逻辑表，不将 V1 的 CMD 注释标签插入当前源码。
+
+## 验收标准
+
+新建 V2 初始自动加载 224 个样本逻辑块，块尾固定一行空白（数据自身内含的真实换行不删、不合并）；空块/多行与 Emoji UTF-16 正确；V1 Everforest、Markdown H1 尺寸、Sarasa、行号与 iPad 原生选区；仅一 CM6；键入→Undo→Redo→跨块编辑拒绝；用户改动时重复 load 同一本书被拒绝；原 SQL 表及 MinerU 原始输入不变；Chromium/iPad-WebKit、原两表 AG/F02/四窗和共享 Frame 源码身份回归、GitHub commit/tag、统一 Lab 门户核验。
+
+## WP04 后续修正：V1 MD 预览
+
+预览现在经 V2 build-only 适配挂载在原有 Frame `ocr-preview-md-scroll`，**直接复用 V1 的 `ui/markdown-preview.js` 及其 stylesheet 与 `createFootnotePopover`**，以当前 CM6 内容实时渲染；不引入另一个 Markdown 渲染器。既有 Frame/Main 共享源码及 SQLite 不变。详见 `WP04_V1_MD_PREVIEW.md`。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP04_V1_MD_PREVIEW.md
+来源提交：ebf41362b4c61a3327da767cd97756fd06a2227a
+SHA256：7cafbc2f56d7faf1dea48aa6e7b7004bdd23a7b4f49ead05167010c868751968
+--- BEGIN ORIGINAL ---
+# OCR2MD V2 · WP04 修订：V1 Markdown 预览 + 一个空行
+
+基线 `da2c33e`，V2 Lab-Frame 隔离工作树内修正。此次不是 WP05 SQL 持久化；仍然只有两张应用物理表，源码 CM6 是未保存编辑的唯一当前文本来源。共享 `ui/frame/*`、V1 `ui/markdown-preview.js`、Main 及其他 Lab 不作源码改写。
+
+## 1. 逻辑块空行约定
+
+原 WP04 块结束序列为 **三换行符 `\n\n\n`**，因而普通相邻非空逻辑块中间有**两个空行**。修订后每块末尾恰追加 **两换行符 `\n\n`**，即**一个空行**，包括尾块。原有逻辑 Markdown (`logical_block.markdown_text`) 的文本内容严格保留，无删除源段、跨块编辑、SQL 回写或破坏 UTF-16 外部位置清单的行为。对本身含内部换行的 OCR 块不做静默文本规整：用户输入的真实正文换行属于内容；零文本逻辑块仍保留自己的两换行符及独立 ID，连续空块可能出现更多连续空白，这是保留空块的结果而非额外插入两个空行的旧缺陷。
+
+## 2. V1 唯一渲染器
+
+- 预览窗仍为 Frame 原来那个 `ocr-preview-md-scroll`，V2 构建阶段通过**严格文本匹配适配器**只替换预览挂载点，创建一个 `article.ocr-markdown`（与 V1 PreviewPanel 相同），不改 Frame 共享源码或 Dockview 布局。
+- 唯一 Markdown 解析器是 V1 `ui/markdown-preview.js` 公开 API **`renderMarkdown(markdown)`**，以及它已注册的 Markdown-it、KaTeX (`$$` 和 `math`/`latex`/`tex` 代码围栏)、Markdown-it footnotes/任务清单、Obsidian callout、Obsidian 图片、highlight.js 代码高亮和 DOMPurify 白名单 HTML 净化。所有 V1 样式来自原 `ui/markdown-preview.css`（该模块已自行导入 CSS），并非新造一个 `marked` 或 Markdown-it 实例。
+- 采用 V1 的 180ms 更新节流、`morphdom` 原位 DOM reconciliation、渲染前关闭脚注浮窗、保留已展开的 callout 状态与预览滚动比例；真实源 `<script>` 不得变成可执行 DOM。
+- 直接复用 V1 `createFootnotePopover` 的脚注浮窗；点击有 `data-source-start` 的预览块/“定位注文”通过 V2 原有 CM6 会话 `locateSourceLine` 跳转到对应行（只更改选区、滚动位置，不改内容）。PDF 与 AG 的完整双向同步仍未迁入。
+- **预览输入永远读取 `#workspace #editor.v2SourcePort.getMarkdown()` 当前值**，由现有 `v2-cm-session` 文档加载、编辑、Undo、Redo 和清空事件驱动。禁止订阅 SQL 或单独缓存另一份可编辑 Markdown 状态；Frame 顶栏的保存仍只操作全局设置。
+
+## 3. 验收
+
+- 真实原始 MinerU 22 页 fixture：539 基础块→224 逻辑块、其中 9 个空块，CM6 源码的有效分隔由旧三换行变为两换行，全文少 224 个展示换行字符，保持每个 `logicalId` 和对应 `markdown_text` 及 UTF-16 来源信息。
+- Chromium + iPad UA WebKit：V1 H1 色/排版、KaTeX、HTML 表格、Obsidian callout、加粗/代码、脚注浮窗、源行定位和 DOMPurify XSS 防护正常；源码输入/Undo/Redo 后仅当前 CM6 文档变化，预览重渲染而 SQL 的所有数据仍不写入；页面刷新丢弃未保存的 WP04 编辑属预期。
+- WP00～WP04 数据与界面回归、Frame 源码身份、GitHub commit/tag、统一发行与公网静态文件 SHA256 校验通过后才可发布。
+
+--- END ORIGINAL ---
