@@ -1,0 +1,21 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：b604609fc8a973b6159fee3b3e092f92b7a0b3ac
+原提交标题：docs(v2): adopt two tables and frontend derived views in README
+父提交：f3cb8672c850c43e7a84e622388616c9d3d3b50d
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_842dac340f725fc9 2026-11-24T03:13:04.223355Z: WP24第二次从 b604609 独立重新构建，标题派生、CM6编辑及Undo/Redo直接测试/Chromium通过，但iPad-WebKit切回逻辑块后原生 AG Type 拖动再次失败。失败本地Git branch experiment/wp24-title-view-failed-20261124 SHA f66780f；正式V2恢复干净 b604609；线上 WP22 6275730 / SQLite / 联邦州宪法及冻结tag均未修改。不在偏离构建上补丁修复，后续须独立重设计。
+任务检查点 tsk_25e7ddf71b0faf3d 2026-11-24T03:09:23.211528Z: completed=[scope], current=implement: WP23 attempt FAILED and stopped per federal BUILD. Local evidence branch experiment/wp23-title-view-failed-20261124 committed d906ea46b5230469a62bc5455d442b1dbace267c (not published). Pure title and targeted Chromium/WebKit CM6 Undo/Redo PASS, but after title->logical switch full iPad-WebKit original native AG Type column resize fails (86px remains 86px) while Chromium passes. Restored clean protected V2 baseline b604609fc8a973b6159fee3b3e092f92b7a0b3ac by normal git switch; frozen PDF tag 6275730 unchanged. Do not patch failed branch; new independent minimal build will use failure as negative regression and retain existing AG renderer without extra Grid filter port.
+任务检查点 tsk_25e7ddf71b0faf3d 2026-11-24T03:13:02.46937Z: WP23 首轮标题 View 构建失败：iPad-WebKit 切回逻辑块审阅后，原生AG Type列宽拖动失效(86→86px)。失败Git证据 d906ea4 仅保存在本地 experiment/wp23-title-view-failed-20261124；按联邦 BUILD 回退到已验收 V2 b604609，未发布。
+任务检查点 tsk_8a204090cd8f4c2e 2026-11-24T03:19:19.615564Z: completed=[inspect], current=implement: 基线 b604609，V1 title-view.js / md-ag-projection.js；现有 V2 AG port、CM6 getBlocks、稳定 logical_id，复用下拉及 V1 EnumCheckboxFilter。
+任务检查点 tsk_1626cec406b11b7d 2026-11-24T02:51:38.287942Z: completed=[c]: 仅V2 README完成并普通push：Git b604609fc8a973b6159fee3b3e092f92b7a0b3ac，远端 experiment/lab-ocr-v2 SHA完全匹配。已写2 Tables + N Derived Views职责3原则、AG过滤不替代候选发现、当前完成逻辑块审阅与6种独立View待实施、审阅状态持久化待另行授权。联邦/州读取顺序纠正，CM6旧只读表述纠正。README唯一文件变更; git diff --check、README定向文字门禁、root联邦/州8个AGENTS及动态7Lab布局门禁PASS。V2州AGENTS、根联邦契约、代码、SQL、发布静态资源均不变，冻结PDF tag仍62757300de886ee7b80348c5581dcaa1d4730113。因README-only未执行构建/重新发布，先前线上PDF里程碑未移动。
+任务检查点 tsk_76193936105b3267 2026-11-24T03:31:06.076901Z: completed=[rollback], current=implement: 用户纠偏：同一 AG 行集，用 block_type 原生筛选；不按正文重分类、无独立标题行模型、无 Level。已 git revert 0c6cbbe -> 18f5325，内容与 b604609 完全一致，直接回归 PASS。旧线上版本仍在，待新构建通过后统一替换。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
