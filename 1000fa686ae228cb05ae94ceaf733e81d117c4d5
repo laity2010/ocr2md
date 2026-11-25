@@ -1,0 +1,65 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：1000fa686ae228cb05ae94ceaf733e81d117c4d5
+原提交标题：feat(v2): CM6 group-end blank ownership without inter-block separators
+父提交：ebbb1cfba5bbc4ba6dfa81e61ba592869c151c26
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP08_CM6_GROUP_END_BLANK_LINE.md
+M	tests/v2-block-source-fixture.test.mjs
+M	tests/v2-block-source.test.mjs
+M	tests/v2-focus-map.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+M	tests/v2-structure-move.test.mjs
+M	ui/v2-block-source.js
+M	ui/v2-focus-map.js
+M	ui/v2-source-session.js
+M	ui/v2-structure-move.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP08_CM6_GROUP_END_BLANK_LINE.md
+来源提交：1000fa686ae228cb05ae94ceaf733e81d117c4d5
+SHA256：045a93d1f9f171d163d7732f9f59f408c140cee42f940e8ece3a82171685efcb
+--- BEGIN ORIGINAL ---
+# WP08 · CM6 逻辑块拼接与空行归属
+
+## 目标与边界
+
+V2 唯一 CM6 文档直接顺序拼接 `logical_block` 每行的 `markdown_text`，**两个逻辑块之间没有结构性分隔符**。父块组采用 `(p,b)` 归类，同组只允许 `s0` 加平级子块 `s1+`，不允许孙块。任何源文本内部已有的 `\n`、`\n\n`、连续多个空行都属于产生它的逻辑块，不能靠空行猜测块 ID、裁剪原文或偷偷生成一个新逻辑行。
+
+对相邻两组，前一组最后一行末尾始终应能在 CM6 中看到一个空白行。这一**最小组末补尾**在最后一个实际子块上实现（若本组只有 `s0`，它也是组末）；同组 `s0 / s1 / s2…` 没有自动补尾，因此 OCR 识别得到的碎片可以直接连续显示。原文本自带的空行全部保留，即使位于同组的非末子块中也不能去掉。
+
+## 投影算法
+
+- 按 SQL 的 `logical_order` 取得所有子块；从 WP03 `markdown` / UTF-16 `segments` 验证并取得每一行的原文，该 WP03 HTTP 载荷用于无损传输的 `\n\n` **不是** CM6 文档分隔符。
+- 每个行文本 `rawText` 原样拼接。若下一行是相同 `(p,b)` 组，不添加任何字符；否则，在当前行末尾补齐 **最少** 的 LF，使其至少以 `\n\n` 结束。对于已结束为 `\n\n` / 更多换行的真实原文，新增 0 个 LF；末尾已有一个 `\n` 则只新增一个；末尾不是 LF 则新增两个。
+- `from` / `to` 精确标识 CM6 中每个逻辑块的所有可见字符（包含其组末自动空行），`groupEndPad` 只记录本次投影新加的 0/1/2 字符，明确其归属并防止拖动时把它当成永久文本带走。靠稳定 `logical_id` 定位，不在 Markdown 内插 CMD 注释，也不解析空行来决定块边界。
+- `logicalTextRows(source,blocks)` 剔除仅用于显示的 `groupEndPad`，保证读回与 SQL `markdown_text` **逐字节一致**。当父块归入其他父块成为子块，旧的自动空行随原组边界消失；由新组最后的子块重新补尾。用户或 OCR 自带的所有空行都保留，不被这一机制吞掉。
+- 同一行的子块边界也可能是同一个 CM6 文本行内的位置。UTF-16 光标落在两个相邻逻辑块的交界位置时，映射到**后一个子块**；落在前一组的空白行内，映射到该组末块；末尾光标仍归最后一块。
+
+## SQLite 安全边界及未来编辑
+
+**WP08 不开放源码文字编辑，不更改 SQLite 的物理表或现有 `markdown_text`。** 补齐的尾部 LF 当前属于末块的 **CM6 显示内容**，但并未虚称为 SQLite 已存原文。此做法可以避免对用户已标定文本进行批量迁移、也避免在重组中无法区分自动空行与真实用户空行。
+
+以后单独开放文本编辑时，必须支持：在末块尾部空行插入文字、继续输入多余空行，均归入该 `logical_id` 的正文；在文本写入时把被实际编辑的显示尾部升级为真实内容并通过验证过的文本写入 API 持久化。其他块不得被意外吞并。现有只读版不提供文本保存 API，不得将上述未来目标宣称已实现。
+
+## WP07 向后兼容与验收
+
+保持原始 PDF 物理 bbox、两层 PBS、根块移动携带子块、局部 b/s 插槽顺延、CM6 单编辑器、原生 Undo/Redo、850ms 空闲 SQLite 差量结构事务、只读源码、AG/Markdown/PDF 高亮。结构操作只更新结构列，不改写原始内容；重组 Markdown 时采用同一 `composeLogicalSource`，不自制第二份拼接规则。
+
+直接测试：
+
+- `node tests/v2-block-source.test.mjs`：包含已有空行、末块自动空行、UTF-16 emoji、非末子块新增空行的纯投影、归属与不跨块编辑边界。
+- `node tests/v2-block-source-fixture.test.mjs`：真实 224 块 MinerU 样本，SQL 原文逐行一致，`s0→s1` 后只有组末补尾，整份原文不损失。
+- `node tests/v2-structure-move.test.mjs` 和 `node tests/v2-focus-map.test.mjs`：父子结构重排之后唯一 CM6 拼接、空行归末块及无分隔子块光标归属。
+- `node tests/v2-mineru-base.browser.test.mjs`：Chromium/iPad-WebKit，实际 CM6 根块归入子块后无额外空行，同时 AG/SQL/Undo/Redo/只读正常。
+- `node tests/v2-real-markdown-preview.browser.test.mjs`：真实 V1 PDF 手势触发的源窗/阅读预览/AG/PDF 同步。
+
+历史 WP04“每个块后都加 `\n\n`”约定已被 WP08 替代，不能用旧项目文档或测试恢复。
+
+--- END ORIGINAL ---
