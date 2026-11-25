@@ -5,3 +5,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"1d41d0024f5249a5a3eb059634309d82","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"1d41d0024f5249a5a3eb059634309d82","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"52293c8bffda539d6638a2baef6508c9e37d779d","event":"RUN_START","utc":"2026-11-25T06:39:18.027312+00:00","phase":"WP30 复用 V1 表格投影及列定义，接入 V2 AG 和公共定位","step":"518b25d28d2544b7968359022253b831"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"1d41d0024f5249a5a3eb059634309d82","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"52293c8bffda539d6638a2baef6508c9e37d779d","event":"RUN_EXIT","utc":"2026-11-25T06:39:25.791249+00:00","phase":"WP30 复用 V1 表格投影及列定义，接入 V2 AG 和公共定位","step":"518b25d28d2544b7968359022253b831","exit_code":0}
+
+WP30 违宪追记：上一轮在代码接入完成、浏览器验收和提交发布尚未进行时提前结束对话；无已知技术阻塞。保留原 START 与 RUN_EXIT，不另开航点，接续同一构建 ID，最终如实记录验收及发布。
