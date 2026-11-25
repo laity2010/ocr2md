@@ -1,0 +1,31 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：9fe720b267bf90b9ecb547e15324a3968296943b
+原提交标题：fix(v2): WP25K clear inherited pinned title column state
+父提交：65e4a799c7f1e14434e1eb9f273865ef12328268
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP25K_TITLE_HEADER_ORDER.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-ag-views.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/v2-ag-views.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_6021a4fdb9023f77 2026-11-24T12:10:18.484725Z: completed=[publish]: 9fe720b pushed and published 261124-200802, 70 manifest hashes and actual LAN version match. Chromium/iPad-WebKit actual header state and DOM order pass, title/frame switching and gutter pass; other Labs preserved.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25K_TITLE_HEADER_ORDER.md
+来源提交：9fe720b267bf90b9ecb547e15324a3968296943b
+SHA256：79ca1b6bf122192ff8e03c3ee15008e80f02a5407f8fbcc7a327d8c551b9ed86
+--- BEGIN ORIGINAL ---
+# WP25K · 标题实际表头顺序
+恢复点 65e4a79（1959）。用户 iPad 截图证明首列 PBS。隔离实际工作台复现：columnDefs 和 ColumnState 顺序均为 md_line/source_line/pbs，然而 PBS 仍继承 pinned:left，实际 DOM 顺序 PBS/MD Line/源码行号。原测试仅检查定义，错误通过。
+修复仅在标题预设显式 pinned:null，保留块视图 PBS 左固定和其余列样式。README 最新列序不变，增加实际显示验收条件。
+V2_TEST_UI_RESTORE=1：旧版本 Chromium 实际显示测试失败（PBS pinned:left）。修复后 Chromium/iPad-WebKit 均通过，实际渲染前三列 md_line/source_line/pbs，所有 pinned 状态为空；切回 frame 确认 PBS 左固定，再进标题重复验证。真实键盘、Enter、Undo/Redo、行号菜单、保存重开均通过。未改用户库、其他视图或框架。
+
+--- END ORIGINAL ---
