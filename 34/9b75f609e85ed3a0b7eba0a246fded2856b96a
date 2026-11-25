@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"5977c0de31034106a6ba725615070b2e","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"349b75f609e85ed3a0b7eba0a246fded2856b96a","event":"START","utc":"2026-11-25T13:22:46.747127+00:00","wp":"WP07B","goal":"补齐网页端 V3 SQL 生成与工作台显性入口及状态栏反馈","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"5977c0de31034106a6ba725615070b2e","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"349b75f609e85ed3a0b7eba0a246fded2856b96a","event":"RUN_START","utc":"2026-11-25T13:25:40.815288+00:00","phase":"precommit-full-verify","step":"3ba7132fc8af42eab03c2bfc84b681d3"}
