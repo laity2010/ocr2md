@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"e6a567eb38144a728f38c8082f5807bb","branch":"refs/heads/experiment/translation-lab","baseline":"14d9a5155d7d25c5686b203981f705fdaa586c7b","event":"START","utc":"2026-11-25T04:04:08.765485+00:00","wp":"FED-ENTRY-translation-lab","goal":"仅接入联邦构建前登记校验；保留当前业务、界面、数据、产物与全部发布版本。","retrospective":false}
