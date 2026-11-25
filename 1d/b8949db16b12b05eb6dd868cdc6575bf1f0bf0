@@ -17,3 +17,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"60eca6540e0447a492a22d65176c80bf","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"START","utc":"2026-11-25T12:47:54.415406+00:00","wp":"WP31D","goal":"用户批准从WP31B 1db8949干净基线重做；WP31C 910ccef失败保全已闭环。已有逻辑表时仅首次启动自动进入逻辑表及逻辑块审阅；无库首次导入及手动设置/基础表选择不变；独立验证启动、媒体选中与原AG过滤，原SQL/CM6/PDF及V1/V3/Frame/用户书籍不变；构建、测试、Git、发布及END闭环。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"RUN_START","utc":"2026-11-25T12:49:11.121518+00:00","phase":"implement-and-test","step":"9dac5d01b2cf4cb988cd76ed8874a099"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2686876e3083475593c299374514d436","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"1db8949db16b12b05eb6dd868cdc6575bf1f0bf0","event":"RUN_EXIT","utc":"2026-11-25T12:51:55.914817+00:00","phase":"implement-and-test","step":"9dac5d01b2cf4cb988cd76ed8874a099","exit_code":0}
