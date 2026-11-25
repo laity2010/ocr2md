@@ -147,9 +147,10 @@ const breakReviewCell=createBlockBreakReviewCell((row,decision)=>{
   }catch(error){report(error.message,'warning');}
 });
 let mediaAll=true,mediaController=null,mediaBook=null,mediaActive=false,mediaQueued=false,savedMediaFilter=null;
+let selectedMedia=null;
 function resetMedia(){
   mediaController?.dispose();mediaController=null;mediaBook=null;mediaActive=false;
-  mediaAll=true;savedMediaFilter=null;
+  mediaAll=true;savedMediaFilter=null;selectedMedia=null;
 }
 function getMediaController(){
   const source=sourceForNotes(),book=source?.getWorkspace();
@@ -189,7 +190,7 @@ function getMediaController(){
 function setMediaActive(value){
   if(value===mediaActive)return;
   mediaActive=value;
-  if(!value){mediaController?.setActive(false);return;}
+  if(!value){selectedMedia=null;mediaController?.setActive(false);return;}
   const controller=getMediaController();
   mediaActive=true;controller.setActive(true);
   queueMicrotask(()=>{if(mediaController===controller&&mediaActive)
@@ -212,8 +213,31 @@ function normalizeMediaMarkdown(){
  if(plan.length)p.replaceMdLines(plan);
  report(plan.length?`✓ 已规范化 ${plan.length} 条图片引用 · 可撤销`:'图片引用已是规范格式','ok');
 }
+function insertSelectedMedia(){
+  const source=sourceForNotes(),port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
+  if(agView!=='media'||!source?.getState().loaded||source.getWorkspace()!==bound||rebuilding||saveBlocked)
+    throw Error('媒体 View 或保存状态已变化');
+  const selected=selectedMedia;
+  const row=port?.getDisplayedRows().find(r=>r.media_row_id===selected?.id&&r.url===selected?.path&&r.local);
+  if(!row||selected.source!==source||selected.workspace!==bound)
+    throw Error('请先在媒体 View 选中本地图片');
+  // Inventory-only selection never moves the source cursor; an already
+  // linked row retains the caret captured before its normal source jump.
+  const pos=selected.unreferenced?source.getEditorView().state.selection.main.head:selected.pos;
+  selectedMedia=null;
+  source.insertLocalMediaAt(row.url,{...selected,pos});
+  report('✓ 已在源码光标处插入所选媒体 · 可撤销','ok');
+}
 function focusAGMedia(port,focus){
   const rows=port.getDisplayedRows();
+  if(selectedMedia){
+    const selected=rows.find(r=>r.media_row_id===selectedMedia.id&&r.url===selectedMedia.path&&r.local);
+    if(selected&&(selectedMedia.unreferenced||selected.block_id===focus?.logicalId&&selected.line_no===focus?.sourceLine)){
+      port.focusRow('media_row_id',selected.media_row_id);return;
+    }
+    selectedMedia=null;
+  }
+  if(!focus){port.focusRow('media_row_id',null);return;}
   const row=rows.find(r=>r.block_id===focus.logicalId&&r.line_no===focus.sourceLine)||
     (focus.origin==='pdf'?rows.find(r=>r.block_id===focus.logicalId):null);
   port.focusRow('media_row_id',row?.media_row_id??null);
@@ -607,7 +631,16 @@ function renderGrid(state){
         return;
       }
       if(selectedTable==='logical_block'&&agView==='media'){
-        const source=sourceForNotes(),line=resolveMediaRow(source?.getMdLineIndex(),source?.getMarkdown(),event.data);
+        const source=sourceForNotes(),row=event.data,index=source?.getMdLineIndex();
+        if(!index||source.getWorkspace()!==bound)return;
+        const line=resolveMediaRow(index,source.getMarkdown(),row);
+        selectedMedia=null;
+        if(row.local&&(line||row.adopted==='未引用'&&!row.line_id)){
+          selectedMedia={id:row.media_row_id,path:row.url,source,workspace:bound,
+            doc:source.getDoc(),index,pos:source.getEditorView().state.selection.main.head,
+            unreferenced:!line};
+          if(!line){port.focusRow('media_row_id',row.media_row_id);report('未引用本地媒体 · '+row.url,'info');return;}
+        }
         if(line)document.dispatchEvent(new CustomEvent('v2-ag-row-click',{detail:{
           table:selectedTable,row:line,workspace:bound,lineRow:true,sourceLine:line.source_line}}));
         else report(event.data.line_id?'媒体引用位置已过期':'未引用本地媒体 · '+event.data.url,'info');
@@ -774,7 +807,7 @@ function renderGrid(state){
       noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
       port.setFilterModel(null);renderGrid(logicalState);
       report('注释格式已应用并重新识别 · 仅当前会话','ok');
-    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),onNormalizeMedia:normalizeMediaMarkdown,onOrganizeTable:organizeTableMarkdown,
+    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),onNormalizeMedia:normalizeMediaMarkdown,onOrganizeTable:organizeTableMarkdown,onInsertMedia:insertSelectedMedia,
   });
   noteToolbar?.setVisible(noteView||latexView||mediaView||tableView,tableView?'table':mediaView?'media':latexView?'latex':'note-match');
   let view=null;
@@ -829,9 +862,9 @@ function renderGrid(state){
     if(nextView==='frame')savedLogicalFilter=null;
   }
   if(logical&&!noteView&&!latexView&&!breakView&&!mediaView&&!tableView)port.fitColumns({pbs:pbsWidth,block_type:typeWidth});
-  if(lastFocus){
-    if(mediaView)focusAGMedia(port,lastFocus);
-    else if(breakView)focusAGBreak(port,lastFocus);
+  if(mediaView)focusAGMedia(port,lastFocus);
+  else if(lastFocus){
+    if(breakView)focusAGBreak(port,lastFocus);
     else if(latexView)focusAGLatex(port,lastFocus);
     else if(noteView)focusAGNote(port,lastFocus);
     else if(lineView)focusAGLine(port,lastFocus);
@@ -1112,6 +1145,7 @@ document.addEventListener('v2-cm-session',event=>{
   }
   if(kind==='saved'&&agView==='note-match'&&active&&logicalState&&selectedTable==='logical_block')renderGrid(logicalState);
   if(kind==='structure'||kind==='edit'){
+    selectedMedia=null;
     overlayCMStructure();
     if(active&&selectedTable==='logical_block'&&logicalState)renderGrid(logicalState);
     saveBlocked=false;scheduleStructureSave();

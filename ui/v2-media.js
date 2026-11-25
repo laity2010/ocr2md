@@ -73,13 +73,13 @@ const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'en',{numeric:true});
 export function mediaColumns(controller){
  return [
  {field:'preview_path',headerName:'预览',width:104,sortable:false,cellRenderer:controller.previewCell},
+ {field:'adopted',headerName:'引用',width:84,sortable:true},
  {field:'source_kind',headerName:'来源',width:86,sortable:true},
  {field:'line_no',headerName:'源码行号',width:110,sortable:true,sort:'asc'},
  {field:'pbs',headerName:'PBS',width:110,sortable:true,comparator:cmp},
  {field:'action',headerName:'操作',width:99,sortable:false,cellRenderer:controller.actionCell},
  {field:'status',headerName:'状态',width:102,sortable:true},
  {field:'progress',headerName:'进度',width:102,sortable:false},
- {field:'adopted',headerName:'引用',width:84,sortable:true},
  {field:'url',headerName:'媒体链接',flex:2,minWidth:245,sortable:false},
  {field:'media_row_id',headerName:'媒体行 ID',hide:true,sortable:false}
  ].map(c=>({pinned:null,sort:null,...c}));

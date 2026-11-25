@@ -21,6 +21,7 @@ import {planMdLineEdit} from './v2-md-line-edit.js';
 import {captureLineSelection,quoteLineChanges} from './v2-line-quote.js';
 import {singleLineMD} from './v2-single-line.js';
 import {uploadPastedImage} from './v2-media-paste.js';
+import {mediaFileUrl} from './v2-media-url.js';
 // Byte-identical V1 Frame source gutter, adapted only via callbacks.
 import {createMdLineGutter} from './v2-md-line-gutter.js';
 import './v2-source-session.css';
@@ -538,6 +539,17 @@ export function mountV2Source(host){
   };
   const port=Object.freeze({
     replaceMdLines,
+    insertLocalMediaAt(path,{doc,index,pos,workspace}){
+      const state=editor.state;
+      if(!loaded||!ownedLF||book!==workspace||doc!==state.doc||index!==getMdLineIndex()||
+        !mediaFileUrl(book,path)||!Number.isInteger(pos)||!editOwner(state.field(structureField),pos,pos))
+        throw Error('图片或源码插入位置已变化，请重新选择');
+      const insert='![]('+path+')';
+      editor.dispatch({changes:{from:pos,insert},selection:{anchor:pos+insert.length},
+        userEvent:'input.paste',annotations:isolateHistory.of('full')});
+      if(editor.state.doc===doc)throw Error('原有正文编辑门禁拒绝图片引用');
+      return true;
+    },
     setBreakPair(index,pair){
       if(index&&index!==getMdLineIndex())return false;
       editor.dispatch({effects:breakEffect.of(pair),annotations:Transaction.addToHistory.of(false)});return true;
