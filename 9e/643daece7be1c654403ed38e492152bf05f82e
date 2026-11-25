@@ -15,3 +15,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_EXIT","utc":"2026-11-25T11:02:31.258985+00:00","phase":"paste-browser-rerun","step":"9902fb0b1a1c439fac822765881d69e8","exit_code":1}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_START","utc":"2026-11-25T11:03:06.749115+00:00","phase":"paste-browser-rerun2","step":"b023c309b8e7403fad74d1615cbe024f"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_EXIT","utc":"2026-11-25T11:05:16.000919+00:00","phase":"paste-browser-rerun2","step":"b023c309b8e7403fad74d1615cbe024f","exit_code":1}
