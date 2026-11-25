@@ -17,6 +17,28 @@ try{
    page.on('response',r=>{if(r.status()>=400&&r.url().startsWith(vite.resolvedUrls.local[0]))console.error('DIRECT_HTTP',r.status(),r.url());});
    await page.route('**/wp29-direct-fixture.html',r=>r.fulfill({contentType:'text/html',body:'<!doctype html><title>Media direct test</title>'}));
    await page.goto(vite.resolvedUrls.local[0]+'wp29-direct-fixture.html');
+   const requested=[];
+   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7xkAAAAASUVORK5CYII=','base64');
+   await page.route('**/labs/lab-ocr-v2/api/mineru-base/media-file?*',r=>{
+    const u=new URL(r.request().url());requested.push([u.searchParams.get('path'),u.searchParams.get('_retry')]);
+    const file=u.searchParams.get('path');
+    if(file.includes('c'.repeat(24))&&!u.searchParams.has('_retry'))return r.fulfill({status:503,body:'transient failure'});
+    return r.fulfill({status:200,contentType:'image/png',body:png});
+   });
+   await page.evaluate(async()=>{
+    const {mediaFileUrl,retryLocalImage}=await import('/ui/v2-media-url.js');
+    const file=mediaFileUrl('/book with spaces','media/'+'c'.repeat(24)+'.png');
+    const replacement=mediaFileUrl('/book with spaces','media/'+'d'.repeat(24)+'.png');
+    const img=document.createElement('img');img.id='retry-fixture';retryLocalImage(img,file);document.body.append(img);img.src=file;
+    const stale=document.createElement('img');stale.id='stale-fixture';document.body.append(stale);retryLocalImage(stale,file);stale.src=file;
+    stale.dispatchEvent(new Event('error'));stale.src=replacement;retryLocalImage(stale,replacement);
+   });
+   await page.waitForFunction(()=>{const img=document.querySelector('#retry-fixture');return img.complete&&img.naturalWidth>0&&new URL(img.src).searchParams.get('_retry')==='1';},null,{timeout:10000});
+   await page.waitForTimeout(700);
+   assert(await page.locator('#stale-fixture').evaluate(img=>img.complete&&img.naturalWidth>0&&new URL(img.src).searchParams.get('path')==='media/'+'d'.repeat(24)+'.png'));
+   assert(requested.some(([path,retry])=>path.includes('c'.repeat(24))&&retry==='1'));
+   console.log('WP29F_HTTP_RETRY_AND_STALE_PASS',name);
+
    const result=await page.evaluate(async()=>{
     const {findLabMedia,createLabOcrMediaView}=await import('/ui/lab-ocr/media-view.js');
     const {mediaContext,planMediaEdits,planBareMediaNormalization,resolveMediaRow,mediaFileUrl}=await import('/ui/v2-media.js');

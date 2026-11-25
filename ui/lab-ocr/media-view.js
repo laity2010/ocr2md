@@ -4,8 +4,8 @@
  */
 import {findMedia} from '../media-module.js';
 import {findBareMedia} from '../v2-bare-media.js';
+import {mediaFileUrl,retryLocalImage} from '../v2-media-url.js';
 
-const API='/labs/lab-ocr-v2/api/mineru-base/';
 const LOCAL=/^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/;
 const approvedPath=value=>typeof value==='string'&&LOCAL.test(value);
 const percent=(bytes,total)=>Number.isFinite(total)&&total>0?
@@ -97,7 +97,7 @@ export function createLabOcrMediaView({request,read,replace,onChanged,onStatus=(
   const notify=()=>{if(active&&!disposed)onChanged(rows());};
   const fileUrl=path=>{
     const ctx=context();
-    return `${API}media-file?workspace=${encodeURIComponent(ctx?.workspace??'')}&path=${encodeURIComponent(path)}`;
+    return mediaFileUrl(ctx?.workspace,path);
   };
   function previewCell(params){
     const row=params.data;
@@ -107,9 +107,11 @@ export function createLabOcrMediaView({request,read,replace,onChanged,onStatus=(
     link.href=src;link.target='_blank';link.rel='noopener noreferrer';
     link.title='打开媒体原图（新窗口）';link.onclick=event=>event.stopPropagation();
     const image=document.createElement('img');image.className='ocr-lab-media-thumb';
-    image.loading='lazy';image.alt='媒体缩略图';image.src=src;
-    image.onerror=()=>{image.hidden=true;link.textContent='无法预览';};
-    link.append(image);return link;
+    image.loading='eager';image.alt='媒体缩略图';
+    const failure=()=>{image.hidden=true;link.title='无法预览 · 点击打开原图';if(!link.querySelector('.ocr-lab-media-error')){const label=document.createElement('span');label.className='ocr-lab-media-error';label.textContent='无法预览';link.append(label);}};
+    image.addEventListener('load',()=>{image.hidden=false;link.querySelector('.ocr-lab-media-error')?.remove();link.title='打开媒体原图（新窗口）';});
+    if(approvedPath(row.preview_path)&&src)retryLocalImage(image,src,failure);else image.addEventListener('error',failure);
+    link.append(image);if(src)image.src=src;else failure();return link;
   }
   function actionCell(params){
     const row=params.data;

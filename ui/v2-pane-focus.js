@@ -34,7 +34,7 @@ export function mountV2PaneFocus(previewPane,previewBody){
   let scroll=null,lastId=null;
   const initialize=()=>{
     if(scroll||!sourcePort())return;
-    scroll=createScrollSync(()=>sourcePort()?.getEditorView(),previewPane,previewBody);
+    scroll=createScrollSync(()=>sourcePort()?.getEditorView(),previewPane,previewBody,{preserveExplicitAnchor:true});
     scroll.measureLater();
   };
   const onSession=event=>{

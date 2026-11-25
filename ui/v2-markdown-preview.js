@@ -9,6 +9,7 @@ import {createFootnotePopover} from './footnote-popover.js';
 import {mountV2PaneFocus,focusSourceLine} from './v2-pane-focus.js';
 import './v2-markdown-preview.css';
 import {mediaFileUrl,resolveMediaPreviewUrl} from './v2-media.js';
+import {retryLocalImage} from './v2-media-url.js';
 
 const SOURCE='#workspace #editor';
 export function mountV2MarkdownPreview(scroller){
@@ -57,6 +58,7 @@ export function mountV2MarkdownPreview(scroller){
   // A remote reference remains remote in CM6 until explicit adoption; only
   // the rendered image may use its already downloaded local counterpart.
   const pendingMedia=new Map();
+  const attachLocalRetry=()=>{for(const img of article.querySelectorAll('img[src]')){const src=img.getAttribute('src');if(!src?.includes('/labs/lab-ocr-v2/api/mineru-base/media-file?'))continue;retryLocalImage(img,src);}};
   const resolveRemoteImages=()=>{
     const workspace=sourcePort()?.getWorkspace();
     if(!workspace||disposed)return;
@@ -123,6 +125,7 @@ export function mountV2MarkdownPreview(scroller){
       if(folds.has(key))detail.open=folds.get(key);
     }
     lastSource=source;renderCount++;
+    attachLocalRetry();
     resolveRemoteImages();
     highlight(focusedId);
     if(location)coordinator.port.afterRender(location);

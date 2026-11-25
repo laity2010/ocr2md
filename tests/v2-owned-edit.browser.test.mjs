@@ -22,6 +22,7 @@ const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
 const breakMode=process.env.V2_TEST_BREAK_VIEW==='1';
 const realMediaBook=process.env.V2_TEST_REAL_MEDIA_BOOK;
 const normalizeMediaMode=process.env.V2_TEST_NORMALIZE_MEDIA==='1';
+const mediaExactMode=process.env.V2_TEST_MEDIA_EXACT==='1';
 const mediaMode=process.env.V2_TEST_MEDIA_VIEW==='1'||Boolean(realMediaBook);
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
@@ -169,7 +170,7 @@ try{
      const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
      const expected=[[12,'p0b5s1'],[17,'p0b7s1'],[22,'p0b9s1'],[27,'p0b11s1'],[32,'p0b13s1'],[37,'p0b15s1'],[45,'p1b1s2'],[111,'p4b1s2'],[116,'p5b0s2'],[252,'p12b8s3'],[258,'p13b1s4']];
      await picker.selectOption('media');
-     await page.waitForFunction(focusOnly=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&(x.status==='已下载'||focusOnly&&x.local&&x.status==='本地'));},normalizeMediaMode||process.env.V2_TEST_FOCUS_STABILITY==='1',{timeout:30000});
+     await page.waitForFunction(focusOnly=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&(x.status==='已下载'||focusOnly&&x.local&&x.status==='本地'));},mediaExactMode||normalizeMediaMode||process.env.V2_TEST_FOCUS_STABILITY==='1',{timeout:30000});
      const rows=await read();assert.deepEqual(rows.map(r=>[r.line_no,r.pbs]),expected);
      console.log("WP29C_ALL_ROWS_PASS",name,rows.length);
      assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
@@ -177,6 +178,32 @@ try{
      const headerOrder=['preview_path','source_kind','line_no','pbs','action','status','progress','adopted','url'];
      assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>!c.hide).map(c=>c.colId)),headerOrder);
      assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned)),[]);
+     if(mediaExactMode){
+       // Simulate a single transient image error on a rendered thumbnail, not a missing file.
+       // Preserve original image elements and verify the same local URL in both views.
+       const ref=rows.find(r=>r.line_no===32);
+       const errorEvidence=await grid.evaluate((el,path)=>{
+         const img=[...el.querySelectorAll('.ocr-lab-media-thumb')].find(n=>new URL(n.src).searchParams.get('path')===path);
+         if(!img)throw Error('target thumbnail not rendered');
+         img.dispatchEvent(new Event('error'));
+         return {connected:img.isConnected,hidden:img.hidden};
+       },ref.url);
+       console.log('WP29F_ERROR_EVIDENCE',name,JSON.stringify(errorEvidence));
+       if(process.env.V2_TEST_MEDIA_EXACT_BASELINE==='1'){
+         assert.equal(errorEvidence.connected,false,'baseline permanently removes failed thumbnail');continue;
+       }
+       assert.equal(errorEvidence.connected,true);
+       for(const ref of rows){
+         const i=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('media_row_id',id);return p.getDisplayedRows().findIndex(r=>r.media_row_id===id);},ref.media_row_id);
+         const cell=grid.locator('.ag-row[row-index="'+i+'"] [col-id="line_no"]').filter({hasText:new RegExp('^'+ref.line_no+'$')});
+         await cell.click();
+         await page.waitForFunction(line=>{const v=document.querySelector('#workspace #editor').v2SourcePort.getEditorView();return v.state.doc.lineAt(v.state.selection.main.head).number===line;},ref.line_no);
+         await page.waitForFunction(id=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().selectedId===id,ref.block_id);
+         await page.waitForFunction(({line,path})=>{const pane=document.querySelector('#workspace .ocr-preview-md-scroll');const img=pane.querySelector('[data-source-start="'+line+'"].v2-sync-preview-focus img');const thumb=[...document.querySelectorAll('#workspace .ocr-outline-grid .ocr-lab-media-thumb')].find(n=>new URL(n.src).searchParams.get('path')===path);if(!img||!thumb||!img.complete||!img.naturalWidth||!thumb.complete||!thumb.naturalWidth||thumb.hidden)return false;const a=img.getBoundingClientRect(),b=pane.getBoundingClientRect();return new URL(img.src).searchParams.get('path')===path&&a.bottom>b.top&&a.top<b.bottom;},{line:ref.line_no,path:ref.url},{timeout:30000});
+         console.log('WP29F_EXACT_PASS',name,ref.line_no,ref.pbs);
+       }
+       assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);assert.deepEqual(errors,[]);continue;
+     }
      if(normalizeMediaMode){
        // Actual header DOM order; widen the test viewport only to expose all five columns.
        await page.setViewportSize({width:2100,height:1100});

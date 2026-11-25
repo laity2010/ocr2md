@@ -1,11 +1,8 @@
 /** WP29 adapter: V1 Media controller, current V2 common line index and
  * one native CM6 replaceMdLines transaction. No second document or table. */
 import {findLabMedia} from './lab-ocr/media-view.js';
-export const MEDIA_API='/labs/lab-ocr-v2/api/mineru-base/';
-export function mediaFileUrl(workspace,path){
- if(!workspace||!/^media\/[0-9a-f]{24}\.(?:jpg|jpeg|png|gif|webp)$/.test(path??''))return null;
- return MEDIA_API+'media-file?'+new URLSearchParams({workspace,path});
-}
+import {MEDIA_API,mediaFileUrl} from './v2-media-url.js';
+export {MEDIA_API,mediaFileUrl};
 /** Read-only preview lookup; the existing authorized status API decides whether
  * the exact remote URL already has a complete local file. Never downloads. */
 export async function resolveMediaPreviewUrl(workspace,remote){
