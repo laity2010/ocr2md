@@ -1,0 +1,1 @@
+WP30A 发布闭环：20261125-154833，59dabaf7d5b0f52555adeceebde8e1b1139f0722，releaseId 9e3d22c040f94f0ac3be08ffa01ef4f9764e8a6aaacff39e0d2039ad3d7e8b78；双浏览器实测列序、当前MD Line及32块回归PASS；首次DOM断言失败已在正文和RUN_EXIT留痕。正式构建、跨版本门禁、普通push、九州布局与八Lab哈希、线上HTTP200及SHA一致，发布run退出0并同步5db0b2b。原有字体/包体警告、stage wp29-media-view 未改；物理iPad未实机验收。
