@@ -19,3 +19,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_START","utc":"2026-11-25T10:00:42.193202+00:00","phase":"WP30C 第三轮验收：核验预览可见性并使用真实预览选择器","step":"29bf83f5e1de468aa37fb7918586f956"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_EXIT","utc":"2026-11-25T10:00:51.121949+00:00","phase":"WP30C 第三轮验收：核验预览可见性并使用真实预览选择器","step":"29bf83f5e1de468aa37fb7918586f956","exit_code":1}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_START","utc":"2026-11-25T10:01:20.142843+00:00","phase":"WP30C 第三轮诊断脚本匹配引号失败未改文件；修正后真实预览验收","step":"34c4064a899c4a9abeba23167cb844ba"}
