@@ -4,6 +4,7 @@ import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
 import {splitSnapshot} from "../ui/sentence/split.js";
+import {boundaryDisplay} from "../ui/sentence/display.js";
 const fixture=JSON.parse(execFileSync("python3",["-c","import sys,tempfile,json; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from test_v2_owned_edit import prepare_owned_book; tmp=tempfile.TemporaryDirectory(prefix='sentence-fixture-'); print(json.dumps(prepare_owned_book(Path(tmp.name)),ensure_ascii=False))","../lab-ocr-v2/tests"],{encoding:"utf8",maxBuffer:32*1024*1024}));
 const sourceSnapshot=await importSnapshot(fixture),expected=splitSnapshot(sourceSnapshot);
 const url="http://127.0.0.1:5399/labs/lab-sentence/";
@@ -38,31 +39,51 @@ try{
    assert.equal(await readDoc(),fixture.markdown);
    await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),fixture.rowCount*3,{timeout:60000});
    assert.equal(await readDoc(),fixture.markdown);
+   const projection=boundaryDisplay(sourceSnapshot,expected);
    const right=page.locator('#workspace [data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content');
-   const first=sourceSnapshot.blocks[0];
-   const waitBlock=async(block)=>{
-    await page.waitForFunction(text=>[...document.querySelectorAll('#workspace [data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content')].every(el=>el.cmTile.root.view.state.doc.toString()===text),block.text);
-    assert.deepEqual(await right.evaluateAll(es=>es.map(e=>e.cmTile.root.view.state.doc.toString())),[block.text,block.text,block.text]);
+   const expectFull=async()=>{
+    assert.deepEqual(await right.evaluateAll(es=>es.map(e=>e.cmTile.root.view.state.doc.toString())),Array(3).fill(fixture.markdown));
+    assert.equal(await readDoc(),fixture.markdown);
    };
-   await waitBlock(first);
-   // Choose a short real multi-sentence block so both colors are visible in all panes.
-   const index=expected.blocks.findIndex((r,i)=>i>0&&sourceSnapshot.blocks[i].text.length<450&&r.candidates.every(c=>!c.error&&c.units.length>=2&&c.units[1].sourceRanges.length));
-   assert(index>0);
-   const block=sourceSnapshot.blocks[index],row=expected.blocks[index];
-   await page.locator('#editor .cm-content').evaluate((e,pos)=>{const v=e.cmTile.root.view;v.dispatch({selection:{anchor:pos},scrollIntoView:true});},block.from);
-   await waitBlock(block);
-   for(const [pane,id] of [['intl','intl'],['splitter','sentence-splitter'],['wink','wink-nlp']]){
-    const el=page.locator('#sentence-editor-'+pane);
-    await el.locator('.sentence-unit-even').first().waitFor();
-    await el.locator('.sentence-unit-odd').first().waitFor();
-    assert.equal(await el.locator('.cm-content').getAttribute('contenteditable'),'false');
-    if(id!=='intl')assert.equal(await page.locator('[data-sentence-pane="'+pane+'"] .sentence-engine-label').textContent(),(pane==='splitter'?'Sentence Splitter':'Wink NLP')+' · '+row.candidates.find(c=>c.engine===id).units.length+' 句');
+   await expectFull();
+   const selectSource=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>{const v=e.cmTile.root.view;v.dispatch({selection:{anchor:pos},scrollIntoView:true});},pos);
+   const expectFocus=async pos=>{
+    await page.waitForFunction(pos=>[...document.querySelectorAll('#workspace .cm-content')].every(el=>el.cmTile.root.view.state.selection.main.head===pos),pos);
+    for(const id of ['editor','sentence-editor-intl','sentence-editor-splitter','sentence-editor-wink']){
+     await page.locator('#'+id+' .ocr-sb-active-line').first().waitFor({state:'visible'});
+    }
+   };
+   // Exercise both marker types at actual source coordinates in all four views.
+   for(const style of ['ocr-sb-agreed','ocr-sb-split']){
+    const mark=projection.source.marks.find(m=>m.style===style&&m.pos>100);
+    assert(mark,'missing fixture boundary '+style);
+    await selectSource(mark.pos);
+    await expectFocus(mark.pos);
+    const left=page.locator('#editor .ocr-sb-boundary[title='+JSON.stringify(mark.title)+']');
+    await left.waitFor({state:'visible'});
+    assert.equal(await left.textContent(),mark.label);
+    assert(await left.evaluate((e,style)=>e.classList.contains(style),style));
+    for(const [pane,id] of [['intl','intl'],['splitter','sentence-splitter'],['wink','wink-nlp']]){
+     const el=page.locator('#sentence-editor-'+pane);
+     const expectedMark=projection[id].marks.find(m=>m.pos===mark.pos&&m.title===mark.title);
+     const widget=el.locator('.ocr-sb-boundary[title='+JSON.stringify(mark.title)+']');
+     if(expectedMark){await widget.waitFor({state:'visible'});assert.equal(await widget.textContent(),'│');assert(await widget.evaluate((e,style)=>e.classList.contains(style),style));}
+     else assert.equal(await widget.count(),0);
+     assert.equal(await el.locator('.cm-content').getAttribute('contenteditable'),'false');
+    }
    }
-   const pos=row.candidates.find(c=>c.engine==='sentence-splitter').units[1].sourceRanges[0].from;
+   const pos=sourceSnapshot.blocks.find(b=>b.from>20000&&b.text.length>100).from;
    await page.locator('#sentence-editor-splitter .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos}}),pos);
-   await page.waitForFunction(pos=>document.querySelector('#editor .cm-content').cmTile.root.view.state.selection.main.head===pos,block.from+pos);
-   await waitBlock(block);assert.equal(await readDoc(),fixture.markdown);
-   console.log("SENTENCE_V2_DISPLAY_PASS",name,fixture.rowCount,fixture.markdown.length,fixture.rowCount*3,"exact blocks; alternating colors; bidirectional positioning");
+   await expectFocus(pos);await expectFull();
+   // Native wheel gesture followed by scrolling, on the short right pane.
+   const oldTop=await page.locator('#editor .cm-scroller').evaluate(e=>e.scrollTop);
+   await page.locator('#sentence-editor-wink .cm-scroller').evaluate(el=>{
+    el.dispatchEvent(new WheelEvent('wheel',{deltaY:900}));el.scrollTop+=900;
+   });
+   await page.waitForFunction(old=>Math.abs(document.querySelector('#editor .cm-scroller').scrollTop-old)>150,oldTop);
+   await expectFull();
+   assert.equal(await page.locator('#workspace .sentence-unit-even,#workspace .sentence-unit-odd').count(),0);
+   console.log("SENTENCE_ORIGINAL_VISUAL_PASS",name,fixture.rowCount,fixture.markdown.length,"full source, agreed/disputed widgets, block focus, bidirectional position and scroll");
   }finally{await b.close();}
  }
 }finally{server.kill("SIGTERM");}

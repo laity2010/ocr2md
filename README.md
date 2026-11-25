@@ -13,7 +13,7 @@
 
 - WP02A：原有三引擎适配器来自已验收的 Sentence Benchmark 84dfe75，固定版本依赖见 ui/sentence/package-lock.json（独立安装 npm ci --prefix ui/sentence）。每个逻辑块独立分句，保护公式、表格、媒体等非正文，保持块内 UTF-16 来源区间及原始片段；引擎跳过的点状省略符归入相邻句，不吞掉非标点遗漏。公开 API：splitBlock(block,engine)、rebuildBlock(result)、splitSnapshot(snapshot) 返回 documentVersion 与 blocks/candidates；每个候选含 units/sourceRanges 和完整原文 pieces 或显式 error。载入快照后在内存生成候选，状态栏报告成功/总数，不写 SQL、不仲裁。
 
-- WP02B：左窗选中逻辑块即显示右三引擎的同一块完整原始 Markdown，候选的源区间交替着色，句内空格着色而保护片段原样保留；首块自动显示。右窗光标定位左窗对应源字符，源窗高亮当前块。候选失败显示明确标签，不伪造分句。display.js 公开 blockAtOffset(blocks,offset) 与 candidateDisplay(block,candidate) 为只读投影；setReview 仅接受同一 documentVersion 的候选。布局、分句算法、设置与数据库不改，筛选仲裁留待 WP03。
+- WP02C：复刻原 Sentence Benchmark 84dfe75 的 BreakWidget 与句界颜色（全三引擎一致绿 │，分歧橙 │；左原文分歧 ┆），四窗均显示同一份 V2 完整 Markdown；按同一绝对 UTF-16 位置双向点击定位与同步滚动。保留 V2 的原生行号、字体、语法着色、布局与只读保护；各窗当前行复用原版橙色高亮，当前逻辑块其余行淡橙色。不引入旧 CMD 标签、旧 PBS gutter、旧折叠或仲裁；块筛选/页码与采用在 WP03。display.js API：blockAtOffset(blocks,offset)、boundaryDisplay(snapshot,results)，后者把已有候选的最后源片段末端转换成全篇句界 Widget 投影，候选失败明确计数，不变更原文或分句算法；setReview 只接同一快照版本。
 
 ## 构建和验收
 

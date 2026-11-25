@@ -22,6 +22,11 @@
 #workspace .sentence-pane .frame-editor{height:auto;flex:1 1 0;min-height:0}
 #workspace .sentence-engine-label{font:calc(12px * var(--ocr-frame-scale)) "OCR2MD Sarasa",monospace;color:#d3c6aa;white-space:nowrap}
 
-/* Alternating sentence marks; source text and protected fragments stay intact. */
-#workspace .cm-content .sentence-unit-even{background:rgba(128,166,110,.23);box-decoration-break:clone;-webkit-box-decoration-break:clone}
-#workspace .cm-content .sentence-unit-odd{background:rgba(103,153,184,.23);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+
+/* Sentence Benchmark 84dfe75 visual contract, scoped to V2 editors. */
+#workspace .ocr-sb-active-line {background:rgba(233,172,101,.16)}
+#workspace .ocr-sb-boundary{display:inline-block;color:#e9ac65;padding:0 1px;font-weight:800;
+  vertical-align:baseline;font-family:"OCR2MD Sarasa",monospace;pointer-events:none}
+#workspace .ocr-sb-boundary.ocr-sb-agreed{color:#83aa8b}
+#workspace .ocr-sb-boundary.ocr-sb-split{color:#e9ac65;background:#5e4837;border-radius:2px}
+#workspace .sentence-active-block{background:rgba(233,172,101,.10)}

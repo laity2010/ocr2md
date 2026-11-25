@@ -1,8 +1,8 @@
 /** Lab-Sentence: one source pane and three independent read-only CM6 panes. */
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateEffect,StateField} from '@codemirror/state';
-import {EditorView,Decoration} from '@codemirror/view';
-import {blockAtOffset,candidateDisplay} from '../sentence/display.js';
+import {EditorView,Decoration,WidgetType} from '@codemirror/view';
+import {blockAtOffset,boundaryDisplay} from '../sentence/display.js';
 import {basicSetup} from 'codemirror';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
@@ -17,13 +17,38 @@ import '../outline-grid.css';
 import '../settings-module.css';
 import '../sentence/layout.css';
 const names={source:'原文',intl:'Intl',splitter:'Sentence Splitter',wink:'Wink NLP'};
-const setMarks=StateEffect.define();
-const decorations=ranges=>Decoration.set(ranges.filter(r=>r.to>r.from).map(r=>Decoration.mark({class:r.className}).range(r.from,r.to)),true);
-const marksField=StateField.define({create:()=>Decoration.none,update(value,tr){
- for(const e of tr.effects)if(e.is(setMarks))value=decorations(e.value);
+class BreakWidget extends WidgetType {
+  constructor(label,style,title){super();this.label=label;this.style=style;this.title=title;}
+  eq(other){return other instanceof BreakWidget &&
+    this.label===other.label&&this.style===other.style&&this.title===other.title;}
+  toDOM(){
+    const marker=document.createElement('span');
+    marker.className='ocr-sb-boundary '+this.style;
+    marker.textContent=this.label;marker.title=this.title;
+    marker.setAttribute('aria-label',this.title);
+    return marker;
+  }
+  ignoreEvent(){return false;}
+}
+
+const setFocus=StateEffect.define();
+const decorations=marks=>Decoration.set(marks.map(m=>Decoration.widget({
+ widget:new BreakWidget(m.label,m.style,m.title),side:1
+}).range(m.pos)),true);
+const marksField=StateField.define({create:()=>Decoration.none,update:value=>value,provide:f=>EditorView.decorations.from(f)});
+const focusField=StateField.define({create:()=>Decoration.none,update(value,tr){
+ for(const e of tr.effects)if(e.is(setFocus)){
+  if(!e.value)return Decoration.none;
+  const {from,to,pos}=e.value,doc=tr.state.doc;
+  const first=doc.lineAt(from).number,last=doc.lineAt(Math.max(from,to-1)).number,active=doc.lineAt(pos).number;
+  const marks=[];
+  for(let n=first;n<=last;n++)marks.push(Decoration.line({class:n===active?'ocr-sb-active-line':'sentence-active-block'}).range(doc.line(n).from));
+  if(active<first||active>last)marks.push(Decoration.line({class:'ocr-sb-active-line'}).range(doc.line(active).from));
+  return Decoration.set(marks,true);
+ }
  return value;
 },provide:f=>EditorView.decorations.from(f)});
-function pane(name,onModuleChange,onSelection){
+function pane(name,onModuleChange,onSelection,onScroll){
   const element=document.createElement('div');
   element.className='ocr-source-pane ocr-source-file-source sentence-pane';
   element.dataset.sentencePane=name;
@@ -48,56 +73,73 @@ function pane(name,onModuleChange,onSelection){
   host.className='ocr-cm-source frame-editor v2-source-session'+(ios?' ocr-ios-native-selection':'');
   host.id=name==='source'?'editor':'sentence-editor-'+name;
   element.append(bar,host);
-  let view;
+  let view,syncing=false,suppressUntil=0,lastGesture=0;
   const extensions=[
       ios?nativeIOSBasicSetup:basicSetup,
       EditorState.lineSeparator.of('\n'),EditorState.readOnly.of(true),EditorView.editable.of(false),
       EditorState.transactionFilter.of(tr=>tr.docChanged?[]:tr),
       EditorView.contentAttributes.of({tabindex:'0',spellcheck:'false','aria-label':names[name]+' · 只读源码'}),
       EditorView.lineWrapping,markdown({base:markdownLanguage}),obsidianMarkdown,
-      syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers,marksField,
+      syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers,marksField,focusField,
       EditorView.updateListener.of(update=>{
-        if(!update.selectionSet)return;
+        if(syncing||!update.selectionSet)return;
         const doc=update.state.doc,head=update.state.selection.main.head;
         queueMicrotask(()=>{if(view?.state.doc===doc&&view.state.selection.main.head===head)onSelection(name,head);});
       })
     ];
   const stateFor=(doc,marks=[])=>EditorState.create({doc,extensions:[...extensions,marksField.init(()=>decorations(marks))]});
-  return {element,init(){view=new EditorView({parent:host,state:stateFor('')});},
+  return {element,init(){
+    view=new EditorView({parent:host,state:stateFor('')});
+    const scroller=view.scrollDOM;
+    const gesture=()=>{lastGesture=performance.now();suppressUntil=0;};
+    for(const event of ['wheel','touchstart','pointerdown','keydown'])scroller.addEventListener(event,gesture,{passive:true});
+    scroller.addEventListener('scroll',()=>{
+      const now=performance.now();
+      if(now<suppressUntil||now-lastGesture>2500)return;
+      const top=scroller.getBoundingClientRect().top;
+      const pos=view.lineBlockAtHeight(Math.max(0,top+24-view.documentTop)).from;
+      onScroll(name,pos);
+    },{passive:true});
+    view.dom.addEventListener('pointerup',event=>{
+      const pos=view.posAtCoords({x:event.clientX,y:event.clientY});
+      if(Number.isInteger(pos))onSelection(name,pos);
+    });
+  },
     setMarkdown(text,marks,label){
       if(title)title.textContent=names[name]+(label?' · '+label:'');
       if(marks===undefined&&view.state.doc.toString()===text)return;
       const state=stateFor(text,marks);
       if(state.doc.toString()!==text)throw Error('Markdown changed during CM6 import');
       view.setState(state);
-    },highlight(ranges){view.dispatch({effects:setMarks.of(ranges)});},
+    },highlight(focus){view.dispatch({effects:setFocus.of(focus)});},
     getPosition:()=>view.state.selection.main.head,
-    locate(pos){if(view.state.selection.main.head!==pos)view.dispatch({selection:{anchor:pos},effects:EditorView.scrollIntoView(pos,{y:'nearest'})});},
+    locate(pos,select=true,anchor='center'){
+      suppressUntil=performance.now()+700;syncing=true;
+      try{view.dispatch({...(select?{selection:{anchor:pos}}:{}),effects:EditorView.scrollIntoView(pos,{y:anchor})});}
+      finally{syncing=false;}
+    },
     layout(){view?.requestMeasure();},dispose(){view?.destroy();}};
 }
 export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const panes=new Map();
   const engineIds={intl:'intl',splitter:'sentence-splitter',wink:'wink-nlp'};
-  let snapshot=null,results=null,activeBlock=null;
-  function selectBlock(pos){
-    if(!snapshot||!results)return;
+  let snapshot=null,lastSync=0;
+  function onSelection(name,pos){
+    if(!snapshot)return;
     const block=blockAtOffset(snapshot.blocks,pos);
-    if(!block||activeBlock===block)return;
-    activeBlock=block;
-    const row=results.blocks[block.logicalOrder-1];
-    panes.get('source').highlight([{from:block.from,to:block.to,className:'v2-sync-source-focus'}]);
-    for(const [name,id] of Object.entries(engineIds)){
-      const candidate=row?.logicalId===block.logicalId?row.candidates.find(c=>c.engine===id):null;
-      const display=candidateDisplay(block,candidate);
-      panes.get(name).setMarkdown(display.text,display.marks,display.label);
+    if(!block)return;
+    for(const [id,component] of panes){
+      component.highlight({from:block.from,to:block.to,pos});
+      if(id!==name)component.locate(pos);
     }
   }
-  function onSelection(name,pos){
-    if(name==='source')selectBlock(pos);
-    else if(activeBlock)panes.get('source').locate(activeBlock.from+Math.min(pos,Math.max(0,activeBlock.text.length-1)));
+  function onScroll(name,pos){
+    if(!snapshot||performance.now()-lastSync<35)return;
+    lastSync=performance.now();
+    for(const [id,component] of panes)if(id!==name)component.locate(pos,false,'start');
   }
   const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>{
-    const component=pane(name,onModuleChange,onSelection);
+    const component=pane(name,onModuleChange,onSelection,onScroll);
     panes.set(name,component);return component;
   }});
   function add(name,position){
@@ -110,13 +152,21 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const wink=add('wink',{referencePanel:splitter,direction:'below'});
   let sized=false;
   return Object.freeze({setSourceMarkdown(text){
-    snapshot=null;results=null;activeBlock=null;
+    snapshot=null;
     panes.get('source').setMarkdown(text);
-    panes.get('source').highlight([]);
+    panes.get('source').highlight(null);
     for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');
   },setReview(next,candidates){
-    if(next.documentVersion!==candidates.documentVersion)throw Error('Candidate source version mismatch');
-    snapshot=next;results=candidates;activeBlock=null;selectBlock(panes.get('source').getPosition());
+    const projection=boundaryDisplay(next,candidates);
+    const pos=panes.get('source').getPosition();
+    panes.get('source').setMarkdown(next.markdown,projection.source.marks);
+    for(const [name,id] of Object.entries(engineIds)){
+      const item=projection[id];
+      panes.get(name).setMarkdown(next.markdown,item.marks,item.count+' 句'+(item.failed?' · '+item.failed+' 块失败':''));
+    }
+    snapshot=next;
+    panes.get('source').locate(pos);
+    onSelection('source',pos);
   },activate(){
     const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;
     dockview.layout(w,h);
