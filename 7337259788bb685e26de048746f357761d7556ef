@@ -1,0 +1,68 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：7337259788bb685e26de048746f357761d7556ef
+原提交标题：feat(v2): rebuild raw typed para logical rows without merging OCR elements
+父提交：feb9bc1f82c34492dabbcf8fb39ccccfa4ea69d3
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP09_PARA_RAW_LOGICAL_REBUILD.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_logical_contract.py
+M	scripts/v2_mineru_base.py
+M	scripts/v2_pdf_projection.py
+M	tests/test_v2_logical_contract.py
+M	tests/test_v2_logical_init.py
+A	tests/test_v2_logical_rebuild.py
+M	tests/test_v2_markdown_roundtrip.py
+M	tests/test_v2_mineru_base.py
+M	tests/test_v2_pbs_upgrade.py
+M	tests/test_v2_pdf_projection.py
+M	tests/test_v2_structure_commit.py
+M	tests/v2-block-source-fixture.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-pdf-evidence-adapter.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+M	ui/v2-mineru-base.css
+M	ui/v2-mineru-entry.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP09_PARA_RAW_LOGICAL_REBUILD.md
+来源提交：7337259788bb685e26de048746f357761d7556ef
+SHA256：745e144f31f67bbd31c986887ff4668bd6c8aaab9db41300a446d771940b37db
+--- BEGIN ORIGINAL ---
+# WP09 · 直接重建逻辑表，以 para_blocks 原始类型/文本为准
+
+## 授权的变动范围
+
+用户明确批准覆盖现有逻辑表，不保留旧 PBS、旧逻辑块顺序、旧的 Markdown 合并文本。**只能清空并重建 `logical_block`**；不重建、不修改 `mineru_base`，不替换 SQLite 文件，不修改 MinerUJSON、PDF 或媒体。保留且核查基础表全部原始字节，并在同一 `BEGIN IMMEDIATE` 事务内 `DELETE + INSERT + 校验 + COMMIT`；重建中发生错误必须完整 `ROLLBACK`。
+
+当前用户书籍目录通过 Frame F02 授权绑定。运行中的实验工作台会显示逻辑表顶栏「重建逻辑表」操作，POST `/labs/lab-ocr-v2/api/mineru-base/logical-rebuild`，请求体只能为 `{workspace,confirm:"rebuild-v2-logical-only"}`。保持同源请求、Frame 会话、根目录白名单和本地 probe。**不对所有书籍自动批量重建**。点击后停止旧 CM6 保存计时器，清除旧的 AG/CM6/PDF 会话，从同一本 SQLite 重新加载。未经点击的其他书籍与工作树绝不受影响。
+
+## 新逻辑层映射（两表不变）
+
+只从 `mineru_base.block_group='para_blocks'` 生成当前逻辑行；`preproc_blocks` 和 `discarded_blocks` 仅保留在基础表。每个顶层 `para_block` 保持自己的父块行：`logical_id=base_blockid`、`s=0`、`parent_id=NULL`、`block_type` 原始 `type`。对其原始 JSON 中的第一层 `blocks[]`，依源顺序逐条生成真实子行 `s1..`，每行 `parent_id=父块 logical_id`、`base_blockid=同一个基础块`、`block_type=此子元素的 type`；逻辑子行的稳定 ID 从所有基础 BlockID 最大值 +1 顺序分配。禁止孙块；若未来 MinerU 原始数据出现第三级业务块，直接报错，不可悄悄扁平合并。
+
+`markdown_text` 现为此**一个**原始逻辑元素的 Raw Txt：从自身 `lines[] -> spans[]` 依原顺序读取非空 `content` / `html` / `image_path`，原始行之间以 LF 保留分行，除此之外不做文字拼接、转义或 Markdown 制造。不加 `#` 标题、`$$` 公式围栏、`![]()` 图片标记，不将表格标题/body/footnote、图表 caption/body/footnote 合成一个字符串。复用 WP08：同父组块直接接续，父组末块在 CM6 视图补显示用空行，原始 SQL 文本不被修改。MD 预览只是 Raw Txt 的只读投影，**不再声称自动格式化原始标题/公式**。格式转换须有独立 View/后续 WP。
+
+表格顶层 `table` 的 `s0` 可能原本没有 `lines`，Raw Txt 就应是空字符串；其原始 `table_caption`、`table_body`、`table_footnote` 作为独立子行分别显示真实 caption 文本、HTML 与 footnote 文本。图表和媒体子元素同理；没有内容就为空，绝不从其他兄弟元素填充。
+
+PDF 映射优先使用每个原始子元素自己的 `bbox`，没有合法原始 `bbox` 才退回同一基础父块的原始 bbox。`logical_id`、`base_blockid` 的稳定关联决定几何，不凭用户可编辑的 `s` 猜测或改动物理覆盖框。AG 逻辑表仍显示 `PBS / Type / Raw Txt / 其他 7 个原始字段`，按照 `logical_order` 而非自增的 ID 顺序展示。
+
+## 22 页固定验证样本
+
+初始基础表 539 条（其中 `preproc_blocks` 224、`discarded_blocks` 91、`para_blocks` 224）。新逻辑表 **267 条**：224 个顶层 para 原始父块 +43 条原始子行，涵盖 `table_caption` 8、`table_body` 9、`table_footnote` 6、`image_body` 7、`chart_caption` 6、`chart_body` 4、`chart_footnote` 3。没有额外物理表。注意每本书和每份 MinerUJSON 的确切数字由自身原始数据决定，不硬编码 267。
+
+测试边界：
+
+- `tests/test_v2_logical_contract.py`：原始类型、原始内容、来源一一对应、无子元素混合、拒绝孙块。
+- `tests/test_v2_logical_rebuild.py`：现有编辑过的 267 行直接覆盖、保留 539 条基础行逐列一致、原 JSON 字节一致、重复构造确定性、来源不匹配拒绝、故障中途回滚。
+- `tests/test_v2_logical_init.py`、`test_v2_mineru_base.py`、`test_v2_pdf_projection.py`、`test_v2_markdown_roundtrip.py`、`test_v2_structure_commit.py`：适配二层子行及类型、原始 bbox、SQL 原子操作。
+- `tests/v2-block-source-fixture.test.mjs`、`tests/v2-pdf-evidence-adapter.test.mjs`、`tests/v2-real-markdown-preview.browser.test.mjs`、`tests/v2-mineru-base.browser.test.mjs`：浏览器中 267 个真实子行与原文、跨窗定位、独立子块 PBS、真实 V1 手势、授权重建操作不会触发完整基础表 import。原四窗布局与 PDF 实例不变。
+
+不改 Frame/V1 公共源码，不复制构建新框架，不新增 SQL 表，不建立新的文档持久化系统。
+
+--- END ORIGINAL ---
