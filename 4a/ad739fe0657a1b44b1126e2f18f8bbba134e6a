@@ -1,0 +1,1 @@
+合规整改：原 WP0_4_LAB_PIPELINE_CONTRACT.md 第5节确认两份未经明确工程授权的未提交试验代码，强制译文齐全与缺译不阻塞规则冲突。2026-11-25 原样归档独立 FAIL 分支 archive/sentence-incremental-rejected-20261125，提交 7a883bd8f01c0c137b82d101e5c34e8f5bf2b734。隔离5测试：4通过、真实运行目录测试跳过；设计判定仍FAIL。GitHub 归档 SHA 与原文件字节已核验，活动树只移除两份未跟踪文件，HEAD、正式发布及用户数据不变。历史原始开发基线未知。
