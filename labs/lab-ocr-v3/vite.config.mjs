@@ -127,7 +127,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp00-shell',
+            stage:'wp01-mount',
           })+'\n',
         });
       },

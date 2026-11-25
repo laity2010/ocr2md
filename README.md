@@ -6,16 +6,16 @@
 
 - **Lab ID**：`lab-ocr-v3`（框架型 Lab，自 `lab-frame` 基线 `1dbc2b7` 建立）
 - **工作树**：`labs/lab-ocr-v3`；**Git 分支**：`experiment/lab-ocr-v3`
-- **目标统一入口**：`/labs/lab-ocr-v3/`（**[WP00-SHELL 尚未发布；WP01 挂载]**）
-- **当前阶段**：**WP00-SHELL 空壳基线 [实现与自动化验证中]**。`ui/frame/*` 保持逐字节不变；通过 `labs/lab-ocr-v3/vite.config.mjs` 注入联邦构建前检查、独立 `lab-ocr-v3` 设置/自动更新隔离与 `v3GridPort`，由 `ui/v3-shell-entry.js` 接线 V1 原生 `EnumCheckboxFilter`，并落盘 `scripts/v3_frame_publish.py` 发布器。
+- **目标统一入口**：`/labs/lab-ocr-v3/`（**[WP01-MOUNT 首次挂载；实机 iPad Safari 尚待验收]**）
+- **当前阶段**：**WP01-MOUNT 首次统一挂载**。统一网关已启用“老路冻结 + 新路动态发现与按 `sourceCommit` 局部热重载”；`lab-ocr-v3` 空壳基线发布至统一 `release/lab-ocr-v3/` 与 `release-manifest.json`，与 V2 零干扰并行。
 
 ## 2. 现状与待实现清单
 
 | 模块 / 能力 | 当前状态 | 说明 |
 | :--- | :--- | :--- |
 | **工作树与州治理体系** | **[已实现 · WP00-LEGISLATION PASS]** | 独立 worktree、`AGENTS.md`（治理架构）+ 显式登记的 `SQL.md`、`CM.md`、`VIEWS.md` 及本 `README.md` |
-| **V3 空壳基线与 `COMM.md` 门禁** | **[WP00-SHELL 已实现]** | `labs/lab-ocr-v3/vite.config.mjs`（含 `check-start`）、`ui/v3-shell-entry.js`（原生 V1 `EnumCheckboxFilter`）、`scripts/v3_frame_publish.py`、`tests/cross-version-ag-filter.browser.test.mjs`、`tests/test_v3_frame_publish.py` |
-| **统一网关接入与首次挂载** | **[仍待实现 · WP01]** | 网关“老路冻结 + 新路动态发现与按 commit 局部热重载”及首次发布至 `/labs/lab-ocr-v3/` |
+| **V3 空壳基线与 `COMM.md` 门禁** | **[已实现 · WP00-SHELL PASS]** | `labs/lab-ocr-v3/vite.config.mjs`（含 `check-start`）、`ui/v3-shell-entry.js`（原生 V1 `EnumCheckboxFilter`）、`scripts/v3_frame_publish.py`、`tests/cross-version-ag-filter.browser.test.mjs`、`tests/test_v3_frame_publish.py` |
+| **统一网关接入与首次挂载** | **[WP01-MOUNT 已实现；待用户实机核验]** | 网关动态发现与按 commit 局部热重载（8/8 单测通过，V2 零回归）；首次发布至 `/labs/lab-ocr-v3/`（停检点 ①） |
 | **V3 SQLite 底座与摘要式 CAS** | **[仍待实现 · WP02–WP03]** | `ocr2md.v3.sqlite`、`zlib` 归档、`structure_sha256` / `before_sha256`、`open_v3_db` |
 | **单源 $O(\log N)$ CM6 与局部拖拽** | **[仍待实现 · WP04–WP06]** | 仅读 `structureField`、轻量行索引、二分局部编辑门禁、局部 `ChangeSpec` 拖拽与三窗布局 |
 | **AG 双投影与全套审阅 View** | **[仍待实现 · WP07–WP09、WP11]** | 标题/注释/LaTeX/断块/媒体/HTML 表格 View |
