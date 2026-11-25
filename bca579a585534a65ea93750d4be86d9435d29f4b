@@ -1,0 +1,40 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：bca579a585534a65ea93750d4be86d9435d29f4b
+原提交标题：feat(v2): WP28 reproduce V1 block-break review and atomic merge
+父提交：6a99dcd0792e585a97fb4f8fc23c17d4ad2645cd
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP28_BLOCK_BREAK.md
+M	labs/lab-ocr-v2/vite.config.mjs
+A	tests/v2-block-break.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+A	ui/lab-ocr/block-break-merge.js
+A	ui/lab-ocr/block-break-review-cell.js
+A	ui/lab-ocr/block-break-view.js
+M	ui/v2-ag-views.js
+A	ui/v2-block-break.css
+A	ui/v2-block-break.js
+M	ui/v2-mineru-entry.js
+M	ui/v2-pdf-viewer.js
+M	ui/v2-source-session.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_bfc5bb09dbbb5838 2026-11-24T14:20:13.414638Z: completed=[projection,ui], current=release: V1 exact modules, MD Line pair adapter, single CM6 merge, Chromium/WebKit UI isolated SQLite pass, direct regressions/layout pass. bca579a committed; publish running. Session-only decisions/receipts disclosed.
+任务检查点 tsk_bfc5bb09dbbb5838 2026-11-24T14:21:58.912572Z: completed=[release]: WP28 bca579a pushed; published 261124-222016, 70 manifest hashes checked, LAN HTTP 200 exact SHA, clean worktree, other six labs preserved. Both browser tests and shared gate passed; session-only review metadata.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP28_BLOCK_BREAK.md
+来源提交：bca579a585534a65ea93750d4be86d9435d29f4b
+SHA256：ef61f92e7d72acb0e8df19c7ce59b6644f4074225bca93262c88d546f121e543
+--- BEGIN ORIGINAL ---
+# WP28 · V1 断块 View
+基线 6a99dcd（WP27B 已发布 261124-220306）。V1 bf32515 的候选/合并/审阅控件原文件逐字节复制；公共 MD Line 适配当前 stable ID、PBS 两层和真实物理行。仅同组相邻 prose 候选；保留原 V1 守卫，非相邻物理行、后块多正文行、过期行引用/证据拒绝。AG 原列、92px 行高、默认全文、PBS 左固定和审阅右固定；A/B 源码着色、PDF 双端物理坐标，MD 预览保持普通定位。退出清除专用标记，恢复其它视图行高与布局。
+合并使用 existing replaceMdLines 一次原生事务，A 拼接 B 文本，跨块断词去连字符，B 清空但保留 LF/ID/PBS/原始几何，原有 SQLite CAS 及 Undo/Redo。忽略、待定及已合并回执仅当前会话；不新增审阅表或持久化旁路。刷新后未合并候选重新计算，已合并正文保留，历史已合并行不重新显示。未修改用户原库。
+直接测试 v2-block-break.test.mjs PASS；V2_TEST_BREAK_VIEW=1 node tests/v2-owned-edit.browser.test.mjs Chromium/WebKit 均 PASS：隔离 SQLite 样本构造真实父子断词对，实际 AG pinned 状态、A/B 源码与 PDF 标记、审阅菜单、忽略零写入、两块原生合并单次差量保存、Undo/Redo/reopen、原几何/ID 不变、标题列序不变。使用合成 PDF 渲染夹具；未手工操作用户 iPad。AG/MD Line/注释/LaTeX 直接回归及联邦布局检查 PASS。
+
+--- END ORIGINAL ---
