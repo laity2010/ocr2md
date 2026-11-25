@@ -1,3 +1,5 @@
 WP30A 发布闭环：20261125-154833，59dabaf7d5b0f52555adeceebde8e1b1139f0722，releaseId 9e3d22c040f94f0ac3be08ffa01ef4f9764e8a6aaacff39e0d2039ad3d7e8b78；双浏览器实测列序、当前MD Line及32块回归PASS；首次DOM断言失败已在正文和RUN_EXIT留痕。正式构建、跨版本门禁、普通push、九州布局与八Lab哈希、线上HTTP200及SHA一致，发布run退出0并同步5db0b2b。原有字体/包体警告、stage wp29-media-view 未改；物理iPad未实机验收。
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"59dabaf7d5b0f52555adeceebde8e1b1139f0722","event":"START","utc":"2026-11-25T07:57:49.147116+00:00","wp":"WP30B","goal":"修复已发布WP30表格View遗漏p7b0s3：logical_id181,parent_id180,type=text，收录表格类型块及其直接逻辑子块，原Type/列序/定位/两表及原书不变。","retrospective":false}
+
+WP30/30A 缺陷证据：实际原书只读SQL：p7b0s3 logical_id181 parent_id180 block_type=text；p7b0s0 logical_id180 block_type=table；现有V2和V1投影均按Type含table过滤，遗漏该子块。32表格类型块+1非table子块。冻结已发布基线59dabaf，另开WP30B定向修正，不改写原验收记录。
