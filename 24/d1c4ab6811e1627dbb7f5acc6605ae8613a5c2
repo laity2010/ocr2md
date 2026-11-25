@@ -1,0 +1,1 @@
+发布：20261125-112659，SHA 24d1c4ab6811e1627dbb7f5acc6605ae8613a5c2，releaseId 238a1570dfd6b6def8f48ecb2b123e0f3f03673b719f285e1524736cd51e7e65，70个发布文件、6个其他Lab保持。Vite build PASS（包体警告非阻塞），V1/V2双浏览器组件门禁、联邦发布门禁、普通push、八州布局与7 Lab发布哈希PASS。公网入口 https://ocr2md.laity.bid/labs/lab-ocr-v2/ HTTP 200，响应头与release-version.json SHA一致，工作树干净。物理iPad实机尚未验收。
