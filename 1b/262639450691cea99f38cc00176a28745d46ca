@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"18b6be20cbc84e318f90766fd723fc44","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"18b6be20cbc84e318f90766fd723fc44","branch":"refs/heads/experiment/sentence-benchmark","baseline":"1b262639450691cea99f38cc00176a28745d46ca","event":"RUN_START","utc":"2026-11-25T04:07:27.302588+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"b49014d2ced04d92b3821703be34c80e"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"18b6be20cbc84e318f90766fd723fc44","branch":"refs/heads/experiment/sentence-benchmark","baseline":"1b262639450691cea99f38cc00176a28745d46ca","event":"RUN_EXIT","utc":"2026-11-25T04:08:02.341060+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"b49014d2ced04d92b3821703be34c80e","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"18b6be20cbc84e318f90766fd723fc44","branch":"refs/heads/experiment/sentence-benchmark","baseline":"1b262639450691cea99f38cc00176a28745d46ca","event":"END","utc":"2026-11-25T04:10:28.521508+00:00","result":"PASS","commit":"84dfe754741c2be4bcec3910b68a771004b0bb81","evidence":"本州实际Vite配置build/serve联动、语法检查和RUN_EXIT=0，独立Commit经共享门禁，普通push远端SHA一致；治理设施变更，无产品发布。","release":"NONE","remote_ref":"refs/heads/experiment/sentence-benchmark"}
