@@ -1,0 +1,15 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：e2b55aa0543c9af657606b1cfe1dd50be14549b3
+原提交标题：fix(v2): reload cached gateway backend on Python release changes
+父提交：a9abaf3a3ff33c8e03985063a44a5faa811120cf
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	scripts/v2_frame_publish.py
+A	tests/test_v2_gateway_publish_sync.py
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
