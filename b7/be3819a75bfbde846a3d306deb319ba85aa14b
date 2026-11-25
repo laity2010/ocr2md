@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"4c9bb02af6a042a6a7f351bf54d8b4be","branch":"refs/heads/experiment/lab-sentence","baseline":"b7be3819a75bfbde846a3d306deb319ba85aa14b","event":"START","utc":"2026-11-25T13:16:24.553354+00:00","wp":"WP01","goal":"只读复用V2现有公开markdown快照API，校验SHA、逻辑ID及字符区间；已保存目录通过F02才加载；不写V2或原书，尚不实施分句。","retrospective":false}
