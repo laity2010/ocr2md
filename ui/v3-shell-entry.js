@@ -41,12 +41,46 @@ function wireGrid(host){
   port.setColumns(V3_SHELL_COLUMNS.map(col=>({...col})));
 }
 
+let activeWorkspace='';
+
+async function loadExistingV3Workspace(workspace){
+  if(!workspace||workspace===activeWorkspace)return;
+  activeWorkspace=workspace;
+  const sourcePort=document.querySelector('#workspace #editor')?.v3SourcePort;
+  if(!sourcePort)return;
+  try{
+    const q=new URLSearchParams({workspace}).toString();
+    const stateRes=await fetch(`/labs/lab-ocr-v3/api/mineru-base/state?${q}`,{
+      credentials:'same-origin',
+      cache:'no-store',
+    });
+    if(!stateRes.ok)return;
+    const stateData=await stateRes.json();
+    if(!stateData?.exists)return;
+    const mdRes=await fetch(`/labs/lab-ocr-v3/api/mineru-base/markdown?${q}`,{
+      credentials:'same-origin',
+      cache:'no-store',
+    });
+    if(!mdRes.ok)return;
+    const snapshot=await mdRes.json();
+    if(activeWorkspace===workspace){
+      await sourcePort.loadSnapshot(snapshot,{workspace});
+    }
+  }catch{
+    // 静默忽略未授权或隔离测试环境下的网络探针失败
+  }
+}
+
 function scanAndWire(){
   const host=document.querySelector('#workspace .ocr-outline-grid');
   if(host?.v3GridPort)wireGrid(host);
 }
 
 document.addEventListener('v3-grid-ready',event=>wireGrid(event.detail?.host));
+document.addEventListener('v3-workspace-verified',event=>{
+  const path=event.detail?.path;
+  if(path)void loadExistingV3Workspace(path);
+});
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',scanAndWire,{once:true});
 }else{

@@ -85,6 +85,12 @@ export default defineConfig({
           );
         }
         if(id.endsWith('/ui/frame/layout.js')){
+          code=exact(code,"import {EditorState} from '@codemirror/state';",
+            "import {mountV3Source} from '../v3/source-session.js';\nimport {EditorState} from '@codemirror/state';",
+            'V3 single CM6 source import');
+          code=exact(code,'element.append(body);owned=()=>mountEmptySource(body);',
+            'element.append(body);owned=()=>mountV3Source(body);',
+            'V3 single CM6 source mount');
           code=exact(code,"picker.add(new Option('空白框架','frame'));",
             "picker.add(new Option('V3 工作台','frame'));",'V3 AG module title');
           code=exact(code,"picker.title='空白框架 AG 模块切换不可用';",
@@ -127,7 +133,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp03-summary-cas',
+            stage:'wp04-cm6-single-source',
           })+'\n',
         });
       },

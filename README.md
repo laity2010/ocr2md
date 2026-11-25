@@ -7,7 +7,7 @@
 - **Lab ID**：`lab-ocr-v3`（框架型 Lab，自 `lab-frame` 基线 `1dbc2b7` 建立）
 - **工作树**：`labs/lab-ocr-v3`；**Git 分支**：`experiment/lab-ocr-v3`
 - **目标统一入口**：`/labs/lab-ocr-v3/`（**[WP01-MOUNT 首次挂载；实机 iPad Safari 尚待验收]**）
-- **当前阶段**：**WP03 · V3 摘要式增量 CAS 写回完成**。`SQL.md` 第 1–4 节的 V3 SQLite 物理底座（`ocr2md.v3.sqlite`、`open_v3_db`、`zlib` 归档、单轨 `owned-LF` 初始化）与摘要式增量 CAS（`md-commit`、`structure-commit`）已全部就绪并通过独立测试与统一门户挂载；下一阶段进入 **WP04–WP06 · 单源 `O(log N)` CM6 与局部拖拽**。
+- **当前阶段**：**WP04 · 单源 `O(log N)` CM6 与增量 `md-commit` 会话完成**。已完成 `ui/v3/` 单源 `v3StructureField`（Zero Shadow Cache）、两层解耦轻量行索引 `createV3MdLineIndex`、`O(log N)` 二分局部按键门禁、边界拦截非阻塞视觉闪烁及 850ms 空闲增量 `md-commit` 会话；下一阶段进入 **WP05–WP06 · V1 PDF/行号组件复用、局部 `ChangeSpec` 拖拽与 AG 双投影**。
 
 ## 2. 现状与待实现清单
 
@@ -18,7 +18,8 @@
 | **统一网关接入与首次挂载** | **[已实现 · WP01-MOUNT PASS；待实机核验]** | 网关动态发现与按 commit 局部热重载（V2 零回归）；已挂载 `/labs/lab-ocr-v3/`（停检点 ①） |
 | **V3 SQLite 物理底座与单轨初始化** | **[已实现 · WP02 PASS]** | `scripts/lab_backend/`（`ocr2md.v3.sqlite`、`open_v3_db`、`zlib` 归档、单轨 `owned-LF` 初始编译、`structureSha256`、`state`/`import`/`markdown`/`pdf-map`/`pdf`）及 `tests/test_v3_sqlite_foundation.py` |
 | **V3 摘要式增量 CAS 写回** | **[已实现 · WP03 PASS]** | `scripts/lab_backend/cas.py`（`md-commit` 基于 `structureSha256` + `beforeSha256` + 局部 `O(k)` 尾换行边界核验；`structure-commit` 含临时坐标停泊、边界块 `beforeSha256` 与外键/不变量复核）及 `tests/test_v3_cas_commits.py` |
-| **单源 $O(\log N)$ CM6 与局部拖拽** | **[仍待实现 · WP04–WP06]** | 仅读 `structureField`、轻量行索引、二分局部编辑门禁、局部 `ChangeSpec` 拖拽与三窗布局 |
+| **单源 `O(log N)` CM6 与增量保存** | **[已实现 · WP04 PASS]** | `ui/v3/{cm-structure,md-line-index,boundary-feedback,source-session}.js`（Zero Shadow Cache、两层解耦轻索引、二分局部按键门禁、边界闪烁与 850ms 空闲增量 `md-commit`）及 `tests/v3-cm-structure.test.mjs`、`tests/v3-source-session.browser.test.mjs` |
+| **V1 PDF/行号复用与局部拖拽** | **[仍待实现 · WP05–WP06]** | 复用 V1 `mountLabOcrPdf`/`createMdLineGutter`、默认三窗、局部 `ChangeSpec` 拖拽与 AG 双投影 |
 | **AG 双投影与全套审阅 View** | **[仍待实现 · WP07–WP09、WP11]** | 标题/注释/LaTeX/断块/媒体/HTML 表格 View |
 | **审阅决策持久化** | **[仍待实现 · WP10，待拍板]** | 待用户选定 `SQL.md` 第 5 节方案 A（`review_meta` 列）或方案 B（`review_state` 辅表） |
 
@@ -32,6 +33,10 @@
   `python3 -m unittest tests/test_v3_sqlite_foundation.py -v`
 - V3 摘要式增量 CAS（`md-commit` / `structure-commit`）直接测试：
   `python3 -m unittest tests/test_v3_cas_commits.py -v`
+- V3 单源 `structureField`、轻量行索引与 3000 块按键性能测试：
+  `node --test tests/v3-cm-structure.test.mjs`
+- V3 CM6 会话双浏览器回归（Chromium + iPad-WebKit）：
+  `node tests/v3-source-session.browser.test.mjs`
 - 联邦 `COMM.md` 跨版本组件双浏览器门禁（Chromium + iPad-WebKit）：
   `python3 ../../main/scripts/verify_cross_version_components.py --target lab-ocr-v3 --browser`
 - 联邦布局与继承检查：
