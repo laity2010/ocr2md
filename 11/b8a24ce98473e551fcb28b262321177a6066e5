@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"d85f0638860c4e019255ab31272e2464","branch":"refs/heads/experiment/lab-frame","baseline":"11b8a24ce98473e551fcb28b262321177a6066e5","event":"START","utc":"2026-11-25T04:03:16.388177+00:00","wp":"FED-ENTRY-lab-frame","goal":"仅接入联邦构建前登记校验；保留当前业务、界面、数据、产物与全部发布版本。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"d85f0638860c4e019255ab31272e2464","branch":"refs/heads/experiment/lab-frame","baseline":"11b8a24ce98473e551fcb28b262321177a6066e5","event":"RUN_START","utc":"2026-11-25T04:04:49.270625+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"82fbee6a0d464b24a0992268910fea50"}
