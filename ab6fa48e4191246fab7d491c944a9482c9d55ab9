@@ -1,0 +1,33 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：ab6fa48e4191246fab7d491c944a9482c9d55ab9
+原提交标题：feat(v2): WP25E common AG MD Line view and exact focus
+父提交：2fc547adda03fda18374a0c7c5b883ecb56f7213
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP25E_AG_LINE_VIEW.md
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/v2-ag-views.js
+M	ui/v2-markdown-preview.js
+M	ui/v2-mineru-entry.js
+M	ui/v2-pane-focus.js
+M	ui/v2-pdf-viewer.js
+M	ui/v2-source-session.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_c14a556ddda50a6c 2026-11-24T09:56:06.993552Z: completed=[E], current=F: WP25E ab6fa48 pushed clean; both browsers verified 497 shared index rows, native multivalue filter, same block line focus, 267 block view, zero writes.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP25E_AG_LINE_VIEW.md
+来源提交：ab6fa48e4191246fab7d491c944a9482c9d55ab9
+SHA256：3f3dfebdac9431f2bf923a27ac0940e5adfc8ca36cc086bc187ae7c9e76be4a2
+--- BEGIN ORIGINAL ---
+# WP25E · 通用 AG 行视图
+基线 2fc547a。同一个 AG Grid 的 MD Line 预设直接消费当前 CM6 getMdLineIndex().rows，保持原块审阅、页范围和全部、V1 EnumCheckboxFilter、独立的视图过滤状态。当前行对象身份验证拒绝陈旧定位；同块跨行焦点通过原事件传递 sourceLine，不重复 PDF 聚焦，Markdown 按实际渲染行范围高亮。无新 SQL 查询、独立正文或实体表。
+V2_TEST_LINE_VIEW=1 node tests/v2-owned-edit.browser.test.mjs：Chromium/WebKit 双 PASS，真实 497 行、267 块，索引对象身份、原生多值筛选、页范围、真实 AG 点击、CM6 同块换行、PDF 选中 ID、滚动不抢光标、切回原列及无写入均通过；PDF 为合成夹具，非实机 iPad。直接回归通过。标题仍为旧预设，WP25F 独立替换。未发布。
+
+--- END ORIGINAL ---
