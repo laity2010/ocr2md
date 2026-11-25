@@ -20,7 +20,8 @@ const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
 const inlineMode=process.env.V2_TEST_INLINE_MATH==='1';
 const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
 const breakMode=process.env.V2_TEST_BREAK_VIEW==='1';
-const mediaMode=process.env.V2_TEST_MEDIA_VIEW==='1';
+const realMediaBook=process.env.V2_TEST_REAL_MEDIA_BOOK;
+const mediaMode=process.env.V2_TEST_MEDIA_VIEW==='1'||Boolean(realMediaBook);
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
 const uiRestoreMode=process.env.V2_TEST_UI_RESTORE==='1';
@@ -49,7 +50,8 @@ try{
   const folder=mkdtempSync(join(tmpdir(),'wp23e-browser-'));
   const browser=await browserType.launch({headless:true});
   try{
-   const initial=mediaMode?py(
+   const initial=realMediaBook?py(
+     'import sqlite3,shutil\nfrom contextlib import closing\noriginal=Path(args["book"]).resolve()\nwith closing(sqlite3.connect((original/base.DB_NAME).as_uri()+"?mode=ro",uri=True)) as src, closing(sqlite3.connect(folder/base.DB_NAME)) as dst: src.backup(dst)\nshutil.copytree(original/"media",folder/"media")\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder,{book:realMediaBook}):mediaMode?py(
      'import base64,hashlib\nprepare_owned_book(folder)\nold=load(folder)[0]\nurl="https://cdn-mineru.openxlab.org.cn/wp29-fixture.png"\npath="media/"+hashlib.sha256(url.encode()).hexdigest()[:24]+".png"\n(folder/"media").mkdir()\ndata=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7xkAAAAASUVORK5CYII=")\n(folder/path).write_bytes(data)\n(folder/"media"/("b"*24+".png")).write_bytes(data)\nowned_commit(folder,[dict(logicalId=old.logical_id,before=old.markdown_text,after="![WP29](<"+url+">) and ![repeat]("+url+")\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
      breakMode?py(
      'from test_v2_owned_structure import packet\nprepare_owned_book(folder)\nbase.commit_structure(folder,packet(folder),Stub())\nold=load(folder)\nwith closing(sqlite3.connect(folder/base.DB_NAME)) as db: db.execute("UPDATE logical_block SET block_type=\'text\' WHERE logical_id IN (?,?)",(old[0].logical_id,old[1].logical_id)); db.commit()\nowned_commit(folder,[dict(logicalId=old[0].logical_id,before=old[0].markdown_text,after="The invest-\\n"),dict(logicalId=old[1].logical_id,before=old[1].markdown_text,after="ment continues.\\n\\n")])\nprint(json.dumps(base.existing_markdown(folder),ensure_ascii=False))',folder):
@@ -108,7 +110,7 @@ try{
    });
    const loadPage=async(count=expectedCount,owned=true)=>{
      await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-     await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});
+     try{await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});}catch(error){console.error('V2_STARTUP_FAILURE',name,JSON.stringify({errors,status:await page.locator('#status').textContent().catch(()=>null)}),log.slice(-6000));throw error;}
      await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
        select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
      });
@@ -116,6 +118,7 @@ try{
        return p?.getState().loaded&&p.getState().ownedLF===owned&&p.getBlocks().length===count&&
         document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12;},{count,owned},{timeout:30000});
    };
+   if(mediaMode)await page.route('https://cdn-mineru.openxlab.org.cn/**',r=>r.abort());
    await loadPage(expectedCount,!initMode);
    const source=page.locator('#workspace #editor');
    const snapshot=()=>source.evaluate(el=>{
@@ -159,6 +162,53 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(realMediaBook){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const pdf=page.locator('#workspace .ocr-preview-pdf-host');
+     const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const expected=[[12,'p0b5s1'],[17,'p0b7s1'],[22,'p0b9s1'],[27,'p0b11s1'],[32,'p0b13s1'],[37,'p0b15s1'],[45,'p1b1s2'],[111,'p4b1s2'],[116,'p5b0s2'],[252,'p12b8s3'],[258,'p13b1s4']];
+     await picker.selectOption('media');
+     await page.waitForFunction(()=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&x.status==='已下载');},null,{timeout:30000});
+     const rows=await read();assert.deepEqual(rows.map(r=>[r.line_no,r.pbs]),expected);
+     console.log("WP29C_ALL_ROWS_PASS",name,rows.length);
+     assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     for(const ref of rows.slice(7)){
+       const rowIndex=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('media_row_id',id);return p.getDisplayedRows().findIndex(r=>r.media_row_id===id);},ref.media_row_id);
+       const cell=grid.locator('.ag-row[row-index="'+rowIndex+'"] [col-id="line_no"]').filter({hasText:new RegExp('^'+ref.line_no+'$')});
+       await cell.click();
+       await page.waitForFunction(line=>{const v=document.querySelector('#workspace #editor').v2SourcePort.getEditorView();return v.state.doc.lineAt(v.state.selection.main.head).number===line;},ref.line_no,{timeout:10000});
+       await page.waitForFunction(id=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().selectedId===id,ref.block_id);
+       const image=page.locator('#workspace .ocr-preview-md-scroll [data-source-start="'+ref.line_no+'"] img[src*="media-file"]');
+       await image.waitFor({state:'attached',timeout:30000});
+       await page.waitForFunction(line=>{const img=document.querySelector('#workspace .ocr-preview-md-scroll [data-source-start="'+line+'"] img[src*="media-file"]');return img?.complete&&img.naturalWidth>0;},ref.line_no,{timeout:30000});
+       console.log("WP29C_FOCUS_PASS",name,ref.line_no,ref.pbs);
+     }
+     assert.equal(writes.length,0);
+     let adopted=before.doc;
+     for(const ref of rows)adopted=adopted.split(ref.url).join(ref.preview_path);
+     await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+     await page.getByRole('menuitem',{name:'下载并替换全部'}).click();
+     await page.waitForFunction(expected=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===expected,adopted,{timeout:30000});
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:30000});
+     assert.equal(writes.length,1);assert.equal(writes[0].payload.changes.length,11);
+     assert.equal(api(folder,'markdown','GET').body.markdown,adopted);
+     await page.waitForFunction(()=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.local&&x.line_id);});
+     assert.deepEqual((await read()).map(r=>[r.line_no,r.pbs]),expected);
+     await source.evaluate(el=>el.v2SourcePort.undo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:30000});
+     assert.equal((await snapshot()).doc,before.doc);
+     await source.evaluate(el=>el.v2SourcePort.redo());
+     await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:30000});
+     assert.equal((await snapshot()).doc,adopted);
+     await loadPage();assert.equal((await snapshot()).doc,adopted);
+     await picker.selectOption('media');
+     await page.waitForFunction(()=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.local&&x.line_id);},null,{timeout:30000});
+     assert.deepEqual((await read()).map(r=>[r.line_no,r.pbs]),expected);
+     assert.equal(writes.length,3);assert.deepEqual(errors,[]);
+     console.log('WP29C_REAL_BOOK_PASS',name,JSON.stringify(expected),'all 11, four actual AG/CM6/PDF/MD locations, one adoption CAS, undo/redo/reopen');
+     continue;
+   }
    if(mediaMode){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
      const remote='https://cdn-mineru.openxlab.org.cn/wp29-fixture.png';

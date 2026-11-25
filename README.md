@@ -150,6 +150,7 @@
 - 审阅待定/断块合并/忽略；合并只接受 V1 安全条件（物理行相邻、后块单非空正文行），现有 CM6 replaceMdLines 原生事务使 A 承接正文、B 清空并保留真实 LF 与 ID/PBS，局部 SQL CAS 保存、Undo/Redo。原始坐标不变，空块原有虚线。未增加第三张表；人工忽略和已合并审阅回执仅当前会话，刷新重新派生未合并候选，合并正文长期保存。详见 [WP28](docs/v2/WP28_BLOCK_BREAK.md)。
 
 ### 3.2d 媒体 View（WP29）
+- **WP29C**：兼容 MinerU `chart_body` 的独立裸图片 URL 及采用后的独立 `media/` 本地路径；媒体扫描与 Markdown 预览使用同一 V2 行解析规则，保持物理行号、稳定逻辑 ID、PBS 与原始 PDF 定位。预览采用独立行映射，不改原文；正文仅显式替换 URL。实际书籍 11 张图片隔离副本 Chromium/WebKit 完整回归通过。见 [WP29C](docs/v2/WP29C_BARE_MEDIA.md)。
 - **WP29B**：Markdown 预览优先使用当前已授权书籍中已经完整下载的 MinerU 图片，即使 CM6 引用仍为远端 URL；只读复用 media-status / media-file，未下载或查询失败则保留远端 URL。替换引用仍需显式操作，不改正文、两表或 AG 列布局。Chromium/WebKit 完整媒体工作台回归通过；见 [WP29B](docs/v2/WP29B_MEDIA_PREVIEW.md)。
 - 复用 V1 bf32515 的 media-view、media-module 与 v6_media 字节服务；列定义为预览、源码行、PBS、来源、状态、进度、引用、媒体链接、操作；源码行/PBS 左固定、操作右固定、78px 行高、默认全文、原生多选过滤。功能菜单保留下载并替换全部、刷新媒体清单；切换回其它 View 恢复行高与既有布局。
 - 清单从唯一 CM6 正文的公共 MD Line 与当前书籍 media/ 文件动态派生；链接按当前源码偏移及旧值核验，多引用同一 URL 统一替换，保留 Markdown 定界符和其它字符；一笔 replaceMdLines 原生事务、原 SQLite CAS 保存及 Undo/Redo。未引用本地文件不制造源码位置，撤销链接不删除文件。MD 预览使用 V2 书籍授权的媒体文件 URL。

@@ -3,6 +3,7 @@
  * No independent AG grid, SQL media table, or raw Markdown copy exists here.
  */
 import {findMedia} from '../media-module.js';
+import {findBareMedia} from '../v2-bare-media.js';
 
 const API='/labs/lab-ocr-v2/api/mineru-base/';
 const LOCAL=/^media\/[0-9a-f]{24}\.(?:jpe?g|png|gif|webp)$/;
@@ -28,7 +29,7 @@ export function findLabMedia(source){
     return {id:String(from),from,to,url,local:url.startsWith('media/'),
       status:url.startsWith('media/')?'本地':'待下载',bytes:0,total:null};
   }).filter(ref=>!evidence.some(([start,end])=>ref.from<end&&ref.to>start));
-  const ordered=[...refs,...additional].sort((a,b)=>a.from-b.from);
+  const ordered=[...refs,...additional,...findBareMedia(source)].sort((a,b)=>a.from-b.from);
   let currentLine=1,last=0;
   for(const ref of ordered){
     for(let position=last;position<ref.from;position++)

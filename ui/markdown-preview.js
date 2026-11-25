@@ -4,6 +4,7 @@
  * rendered by KaTeX. Other extensions can be added independently.
  */
 import MarkdownIt from 'markdown-it';
+import {parseBareMediaLine} from './v2-bare-media.js';
 import footnote from 'markdown-it-footnote';
 import taskLists from 'markdown-it-task-lists';
 import DOMPurify from 'dompurify';
@@ -45,6 +46,22 @@ const sourceAttrs = token => token.map
 
 installObsidianImages(md);
 installObsidianCallouts(md);
+// V2 chart_body lines are stand-alone images even without Markdown wrappers.
+// The native block token interrupts a caption paragraph and keeps its own
+// exact one-line source map; other renderer callers retain standard Markdown.
+md.block.ruler.before('paragraph','v2_bare_media',(state,startLine,endLine,silent)=>{
+  if(!state.env.bareMedia||state.sCount[startLine]>3)return false;
+  const match=parseBareMediaLine(state.src.slice(state.bMarks[startLine],state.eMarks[startLine]));
+  if(!match)return false;
+  if(silent)return true;
+  const token=state.push('v2_bare_media','p',0);
+  token.block=true;token.map=[startLine,startLine+1];token.content=match.url;
+  state.line=startLine+1;return true;
+},{alt:['paragraph']});
+md.renderer.rules.v2_bare_media=(tokens,idx)=>{
+  const token=tokens[idx];
+  return '<p'+sourceAttrs(token)+'><img src="'+md.utils.escapeHtml(token.content)+'" alt=""></p>\n';
+};
 // Obsidian-native display math uses its own $$ lines, not a code fence.
 // Keep source-line maps so AG/CM6/PDF navigation remains unchanged.
 md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent)=>{
@@ -113,12 +130,12 @@ md.renderer.rules.html_block = (tokens,idx,options,env,self) => {
 
 // Obsidian-reading projection. MinerU preservation comments are deliberately
 // present in the source but invisible here; the sanitizer strips comments.
-export function renderMarkdown(source,{nativeInlineMath=false}={}) {
+export function renderMarkdown(source,{nativeInlineMath=false,bareMedia=false}={}) {
   // Main remains review-gated; Lab-OCR opts in to native $...$ math.
   // Explicitly ignored formulas remain plain text in every mode.
   // The projection never inserts or removes source line breaks.
   const {projected,fragments}=projectReviewedInlineLatex(source,{nativeInlineMath});
-  const env={};
+  const env={bareMedia};
   const tokens=md.parse(projected,env);
   for(let idx=0;idx<tokens.length;idx++){
     const token=tokens[idx];
