@@ -35,7 +35,9 @@
 #v2-sql-actions-dialog .v2-sql-action-close{display:block;margin-left:auto;min-height:34px}
 
 /* V1-style AG focus follows a stable logical ID, never the physical row index. */
-#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell{
+/* Suppress AG native selection tint; retain the established orange focus. */
+#workspace .ocr-outline-grid .ag-row.ag-row-selected{--ag-selected-row-background-color:transparent}
+#workspace .ocr-outline-grid .ag-row.ag-row-selected .ag-cell{
   background:rgba(235,163,82,.20)!important;
   box-shadow:inset 0 1px rgba(235,163,82,.4),inset 0 -1px rgba(235,163,82,.4);
 }

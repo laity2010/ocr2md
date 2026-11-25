@@ -459,12 +459,12 @@ try{
      ?.v2MarkdownPreviewPort?.getFocusedId()===2,null,{timeout:10000});
    assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),
      sourceState.intervals[1].from);
-   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.ag-row-selected').count(),1);
    // Preview -> source + AG, without a second CM6 document.
    await article.locator('h1').first().click();
    await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
      ?.v2MarkdownPreviewPort?.getFocusedId()===1,null,{timeout:10000});
-   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.ag-row-selected').count(),1);
    // Source/CM6 selection in a distant block -> AG follows persistent PBS p.
    await page.locator('#workspace #editor').evaluate(el=>{
      const p=el.v2SourcePort;const row=p.getIntervals().find(b=>b.logicalId===130);
@@ -472,7 +472,7 @@ try{
    });
    await page.waitForFunction(()=>document.querySelector('#workspace .v2-logical-page')
      ?.textContent.includes('p12 · 10 / 224'),null,{timeout:12000});
-   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row').count(),1);
+   assert.equal(await page.locator('#workspace .ocr-outline-grid .ag-row.ag-row-selected').count(),1);
    // A PDF-origin focus uses the same logical p, independent of physical page.
    await page.evaluate(()=>document.dispatchEvent(new CustomEvent('v2-sync-focus',{
      detail:{logicalId:213,baseBlockId:213,logicalOrder:213,origin:'pdf'}})));
@@ -503,7 +503,7 @@ try{
      caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
      focused:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
      page:el.querySelector('.v2-logical-page')?.textContent,
-     ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+     ag:el.querySelector('.ocr-outline-grid .ag-row.ag-row-selected [col-id="pbs"]')?.textContent,
    }));
    assert.equal(stableFocus.focused,1);
    // The exact V1 scroll-sync coordinator must have installed source-line
@@ -523,7 +523,7 @@ try{
      caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
      focused:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
      page:el.querySelector('.v2-logical-page')?.textContent,
-     ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+     ag:el.querySelector('.ocr-outline-grid .ag-row.ag-row-selected [col-id="pbs"]')?.textContent,
      events:window.__wp19FocusEvents,
    }));
    assert.deepEqual({...afterPreviewScroll,events:[]},{...stableFocus,events:[]},
@@ -541,7 +541,7 @@ try{
      caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
      focused:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
      page:el.querySelector('.v2-logical-page')?.textContent,
-     ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+     ag:el.querySelector('.ocr-outline-grid .ag-row.ag-row-selected [col-id="pbs"]')?.textContent,
      events:window.__wp19FocusEvents,
    }));
    assert.deepEqual({...afterSourceScroll,events:[]},{...stableFocus,events:[]},

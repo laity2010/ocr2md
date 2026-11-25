@@ -520,7 +520,7 @@ try{
       await firstTag.click();
       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-md-scroll')
         ?.v2MarkdownPreviewPort?.getFocusedId()===23,null,{timeout:10000});
-      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .v2-sync-ag-row')
+      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid .ag-row-selected')
         ?.querySelector('[col-id="pbs"]')?.textContent?.includes('p0b0s0'),null,{timeout:10000});
       assert.equal(await page.locator('#workspace .ocr-preview-pdf-host').evaluate(el=>el.v2PDFPort.getState().selectedId),23);
       assert.equal(await page.locator('#workspace #editor').evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head),0);
@@ -538,7 +538,7 @@ try{
         pdf:el.querySelector('.ocr-preview-pdf-host').v2PDFPort.getState().selectedId,
         markdown:el.querySelector('.ocr-preview-md-scroll').v2MarkdownPreviewPort.getFocusedId(),
         caret:el.querySelector('#editor').v2SourcePort.getEditorView().state.selection.main.head,
-        ag:el.querySelector('.ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')?.textContent,
+        ag:el.querySelector('.ocr-outline-grid .ag-row.ag-row-selected [col-id="pbs"]')?.textContent,
       }));
       assert.deepEqual(afterPDFScroll,{pdf:23,markdown:23,caret:0,ag:'p0b0s0'},
         'scrolling a PDF page must not automatically move the highlighted logical block');
@@ -785,11 +785,11 @@ try{
       // user-requested PBS/Type/Raw Txt-first order, AG's horizontal
       // virtualization can omit its DOM cell. The pinned PBS always exists.
       const agPBS=(await page.locator(
-        '#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row [col-id="pbs"]')
+        '#workspace .ocr-outline-grid .ag-row.ag-row-selected [col-id="pbs"]')
         .first().textContent()).trim();
       const agId=projection.covers.find(row=>row.pbs===agPBS)?.logicalId;
       assert(Number.isSafeInteger(agId),'selected AG PBS not found: '+agPBS);
-      await page.locator('#workspace .ocr-outline-grid .ag-row.v2-sync-ag-row .ag-cell').first().click();
+      await page.locator('#workspace .ocr-outline-grid .ag-row.ag-row-selected .ag-cell').first().click();
       await page.waitForFunction(expected=>document.querySelector('#workspace .ocr-preview-pdf-host')
         ?.v2PDFPort?.getState().selectedId===expected,agId,{timeout:10000});
       const expectedPage=projection.covers.find(row=>row.logicalId===agId).physicalPageIndex+1;

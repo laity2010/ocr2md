@@ -168,11 +168,46 @@ try{
      const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
      const expected=[[12,'p0b5s1'],[17,'p0b7s1'],[22,'p0b9s1'],[27,'p0b11s1'],[32,'p0b13s1'],[37,'p0b15s1'],[45,'p1b1s2'],[111,'p4b1s2'],[116,'p5b0s2'],[252,'p12b8s3'],[258,'p13b1s4']];
      await picker.selectOption('media');
-     await page.waitForFunction(()=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&x.status==='已下载');},null,{timeout:30000});
+     await page.waitForFunction(focusOnly=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&(x.status==='已下载'||focusOnly&&x.local&&x.status==='本地'));},process.env.V2_TEST_FOCUS_STABILITY==='1',{timeout:30000});
      const rows=await read();assert.deepEqual(rows.map(r=>[r.line_no,r.pbs]),expected);
      console.log("WP29C_ALL_ROWS_PASS",name,rows.length);
      assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     if(process.env.V2_TEST_FOCUS_STABILITY==='1'){
+       // The first two media rows fit without scrolling. Capture actual
+       // rendered nodes, not just rowData, before any selection.
+       const take=()=>grid.evaluate(el=>{
+         const nodes=[...el.querySelectorAll('.ag-row[row-index]')];
+         window.__focusStability={rows:el.v2BaseGridPort.getDisplayedRows(),nodes:nodes.map(n=>[n.getAttribute('row-index'),n,n.querySelector('img')]),buttons:[...el.querySelectorAll('.ocr-lab-media-action')],columns:JSON.stringify(el.v2BaseGridPort.getColumnState())};
+         return {rows:nodes.length,images:nodes.filter(n=>n.querySelector('img')).length};
+       });
+       await page.waitForFunction(()=>document.querySelectorAll('#workspace .ocr-outline-grid .ag-row[row-index]').length>=2,null,{timeout:10000});
+       await page.waitForFunction(()=>document.querySelectorAll('#workspace .ocr-outline-grid .ocr-lab-media-thumb').length>=2,null,{timeout:10000});
+       const captured=await take();console.log('WP29D_CAPTURE',name,JSON.stringify(captured));assert(captured.rows>=2&&captured.images>=2);
+       const check=async label=>{
+         const result=await grid.evaluate(el=>{
+           const old=window.__focusStability,rows=el.v2BaseGridPort.getDisplayedRows();
+           return {rowData:rows.length===old.rows.length&&rows.every((r,i)=>r===old.rows[i]),
+             rows:old.nodes.every(([,n])=>n.isConnected&&el.contains(n)),
+             images:old.nodes.every(([,n,img])=>!img||n.querySelector('img')===img&&img.isConnected),
+             buttons:old.buttons.every(n=>n.isConnected),columns:JSON.stringify(el.v2BaseGridPort.getColumnState())===old.columns};
+         });
+         console.log('WP29D_FOCUS_DOM',name,label,JSON.stringify(result));
+         if(process.env.V2_TEST_FOCUS_BASELINE==='1')assert.equal(result.rows,false,'baseline must demonstrate actual row recreation');
+         else assert.deepEqual(result,{rowData:true,rows:true,images:true,buttons:true,columns:true});
+       };
+       for(const [i,ref] of rows.slice(0,2).entries()){
+         await grid.locator('.ag-row[row-index="'+i+'"] [col-id="line_no"]').filter({hasText:new RegExp('^'+ref.line_no+'$')}).click();
+         await page.waitForFunction(line=>{const v=document.querySelector('#workspace #editor').v2SourcePort.getEditorView();return v.state.doc.lineAt(v.state.selection.main.head).number===line;},ref.line_no,{timeout:10000});
+         await page.waitForFunction(id=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().selectedId===id,ref.block_id);
+         await check('click '+ref.line_no);
+         if(process.env.V2_TEST_FOCUS_BASELINE==='1'){await take();continue;}
+         await page.waitForFunction(line=>[...document.querySelectorAll('#workspace .ocr-outline-grid .ag-row.ag-row-selected [col-id="line_no"]')].some(n=>n.textContent===String(line)),ref.line_no);
+       }
+       assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);assert.deepEqual(errors,[]);
+       console.log('WP29D_FOCUS_STABILITY_PASS',name);
+       continue;
+     }
      for(const ref of rows.slice(7)){
        const rowIndex=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('media_row_id',id);return p.getDisplayedRows().findIndex(r=>r.media_row_id===id);},ref.media_row_id);
        const cell=grid.locator('.ag-row[row-index="'+rowIndex+'"] [col-id="line_no"]').filter({hasText:new RegExp('^'+ref.line_no+'$')});
@@ -746,7 +781,7 @@ try{
        const cell=grid.locator('.ag-center-cols-container .ag-row').filter({has:grid.locator('[col-id="source_line"]').getByText(String(line),{exact:true})});
        // Native focusRow brings the intended row into the virtual viewport.
        await grid.evaluate((el,line)=>el.v2BaseGridPort.focusRow('source_line',line),line);
-       const row=grid.locator('.ag-row.v2-sync-ag-row [col-id="md_line"]').first();
+       const row=grid.locator('.ag-row.ag-row-selected [col-id="md_line"]').first();
        await row.click();
        assert.equal(await source.evaluate(el=>el.v2SourcePort.getEditorView().state.doc.lineAt(el.v2SourcePort.getEditorView().state.selection.main.head).number),line);
      };
@@ -754,7 +789,7 @@ try{
      await source.evaluate(el=>{
        const p=el.v2SourcePort,v=p.getEditorView();v.dispatch({selection:{anchor:v.state.doc.line(1).from}});
      });
-     await page.waitForFunction(()=>document.querySelector('.ag-row.v2-sync-ag-row [col-id="source_line"]')?.textContent==='1');
+     await page.waitForFunction(()=>document.querySelector('.ag-row.ag-row-selected [col-id="source_line"]')?.textContent==='1');
      assert.equal(await pdf.evaluate(el=>el.v2PDFPort.getState().selectedId),23);
      const focusBefore=await source.evaluate(el=>el.v2SourcePort.getEditorView().state.selection.main.head);
      await grid.evaluate(el=>{const viewport=el.querySelector('.ag-body-viewport');if(viewport)viewport.scrollTop+=120;});
