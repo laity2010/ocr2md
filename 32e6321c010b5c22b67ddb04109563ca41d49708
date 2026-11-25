@@ -1,0 +1,59 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：32e6321c010b5c22b67ddb04109563ca41d49708
+原提交标题：fix(v2 wp04): restore V1 shared PDF preview slot across split toggles
+父提交：3d0649fc80f06811df7e2faa57b09e843c61eea8
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP04_V1_PDF_PREVIEW_SPLIT_LIFECYCLE.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+M	ui/v2-pdf-viewer.js
+A	ui/v2-preview-slot.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP04_V1_PDF_PREVIEW_SPLIT_LIFECYCLE.md
+来源提交：32e6321c010b5c22b67ddb04109563ca41d49708
+SHA256：9ab4dc6ef5cbca9840eb1cb1b6331b0fc8687c5cd265dbd645c4f546644fa74d
+--- BEGIN ORIGINAL ---
+# V2 · WP04 · V1 PDF 预览下拉与切分往返修复
+
+## 实机失败（2026-11-21，已保留）
+
+用户在 iPad Safari 实测：取消切分后，**预览类型下拉无法切换 PDF**；恢复切分后，**独立 PDF 窗连文档都没有**。此前仅测试了 PDF 初次载入及多轨标签，遗漏 V1 的三窗↔四窗完整生命周期，属于 WP04 PDF 复刻的失败门禁，不能将此前“PDF 已通过”代替往返验收。
+
+## 确切原因及 V1 的权威实现
+
+真正的 V1 指 `lab-ocr`，不是历史 `main`（约等于 V0）。已审阅**实际 V1** `labs/lab-ocr/ui/frame/layout.js` 的 `pdfSlot`/`setSplit`/`blankPane('preview'|'pdf')` 机制：
+
+- 原 V1 预览窗永远持有 **一个 PDF.js 组件** (`pdfSlot.current`)，独立 PDF 分屏只是承载相同 `surface` 与 `toolbar` 的临时容器。
+- 取消切分时，Dockview 销毁 PDF 分屏但先将**同一 PDF DOM 和工具栏移回预览窗**。预览下拉开启 `PDF 原文`，可以在 Markdown 与 PDF 间切换，组件和原文/缓存均未销毁。
+- 恢复切分时，将同一组 DOM 移到独立 PDF 面板，禁用单窗下拉的重复 PDF 选项，保留原 PDF.js 文档实例、文字层、PBS 与滚动状态。不新建 PDFViewer、不再次读取 PDF、不以控件同名代替身份一致。
+
+上一轮 V2 仍沿用**Lab-Frame 的空白组件** `ui/frame/layout.js`：`<option value="pdf" disabled>`；`setSplit(false)` 会直接移除 Dockview 的 PDF panel，而那时 V2 PDF 实例由这个 panel 的 `dispose()` 释放；`setSplit(true)` 新建无 PDF 的 panel，**仅有初次 F02 资料目录核验才会触发后端 PDF 装载**，所以再次切分无 PDF。两个用户故障源自同一接线错误。
+
+## 此轮修复（不改共享 Frame 文件）
+
+- `labs/lab-ocr-v2/vite.config.mjs` 保持对原 Frame 代码的**精确签名适配，遇到变更即构建拒绝**，只给 V2 的 Frame 预览注册 `pdfSlot`，启用单窗 PDF 选项，把 V1 的 PDF 拥有权放在永久预览 Pane；独立 PDF pane 的 mount/dispose 改成只做 DOM 移动/归位。共享 `ui/frame/*`、V1 Lab-OCR、Main 原工作树不改。
+- `ui/v2-preview-slot.js` 直接按上述 V1 `pdfSlot.preview.setMode/setSplit/restore` 生命周期接线，预览的 `mountV2MarkdownPreview()` 和原 V1 `mountLabOcrPdf()` **各只实例化一次**，PDF 本体仍从 `ui/v2-pdf-viewer.js` 调用 V1 `mountLabOcrPdf`/`layoutPbsLabels`，不新增轨道或第二 PDF UI。
+- V1 原始宿主样式已经在 `ui/workspace.css`：`ocr-preview-pane[data-preview-mode=md|pdf]` 决定单窗可见性；V1 原生 `.lab-ocr-pdf-controls` 跟着 Viewer 移动，分屏时必须取消 `pdfTools.hidden`，单窗下拉显示 PDF 时才显示工具栏。
+- iPad WebKit **已有页面 Canvas 重建但不发送 pagerendered 事件**的路径，移动并恢复尺寸后只通过 V1 公开 `repaintOverlayPage(page)` 重挂原有 PBS/覆盖框，仍不自己绘制标签。两个 `requestAnimationFrame` 仅用于等待 DOM 搬移的原生页面布局完成。
+- `GET pdf-map` 与 `GET pdf` 仍走当前书籍的 F02 授权边界，SQLite 两物理表不变，无用户文件/数据写回、无新本地服务、无平行 PDFViewer。
+
+## 新增必须长期保留的验收
+
+**`node tests/v2-real-markdown-preview.browser.test.mjs`，同时跑 Chromium 与 iPad UA WebKit：** 在真实 22 页 / 224 个逻辑块 / PBS 多轨 fixture 完成初次授权加载后，记录第一份真正 V1 PDFViewer 对象与原文 GET 计数，执行两整轮：
+
+1. 初态四窗，PDF 原生 PBS 可见，下拉 PDF 禁用（避免同一文档重复显示）。
+2. 取消切分 → 三窗，预览下拉 **PDF 可选** → 选择 PDF；页 Canvas、PBS、工具栏在主预览窗，`v2PDFPort.getV1Preview()` **严格引用相等**，无重新下载。
+3. 在同一窗切回 Markdown，确认原有 Markdown 正常显示。
+4. 恢复切分 → 四窗；原生工具栏与 PBS 回到独立 PDF Pane，仍是同一 Viewer 实例，GET PDF 计数保持 1，Markdown 窗正常。
+5. 重复上述四步第二次，之后继续 PDF 缩放、22 页源码/AG/MD/原框定位和 iPad 0px 安全适宽测试。
+
+此外执行原 V1 动态 PBS 高密度轨道回归、Python 两表40测试、V2 SQL/CM6/Undo/Redo、Frame 四窗 Settings/F02 隔离回归、GitHub 版本 tag + 原唯一 V2 发布入口的所有静态文件哈希。**用户 iPad 真正 Safari 刷新后的结果仍应作为最后一项实机验证，而非用模拟器替代。**
+
+--- END ORIGINAL ---
