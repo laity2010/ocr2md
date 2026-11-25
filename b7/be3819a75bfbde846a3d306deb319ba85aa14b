@@ -11,3 +11,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"4c9bb02af6a042a6a7f351bf54d8b4be","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"4c9bb02af6a042a6a7f351bf54d8b4be","branch":"refs/heads/experiment/lab-sentence","baseline":"b7be3819a75bfbde846a3d306deb319ba85aa14b","event":"RUN_START","utc":"2026-11-25T13:19:48.902149+00:00","phase":"diagnose-fixture","step":"1c88c391900748a9beed8c2b04eb4e93"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"4c9bb02af6a042a6a7f351bf54d8b4be","branch":"refs/heads/experiment/lab-sentence","baseline":"b7be3819a75bfbde846a3d306deb319ba85aa14b","event":"RUN_EXIT","utc":"2026-11-25T13:20:19.683295+00:00","phase":"diagnose-fixture","step":"1c88c391900748a9beed8c2b04eb4e93","exit_code":1}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"4c9bb02af6a042a6a7f351bf54d8b4be","branch":"refs/heads/experiment/lab-sentence","baseline":"b7be3819a75bfbde846a3d306deb319ba85aa14b","event":"RUN_START","utc":"2026-11-25T13:21:01.105586+00:00","phase":"fixture-correction-and-release","step":"d7ba9b8630814aa3963a4178f4f7a17e"}
