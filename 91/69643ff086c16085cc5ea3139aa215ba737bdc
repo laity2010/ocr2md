@@ -5,3 +5,5 @@ FEDERAL_BUILD_EVENT_V1 {"event":"START","id":"federal-build-record-20261125","br
 FEDERAL_BUILD_EVENT_V1 {"id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","event":"RUN_START","utc":"2026-11-25T04:01:45.093449+00:00","phase":"最终联邦生命周期及既有执法回归","step":"05935d886a87456eb1cc7e8b751b4bf8"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","event":"RUN_EXIT","utc":"2026-11-25T04:05:30.392945+00:00","phase":"最终联邦生命周期及既有执法回归","step":"05935d886a87456eb1cc7e8b751b4bf8","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"federal-build-record-20261125","branch":"refs/heads/main","baseline":"9169643ff086c16085cc5ea3139aa215ba737bdc","event":"END","utc":"2026-11-25T04:06:41.552669+00:00","result":"PASS","commit":"e4eebf8e8b8d9117c0b0f82fa11e8307b126f934","evidence":"联邦立法及Main真实入口已通过定向回归；联邦生效tag及main普通推送成功；治理设施变化无产品发布。其余七州适配各有独立START/Commit/END。","release":"NONE","remote_ref":"refs/heads/main"}
