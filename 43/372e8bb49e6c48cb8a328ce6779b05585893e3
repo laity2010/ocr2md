@@ -1,0 +1,1 @@
+WP29G 发布闭环：20261125-114702，SHA 43372e8bb49e6c48cb8a328ce6779b05585893e3；releaseId 972b7fb4f955f92ce6fc42a1fbb0fb8342205148898f1237faded6e946be2cc1。正式Vite构建成功（包体大小警告非阻塞），V1/V2跨版本浏览器组件门禁、联邦commit-msg/pre-push/check-release均PASS；70发布文件，其他6 Lab保持不变；八州布局及七Lab发布哈希通过；GitHub普通push成功，工作树干净；公网入口HTTP200及响应头、release-version.json SHA一致。上一轮提前结束造成的违规见本提交正文，补齐发布不抹除该事实；物理iPad原生选择手势仍未验收。
