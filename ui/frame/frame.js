@@ -14,6 +14,7 @@ const $=id=>document.getElementById(id);
 const globalStatus=createFrameStatus($('status'));
 const topStatus=(message,kind='info')=>globalStatus.publish(message,kind);
 const sentenceSource=createSnapshotSession({report:topStatus});
+let sentenceCandidates=null;
 const build=__FRAME_BUILD_VERSION__;
 // The displayed badge is immutable for this build. Keep seconds in the
 // release identity for auto-update checks, but show year/month/day-hour/minute.
@@ -46,7 +47,17 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
       (afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':''),'ok');
     if(generation===probeGeneration&&!uncommitted){
       const snapshot=await sentenceSource.load(selected);
-      if(generation===probeGeneration)frame.setSourceMarkdown(snapshot?.markdown??'');
+      if(generation===probeGeneration){
+        frame.setSourceMarkdown(snapshot?.markdown??'');
+        sentenceCandidates=null;
+        if(snapshot){
+          const {splitSnapshot}=await import('../sentence/split.js');
+          if(generation!==probeGeneration)return;
+          sentenceCandidates=splitSnapshot(snapshot);
+          const failures=sentenceCandidates.blocks.flatMap(row=>row.candidates).filter(c=>c.error).length;
+          topStatus('V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · 三引擎分句 '+(snapshot.blocks.length*3-failures)+'/'+(snapshot.blocks.length*3)+(failures?' · '+failures+' 个候选失败':''),failures?'warning':'ok');
+        }
+      }
     }
   }catch(error){
     if(generation===probeGeneration)topStatus(

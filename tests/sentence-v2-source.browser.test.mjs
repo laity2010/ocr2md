@@ -34,7 +34,9 @@ try{
    assert.equal(await page.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
    await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({changes:{from:0,insert:'SHOULD NOT WRITE'}}));
    assert.equal(await readDoc(),fixture.markdown);
-   console.log("SENTENCE_V2_SOURCE_PASS",name,fixture.rowCount,fixture.markdown.length,"exact readonly; SQL navigation; three blank panes");
+   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),fixture.rowCount*3,{timeout:60000});
+   assert.equal(await readDoc(),fixture.markdown);
+   console.log("SENTENCE_V2_SOURCE_AND_ENGINES_PASS",name,fixture.rowCount,fixture.markdown.length,fixture.rowCount*3,"exact readonly; SQL navigation; three blank panes");
   }finally{await b.close();}
  }
 }finally{server.kill("SIGTERM");}
