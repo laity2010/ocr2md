@@ -1,12 +1,12 @@
 # OCR2MD · lab-ocr 州宪法（AGENTS.md）
 
-<!-- ocr2md:state-constitution:v1 federal=../../AGENTS.md build=../../BUILD.md comm=../../COMM.md -->
+<!-- ocr2md:state-constitution:v2 federal=../../AGENTS.md build=../../BUILD.md comm=../../COMM.md git=../../GIT.md -->
 
-> **州宪法，独立于联邦宪法的 Git 跟踪文件。** 本州从统一 OCR2MD 根目录的联邦 `AGENTS.md` 及 `BUILD.md`、`COMM.md` 继承所有强制要求；本文件只能按用户授权**补充、细化、调适本州行为，不得覆盖联邦宪法**、缩减公共组件契约或变更其他州的义务。
+> **州宪法，独立于联邦宪法的 Git 跟踪文件。** 本州从统一 OCR2MD 根目录的联邦 `AGENTS.md` 及 `BUILD.md`、`COMM.md`、`GIT.md` 继承所有强制要求；本文件只能按用户授权**补充、细化、调适本州行为，不得覆盖联邦宪法**、缩减公共组件契约或变更其他州的义务。
 
 ## 1. 联邦继承与优先级
 
-- 接手当前 `lab-ocr` 工作树时，必须先实际读取 `../../AGENTS.md`（联邦最高宪法）→ `../../BUILD.md`（联邦构建/回退契约）→ `../../COMM.md`（联邦公共组件/UI 契约）→ `AGENTS.md`（本州宪法）→ 本州 `README.md`，再看模块源码与测试。
+- 接手当前 `lab-ocr` 工作树时，必须先实际读取 `../../AGENTS.md`（联邦最高宪法）→ `../../BUILD.md`（联邦构建/回退契约）→ `../../COMM.md`（联邦公共组件/UI 契约）→ `../../GIT.md`（联邦 Git 留痕与执法）→ `AGENTS.md`（本州宪法）→ 本州 `README.md`，再看模块源码与测试。
 - 本州规则只能在联邦允许的业务范围内添加更严格的隔离、接口、数据权威和验收要求；联邦未授予的例外无效，联邦冲突时停止实施并提交用户裁决。
 - 州规范由本州 Git 单独提交和保留历史，**不与其他 Lab、联邦根 AGENTS 共享 inode**；不复制整部联邦宪法来当作本州副本。
 
