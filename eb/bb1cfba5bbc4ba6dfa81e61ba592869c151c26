@@ -14,3 +14,6 @@ M	ui/v2-mineru-entry.js
 
 历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
 
+
+补充历史检查点证据：原注记的历史证据不足状态由以下可核对记录补充；并非本轮重测。
+tsk_47910ecec2d7c333 2026-11-23T04:09:32.609051Z: completed=[publish]: AG logical_block列序PBS,Type(block_type),Raw Txt(markdown_text),其余字段全保留，PBS唯一左置，Raw Txt宽420；基础表列序未修改。Chromium与iPad-WebKit完整AG UI测试PASS；真实V1 PDF/AG跨窗联动Chromium PASS（已把受横向虚拟化影响的测试改为pinned PBS断言）；PBS过滤/结构纯函数/SQLite测试PASS。提交并普通推送 Git ebbb1cfba5bbc4ba6dfa81e61ba592869c151c26, worktree clean。版本 20261123-1208 (build id v2-lab-frame-20261123-120831)已统一发布；70资源SHA匹配，其他6 Lab保持，gateway releaseId及公网HTTP200+Git SHA/Release一致。
