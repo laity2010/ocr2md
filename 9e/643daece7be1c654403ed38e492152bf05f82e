@@ -25,3 +25,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_START","utc":"2026-11-25T11:08:34.803462+00:00","phase":"preserve-failure","step":"33b73a5030cd4d8eb04eaeb78c9f4fa1"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_EXIT","utc":"2026-11-25T11:08:58.414267+00:00","phase":"preserve-failure","step":"33b73a5030cd4d8eb04eaeb78c9f4fa1","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"END","utc":"2026-11-25T11:09:29.140430+00:00","result":"FAIL","commit":"629062d3ff0c92ad6c1e9024cdcb2bbb9cbce626","evidence":"Python 3/3 PASS; Chromium 图片落盘、CAS、媒体采用及MD渲染通过；最终Undo断言超时，四轮浏览器退出1，WebKit未完成。独立证据分支已推送，不发布。","release":"FORBIDDEN","remote_ref":"refs/heads/evidence/v2-wp31-failed-20261125"}
