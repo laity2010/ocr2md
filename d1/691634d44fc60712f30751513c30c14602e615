@@ -13,3 +13,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_EXIT","utc":"2026-11-25T08:53:15.047438+00:00","phase":"WP30C 直接测试与真实表格组织双浏览器验收","step":"99453e788ad54bebbab044e653d08719","exit_code":1}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_START","utc":"2026-11-25T08:53:49.759475+00:00","phase":"WP30C 修正浏览器夹具保存记录字段并复测","step":"7a0bbb320f8b4608a1def17001ccca1c"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_EXIT","utc":"2026-11-25T08:55:29.535625+00:00","phase":"WP30C 修正浏览器夹具保存记录字段并复测","step":"7a0bbb320f8b4608a1def17001ccca1c","exit_code":1}
