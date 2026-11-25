@@ -25,7 +25,16 @@ try{
    assert.match(metadata.commit,/^[0-9a-f]{40}$/);
    assert.equal(await page.locator("#workspace").isVisible(),true);
    await page.waitForFunction(n=>document.querySelector("#status")?.textContent.includes("V2 已保存逻辑表 · "+n+" 块"),fixture.rowCount,{timeout:30000});
-   console.log("SENTENCE_V2_SNAPSHOT_PASS",name,fixture.rowCount);
+   const readDoc=()=>page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.doc.toString());
+   await page.waitForFunction(text=>document.querySelector('#editor .cm-content')?.cmTile?.root?.view?.state.doc.toString()===text,fixture.markdown);
+   assert.equal(await readDoc(),fixture.markdown);
+   assert.equal(await page.locator('#workspace select.ocr-navigation-native option[value="frame"]').evaluate(e=>e.parentElement.label),'SQL');
+   assert.equal(await page.locator('#workspace .ocr-navigation-select .item').textContent(),'逻辑表 · logical_block');
+   assert.deepEqual(await page.locator('#workspace [data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content').evaluateAll(es=>es.map(e=>e.cmTile.root.view.state.doc.toString())),['','','']);
+   assert.equal(await page.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
+   await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({changes:{from:0,insert:'SHOULD NOT WRITE'}}));
+   assert.equal(await readDoc(),fixture.markdown);
+   console.log("SENTENCE_V2_SOURCE_PASS",name,fixture.rowCount,fixture.markdown.length,"exact readonly; SQL navigation; three blank panes");
   }finally{await b.close();}
  }
 }finally{server.kill("SIGTERM");}

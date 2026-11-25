@@ -44,7 +44,10 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
     await frameWorkspaceIO.probe(selected);
     if(generation===probeGeneration)topStatus(
       (afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':''),'ok');
-    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);
+    if(generation===probeGeneration&&!uncommitted){
+      const snapshot=await sentenceSource.load(selected);
+      if(generation===probeGeneration)frame.setSourceMarkdown(snapshot?.markdown??'');
+    }
   }catch(error){
     if(generation===probeGeneration)topStatus(
       (afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
@@ -167,7 +170,8 @@ async function showModule(name){
     // The native select is the Main NavigationSelect public business port.
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
-    topStatus('分句工作台 · 四窗布局 · 原文显示待接入');
+    const snapshot=sentenceSource.getSnapshot();
+    topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · '+snapshot.documentVersion.slice(0,12):'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');
 
   }
 }
