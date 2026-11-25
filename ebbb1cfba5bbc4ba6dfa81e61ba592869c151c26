@@ -1,0 +1,16 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：ebbb1cfba5bbc4ba6dfa81e61ba592869c151c26
+原提交标题：feat(v2): prioritize PBS Type Raw Txt in logical AG columns
+父提交：9f2e39d2db9b7f03b8fde83517a9ab6bd29d9fc0
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+M	ui/v2-mineru-entry.js
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
