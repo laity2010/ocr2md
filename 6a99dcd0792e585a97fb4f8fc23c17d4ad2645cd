@@ -1,0 +1,41 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：6a99dcd0792e585a97fb4f8fc23c17d4ad2645cd
+原提交标题：fix(v2): WP27B restore native inline math and safe reconciliation
+父提交：d170db8a37aae50d3afe12c1aa410e8c3323f73b
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP27B_NATIVE_INLINE_MATH.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_md_block.py
+A	tests/test_v2_inline_math.py
+M	tests/v2-latex.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/latex-inline-preview.js
+M	ui/markdown-preview.js
+A	ui/v2-inline-math.js
+M	ui/v2-markdown-preview.js
+M	ui/v2-mineru-entry.js
+M	ui/v2-note-toolbar.js
+
+已核实问题及后续处理：任务 tsk_2d0cba86ff972b75 停留在 publish in_progress；测试 PASS 证据在本提交原文。后续 WP28/29 已纳入该源码，不能凭任务进度或后续版本反推单独发布核验。该次单独发布证据待补。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_2d0cba86ff972b75 2026-11-24T14:03:10.384352Z: completed=[fix,test], current=publish: 6a99dcd: V1 native inline renderer and typed span initialization restored; actual sample read-only clones Chromium/WebKit PASS 16 blocks, 21 wrapped matched, 22 preview formulas, repeat no writes, undo/redo/reopen; Python init/PDF and direct regressions plus layout PASS. Publishing.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP27B_NATIVE_INLINE_MATH.md
+来源提交：6a99dcd0792e585a97fb4f8fc23c17d4ad2645cd
+SHA256：0e2b6bac5bb6693362bf5597a9290808788b1d3b16986dbdf6f18b6b6098f390
+--- BEGIN ORIGINAL ---
+# WP27B · 原生行内公式定界与预览
+基线 d170db8。用户反馈行内公式没有 $...$、MD 预览没有渲染。根因：V2 initial_md 直接拼接 raw_element_text，未处理段落内 typed inline_equation；MD renderer 仍采用旧 review-marker 门禁，未启用 V1 nativeInlineMath。
+新初始化保留原 V2 文本归一化和原始表，按类型包装行内 span（原本有定界、空串、多行或内含不安全美元符号不重复包装）。V1 的 latex-inline-preview.js / markdown-preview.js 按 bf32515 逐字节复用；仅 V2 reader 启用 nativeInlineMath。原已审阅 ignore 语义保留。原 V1 renderer 也含独立公式紧邻普通段落的 paragraph termination 修复。
+已有书籍不自动重建、迁移或写库；LaTeX 功能菜单增加「补全行内公式定界」。按稳定 logical_id + base_blockid 原始 Span，只有完整未编辑且单非空行的 text/ref_text 段落可以安全补全；已补全跳过，人工改动/不确定跳过。全部更新由现有 replaceMdLines 同修订 CAS 原生事务执行，整体 Undo/Redo，原始 LF 和原始两表不变。
+直接测试 v2-latex、test_v2_inline_math、test_v2_pdf_projection、fresh_owned_init、logical_init、AG、note、MD line PASS。真实 sample 的 mode=ro 备份副本 Chromium/WebKit：16 块差量保存、21 条已匹配且 $ 定界、22 处真实行内 KaTeX 渲染；重复操作零写入；Undo/Redo/reopen 保留。未写用户原书。
+
+--- END ORIGINAL ---
