@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"8e16e86d963b456db43e6958396da955","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"b4a8223f3e659e73093e9f39828aad62717a695e","event":"START","utc":"2026-11-25T07:34:25.527953+00:00","wp":"WP30A","goal":"表格View列序源码行号、PBS、Type、MD Line、其他；保留原摘要及其他列，沿用定位和两表，不改其他View或原书。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"8e16e86d963b456db43e6958396da955","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"b4a8223f3e659e73093e9f39828aad62717a695e","event":"RUN_START","utc":"2026-11-25T07:35:07.812468+00:00","phase":"WP30A 精确列序和当前MD Line双浏览器回归","step":"d7dc6b550f1c41f18a0f3b71b837f3bd"}
