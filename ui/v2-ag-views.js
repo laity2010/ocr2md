@@ -10,6 +10,7 @@ export const AG_VIEWS=Object.freeze({
   latex:Object.freeze({label:'LaTeX'}),
   'block-break':Object.freeze({label:'断块'}),
   media:Object.freeze({label:'媒体'}),
+  table:Object.freeze({label:'表格'}),
 });
 export function titleClickLine(row){
   return Number.isInteger(row?.source_line)?row.source_line:null;

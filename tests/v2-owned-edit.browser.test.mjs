@@ -21,7 +21,8 @@ const noteMode=process.env.V2_TEST_NOTE_MATCH==='1'||noteReviewMode;
 const inlineMode=process.env.V2_TEST_INLINE_MATH==='1';
 const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
 const breakMode=process.env.V2_TEST_BREAK_VIEW==='1';
-const realMediaBook=process.env.V2_TEST_REAL_MEDIA_BOOK;
+const tableBook=process.env.V2_TEST_REAL_TABLE_BOOK;
+const realMediaBook=process.env.V2_TEST_REAL_MEDIA_BOOK||tableBook;
 const normalizeMediaMode=process.env.V2_TEST_NORMALIZE_MEDIA==='1';
 const mediaExactMode=process.env.V2_TEST_MEDIA_EXACT==='1';
 const mediaMode=process.env.V2_TEST_MEDIA_VIEW==='1'||Boolean(realMediaBook);
@@ -213,6 +214,69 @@ try{
      menu=page.locator('.ocr-cm-line-menu');assert.equal(await menu.locator('.ocr-cm-line-selection-summary').textContent(),'第 1–1 行 · 共 1 行');
      await menu.getByRole('menuitem',{name:'引用>-'}).click();await saved(cross,7);
      assert.deepEqual(errors,[]);console.log('WP29G_QUOTE_BROWSER_PASS',name,'reverse/half-open, cross-owner blank LF repair, no-op, exact undo/redo/reopen, seven CAS saves');continue;
+   }
+   if(tableBook){
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const rows=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
+     const columns=()=>grid.evaluate(el=>el.v2BaseGridPort.getColumnState());
+     const expected=await source.evaluate(el=>{
+       const p=el.v2SourcePort,index=p.getMdLineIndex();
+       return p.getIntervals().filter(r=>r.blockType.toLowerCase().includes('table')).map(r=>({
+         id:r.logicalId,pbs:index.forBlock(r.logicalId)[0].pbs,
+         type:r.blockType,line:index.forBlock(r.logicalId).find(l=>l.md_line.trim())?.source_line??null
+       }));
+     });
+     assert.equal(expected.length,32);
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     await picker.selectOption('table');
+     await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===32);
+     const actual=await rows(),byId=new Map(expected.map(r=>[r.id,r]));
+     const coverMap=new Map(projection.covers.map(r=>[r.logicalId,r]));
+     assert.equal(new Set(actual.map(r=>r.logical_id)).size,32);
+     for(const row of actual){
+       const ref=byId.get(row.logical_id),cover=coverMap.get(row.logical_id);
+       assert(ref);assert.equal(row.pbs,ref.pbs);assert.equal(row.block_type,ref.type);
+       assert.equal(row.line_no,ref.line);assert.equal(row.block_id,ref.id);
+       assert.equal(row.global_page,cover?.physicalPageIndex??null);
+       assert.equal(row.block_bbox_json,cover?JSON.stringify(cover.bbox):null);
+       assert.equal(row.merged_into_block_id,null);
+     }
+     assert.deepEqual(Object.fromEntries(['table','table_body','table_caption','table_footnote'].map(t=>[t,actual.filter(r=>r.block_type===t).length])),{table:9,table_body:9,table_caption:8,table_footnote:6});
+     assert.equal(actual.filter(r=>r.line_no==null).length,10);
+     const order=['pbs','block_type','content_preview','line_no','global_page','block_id','parent_block_id','merged_into_block_id','block_bbox_json'];
+     assert.deepEqual((await columns()).filter(c=>!c.hide).map(c=>c.colId),order);
+     assert.deepEqual((await columns()).filter(c=>c.pinned).map(c=>c.colId),['pbs']);
+     assert.equal((await columns()).find(c=>c.colId==='pbs').sort,'asc');
+     async function clickRow(ref){
+       const i=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('logical_id',id);return p.getDisplayedRows().findIndex(r=>r.logical_id===id);},ref.logical_id);
+       await grid.locator('.ag-row[row-index="'+i+'"] [col-id="pbs"]').click();
+       await page.waitForFunction(id=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().selectedId===id,ref.logical_id,{timeout:15000});
+     }
+     for(const t of ['table_caption','table_body','table_footnote']){
+       const ref=actual.find(r=>r.block_type===t&&r.line_no!=null&&coverMap.has(r.logical_id));
+       assert(ref);await clickRow(ref);
+       await page.waitForFunction(line=>{const v=document.querySelector('#workspace #editor').v2SourcePort.getEditorView();return v.state.doc.lineAt(v.state.selection.main.head).number===line;},ref.line_no);
+     }
+     const blank=actual.find(r=>r.line_no==null&&coverMap.has(r.logical_id));
+     const oldHead=(await snapshot()).head;
+     await clickRow(blank);assert.equal((await snapshot()).head,oldHead,'PDF-only must preserve source caret');
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel({block_type:{values:['table_body']}}));
+     assert.equal((await rows()).length,9);
+     await picker.selectOption('frame');
+     assert.equal((await columns()).find(c=>c.colId==='pbs').pinned,'left');
+     await picker.selectOption('table');
+     assert.equal((await rows()).length,9,'table filter persists independently');
+     await grid.evaluate(el=>el.v2BaseGridPort.setFilterModel(null));
+     assert.equal((await rows()).length,32);
+     await page.locator('.v2-logical-all input').uncheck();
+     assert((await rows()).length>0&&(await rows()).every(r=>r.p===blank.p));
+     await page.locator('.v2-logical-all input').check();
+     assert.equal((await rows()).length,32);
+     assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
+     assert.equal(api(folder,'markdown','GET').body.markdown,before.doc);
+     assert.deepEqual(errors,[]);
+     console.log('WP30_REAL_TABLE_VIEW_PASS',name,'32 blocks / 10 PDF-only / V1 columns / PBS sort / three source targets / PDF-only / filter scope / no writes');
+     continue;
    }
    if(realMediaBook){
      const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
