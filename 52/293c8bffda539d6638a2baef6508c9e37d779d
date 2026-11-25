@@ -11,3 +11,5 @@ WP30 违宪追记：上一轮在代码接入完成、浏览器验收和提交发
 FEDERAL_BUILD_EVENT_V1 {"id":"1d41d0024f5249a5a3eb059634309d82","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"52293c8bffda539d6638a2baef6508c9e37d779d","event":"RUN_START","utc":"2026-11-25T06:42:40.259831+00:00","phase":"WP30 真实书籍隔离副本双浏览器表格定位及筛选验收","step":"0d9d2b94dc1246a6b78e15b9e73a8fb8"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"1d41d0024f5249a5a3eb059634309d82","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"52293c8bffda539d6638a2baef6508c9e37d779d","event":"RUN_EXIT","utc":"2026-11-25T06:43:52.464269+00:00","phase":"WP30 真实书籍隔离副本双浏览器表格定位及筛选验收","step":"0d9d2b94dc1246a6b78e15b9e73a8fb8","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"1d41d0024f5249a5a3eb059634309d82","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"52293c8bffda539d6638a2baef6508c9e37d779d","event":"RUN_START","utc":"2026-11-25T07:09:22.717192+00:00","phase":"WP30 正式构建发布及线上核验","step":"a1f0e28c5c6c4503b7f91915319a5b33"}
