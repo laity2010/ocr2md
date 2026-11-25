@@ -7,7 +7,7 @@
 - **Lab ID**：`lab-ocr-v3`（框架型 Lab，自 `lab-frame` 基线 `1dbc2b7` 建立）
 - **工作树**：`labs/lab-ocr-v3`；**Git 分支**：`experiment/lab-ocr-v3`
 - **目标统一入口**：`/labs/lab-ocr-v3/`（**[WP01-MOUNT 首次挂载；实机 iPad Safari 尚待验收]**）
-- **当前阶段**：**WP05 · V1 PDF/行号组件复用、默认三窗布局与局部 `ChangeSpec` 结构拖拽完成**。已完成默认三窗（左 AG、右上源码 1/3、右下 PDF 2/3）、切分四窗不重建单一 PDF 实例、复用 V1 `mountLabOcrPdf`/`layoutPbsLabels`、焦点行号菜单（引用 `>+`/`>-` 与原生 PDF 提取文本）及局部 `ChangeSpec` 拖拽接入 `structure-commit`；下一阶段进入 **WP06 · SQL 组导航、基础表/逻辑块 AG 检视与端到端工作台**。
+- **当前阶段**：**WP06 · 统一 AG Grid 双投影与 SQL 导入工作台闭环完成**。已完成统一 AG Grid 双投影（逻辑块审阅 + 通用 `MD Line` 行级投影）、可见文本自适应列宽、纯焦点切换单行选中护栏（不重设 `rowData`）、SQL 组安全导入入口及四套双浏览器端到端回归；下一阶段进入 **WP07–WP09 · 标题/注释/LaTeX/断块/媒体/HTML 表格派生视图**。
 
 ## 2. 现状与待实现清单
 
@@ -20,7 +20,8 @@
 | **V3 摘要式增量 CAS 写回** | **[已实现 · WP03 PASS]** | `scripts/lab_backend/cas.py`（`md-commit` 基于 `structureSha256` + `beforeSha256` + 局部 `O(k)` 尾换行边界核验；`structure-commit` 含临时坐标停泊、边界块 `beforeSha256` 与外键/不变量复核）及 `tests/test_v3_cas_commits.py` |
 | **单源 `O(log N)` CM6 与增量保存** | **[已实现 · WP04B PASS]** | `ui/v3/{cm-structure,md-line-index,boundary-feedback,source-session}.js`（Zero Shadow Cache、两层解耦轻索引、二分局部按键门禁、异步微任务闪烁与 850ms 空闲增量 `md-commit`）及 `tests/v3-cm-structure.test.mjs`、`tests/v3-source-session.browser.test.mjs` |
 | **V1 PDF/行号复用与局部拖拽** | **[已实现 · WP05 PASS]** | `ui/v3/{pdf-viewer,preview-slot,structure-move,line-gutter,pane-focus}.js`（默认三窗、四窗不重建实例、局部 `ChangeSpec` 拖拽 + `invertedEffects` Undo/Redo + `structure-commit`）及 `tests/v3-structure-move.test.mjs`、`tests/v3-wp05-layout-and-drag.browser.test.mjs` |
-| **AG 双投影与端到端检视** | **[仍待实现 · WP06]** | SQL 组导航、基础表/逻辑块 AG 检视、可见文本自适应列宽 |
+| **AG 双投影与端到端检视** | **[已实现 · WP06 PASS]** | `ui/v3/{ag-router,sql-actions}.js`（逻辑块/MD Line 双投影、自适应列宽、纯焦点护栏、SQL 安全导入）及 `tests/v3-wp06-ag-dual-projection.browser.test.mjs` |
+| **派生审阅 View（标题/注释/LaTeX/断块/媒体/表格）** | **[仍待实现 · WP07–WP09、WP11]** | 挂载于公共行索引与独立语法派生层的全套只读审阅 View |
 | **AG 双投影与全套审阅 View** | **[仍待实现 · WP07–WP09、WP11]** | 标题/注释/LaTeX/断块/媒体/HTML 表格 View |
 | **审阅决策持久化** | **[仍待实现 · WP10，待拍板]** | 待用户选定 `SQL.md` 第 5 节方案 A（`review_meta` 列）或方案 B（`review_state` 辅表） |
 
@@ -42,6 +43,8 @@
   `node --test tests/v3-structure-move.test.mjs`
 - V3 默认三窗、四窗不重建及拖拽提交双浏览器回归（Chromium + iPad-WebKit）：
   `node tests/v3-wp05-layout-and-drag.browser.test.mjs`
+- V3 AG 双投影、自适应列宽及纯焦点护栏双浏览器回归（Chromium + iPad-WebKit）：
+  `node tests/v3-wp06-ag-dual-projection.browser.test.mjs`
 - 联邦 `COMM.md` 跨版本组件双浏览器门禁（Chromium + iPad-WebKit）：
   `python3 ../../main/scripts/verify_cross_version_components.py --target lab-ocr-v3 --browser`
 - 联邦布局与继承检查：

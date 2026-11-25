@@ -153,7 +153,9 @@ export default defineConfig({
             "setFilterModel:(model)=>grid.setFilterModel(model),"+
             "getDisplayedRows:()=>{const rows=[];for(let i=0;i<grid.getDisplayedRowCount();i++)rows.push(grid.getDisplayedRowAtIndex(i)?.data);return rows;},"+
             "setRowHeight:(height)=>{if(grid.getGridOption('rowHeight')!==height){grid.setGridOption('rowHeight',height);grid.resetRowHeights();}},"+
-            "onRowClicked:(handler)=>{grid.addEventListener('rowClicked',handler);return ()=>grid.removeEventListener('rowClicked',handler);},"+
+            "setColumnWidths:(widths)=>{grid.setColumnWidths(widths);},"+
+            "onColumnResized:(handler)=>{grid.addEventListener('columnResized',handler);return ()=>grid.removeEventListener('columnResized',handler);},"+
+            "onRowClicked:(handler)=>{let lastAt=0,lastIdx=-1;const emit=(idx,data,node,ev)=>{const now=Date.now();if(idx===lastIdx&&now-lastAt<120)return;lastIdx=idx;lastAt=now;handler({data,node,rowIndex:idx,event:ev});};const onAg=(ev)=>{if(ev?.data)emit(ev.rowIndex??-1,ev.data,ev.node,ev.event);};const onDom=(ev)=>{const rowEl=ev.target?.closest?.('.ag-row[row-index]');if(!rowEl||!host.contains(rowEl))return;const idx=Number(rowEl.getAttribute('row-index'));if(!Number.isInteger(idx)||idx<0)return;const node=grid.getDisplayedRowAtIndex(idx);if(node?.data)emit(idx,node.data,node,ev);};grid.addEventListener('rowClicked',onAg);host.addEventListener('click',onDom);return ()=>{grid.removeEventListener('rowClicked',onAg);host.removeEventListener('click',onDom);};},"+
             "focusRow:(field,id)=>{let target=null;if(id!=null)grid.forEachNode(node=>{if(!target&&node.data?.[field]===id)target=node;});"+
             "if(!target){if(grid.getSelectedNodes().length)grid.deselectAll();return false;}"+
             "if(!target.isSelected())target.setSelected(true,true);"+
@@ -178,7 +180,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp05-pdf-local-drag',
+            stage:'wp06-ag-dual-projection',
           })+'\n',
         });
       },
