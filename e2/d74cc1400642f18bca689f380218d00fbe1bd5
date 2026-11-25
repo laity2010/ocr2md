@@ -7,3 +7,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"5857bf332c6d43378b6e33fc29724b11","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"5857bf332c6d43378b6e33fc29724b11","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_START","utc":"2026-11-25T13:26:06.165170+00:00","phase":"preserve-failure","step":"6b7a2f56423748bfa1f983e6a6902cd9"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"5857bf332c6d43378b6e33fc29724b11","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_EXIT","utc":"2026-11-25T13:26:40.611031+00:00","phase":"preserve-failure","step":"6b7a2f56423748bfa1f983e6a6902cd9","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"5857bf332c6d43378b6e33fc29724b11","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"END","utc":"2026-11-25T13:27:13.825767+00:00","result":"FAIL","commit":"3211e84c22f0b6e8a5015cd3f7792328eb187e1c","evidence":"真实隔离267块三引擎覆盖798/801，Sentence Splitter三处源区间缺失或重叠；4/5测试通过，失败证据独立推送；停止后续航点，未发布，恢复WP01。","release":"FORBIDDEN","remote_ref":"refs/heads/evidence/sentence-wp02-failed-20261125"}
