@@ -21,3 +21,7 @@
 #workspace .sentence-pane{display:flex;flex-direction:column;min-width:0;min-height:0}
 #workspace .sentence-pane .frame-editor{height:auto;flex:1 1 0;min-height:0}
 #workspace .sentence-engine-label{font:calc(12px * var(--ocr-frame-scale)) "OCR2MD Sarasa",monospace;color:#d3c6aa;white-space:nowrap}
+
+/* Alternating sentence marks; source text and protected fragments stay intact. */
+#workspace .cm-content .sentence-unit-even{background:rgba(128,166,110,.23);box-decoration-break:clone;-webkit-box-decoration-break:clone}
+#workspace .cm-content .sentence-unit-odd{background:rgba(103,153,184,.23);box-decoration-break:clone;-webkit-box-decoration-break:clone}

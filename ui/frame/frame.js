@@ -54,6 +54,7 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
           const {splitSnapshot}=await import('../sentence/split.js');
           if(generation!==probeGeneration)return;
           sentenceCandidates=splitSnapshot(snapshot);
+          frame.setReview(snapshot,sentenceCandidates);
           const failures=sentenceCandidates.blocks.flatMap(row=>row.candidates).filter(c=>c.error).length;
           topStatus('V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · 三引擎分句 '+(snapshot.blocks.length*3-failures)+'/'+(snapshot.blocks.length*3)+(failures?' · '+failures+' 个候选失败':''),failures?'warning':'ok');
         }
