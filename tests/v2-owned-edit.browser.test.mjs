@@ -3,6 +3,7 @@
  * directory. No user DB, no gateway, no real PDF required by this text test.
  */
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -13,6 +14,7 @@ import {makePDF} from './v2-pdf-fixture.mjs';
 const structureMode=process.env.V2_TEST_OWNED_STRUCTURE==='1';
 const lineEditMode=process.env.V2_TEST_LINE_EDIT==='1';
 const quoteMode=process.env.V2_TEST_LINE_QUOTE==='1';
+const pasteMode=process.env.V2_TEST_MEDIA_PASTE==='1';
 const splitMode=process.env.V2_TEST_OWNED_SPLIT==='1';
 const titleMode=process.env.V2_TEST_OWNED_TITLES==='1';
 const noteConversionMode=process.env.V2_TEST_NOTE_CONVERSION==='1';
@@ -33,7 +35,7 @@ const legacyEditMode=process.env.V2_TEST_LEGACY_EDIT==='1';
 const blockedRelease=legacyEditMode&&process.env.V2_TEST_BLOCKED_RELEASE==='1';
 const copyFrom=(legacyEditMode||uiRestoreMode||inlineMode)?process.env.V2_TEST_COPY_FROM:null;
 const expectedCount=legacyEditMode?268:267;
-const pdfMode=structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode||breakMode||mediaMode;
+const pdfMode=pasteMode||structureMode||splitMode||titleMode||initMode||lineViewMode||legacyEditMode||uiRestoreMode||noteMode||latexMode||breakMode||mediaMode;
 const port=Number(process.env.V2_TEST_PORT||5431),url='http://127.0.0.1:'+(blockedRelease?4414:port)+'/labs/lab-ocr-v2/';
 const server=blockedRelease?null:spawn('node',['node_modules/vite/bin/vite.js','--config','labs/lab-ocr-v2/vite.config.mjs',
  '--host','127.0.0.1','--port',String(port),'--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -75,7 +77,7 @@ try{
    const pdfBytes=projection?makePDF(projection.pageSizes):null;
    const page=await browser.newPage({viewport:name==='webkit'?{width:834,height:1112}:{width:1280,height:850},
     hasTouch:true,...(name==='webkit'?{userAgent:'Mozilla/5.0 (iPad; CPU OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1'}:{})});
-   const errors=[],writes=[];page.on('pageerror',e=>errors.push(e.message));
+   const errors=[],writes=[];let pasteCalls=0,delayPaste=false,denyPaste=false;page.on('pageerror',e=>errors.push(e.message));
    page.on('console',m=>{if(m.text().includes('CodeMirror plugin crashed'))errors.push(m.text());});
    if(structureMode)await page.addInitScript(()=>{
      window.__wp23fStatuses=[];
@@ -94,8 +96,15 @@ try{
    await page.route('**/labs/lab-ocr-v2/api/mineru-base/**',async route=>{
      const req=route.request(),u=new URL(req.url()),op=u.pathname.split('/').at(-1);
      if(op==='pdf')return pdfMode?route.fulfill({status:200,contentType:'application/pdf',body:pdfBytes}):fulfill(route,{error:'No PDF in disposable fixture'},404);
+     if(pasteMode&&op==='media-paste'){
+       pasteCalls++;
+       if(denyPaste)return fulfill(route,{error:'Unauthorized'},403);
+       if(delayPaste)await sleep(1200);
+       const result=py('from test_v2_media_paste import call\nimport base64\ncode,body=call(folder,body=base64.b64decode(args["bytes"]),mime=args["mime"],workspace=args["workspace"])\nprint(json.dumps({"status":code,"body":body}))',folder,{bytes:req.postDataBuffer().toString('base64'),mime:req.headers()['content-type'],workspace:u.searchParams.get('workspace')});
+       return fulfill(route,result.body,result.status);
+     }
      const payload=req.method()==='POST'?req.postDataJSON():{};
-     if(mediaMode&&op==='media-file'){
+     if((mediaMode||pasteMode)&&op==='media-file'){
        const result=py('import base64\ndata,kind=base.dispatch("media-file","GET",folder,{},args["query"],Stub())\nprint(json.dumps({"body":base64.b64encode(data).decode(),"kind":kind}))',folder,{query:{path:[u.searchParams.get('path')]}});
        return route.fulfill({status:200,contentType:result.kind,body:Buffer.from(result.body,'base64')});
      }
@@ -114,15 +123,27 @@ try{
      const result=api(folder,op,req.method(),payload,query);
      return fulfill(route,result.body,result.status);
    });
+   let pasteReopening=false;
    const loadPage=async(count=expectedCount,owned=true)=>{
      await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-     try{await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});}catch(error){console.error('V2_STARTUP_FAILURE',name,JSON.stringify({errors,status:await page.locator('#status').textContent().catch(()=>null)}),log.slice(-6000));throw error;}
-     await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
-       select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
-     });
-     await page.waitForFunction(({count,owned})=>{const p=document.querySelector('#workspace #editor')?.v2SourcePort;
+     if(pasteMode&&pasteReopening){
+       await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded||document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});
+       await page.evaluate(()=>{
+         if(document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded)return;
+         const select=document.querySelector('#settings-workspace .ocr-source-file-select');
+         if(select?.querySelector('option[value="sql:logical_block"]')){
+           select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
+         }
+       });
+     }else{
+       try{await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]'),null,{timeout:20000});}catch(error){console.error('V2_STARTUP_FAILURE',name,JSON.stringify({errors,status:await page.locator('#status').textContent().catch(()=>null)}),log.slice(-6000));throw error;}
+       await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{
+         select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));
+       },undefined,{timeout:15000});
+     }
+     try{await page.waitForFunction(({count,owned})=>{const p=document.querySelector('#workspace #editor')?.v2SourcePort;
        return p?.getState().loaded&&p.getState().ownedLF===owned&&p.getBlocks().length===count&&
-        document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12;},{count,owned},{timeout:30000});
+        document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length===12;},{count,owned},{timeout:30000});}catch(e){console.error('V2_LOAD_DIAGNOSTIC',name,await page.evaluate(()=>({status:document.querySelector('#status')?.textContent,source:document.querySelector('#workspace #editor')?.v2SourcePort?.getState(),cols:document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.length,selects:[...document.querySelectorAll('.ocr-source-file-select')].map(x=>[x.value,x.id])})),errors);throw e;}
    };
    if(mediaMode)await page.route('https://cdn-mineru.openxlab.org.cn/**',r=>r.abort());
    await loadPage(expectedCount,!initMode);
@@ -168,6 +189,59 @@ try{
    }
    const before=await snapshot();
    assert(before.complete);assert.equal(before.doc,initial.markdown);
+   if(pasteMode){
+     const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7xkAAAAASUVORK5CYII=';
+     const path='media/'+createHash('sha256').update(Buffer.from(png,'base64')).digest('hex').slice(0,24)+'.png',ref='![]('+path+')';
+     const grid=page.locator('#workspace .ocr-outline-grid'),picker=page.locator('#workspace .ocr-ag-module-select');
+     const select=(from,to=from)=>source.evaluate((el,{from,to})=>{const v=el.v2SourcePort.getEditorView();v.dispatch({selection:{anchor:from,head:to},scrollIntoView:true});v.focus();},{from,to});
+     const paste=()=>source.evaluate((el,png)=>{
+       const data=new DataTransfer();data.items.add(new File([Uint8Array.from(atob(png),c=>c.charCodeAt(0))],'paste.png',{type:'image/png'}));
+       return !el.querySelector('.cm-content').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:data}));
+     },png);
+     const saved=async(expected,count)=>{
+       await page.waitForFunction(expected=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===expected,expected,{timeout:10000});
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+       const now=await snapshot();assert(now.complete);assert.equal(now.doc,expected);
+       assert.equal(api(folder,'markdown','GET').body.markdown,expected);assert.equal(writes.length,count);
+       assert.deepEqual(now.rows.map(r=>[r.logicalId,r.p,r.b,r.s]),before.rows.map(r=>[r.logicalId,r.p,r.b,r.s]));
+       return now;
+     };
+     // Place on a real blank line of the first logical block: no syntax wrapper.
+     const at=before.intervals[0].to-1;
+     const expected=before.doc.slice(0,at)+ref+'\n'+before.doc.slice(at);
+     await select(at);assert(await paste());
+     const after=await saved(expected,1);console.log('WP31_STAGE',name,'paste SQL CAS');
+     assert.deepEqual(after.rows.slice(1),before.rows.slice(1));
+     await picker.selectOption('media');
+     const adopted=()=>grid.evaluate((el,path)=>el.v2BaseGridPort.getDisplayedRows().find(r=>r.url===path)?.adopted,path);
+     await page.waitForFunction(path=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().some(r=>r.url===path&&r.adopted==='已采用'),path,{timeout:15000});
+     const previewMode=page.locator('#workspace .ocr-preview-pane select.ocr-preview-mode');
+     if(await previewMode.inputValue({timeout:10000})!=='md')await previewMode.selectOption('md',{timeout:10000});
+     try{await page.waitForFunction(path=>[...document.querySelectorAll('#workspace .ocr-preview-md-scroll img')].some(i=>i.src.includes(encodeURIComponent(path))&&i.complete&&i.naturalWidth>0),path,{timeout:20000});}catch(error){console.error('WP31_PREVIEW_DIAGNOSTIC',name,await page.evaluate(()=>({mode:document.querySelector('.ocr-preview-mode')?.value,imgs:[...document.querySelectorAll('#workspace .ocr-preview-md-scroll img')].slice(0,8).map(i=>[i.src,i.complete,i.naturalWidth]),status:document.querySelector('#status')?.textContent})));throw error;}
+     await source.evaluate(el=>el.v2SourcePort.undo());await saved(before.doc,2);
+     await page.waitForFunction(path=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().some(r=>r.url===path&&r.adopted==='未引用'),path,{timeout:15000});
+     await source.evaluate(el=>el.v2SourcePort.redo());await saved(expected,3);assert.equal(await adopted(),'已采用');
+     console.log('WP31_STAGE',name,'preview media undo redo');pasteReopening=true;await loadPage();await saved(expected,3);console.log('WP31_STAGE',name,'reopen');
+     // Replacing exact existing image is a no-op and must deduplicate bytes.
+     await select(at,at+ref.length);assert(await paste());
+     await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('图片引用已存在'),null,{timeout:15000});
+     assert.equal(pasteCalls,2);await saved(expected,3);
+     assert.equal(api(folder,'media-inventory','GET').body.files.length,1);
+     // Cross-block replacement is rejected before transport.
+     const boundary=after.intervals[0].to;
+     await select(boundary-1,boundary+1);assert(await paste());assert.equal(pasteCalls,2);
+     await saved(expected,3);
+     denyPaste=true;await select(at);assert(await paste());
+     await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('粘贴图片失败'),null,{timeout:15000});denyPaste=false;
+     await saved(expected,3);
+     // Async upload must not redirect after intervening text edit.
+     delayPaste=true;await select(at);assert(await paste());
+     await source.evaluate(el=>{const v=el.v2SourcePort.getEditorView(),p=v.state.selection.main.head;v.dispatch({changes:{from:p,insert:'X'}});});
+     await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('文档已改变'),null,{timeout:10000});
+     await saved(expected.slice(0,at)+'X'+expected.slice(at),4);assert.deepEqual(errors,[]);
+     console.log('WP31_PASTE_PASS',name,'image bytes, original selection, preview, media adoption, undo/redo, CAS/reopen, duplicate, cross-block, unauthorized, stale upload');
+     continue;
+   }
    if(quoteMode){
      const open=async(first,last,reverse=false,endAtNext=false)=>{
        await source.evaluate((el,{first,last,reverse,endAtNext})=>{

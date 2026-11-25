@@ -20,6 +20,7 @@ import {createMdLineIndex} from './v2-md-line-index.js';
 import {planMdLineEdit} from './v2-md-line-edit.js';
 import {captureLineSelection,quoteLineChanges} from './v2-line-quote.js';
 import {singleLineMD} from './v2-single-line.js';
+import {uploadV2PastedImage} from './v2-media-paste.js';
 // Byte-identical V1 Frame source gutter, adapted only via callbacks.
 import {createMdLineGutter} from './v2-md-line-gutter.js';
 import './v2-source-session.css';
@@ -166,8 +167,43 @@ export function mountV2Source(host){
   // V1 Frame replaces only the stock first line-number extension.
   // Preserve CM6's remaining setup, native iPad selection and history.
   const base=native?nativeIOSBasicSetup:basicSetup;
+  const pasteStatus=(text,kind='info')=>document.dispatchEvent(new CustomEvent('v2-cm-status',{detail:{text,kind}}));
   const extensions=[
     lineGutter.extension,...base.slice(1),
+    EditorView.domEventHandlers({paste(event,view){
+      const item=[...(event.clipboardData?.items||[])].find(x=>x.kind==='file'&&x.type.startsWith('image/'));
+      if(!item)return false; // text remains native CM6
+      event.preventDefault();
+      if(!loaded||!ownedLF){pasteStatus('粘贴图片需要已加载的真实 LF 正文','warning');return true;}
+      const file=item.getAsFile();
+      const snapshot=view.state.doc,structure=view.state.field(structureField),workspace=book;
+      const {from,to}=view.state.selection.main;
+      // A file must never be uploaded for an invalid cross-block edit.
+      const template={from,to,insert:'![](media/'+'0'.repeat(24)+'.png)'};
+      if(!planMdLineEdit(snapshot,structure,ChangeSet.of([template],snapshot.length))){
+        pasteStatus('图片粘贴位置跨越受保护逻辑块','warning');return true;
+      }
+      void (async()=>{
+        try{
+          pasteStatus('正在将剪贴板图片写入 media/');
+          const path=await uploadV2PastedImage(workspace,file);
+          document.dispatchEvent(new CustomEvent('v2-media-pasted',{detail:{workspace}}));
+          if(!loaded||book!==workspace||view.state.doc!==snapshot||view.state.field(structureField)!==structure)
+            throw Error('图片上传期间文档已改变，请重新选择位置粘贴');
+          const insert='![]('+path+')',change={from,to,insert};
+          const changes=ChangeSet.of([change],snapshot.length);
+          const plan=planMdLineEdit(snapshot,structure,changes);
+          if(!plan)throw Error('图片粘贴位置不再有效');
+          if(plan.source===snapshot.toString()){pasteStatus('图片引用已存在','ok');return;}
+          document.querySelector('#workspace .ocr-preview-md-scroll')?.v2MarkdownPreviewPort?.beforeSourceEdit?.();
+          view.dispatch({changes,effects:view.scrollSnapshot().map(changes),selection:{anchor:from+insert.length},
+            annotations:[Transaction.userEvent.of('input.paste'),isolateHistory.of('full')]});
+          if(view.state.doc.toString()!==plan.source)throw Error('图片引用未通过 CM6 事务门禁');
+          pasteStatus('已插入图片引用 · 等待 SQL 增量保存','ok');
+        }catch(error){pasteStatus('粘贴图片失败：'+error.message,'error');}
+      })();
+      return true;
+    }}),
     // The native CM6 document is editable. Every textual transaction owns a
     // single logical block (or several independent changes, one each); cross-
     // block deletion/replacement remains forbidden to protect stable IDs.
