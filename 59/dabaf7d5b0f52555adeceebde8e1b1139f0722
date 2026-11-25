@@ -13,3 +13,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"59dabaf7d5b0f52555adeceebde8e1b1139f0722","event":"RUN_EXIT","utc":"2026-11-25T08:01:12.472097+00:00","phase":"WP30B 首轮预期值夹具未读取ParentID，改用公共getStructureRows复测","step":"c7c6686c0c2c4215ba5e7a5411f9dff3","exit_code":0}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"59dabaf7d5b0f52555adeceebde8e1b1139f0722","event":"RUN_START","utc":"2026-11-25T08:01:45.510860+00:00","phase":"WP30B 正式构建发布及线上核验","step":"25326680a5714f8dbbe84e16b30fc61e"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2ff7a1dfaa4e4d02995dcfec71d65bcc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"59dabaf7d5b0f52555adeceebde8e1b1139f0722","event":"RUN_EXIT","utc":"2026-11-25T08:04:34.653357+00:00","phase":"WP30B 正式构建发布及线上核验","step":"25326680a5714f8dbbe84e16b30fc61e","exit_code":0}
