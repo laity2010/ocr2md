@@ -7,3 +7,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"2353836f9c964cc0941f991ae54169d5","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2353836f9c964cc0941f991ae54169d5","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"7d12c30a59f139af8c11f6b16e5515fb899add9c","event":"RUN_START","utc":"2026-11-25T09:46:46.626585+00:00","phase":"build-browser-publish","step":"0e5729c9225548bda21abd1bde7943e6"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2353836f9c964cc0941f991ae54169d5","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"7d12c30a59f139af8c11f6b16e5515fb899add9c","event":"RUN_EXIT","utc":"2026-11-25T09:47:03.251330+00:00","phase":"build-browser-publish","step":"0e5729c9225548bda21abd1bde7943e6","exit_code":1}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2353836f9c964cc0941f991ae54169d5","branch":"refs/heads/experiment/lab-ocr-v3","baseline":"7d12c30a59f139af8c11f6b16e5515fb899add9c","event":"END","utc":"2026-11-25T09:54:12.268380+00:00","result":"FAIL","commit":"7d12c30a59f139af8c11f6b16e5515fb899add9c","evidence":"用户批准回退重来：WP04 (bf2a655) 因 CM6 transactionFilter 内同步 dispatch 导致浏览器 RangeError 失败，证据已保全至 evidence/wp04-bf2a655，工作树与分支恢复至 WP03 (7d12c30)。","release":"NONE","remote_ref":""}
