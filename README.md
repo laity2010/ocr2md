@@ -166,6 +166,7 @@
 - 新增 F02 已授权工作目录下的 media-inventory/status/chunk/file API，沿用 V1 512 KiB 分块、partial 文件、校验及安全路径策略，仅下载明确允许的 MinerU CDN，不允许任意 URL 或路径；状态读取不主动建立媒体目录。无新增 SQL 表或第二正文。实际下载仅在隔离 loopback 夹具验证；真实 CDN、用户原书及 iPad 实机未执行。详见 WP29（Git `4d81b21`）。
 
 ### 3.2e 表格 View（WP30）
+- 功能 → 组织源码：选中当前表格组任一行，以父 ID 收集组内标题/正文/注释，标题及注释加一级引用，正文首行之前插入 `><!-- image -->`、`>>[! ds-html]- HTML Table`，HTML 行加二级引用。无标题允许直接从占位开始；多正文、顺序不明、非完整 HTML 或已有非目标引用拒绝，不猜测改写。已组织格式重复执行无变化。使用同一 MD Line 快照及 replaceMdLines 的显式 allowMultiline 选项，一次 CM6 历史事务，新增行仍属原正文块，空白父块及组尾 LF 保留。原 Type/PBS/逻辑身份和其他块不变。
 - 复用 V1 `projectTableBlockRows`；列序：源码行号、PBS、Type、MD Line、摘要、PDF 页（0起）、BlockID、ParentID、已合并至 BlockID、Block BBox。行号与 PBS 固定左侧（保留 PBS 数值升序），MD Line 直接显示同一块第一条非空的当前 CM6 源码行，空白块留空；原摘要列保留；默认全部、58px 行高、原生 AG 多选筛选。每个逻辑 `table*` 块及其所有直接逻辑子块各一行（依据稳定 logical_id / parent_id，保留原 Type，包括 text、空白父块与空白注释块），不按 HTML 内容猜测类型。V1 投影函数在 V2 本地适配中增加可选收录谓词，默认仍保持原 V1 Type 规则。
 - V2 由当前逻辑行、公共 MD Line 与已有 PDF covers 只读派生。BlockID 是稳定 logical_id，摘要优先原始 Raw Block，源码行是同一块第一条非空物理 MD Line；空白块不借用子块行，直接定位 PDF。物理 PDF 页/BBox 与逻辑 PBS p 分别独立；无证据留空。V2 无 V1 历史吸收字段，合并目标列保留空值，不新增持久化字段。
 - 只读审阅，不新增 SQLite 表、不改正文或原书；有源码行时走既有四窗定位，空白块只选原 PDF/AG，不移动源码窗或 Markdown 预览。

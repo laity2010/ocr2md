@@ -294,6 +294,47 @@ try{
      assert.equal(api(folder,'markdown','GET').body.markdown,before.doc);
      assert.deepEqual(errors,[]);
      console.log('WP30_REAL_TABLE_VIEW_PASS',name,'33 blocks incl p7b0s3 text child / 10 PDF-only / requested columns and current MD Line / PBS sort / three source targets / PDF-only / filter scope / no writes');
+     if(process.env.V2_TEST_TABLE_ORGANIZE==='1'){
+       const changed=before.rows.map(r=>r.logicalId===564?{...r,markdownText:'>'+r.markdownText}:r.logicalId===565?{...r,markdownText:'><!-- image -->\n>>[! ds-html]- HTML Table\n>>'+r.markdownText}:r.logicalId===566?{...r,markdownText:'>'+r.markdownText}:r);
+       const target=changed.map(r=>r.markdownText).join('');
+       const saved=async(expected,count)=>{
+         await page.waitForFunction(v=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===v,expected,{timeout:10000});
+         await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:20000});
+         const now=await snapshot();assert(now.complete);assert.equal(now.doc,expected);
+         assert.equal(api(folder,'markdown','GET').body.markdown,expected);assert.equal(writes.length,count);
+         return now;
+       };
+       const organize=async()=>{
+         await clickRow((await rows()).find(r=>r.pbs==='p8b0s2'));
+         await page.locator('.ocr-ag-function-select').click();
+         await page.getByRole('menuitem',{name:'组织源码'}).click();
+       };
+       await organize();
+       assert.deepEqual((await saved(target,1)).rows,changed);
+       assert.equal(writes[0].op,"md-commit");assert.equal(writes[0].payload.changes.length,3);
+       const callout=page.locator('.ocr-preview-md-scroll details[data-callout="ds-html"]');
+       await callout.waitFor({state:'attached',timeout:15000});
+       assert.equal(await callout.count(),1);
+       assert.equal(await callout.locator('summary').textContent(),'HTML Table');
+       assert.equal(await callout.getAttribute('open'),null);
+       const previewMode=page.locator('#workspace .ocr-preview-pane select.ocr-preview-mode');
+       if(await previewMode.inputValue()!=='md')await previewMode.selectOption('md');
+       const summary=callout.locator('summary');
+       console.log('WP30C_PREVIEW_VISIBILITY',name,JSON.stringify(await summary.evaluate(el=>{
+         const chain=[];for(let n=el;n;n=n.parentElement){
+           const s=getComputedStyle(n),r=n.getBoundingClientRect();
+           chain.push({tag:n.tagName,cls:n.className,mode:n.dataset.previewMode??null,open:n instanceof HTMLDetailsElement?n.open:null,display:s.display,visibility:s.visibility,w:r.width,h:r.height});
+         }return chain;
+       })));
+       await summary.click({timeout:10000});
+       assert(await callout.locator('table').isVisible());
+       await organize();await saved(target,1);
+       await source.evaluate(el=>el.v2SourcePort.undo());assert.deepEqual((await saved(before.doc,2)).rows,before.rows);
+       await source.evaluate(el=>el.v2SourcePort.redo());assert.deepEqual((await saved(target,3)).rows,changed);
+       await loadPage();assert.deepEqual((await saved(target,3)).rows,changed);
+       assert.deepEqual(errors,[]);
+       console.log('WP30C_TABLE_ORGANIZE_BROWSER_PASS',name,'exact source / 3 stable owners / callout / idempotence / undo redo reopen');
+     }
      continue;
    }
    if(realMediaBook){

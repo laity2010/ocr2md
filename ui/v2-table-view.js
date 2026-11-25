@@ -65,3 +65,54 @@ export function resolveV2TableLine(index,row){
   const first=index?.forBlock(row?.logical_id).find(l=>l.md_line.trim()!=='')??null;
   return first&&first.source_line===row.line_no&&first.pbs===row.pbs?first:null;
 }
+
+
+// Plan an atomic, owner-preserving edit against the current public MD Line
+// snapshot. Existing content stays with its original logical ID.
+const IMAGE_LINE='><!-- image -->';
+const HTML_CALLOUT='>>[! ds-html]- HTML Table';
+export function planV2TableOrganization(index,logicalRows,selectedId){
+  if(!index||!Array.isArray(logicalRows))throw Error('表格组织需要当前 MD Line');
+  const selected=logicalRows.find(r=>r.logical_id===selectedId);
+  const root=selected?.parent_id==null?selected:logicalRows.find(r=>r.logical_id===selected.parent_id);
+  if(!root||root.block_type!=='table')throw Error('请选择一个表格组');
+  const group=logicalRows.filter(r=>r.logical_id===root.logical_id||r.parent_id===root.logical_id);
+  const bodies=group.filter(r=>r.block_type==='table_body');
+  const captions=group.filter(r=>r.block_type==='table_caption');
+  if(bodies.length!==1||captions.length>1)throw Error('表格组存在多个正文或标题，请先核对结构');
+  const body=bodies[0],caption=captions[0];
+  const parts=group.map(row=>({row,lines:index.forBlock(row.logical_id)}));
+  if(parts.some(p=>!p.lines.length))throw Error('表格组缺少真实 MD Line');
+  const lines=parts.flatMap(p=>p.lines);
+  if(lines.some((l,i)=>i&&l.source_line!==lines[i-1].source_line+1))
+    throw Error('表格组不连续，请先核对父子块顺序');
+  const nonempty=parts.flatMap(p=>p.lines.filter(l=>l.md_line.trim()!=='').map(line=>({row:p.row,line})));
+  const bodyLines=nonempty.filter(x=>x.row===body).map(x=>x.line);
+  if(!bodyLines.length)throw Error('表格没有 HTML 正文');
+  const firstBody=nonempty.findIndex(x=>x.row===body);
+  if(nonempty.some((x,i)=>x.row===root||x.row===caption&&i>=firstBody||x.row!==caption&&x.row!==body&&i<firstBody))
+    throw Error('表格标题、正文与注释顺序不明确，请先审阅结构');
+  // Exact generated format is idempotent. Never strip arbitrary user quotes
+  // or overwrite a partially organized group.
+  const organized=bodyLines[0].md_line===IMAGE_LINE&&bodyLines[1]?.md_line===HTML_CALLOUT;
+  const rawBody=(organized?bodyLines.slice(2).map(l=>l.md_line.slice(2)):bodyLines.map(l=>l.md_line)).join('\n');
+  if(!/^\s*<table(?:\s|>)/i.test(rawBody)||!/<\/table>\s*$/i.test(rawBody))
+    throw Error('表格正文不是完整 HTML table，未改写');
+  if(organized){
+    if(bodyLines.slice(2).every(l=>l.md_line.startsWith('>>'))&&
+      nonempty.filter(x=>x.row!==body).every(x=>/^>(?!>)/.test(x.line.md_line)))return [];
+    throw Error('表格已部分组织，请先核对源码');
+  }
+  if(nonempty.some(x=>/^\s*>/.test(x.line.md_line)))throw Error('表格已有引用格式，请先核对源码，未重复改写');
+  const from=nonempty[0].line.source_line,to=nonempty.at(-1).line.source_line;
+  const updates=[];
+  for(const part of parts){
+    for(const line of part.lines){
+      if(line.source_line<from||line.source_line>to)continue;
+      const prefix=part.row===body?'>>':'>';
+      const afterText=(line===bodyLines[0]?IMAGE_LINE+'\n'+HTML_CALLOUT+'\n':'')+prefix+line.md_line;
+      updates.push({ref:index.makeRef(line.source_line),beforeText:line.md_line,afterText});
+    }
+  }
+  return updates;
+}

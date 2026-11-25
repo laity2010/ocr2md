@@ -25,7 +25,7 @@ import {createLabOcrMediaView} from './lab-ocr/media-view.js';
 import {mediaContext,mediaColumns,planMediaEdits,planBareMediaNormalization,resolveMediaRow} from './v2-media.js';
 import './lab-ocr/media-view.css';
 import {planV2InlineMath} from './v2-inline-math.js';
-import {projectV2TableRows,resolveV2TableLine,TABLE_COLUMNS} from './v2-table-view.js';
+import {projectV2TableRows,resolveV2TableLine,TABLE_COLUMNS,planV2TableOrganization} from './v2-table-view.js';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
 import {EnumCheckboxFilter} from './enum-checkbox-filter.js';
 import './ag-enum-filter-shared.css';
@@ -194,6 +194,16 @@ function setMediaActive(value){
   mediaActive=true;controller.setActive(true);
   queueMicrotask(()=>{if(mediaController===controller&&mediaActive)
     void controller.scan().catch(error=>report('媒体清单刷新失败：'+error.message,'warning'));});
+}
+function organizeTableMarkdown(){
+ const p=sourceForNotes(),port=$('#workspace .ocr-outline-grid')?.v2BaseGridPort;
+ if(agView!=='table'||!p?.getState().loaded||p.getWorkspace()!==bound||!logicalState||rebuilding||saveBlocked)
+   throw Error('表格 View 或保存状态已变化');
+ const id=lastFocus?.logicalId;
+ if(!port?.getDisplayedRows().some(r=>r.logical_id===id))throw Error('请先选中表格 View 中的一行');
+ const plan=planV2TableOrganization(p.getMdLineIndex(),logicalState.rows,id);
+ if(plan.length)p.replaceMdLines(plan,{allowMultiline:true});
+ report(plan.length?'✓ 表格源码已组织 · 可撤销':'表格源码已是目标格式','ok');
 }
 function normalizeMediaMarkdown(){
  const p=sourceForNotes();
@@ -764,9 +774,9 @@ function renderGrid(state){
       noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
       port.setFilterModel(null);renderGrid(logicalState);
       report('注释格式已应用并重新识别 · 仅当前会话','ok');
-    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),onNormalizeMedia:normalizeMediaMarkdown,
+    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),onNormalizeMedia:normalizeMediaMarkdown,onOrganizeTable:organizeTableMarkdown,
   });
-  noteToolbar?.setVisible(noteView||latexView||mediaView,mediaView?'media':latexView?'latex':'note-match');
+  noteToolbar?.setVisible(noteView||latexView||mediaView||tableView,tableView?'table':mediaView?'media':latexView?'latex':'note-match');
   let view=null;
   if(controls){
     controls.label.hidden=!logical;

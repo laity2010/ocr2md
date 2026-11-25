@@ -484,14 +484,15 @@ export function mountV2Source(host){
   };
   // Public line-edit command for business views. The immutable reference
   // and exact preimage are validated against the SAME current CM6 state.
-  const replaceMdLines=updates=>{
+  const replaceMdLines=(updates,{allowMultiline=false}={})=>{
     if(!loaded||!ownedLF||!Array.isArray(updates)||!updates.length)
       throw Error('MD Line 替换需要已加载的真实 LF 正文');
     const idx=getMdLineIndex(),seen=new Set(),changes=[];
     for(const u of updates){
       const line=idx.resolve(u?.ref);
       if(!line||seen.has(line.source_line)||typeof u.beforeText!=='string'||
-         typeof u.afterText!=='string'||/[\r\n]/.test(u.afterText)||
+         typeof u.afterText!=='string'||/\r/.test(u.afterText)||
+         (u.afterText.includes('\n')&&(!allowMultiline||!line.md_line||u.afterText.endsWith('\n')))||
          line.md_line!==u.beforeText||u.beforeText===u.afterText)
         throw Error('MD Line 替换证据已过期或包含非法改写');
       seen.add(line.source_line);
