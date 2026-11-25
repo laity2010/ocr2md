@@ -1,0 +1,44 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：4caf8bebd4cd5b9c8c722bf24838ee68c282306b
+原提交标题：fix(v2): synchronize PDF dashed overlays with live MD Block text
+父提交：3b3b3c504cb9b7c40cef3c58d5317aee97b3bf1d
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP16_PDF_EMPTY_STATE_SYNC.md
+M	labs/lab-ocr-v2/vite.config.mjs
+A	tests/v2-pdf-empty-state.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+M	ui/v2-pdf-evidence-adapter.js
+M	ui/v2-pdf-viewer.css
+M	ui/v2-pdf-viewer.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP16_PDF_EMPTY_STATE_SYNC.md
+来源提交：4caf8bebd4cd5b9c8c722bf24838ee68c282306b
+SHA256：48b2b7c01054f1a6622a5088e926fcb03f01b0d7b0b1cf8d4247ce30997daac3
+--- BEGIN ORIGINAL ---
+# WP16 · PDF 覆盖框的虚线状态跟随当前 MD Block
+
+## 根因和症状
+
+V2 SQL `project_pdf()` 将 PDF 映射响应 `covers[].empty` 取自**加载时**的 `logical_block.md_block` 是否为空。`v2-pdf-evidence-adapter.js` 把它投影为 V1 PDF 的 `sourceEmpty`，V1 CSS 对 `[data-source-empty=true]` 绘制虚线。WP15 在 CM6 中按原始 preproc 精准恢复正文后，PDF 不会因 `edit`/Undo/Redo 自动刷新这个加载时标记，因此会出现“当前 CM6 中有 `<table>` HTML，PDF 标签/框仍是虚线”的反例。V1 `sourceEmpty` 原本用于 OCR 来源标签，但 V2 后端实际上把它填成加载时的 `md_block` 快照，并不是可靠的原始 OCR 证据；真正的 MinerU 原件仍由只读基础表保存。
+
+## 修复的唯一权威
+
+- **唯一可写正文是 CM6 对应的 MD Block**。在 V2 PDF 适配器中读取当前 `getBlocks()`，经纯函数 `emptyLogicalIds(rows)` 计算真正空白的 `logicalId`，调用 **V1 现有公共 API** `setEmptyMdBlocks(ids)`；初次 PDF load 和 CM6 的 `load/edit/structure/saved` 都执行同步，适应人工编辑、跨页恢复、撤销/重做和 PBS 拖动。
+- 容器 s0 无自身 span 正常；同 `(p,b)` 的任何 s1+ 非空时，s0 只是无独立文本的外框，不属于“逻辑内容为空”的虚线框。空白的其他子块仍虚线。
+- `sourceEmpty` 旧 PDF-map 快照原样保留，不动 V1；V2 只为 `[data-source-empty=true][data-md-empty=false]` 补充实线样式，并继续使用 V1 现有 PBS 标签、图层和选中高亮逻辑。原始 bbox、原始 PDF、SQLite、MinerU JSON、PBS、表格修复结果都不改变。
+- 只读诊断可检查 PDF tag/box 的 `data-source-empty`（加载时的旧标记）与 `data-md-empty`（当前正文）。当 `sourceEmpty=true`、`mdEmpty=false` 时，**必须呈现实线**。无法获取当前 CM6 正文时，不凭空宣称已经恢复；旧库仍须按 WP15 明确使用 SQL 组的“恢复跨页表格正文（不重建）”。
+
+## 回归门禁
+
+- `node tests/v2-pdf-empty-state.test.mjs`：空表子块、恢复表格正文、容器 s0 跟随子块、Undo 回空、ID 不变、来源 PDF bbox 不变。
+- `node tests/v2-real-markdown-preview.browser.test.mjs`：真正的 267 行/22 页 Berkshire 样本，经 V1 PDF 原生 PBS 标签，验证 p4b0s0 原来源空标记仍为 true、当前 `mdEmpty=false`、标签边框 solid，覆盖框恢复实线；Chromium 与 iPad-WebKit 均需通过，原 PDF 多轨、切分、MD 表格/公式的测试不能被绕开。
+- 按既有统一发布器验收 V1 AG Grid 过滤公共门禁、统一 SHA 和 70 个静态文件，既有用户数据不迁移。
+
+--- END ORIGINAL ---
