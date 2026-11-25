@@ -1,0 +1,6 @@
+/* V1 selection highlight adapted to V2 logical (external) identity. */
+#workspace .ocr-markdown .v2-sync-preview-focus{
+  background:rgba(235,163,82,.12);
+  outline:1px solid rgba(235,163,82,.30);
+  outline-offset:1px;
+}

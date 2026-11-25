@@ -8,7 +8,7 @@ import {findReviewMarkers} from './latex-review-markers.js';
 function escapeHtml(text){
   return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-export function projectReviewedInlineLatex(source){
+export function projectReviewedInlineLatex(source,{nativeInlineMath=false}={}){
   let prefix='OCR2MDREVIEWEDINLINEKATEX';
   while(source.includes(prefix))prefix+='Z';
   const fragments=[],replacements=[];
@@ -16,7 +16,9 @@ export function projectReviewedInlineLatex(source){
   const formulas=findLatex(source);
   findReviewMarkers(source,formulas,annotations);
   for(const formula of formulas){
-    if(formula.kind!=='行内'||formula.status!=='latex')continue;
+    if(formula.kind!=='行内'||!(formula.status==='latex'||
+      (nativeInlineMath&&formula.status==='待复核'&&
+       formula.reviewMarker===null&&formula.syntax==='$')))continue;
     const token=prefix+fragments.length+'END';
     const latex=formula.content;
     let html;

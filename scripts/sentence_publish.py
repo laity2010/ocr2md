@@ -10,6 +10,6 @@ base.CARD='''      <article id="lab-sentence"><div class="kind">Sentence Lab</di
 '''
 if __name__=="__main__":
     root=base.ROOT.parent.parent
-    subprocess.run([sys.executable,str(root/"main/scripts/verify_cross_version_components.py"),"--target",base.NAME],check=True)
+    subprocess.run([sys.executable,str(root/"main/scripts/verify_cross_version_components.py"),"--target",base.NAME,"--browser"],check=True)
     base.require_workspace_io_runtime()
     base.publish(root/"release")

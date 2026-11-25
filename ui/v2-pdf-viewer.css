@@ -1,0 +1,32 @@
+/* Only fit the copied V1 Lab-OCR PDF surface inside original Frame hosts.
+ * All PBS geometry, dynamic multi-lanes, SVG leaders, family highlights,
+ * text overlays, drag controls and other styling stay in V1 pdf-viewer.css.
+ */
+#workspace .ocr-preview-pdf-host.lab-ocr-pdf-surface{
+  width:100%;height:100%;min-width:0;min-height:0;
+}
+#workspace .ocr-detached-pdf-tools>.lab-ocr-pdf-controls{
+  position:static;min-width:0;
+}
+
+/* WP16: V2 sourceEmpty is a cached map snapshot; a recovered
+ * logical MD Block is no longer visually empty. V1 setEmptyMdBlocks() owns
+ * the live data-md-empty flag, including after CM6 edit/undo/redo. This V2
+ * adapter style never changes V1, the bbox, labels or PDF rendering engine. */
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-md-empty="false"]{
+  border:0;box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #95b989;
+}
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-md-empty="false"][data-child="true"]{
+  box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #79c3a0;
+}
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-md-empty="false"]{
+  border-style:solid;
+}
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-md-empty="false"][data-selected="true"],
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-md-empty="false"][data-family-selected="true"]{
+  outline-style:solid;
+}
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-md-empty="false"][data-selected="true"],
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-md-empty="false"][data-family-selected="true"]{
+  border-style:solid;box-shadow:0 0 0 2px #eec45b;outline:none;
+}

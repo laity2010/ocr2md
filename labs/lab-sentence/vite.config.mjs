@@ -36,9 +36,25 @@ export default defineConfig({
       const source=code.replace(old,"createFrameSettingsIO(localStorage,'lab-sentence'");
       const probe="await frameWorkspaceIO.probe(selected);";
       if(!source.includes(probe))throw Error("Frame F02 signature changed");
-      return "import {createSnapshotSession} from '../sentence/snapshot.js';\n"+source
-        .replace("const build=__FRAME_BUILD_VERSION__;","const sentenceSource=createSnapshotSession({report:topStatus});\nconst build=__FRAME_BUILD_VERSION__;")
-        .replace(probe,probe+"\n    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);");
+      return "import {createSentenceReview} from '../sentence/review.js';\n"+source
+        .replace("let settings=null,loadingSettings=null,currentModule='frame';","let settings=null,loadingSettings=null,currentModule='frame';\nconst sentenceReview=createSentenceReview({report:topStatus,showFrame:()=>showModule('frame')});")
+        .replace("if(!selected){","if(!selected){\n    if(!uncommitted)sentenceReview.clear();")
+        .replace(probe,probe)
+        .replace("(afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':''),'ok');","(afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':''),'ok');\n    if(generation===probeGeneration&&!uncommitted)void sentenceReview.load(selected).catch(error=>topStatus('逻辑表接入失败：'+error.message,'error'));")
+        .replace("}catch(error){\n    if(generation===probeGeneration)topStatus(","}catch(error){\n    if(generation===probeGeneration&&!uncommitted)sentenceReview.clear();\n    if(generation===probeGeneration)topStatus(");
+    }
+    if(id.endsWith("/ui/frame/layout.js")){
+      const exact=(a,b)=>{if(code.split(a).length!==2)throw Error("Sentence Frame contract drift: "+a);code=code.replace(a,b);};
+      exact("import {EditorState} from '@codemirror/state';","import {EditorState} from '@codemirror/state';\nimport {mountSentenceSource} from '../sentence/source.js';\nimport {mountV2PreviewSlot,mountV2DetachedPDF} from '../v2-preview-slot.js';");
+      exact("element.append(body);owned=()=>mountEmptySource(body);","element.append(body);owned=()=>mountSentenceSource(body);");
+      exact("function blankPane(name,onSplit,onModuleChange){","function blankPane(name,onSplit,onModuleChange,pdfSlot){");
+      exact("  let split=false;\n  const dockview=createDockview","  let split=false;\n  const pdfSlot={preview:null,detached:null,current:null};\n  const dockview=createDockview");
+      exact("blankPane(name,setSplit,onModuleChange)","blankPane(name,setSplit,onModuleChange,pdfSlot)");
+      exact('<option value="pdf" disabled>PDF 原文</option>','<option value="pdf">PDF 原文</option>');
+      exact("element.append(area);\n    element.setAttribute('aria-label','Markdown 预览（空白）');","const pdfTools=document.createElement('div');pdfTools.className='ocr-preview-mode-tools';pdfTools.dataset.mode='pdf';pdfTools.hidden=true;bar.append(pdfTools);\nconst pdfSurface=document.createElement('div');pdfSurface.className='ocr-preview-pdf-host';pdfSurface.dataset.pdfTheme='dark';\nelement.append(area,pdfSurface);owned=()=>mountV2PreviewSlot({pane:element,mdScroller:area,modeSelect:mode,pdfSurface,pdfTools,pdfSlot});\nelement.setAttribute('aria-label','Markdown / PDF 预览');");
+      exact("host.append(surface);element.append(host);","host.append(surface);element.append(host);owned=()=>mountV2DetachedPDF({surface,actions,pdfSlot});");
+      exact("return {dispose(){grid.destroy();},layout:()=>{}};","grid.setGridOption('rowSelection',{mode:'singleRow',checkboxes:false,enableClickSelection:false});host.sentenceGridPort=Object.freeze({setColumns:columns=>grid.setGridOption('columnDefs',columns),setRows:rows=>grid.setGridOption('rowData',rows),getColumns:()=>grid.getColumnDefs(),getDisplayedRows:()=>Array.from({length:grid.getDisplayedRowCount()},(_,i)=>grid.getDisplayedRowAtIndex(i).data),onRowClicked:fn=>grid.addEventListener('rowClicked',fn),focusRow:id=>{let target=null;grid.forEachNode(node=>{if(node.data?.logical_id===id)target=node;});if(!target){grid.deselectAll();return false;}target.setSelected(true,true);if(target.rowIndex!=null)grid.ensureIndexVisible(target.rowIndex,'auto');return true;}});return {dispose(){delete host.sentenceGridPort;grid.destroy();},layout:()=>{}};");
+      return code;
     }
     if(id.endsWith("/ui/frame/refresh.js")){
       const old="remote?.name==='lab-frame'";

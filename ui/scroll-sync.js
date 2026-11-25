@@ -12,14 +12,14 @@ const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const lerp=(a,b,t)=>a+(b-a)*clamp(t,0,1);
 const leadingOffset=24;
 
-export function createScrollSync(getEditor, previewPane, previewBody) {
+export function createScrollSync(getEditor, previewPane, previewBody,{preserveExplicitAnchor=false}={}) {
   let anchors=[];
   let measuredRevision=-1;
   let lastDriver='cm6';
   let disposed=false;
   let measureFrame=0, sourceFrame=0, previewFrame=0;
   let sourceCorrectionFrame=0, sourceCorrectionTries=0, desiredSource=null;
-  let explicitNavigation=false;
+  let explicitNavigation=false,explicitPreviewPosition=null;
   let sourceMenuEdit=false;
   // Programmatically moved followers generate 'scroll' events too.
   // Ignore exactly that movement, but allow immediate real user input.
@@ -66,11 +66,12 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
       measure();
       // A new image height or Dockview width changes the visual positions.
       // Keep the driver pane still; only adjust the follower.
-      if(viewStore.getState().scrollSyncEnabled && anchors.length) {
+      if(anchors.length&&(viewStore.getState().scrollSyncEnabled||explicitPreviewPosition&&preserveExplicitAnchor)) {
         // PDF and AG explicit location events are source-document driven.
         // Only an actual Markdown preview scroll may drive the CM6 follower;
         // treating 'pdf' as 'preview' pulls everyone back to stale MD text.
-        if(lastDriver==='preview')moveSource(readPreview());
+        if(explicitPreviewPosition&&preserveExplicitAnchor)movePreview(explicitPreviewPosition,true);
+        else if(lastDriver==='preview')moveSource(readPreview());
         else movePreview(readSource());
       }
     });
@@ -263,6 +264,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     });
   }
   function sourceUserInput() {
+    explicitPreviewPosition=null;
     if(viewStore.getState().scrollSyncEnabled) lastDriver='cm6';
     suppressSourceUntil=0; ignoredSource=null; desiredSource=null;
     explicitNavigation=false;
@@ -270,7 +272,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     sourceCorrectionFrame=0;
   }
   function previewUserInput() {
-    sourceMenuEdit=false;
+    sourceMenuEdit=false;explicitPreviewPosition=null;
     if(viewStore.getState().scrollSyncEnabled) lastDriver='preview';
     suppressPreviewUntil=0; ignoredPreview=null;
     // Stop any stale source correction from a previous navigation gesture.
@@ -296,6 +298,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
       lastDriver='cm6';
       measureLater();
     }
+    if(state.documentRevision!==previous.documentRevision)explicitPreviewPosition=null;
     if(state.scrollTarget!==previous.scrollTarget && state.scrollTarget &&
        state.scrollTarget.revision===state.documentRevision) {
       if(state.scrollTarget.origin==='cm6') movePreview(state.scrollTarget);
@@ -310,6 +313,7 @@ export function createScrollSync(getEditor, previewPane, previewBody) {
     if(target===previous.focusTarget || !target ||
        target.revision!==state.documentRevision)return;
     const position={sourceLine:target.sourceLine,fraction:0};
+    explicitPreviewPosition=preserveExplicitAnchor&&target.origin==='outline'?position:null;
     // A registered review module (LaTeX, Media, future audit plugins) sends
     // the same explicit click-navigation contract as the chapter outline.
     // Consumers use source lines, never import another module's AG or editor.

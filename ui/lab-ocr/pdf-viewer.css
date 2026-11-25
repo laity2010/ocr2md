@@ -1,0 +1,180 @@
+/* Lab OCR PDF viewer: independent PDF.js view with dark chrome. */
+.lab-ocr-pdf-surface,.lab-ocr-pdf-root{background:#1c2429;color:#d3c6aa}
+.lab-ocr-pdf-root{position:absolute;inset:0;overflow:hidden}
+.lab-ocr-pdf-scroller{position:absolute;inset:0;overflow:auto;background:#1c2429}
+/* Reserve real rails outside the PDF paper, not over OCR text. */
+.lab-ocr-pdf-scroller .pdfViewer{padding:8px 88px 16px;min-width:max-content}
+.lab-ocr-pdf-scroller .page{box-shadow:0 2px 12px #05090b90;margin:8px auto!important}
+/* Unlike dark toolbar chrome, this changes the ACTUAL PDF paper pixels.
+ * Same canvas dark-mode principle as Main pdf-preview.css. Scope to Lab OCR
+ * only: PDF.js normally paints a white canvas regardless of host theme.
+ * Muted brightness/contrast avoids pure black paper and dazzling white ink.
+ * The paper fallback must also be dark while pages are still rendering. */
+.lab-ocr-pdf-surface[data-pdf-theme="dark"] .pdfViewer .page{
+  --page-bg-color:#1c2429;
+  background:#1c2429!important;
+  --page-border:1px solid #4b565a;
+}
+.lab-ocr-pdf-surface[data-pdf-theme="dark"] .pdfViewer .page canvas{
+  filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.84);
+}
+.lab-ocr-pdf-placeholder{position:absolute;top:22%;left:8%;right:8%;text-align:center;
+  padding:12px;line-height:1.6;background:#263139;border:1px solid #53615e;
+  border-radius:6px;pointer-events:none;color:#d3c6aa;font-size:12px}
+.lab-ocr-pdf-placeholder[hidden]{display:none!important}
+.lab-ocr-pdf-controls{display:flex;align-items:center;justify-content:flex-start;gap:8px;
+  min-width:0;width:100%;overflow-x:auto;scrollbar-width:thin;white-space:nowrap;color:#d3c6aa;height:29px}
+.lab-ocr-pdf-controls label{display:inline-flex;gap:4px;align-items:center;flex:none}
+.lab-ocr-pdf-controls .lab-ocr-pdf-page{box-sizing:border-box;width:42px;min-width:42px;height:26px;
+  padding:2px 3px;background:#202c32;border:1px solid #596963;color:#d3c6aa;border-radius:3px}
+.lab-ocr-pdf-controls .lab-ocr-pdf-count{font-variant-numeric:tabular-nums;font-size:12px;flex:none}
+.lab-ocr-pdf-controls .lab-ocr-pdf-scale{box-sizing:border-box;flex:0 1 92px;min-width:64px;
+  height:26px;padding:2px 4px;border:1px solid #596963;color:#d3c6aa;
+  background:#202c32;border-radius:4px;font:12px "OCR2MD Sarasa",monospace}
+.lab-ocr-pdf-controls :disabled{opacity:.65}
+/* In single-pane mode the controls share the preview switchbar. */
+.ocr-preview-mode-tools[data-mode="pdf"]{flex:1 1 auto;min-width:0}
+.ocr-preview-mode-tools[data-mode="pdf"] .lab-ocr-pdf-controls{gap:6px}
+.ocr-preview-pane[data-preview-mode="md"]>.ocr-preview-pdf-host{visibility:hidden;pointer-events:none}
+.ocr-preview-pane[data-preview-mode="pdf"]>.ocr-preview-pdf-host{visibility:visible;pointer-events:auto}
+
+/* Read-only geometry, never intercepts PDF text selection or scrolling. */
+.lab-ocr-pdf-scroller .page>.lab-ocr-pdf-overlay-layer{
+  position:absolute;inset:0;z-index:7;pointer-events:none;overflow:hidden;
+  opacity:var(--lab-ocr-pdf-overlay-opacity,.35)}
+.lab-ocr-pdf-overlay-box{position:absolute;box-sizing:border-box;
+  /* CSS borders snap fractional widths to 1 device pixel in WebKit/Chromium.
+     Inset shadow preserves the requested 0.25px increments. */
+  box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #95b989;
+  background:rgba(111,163,119,.12);pointer-events:none}
+.lab-ocr-pdf-overlay-layer[data-level="span"] .lab-ocr-pdf-overlay-box{
+  box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #e0b86a;
+  background:rgba(215,166,80,.10)}
+
+/* Interactive PBS annotations are a separate opaque layer; geometry boxes
+ * remain translucent and pointer-events:none for PDF text selection. */
+.lab-ocr-pdf-scroller .page>.lab-ocr-pdf-pbs-layer{
+  position:absolute;inset:0;z-index:8;pointer-events:none;overflow:visible;
+  font-family:"OCR2MD Sarasa",monospace}
+.lab-ocr-pdf-pbs-leaders{position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;overflow:visible}
+.lab-ocr-pdf-pbs-leaders polyline{fill:none;stroke:#8cb6a3;stroke-width:1;
+  vector-effect:non-scaling-stroke}
+.lab-ocr-pdf-pbs-tag{position:absolute;box-sizing:border-box;width:max-content;max-width:none;height:23px;
+  padding:0 4px;border:1px solid #76a497;border-radius:4px;
+  --pbs-chip-bg:rgba(39,63,60,.94);background:var(--pbs-chip-bg);color:#e4ebd6;
+  text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font:11px "OCR2MD Sarasa",monospace;line-height:20px;cursor:pointer;
+  pointer-events:auto;touch-action:manipulation;z-index:1}
+
+/* Reuse Main ui/pdf-preview.css's exact PBS family palette.
+ * Parent: muted green; child: blue-gray. Both borders and both leaders
+ * are SOLID (do not encode the child type as a missing-text dashed label).
+ * The label is 23px tall and remains width-fitted to its own text. */
+.lab-ocr-pdf-pbs-tag[data-child="true"]{
+  --pbs-chip-bg:rgba(34,56,70,.95);border-color:#8ab5ca;
+  border-style:solid;color:#e4effa}
+/* Global button:hover would otherwise paint either chip #37465c.
+ * Keep Main's original parent/child color even under finger/mouse hover. */
+.lab-ocr-pdf-pbs-tag:hover{background:var(--pbs-chip-bg)}
+.lab-ocr-pdf-pbs-tag{touch-action:none;user-select:none;-webkit-user-select:none}
+.lab-ocr-pdf-pbs-tag.lab-ocr-pdf-drag-source{
+  box-shadow:0 0 0 2px #eec45b,0 0 9px 3px #eec45b9a;z-index:20}
+.lab-ocr-pdf-overlay-box.lab-ocr-pdf-drop-target{
+  /* Drag hover uses the same direct-selection orange as a normal click. */
+  outline:2px solid #ffd46c;outline-offset:1px;background:rgba(231,183,83,.20)}
+.lab-ocr-pdf-drag-arrow{position:fixed;inset:0;width:100vw;height:100vh;
+  z-index:20001;pointer-events:none;overflow:visible}
+.lab-ocr-pdf-drag-arrow path{stroke:#eec45b;stroke-width:2.5;fill:none;stroke-linecap:round}
+.lab-ocr-pdf-drag-arrow circle{fill:#eec45b;stroke:#222b30;stroke-width:1.5}
+.lab-ocr-pdf-drop-guide{position:fixed;display:flex;height:30px;align-items:stretch;
+  z-index:20002;pointer-events:none;border-radius:5px;overflow:hidden;
+  background:#243339;box-shadow:0 2px 8px #000b;border:1px solid #73998a;
+  color:#e4ebd6;font:12px "OCR2MD Sarasa",monospace}
+.lab-ocr-pdf-drop-guide span{display:flex;align-items:center;justify-content:center;
+  min-width:63px;padding:0 7px;white-space:nowrap;border-right:1px solid #47616a}
+.lab-ocr-pdf-drop-guide span:last-child{border-right:0}
+.lab-ocr-pdf-drop-guide span.active{background:#bd9142;color:#171b1a;font-weight:bold}
+.lab-ocr-pdf-pbs-leaders polyline[data-child="true"]{stroke:#8ab5da;stroke-dasharray:none}
+.lab-ocr-pdf-overlay-box[data-child="true"]{
+  box-shadow:inset 0 0 0 var(--lab-ocr-pdf-overlay-border-width,.75px) #79c3a0;
+  background:rgba(105,182,148,.09)}
+/* Directly selected PBS and every recursively highlighted descendant use
+ * the exact same solid, 2px gold outer ring. Keep the Main parent/child
+ * palette, border width and chip geometry unchanged. */
+.lab-ocr-pdf-pbs-tag[data-family-selected="true"],
+.lab-ocr-pdf-pbs-tag[data-selected="true"]{
+  border-width:1px;border-style:solid;line-height:20px;
+  box-shadow:0 0 0 2px #eec45b}
+/* Restore the established orange for PDF block selection. The chosen
+ * Block and every highlighted descendant use SOLID outlines; descendants
+ * stay softer amber. The Main-colored PBS badges/leader rails are separate. */
+.lab-ocr-pdf-overlay-box[data-family-selected="true"]{
+  outline:1.5px solid #e8aa55;outline-offset:1px;background:rgba(231,183,83,.14)}
+.lab-ocr-pdf-overlay-box[data-selected="true"]{
+  outline:2px solid #ffd46c;outline-offset:1px;background:rgba(231,183,83,.20)}
+
+/* Only source-empty MinerU LEAVES get dashed geometry and PBS labels.
+ * The source flag is immutable OCR evidence; no dependence on editable MD or
+ * on whether this block is currently selected. Parent wrappers with children
+ * remain solid even when the wrapper itself has no lines of its own. */
+.lab-ocr-pdf-overlay-box[data-source-empty="true"] {
+  box-shadow:none;
+  border:max(1px,var(--lab-ocr-pdf-overlay-border-width,.75px)) dashed #95b989;
+}
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-child="true"] {
+  border-color:#79c3a0;
+}
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"] {
+  border-style:dashed;
+}
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-selected="true"],
+.lab-ocr-pdf-overlay-box[data-source-empty="true"][data-family-selected="true"] {
+  outline-style:dashed;
+}
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-selected="true"],
+.lab-ocr-pdf-pbs-tag[data-source-empty="true"][data-family-selected="true"] {
+  border-style:dashed;
+  box-shadow:none;
+  outline:2px dashed #eec45b;
+  outline-offset:1px;
+}
+
+/* PDF toolbar: no overlay selector; extraction is enabled only for a
+ * source-backed selected Block. Native disabled state is also touch-safe. */
+.lab-ocr-pdf-controls .lab-ocr-pdf-extract-text {
+  flex:0 0 auto;min-height:27px;padding:2px 9px;
+  border:1px solid #71988c;border-radius:4px;
+  background:#2c493f;color:#e4ebd6;
+  font:12px "OCR2MD Sarasa",monospace;cursor:pointer;
+}
+.lab-ocr-pdf-controls .lab-ocr-pdf-extract-text:disabled {
+  opacity:.4;cursor:default;
+}
+
+/* Selected formula Span, independent of the parent Block overlay and PDF text
+ * layer. Uses source-page percentages, so zoom/pinch remain aligned. */
+.lab-ocr-pdf-scroller .page>.lab-ocr-pdf-formula-focus{
+ position:absolute;z-index:9;box-sizing:border-box;pointer-events:none;
+ border:2px solid #f7bb57;background:rgba(255,173,41,.16);
+ box-shadow:0 0 0 2px rgba(26,31,32,.75),0 0 10px rgba(248,166,38,.35);
+ border-radius:2px;
+}
+
+/* Editable MD's post-merge empty child is NOT the immutable OCR sourceEmpty.
+ * The original PDF bbox and PBS stay mounted; selected also stays dashed. */
+.lab-ocr-pdf-overlay-box[data-md-empty="true"] {
+  box-shadow:none;
+  border:max(1px,var(--lab-ocr-pdf-overlay-border-width,.75px)) dashed #95b989;
+  background:rgba(111,163,119,.055);
+}
+.lab-ocr-pdf-overlay-box[data-md-empty="true"][data-child="true"] {border-color:#79c3a0;}
+.lab-ocr-pdf-pbs-tag[data-md-empty="true"] {border-style:dashed;}
+.lab-ocr-pdf-overlay-box[data-md-empty="true"][data-selected="true"],
+.lab-ocr-pdf-overlay-box[data-md-empty="true"][data-family-selected="true"] {
+  outline-style:dashed;
+}
+.lab-ocr-pdf-pbs-tag[data-md-empty="true"][data-selected="true"],
+.lab-ocr-pdf-pbs-tag[data-md-empty="true"][data-family-selected="true"] {
+  border-style:dashed;box-shadow:none;outline:2px dashed #eec45b;outline-offset:1px;
+}
