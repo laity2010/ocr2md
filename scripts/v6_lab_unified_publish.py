@@ -39,6 +39,9 @@ def validate_source(name,path):
     if src.get('mode')!='lab' or src.get('name')!=name or not re.fullmatch('[0-9a-f]{40}',src.get('baseCommit','')):
         raise ValueError(f'Incorrect Lab build/version identity: {name}')
     repo=path.parent.parent.parent
+    if repo.parent.name == 'labs' and (repo.parent.parent / 'main').is_dir():
+        gate = repo.parent.parent / '.ops/git-gate.py'
+        subprocess.run([sys.executable, str(gate), 'check-release', '--tree', str(repo), '--commit', src['baseCommit']], check=True)
     if not (repo/'.git').exists():
         raise ValueError('Release input must come from a Git worktree')
     if subprocess.run(['git','cat-file','-e',src['baseCommit']+'^{commit}'],cwd=repo,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode!=0:
