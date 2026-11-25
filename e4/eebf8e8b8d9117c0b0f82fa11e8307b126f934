@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"78fd325ad47241f2849f0a01e2ec9d6a","branch":"refs/heads/main","baseline":"e4eebf8e8b8d9117c0b0f82fa11e8307b126f934","event":"START","utc":"2026-11-25T12:34:29.764018+00:00","wp":"FEDERAL-FOUR-STEPS","goal":"用户批准：GIT.md第3节明确构建、测试、Git、发布四步缺一不可；无客观阻塞主动结束属违宪，OPEN只用于恢复；保留失败回退、纯立法NONE和获准隔离例外，不改执法程序、业务代码或各州工作树。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"78fd325ad47241f2849f0a01e2ec9d6a","branch":"refs/heads/main","baseline":"e4eebf8e8b8d9117c0b0f82fa11e8307b126f934","event":"RUN_START","utc":"2026-11-25T12:35:00.943403+00:00","phase":"constitutional-amendment","step":"d04bb84de7c04ab4a4c728e155f08a46"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"78fd325ad47241f2849f0a01e2ec9d6a","branch":"refs/heads/main","baseline":"e4eebf8e8b8d9117c0b0f82fa11e8307b126f934","event":"RUN_EXIT","utc":"2026-11-25T12:35:33.229359+00:00","phase":"constitutional-amendment","step":"d04bb84de7c04ab4a4c728e155f08a46","exit_code":0}
