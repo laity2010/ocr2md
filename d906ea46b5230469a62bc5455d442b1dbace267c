@@ -1,0 +1,20 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：d906ea46b5230469a62bc5455d442b1dbace267c
+原提交标题：test(v2): FAILED WP23 title view prototype, do not release
+父提交：b604609fc8a973b6159fee3b3e092f92b7a0b3ac
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	labs/lab-ocr-v2/vite.config.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+A	tests/v2-title-derived-view.test.mjs
+M	ui/v2-mineru-base.css
+M	ui/v2-mineru-entry.js
+A	ui/v2-title-derived-view.js
+
+已核实问题及后续处理：FAIL：本地失败证据分支 experiment/wp23-title-view-failed-20261124；不得作为正式构建或正常基线。回退点 b604609。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
