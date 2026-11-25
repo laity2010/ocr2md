@@ -3,3 +3,5 @@ WP29G 发布闭环：20261125-114702，SHA 43372e8bb49e6c48cb8a328ce6779b0558589
 FEDERAL_BUILD_EVENT_V1 {"id":"71ea08af20a2421f84be86ebf2c2c2f2","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"43372e8bb49e6c48cb8a328ce6779b05585893e3","event":"START","utc":"2026-11-25T04:03:41.262090+00:00","wp":"FED-ENTRY-lab-ocr-v2","goal":"仅接入联邦构建前登记校验；保留当前业务、界面、数据、产物与全部发布版本。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"71ea08af20a2421f84be86ebf2c2c2f2","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"43372e8bb49e6c48cb8a328ce6779b05585893e3","event":"RUN_START","utc":"2026-11-25T04:06:19.178399+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"3b66778d722541faacecd321acde8314"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"71ea08af20a2421f84be86ebf2c2c2f2","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"43372e8bb49e6c48cb8a328ce6779b05585893e3","event":"RUN_EXIT","utc":"2026-11-25T04:07:50.786755+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"3b66778d722541faacecd321acde8314","exit_code":0}
