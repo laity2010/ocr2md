@@ -1,0 +1,43 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：558c41a59e86ad95da2bdf8d0e057eada167cb28
+原提交标题：fix(v2): WP29C locate and render bare chart image references
+父提交：84836144f8d198bfa371f36e24deb8c25e8284e2
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP29C_BARE_MEDIA.md
+M	tests/v2-media-direct.browser.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/lab-ocr/media-view.js
+M	ui/markdown-preview.js
+A	ui/v2-bare-media.js
+M	ui/v2-markdown-preview.js
+
+已核实问题及后续处理：发布证据：20261125-093949；当轮 Git/线上 SHA 核验通过。真实书籍隔离副本，非物理 iPad 验收。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_ffa9e15f6bf2fbf7 2026-11-25T01:48:51.556113Z: completed=[inspect], current=implement: WP04 65fcc2b 引入 focusRow 每次 grid.setGridOption(rowClassRules)+redrawRows()。基线 558c41a 真实原书隔离副本 Chromium 点击 12/17，rowData/列状态不变但11个行节点与缩略图重建，失败证据已取得。
+任务检查点 tsk_9c4d941f9f14da94 2026-11-25T01:41:17.435312Z: completed=[publish]: 558c41a59e86ad95da2bdf8d0e057eada167cb28 已提交推送，20261125-093949 已发布，公网 HTTP 200 与发布 JSON SHA 一致，布局及七 Lab 哈希核验通过。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP29C_BARE_MEDIA.md
+来源提交：558c41a59e86ad95da2bdf8d0e057eada167cb28
+SHA256：0d551e54e85c74a96298d9cddd55e6f3bf8fadb45ee465a70808cd2094e11991
+--- BEGIN ORIGINAL ---
+# WP29C · 裸图片 URL 定位与渲染
+
+基线：8483614（WP29B）。实机截图中四个已下载图表错误归为未引用文件。只读核对实际 Buffett 样本 SQLite：11 张图片中七张为 Markdown 图片语法，四个 chart_body 是独立裸 CDN URL：111/p4b1s2、116/p5b0s2、252/p12b8s3、258/p13b1s4；对应文件名哈希均匹配。
+
+V2 新增共享裸图片行解析，限已允许的 MinerU HTTPS 图片 URL 或已批准 media/ 本地图片路径；不扫描代码围栏、HTML 注释、正文内的普通链接或四空格缩进。媒体投影仍用原 findLabMedia、公共 MD Line、媒体状态与同一 CM6 原生事务；Markdown-it 仅 V2 启用独立图像 block token，准确保留单行映射，复用 WP29B 本地文件解析。不增加表、改布局或批量改写原文。
+
+验收：使用原书数据库只读 backup 至临时目录并复制 11 个本地图片文件；隔离测试的 PDF.js 使用生成的同页尺寸 PDF 夹具，实际逻辑覆盖框和 PBS 来自原数据库。阻断 CDN，Chromium 与 WebKit 均实际验证全部 11 项的行号、PBS、已下载状态，四张遗漏图的 AG 点击→CM6、PDF 高亮、Markdown 图片自然宽度；批量采用只产生一次 11 块旧值 CAS 保存，原文精确比对、撤销、重做及重开仍保持 11 项定位。原书零写入。Python 媒体 API 测试通过。
+
+失败证据：首轮两套 Vite 测试并行发生页面启动超时及动态模块加载失败；顺序重跑后，真实书籍测试在第二行点击后过早读取选区（111 != 116）。改为点击精确行号并等待实际选区达到目标（10 秒上限），未放宽结果断言。真实书籍双浏览器完整回归最终退出 0。物理 iPad Safari 实机验收待用户执行。
+
+独立控制器夹具显式预优化 Markdown/KaTeX/高亮等依赖后，Chromium/WebKit 均 PASS（退出 0）；新增裸链接扫描、代码/注释排除、准确单行预览映射及默认标准 Markdown 不变的直接断言保留。
+
+--- END ORIGINAL ---
