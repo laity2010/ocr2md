@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"89c6e2a2fe264ac8828b609f3be64835","branch":"refs/heads/experiment/lab-ocr","baseline":"6a8bfe4d78257fd8ca3fc69db4c597c368d86804","event":"START","utc":"2026-11-25T04:03:31.738432+00:00","wp":"FED-ENTRY-lab-ocr","goal":"仅接入联邦构建前登记校验；保留当前业务、界面、数据、产物与全部发布版本。","retrospective":false}
