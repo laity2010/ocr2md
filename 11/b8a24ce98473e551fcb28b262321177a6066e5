@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"d85f0638860c4e019255ab31272e2464","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"d85f0638860c4e019255ab31272e2464","branch":"refs/heads/experiment/lab-frame","baseline":"11b8a24ce98473e551fcb28b262321177a6066e5","event":"RUN_START","utc":"2026-11-25T04:04:49.270625+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"82fbee6a0d464b24a0992268910fea50"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"d85f0638860c4e019255ab31272e2464","branch":"refs/heads/experiment/lab-frame","baseline":"11b8a24ce98473e551fcb28b262321177a6066e5","event":"RUN_EXIT","utc":"2026-11-25T04:06:07.976325+00:00","phase":"联邦构建入口适配及真实Vite配置联动","step":"82fbee6a0d464b24a0992268910fea50","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"d85f0638860c4e019255ab31272e2464","branch":"refs/heads/experiment/lab-frame","baseline":"11b8a24ce98473e551fcb28b262321177a6066e5","event":"END","utc":"2026-11-25T04:09:38.721409+00:00","result":"PASS","commit":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","evidence":"本州实际Vite配置build/serve联动、语法检查和RUN_EXIT=0，独立Commit经共享门禁，普通push远端SHA一致；治理设施变更，无产品发布。","release":"NONE","remote_ref":"refs/heads/experiment/lab-frame"}
