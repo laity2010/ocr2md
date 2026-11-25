@@ -38,6 +38,11 @@ export const V3_SHELL_COLUMNS = Object.freeze([
 
 let agRouter = null;
 let sqlActions = null;
+let verifiedWorkspacePath = '';
+
+function reportV3Status(message, kind = 'info') {
+  document.dispatchEvent(new CustomEvent('v3-status', {detail: {message, kind}}));
+}
 
 function getSourcePort() {
   return document.querySelector('#workspace #editor')?.v3SourcePort || null;
@@ -64,6 +69,7 @@ function ensureSqlActions() {
   if (!sourceToolbar) return null;
   sqlActions = mountV3SqlActions({
     toolbarHost: sourceToolbar,
+    onStatus: reportV3Status,
     onLoaded: async (snapshot, workspace) => {
       const sourcePort = getSourcePort();
       if (sourcePort) {
@@ -78,19 +84,52 @@ function ensureSqlActions() {
   return sqlActions;
 }
 
+function ensureSettingsBridge() {
+  const settingsToolbar = document.querySelector('#settings-workspace .ocr-source-file-toolbar');
+  if (!settingsToolbar || settingsToolbar.querySelector('.ocr-v3-enter-workspace-btn')) return;
+  const enterBtn = document.createElement('button');
+  enterBtn.type = 'button';
+  enterBtn.className = 'ocr-v3-enter-workspace-btn';
+  enterBtn.textContent = '进入 V3 工作台';
+  enterBtn.title = '切换至 V3 工作台并查看/生成 ocr2md.v3.sqlite';
+  enterBtn.style.cssText = 'margin-left:8px;padding:2px 10px;font-size:12px;cursor:pointer;';
+  enterBtn.addEventListener('click', () => {
+    document.dispatchEvent(new Event('v3-show-frame'));
+    queueMicrotask(() => {
+      const actions = ensureSqlActions();
+      if (verifiedWorkspacePath && actions) {
+        void actions.inspectAndLoad(verifiedWorkspacePath).catch(() => {});
+      }
+    });
+  });
+  const undoGroup = settingsToolbar.querySelector('.ocr-source-undo-redo');
+  if (undoGroup) {
+    settingsToolbar.insertBefore(enterBtn, undoGroup);
+  } else {
+    settingsToolbar.append(enterBtn);
+  }
+}
+
 function scanAndWire() {
   const host = document.querySelector('#workspace .ocr-outline-grid');
   if (host?.v3GridPort) wireGrid(host);
   ensureSqlActions();
+  ensureSettingsBridge();
 }
 
 document.addEventListener('v3-grid-ready', (event) => wireGrid(event.detail?.host));
-document.addEventListener('v3-source-ready', () => ensureSqlActions());
-document.addEventListener('v3-workspace-verified', (event) => {
-  const path = event.detail?.path;
+document.addEventListener('v3-source-ready', () => {
   const actions = ensureSqlActions();
-  if (path && actions) {
-    void actions.inspectAndLoad(path).catch(() => {});
+  if (verifiedWorkspacePath && actions && !actions.getState().workspace) {
+    void actions.inspectAndLoad(verifiedWorkspacePath).catch(() => {});
+  }
+});
+document.addEventListener('v3-workspace-verified', (event) => {
+  verifiedWorkspacePath = String(event.detail?.path || '');
+  ensureSettingsBridge();
+  const actions = ensureSqlActions();
+  if (verifiedWorkspacePath && actions) {
+    void actions.inspectAndLoad(verifiedWorkspacePath).catch(() => {});
   }
 });
 

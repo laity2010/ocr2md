@@ -76,6 +76,7 @@ export default defineConfig({
             code,
             'startFrameAutoUpdate({version:build,report:topStatus});',
             "document.addEventListener('v3-show-frame',()=>void showModule('frame'));"+
+            "document.addEventListener('v3-status',e=>{if(e?.detail?.message)topStatus(e.detail.message,e.detail.kind||'info');});"+
             "startFrameAutoUpdate({version:build,report:topStatus,fetchVersion:async()=>{"+
             "const r=await fetch(new URL('release-version.json',location.href),{cache:'no-store'});"+
             "if(!r.ok)throw Error('HTTP '+r.status);const remote=await r.json();"+
@@ -170,6 +171,14 @@ export default defineConfig({
         }
         if(id.endsWith('/ui/frame/refresh.js')){
           return exact(code,"remote?.name==='lab-frame'","remote?.name==='lab-ocr-v3'",'V3 auto-update identity');
+        }
+        if(id.endsWith('/ui/lab-ocr/pdf-viewer.js')){
+          return exact(
+            code,
+            "!url.startsWith('/labs/lab-ocr/api/ocr/pdf?')",
+            "(!url.startsWith('/labs/lab-ocr/api/ocr/pdf?')&&!url.startsWith('/labs/lab-ocr-v3/api/mineru-base/pdf?'))",
+            'V3 authorized PDF endpoint',
+          );
         }
       },
       generateBundle(){

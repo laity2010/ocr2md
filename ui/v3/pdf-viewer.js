@@ -202,6 +202,11 @@ export function mountV3PDF(host, {toolbar, fetcher = fetch, onStatus} = {}) {
     const canMeasure = await measurable();
     if (!canMeasure || disposed || myGen !== generation) return;
 
+    if (pdfMap?.totalPages === 0 && !pdfMap?.covers?.length) {
+      await native.loadPdf(null);
+      return;
+    }
+
     await native.loadPdf(`${API_BASE}pdf?${q}`);
     if (disposed || myGen !== generation) return;
     ready = true;
