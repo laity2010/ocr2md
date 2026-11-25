@@ -41,3 +41,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"63992955e3ec4b7a8d67c5007ad93421","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2a91088e082a4668ae08fc685be60d1e","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"START","utc":"2026-11-25T14:08:11.682105+00:00","wp":"WP01B2","goal":"用户授权从WP01 e2d74cc重做四CM6布局，左整高40%、右60%三窗上下等高；直接本州布局与Frame入口源码装配，V2视觉只读；保留设置及WP01快照，暂不显示真实正文及分句，不挂载工作台AG/PDF/预览，不改其他州和用户数据；四步闭环。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2a91088e082a4668ae08fc685be60d1e","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_START","utc":"2026-11-25T14:14:05.854091+00:00","phase":"build-test","step":"4b1213ecfa444f4189e142c434ee0305"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2a91088e082a4668ae08fc685be60d1e","branch":"refs/heads/experiment/lab-sentence","baseline":"e2d74cc1400642f18bca689f380218d00fbe1bd5","event":"RUN_EXIT","utc":"2026-11-25T14:15:25.743057+00:00","phase":"build-test","step":"4b1213ecfa444f4189e142c434ee0305","exit_code":0}
