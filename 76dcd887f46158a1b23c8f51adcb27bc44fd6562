@@ -1,0 +1,36 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：76dcd887f46158a1b23c8f51adcb27bc44fd6562
+原提交标题：feat(v2): WP26B reuse V1 note rules and session review
+父提交：335fbada2d1111368f6ae7ea5dca40842dfcde03
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP26B_NOTE_REVIEW.md
+M	tests/v2-note-match.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+A	ui/lab-ocr/note-match-rules-dialog.js
+A	ui/lab-ocr/note-pair-review-cell.js
+A	ui/lab-ocr/note-pair-review.js
+M	ui/v2-mineru-entry.js
+M	ui/v2-note-match.js
+A	ui/v2-note-session.js
+A	ui/v2-note-toolbar.css
+A	ui/v2-note-toolbar.js
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_9b84a5644f748efb 2026-11-24T13:23:47.536226Z: completed=[projection,ui], current=publish: WP26A 335fbad, B 76dcd88, C cb7c022: V1 exact reused algorithms, dual browser actual UI and atomic conversion/undo/reopen PASS; real sample readonly scan 12 refs/10 bodies/10 planned matches, zero plan failures; no extra SQL tables or user writes. Review decisions session-only, line-level rather than character-range focus. Build/release pending.
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP26B_NOTE_REVIEW.md
+来源提交：76dcd887f46158a1b23c8f51adcb27bc44fd6562
+SHA256：fe71db80366305b493d214dd24ba1f7352a071a7ac885a2e2a26c5c9ef76933d
+--- BEGIN ORIGINAL ---
+# WP26B · V1 注释规则和配对审阅
+基线 335fbad。复用 V1 bf32515 原规则弹窗、审阅投影与状态下拉（源码逐字节一致）。注释 View 专属功能菜单，规则选择显示内置示例/正则，并保留 Markdown 脚注格式识别；状态已匹配/待核实/忽略，多候选须选定注文。已存在标准 Markdown 注引/唯一注文按实际正文派生已转换。当前会话内记录人工选择，不另建业务表或文件，也不在正文插入审阅元数据；书籍切换/刷新清除，规则变化重新核对。证据以完整相关逻辑块正文及注引范围校验，过期决定不应用。转换尚待 WP26C。
+直接测试 v2-note-match.test.mjs PASS；V2_TEST_NOTE_REVIEW=1 实际 Chromium/WebKit 规则选择/示例与状态下拉、A 双端定位/列布局/筛选/标题和逻辑块往返通过，0 SQL 写入。真实 iPad 未验证。
+
+--- END ORIGINAL ---
