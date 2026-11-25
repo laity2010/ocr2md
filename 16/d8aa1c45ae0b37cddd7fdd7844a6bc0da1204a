@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"143178a1c2fa41fc8bfc71814e821806","branch":"refs/heads/experiment/lab-sentence","baseline":"16d8aa1c45ae0b37cddd7fdd7844a6bc0da1204a","event":"START","utc":"2026-11-25T15:04:37.293243+00:00","wp":"WP02A","goal":"基线16d8aa1；复用已验证Intl、Sentence Splitter、Wink NLP，独立分句V2快照逻辑块、保留保护片段与全部源字符，明确补全省略符间隙；不改四窗、设置、数据库，不实现显示仲裁持久化；覆盖801候选及真实双浏览器回归、Git发布END。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"143178a1c2fa41fc8bfc71814e821806","branch":"refs/heads/experiment/lab-sentence","baseline":"16d8aa1c45ae0b37cddd7fdd7844a6bc0da1204a","event":"RUN_START","utc":"2026-11-25T15:05:29.234682+00:00","phase":"build-test","step":"1e937d0a23d4413393a7ff1c5e82a5fb"}
