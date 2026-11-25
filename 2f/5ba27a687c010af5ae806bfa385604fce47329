@@ -12,3 +12,6 @@ M	scripts/v2_frame_publish.py
 
 历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
 
+
+补充历史检查点证据：原注记的历史证据不足状态由以下可核对记录补充；并非本轮重测。
+tsk_65fedcf3629c5b9e 2026-11-23T07:44:02.067011Z: completed=[deploy]: WP10正式发布。Git 2f5ba27a687c010af5ae806bfa385604fce47329 推送 origin/experiment/lab-ocr-v2 且工作树 clean。发布 v2-lab-frame-20261123-154216 stage wp10-md-block-cm6-edit-ag-type-filter-f02。统一Lab 70资源SHA256、其他6 Lab、门户首页哈希匹配；后端 v2_md_block.py 新依赖已加入后端热部署判据，原唯一 macOS Gateway 重启成功，local healthz releaseId与public Cloudflare HTTP200 header commit/releaseId全部一致。内容与数据库：物理逻辑表10列(md_block/raw_path)、Raw Block从immutable基础表只读动态外联；9列受控原地迁移保留编辑/PBS；CM6文本编辑/UndoRedo和PDF拖动共用CM6历史，逐块乐观SQL持久化、跨逻辑块编辑拒绝、WP08组末自动空行保持。AG PBS左固定按值适宽不可排序、Type表头原生列值筛选适宽不可排序、MD Block第三列、其余全部保留。Python多套SQLite+原始PDF投影含多行冲突回滚、JS纯测试、Chromium+iPad-WebKit AG/CM6/SQL+真实267块V1 PDF四窗手势及Frame隔离全部PASS。用户书籍未擅自覆盖，实机iPad Safari触控仍待用户现场验收。
