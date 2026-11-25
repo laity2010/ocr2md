@@ -65,9 +65,12 @@ for(const [name,engine] of [['chromium',chromium],['ipad-webkit',webkit]]){
   }})),folder);
   await page.route('https://cdn-mineru.openxlab.org.cn/**',r=>r.abort());
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-  await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]')&&document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,null,{timeout:30000});
-  await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));},undefined,{timeout:10000});
-  await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded&&document.querySelector('#workspace').getBoundingClientRect().width>0,null,{timeout:20000});
+  await page.waitForFunction(()=>{
+   const w=document.querySelector('#workspace'),nav=w?.querySelector('.ocr-source-file-select'),picker=w?.querySelector('.ocr-ag-module-select'),grid=w?.querySelector('.ocr-outline-grid')?.v2BaseGridPort,source=w?.querySelector('#editor')?.v2SourcePort;
+   return !w?.hidden&&document.querySelector('#settings-workspace')?.hidden&&nav?.value==='sql:logical_block'&&nav.ocrNavigationSelect?.tom.getValue()==='sql:logical_block'&&picker?.value==='frame'&&picker.selectedOptions[0]?.textContent==='逻辑块审阅'&&grid?.getColumns()?.[0]?.field==='pbs'&&grid.getDisplayedRows().length>0&&source?.getState().loaded;
+  },null,{timeout:45000});
+  assert.equal(writes.length,0,'opening existing logical table must not write SQL');
+  console.log('WP31C_STARTUP_PASS',name,'existing logical table auto selected, visible review, zero writes');
   const source=page.locator('#workspace #editor'),pos=initial.segments[0].endUtf16-1;
   const before=await source.evaluate(el=>({text:el.v2SourcePort.getMarkdown(),structure:el.v2SourcePort.getStructureRows()}));
   assert.equal(before.text,initial.markdown);
@@ -108,6 +111,16 @@ for(const [name,engine] of [['chromium',chromium],['ipad-webkit',webkit]]){
   await page.locator('#workspace .ocr-ag-module-select').selectOption('media');
   await page.waitForFunction(path=>document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getDisplayedRows().some(r=>r.url===path&&r.adopted==='已采用'),imagePath);
   assert.equal(uploads,0);assert.deepEqual(readFileSync(join(folder,imagePath)),png);assert.deepEqual(errors,[]);
+  // Explicit Settings reentry must not bounce the user back into review.
+  await source.evaluate(el=>{const select=el.closest('.ocr-source-pane').querySelector('.ocr-source-file-select');select.value='settings';select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await page.waitForFunction(()=>!document.querySelector('#settings-workspace').hidden&&document.querySelector('#workspace').hidden);
+  // Wait for the ordinary F02 recheck and existing SQLite readiness, not an arbitrary sleep.
+  await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('V2 SQLite 就绪')||document.querySelector('#status')?.textContent.includes('SQL 逻辑表'),null,{timeout:30000});
+  assert.equal(await page.locator('#settings-workspace').isVisible(),true);
+  await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{select.value='sql:mineru-base';select.dispatchEvent(new Event('change',{bubbles:true}));});
+  await page.waitForFunction(()=>!document.querySelector('#workspace').hidden&&document.querySelector('#workspace .ocr-source-file-select')?.value==='sql:mineru-base'&&document.querySelector('#workspace .ocr-outline-grid')?.v2BaseGridPort?.getColumns()?.[0]?.field==='blockid',null,{timeout:30000});
+  assert.equal(writes.length,3);assert.equal(await source.evaluate(el=>el.v2SourcePort.getMarkdown()),expected);
+  console.log('WP31C_MANUAL_NAV_PASS',name,'settings reentry and explicit base table; no extra SQL writes');
   console.log('WP31B_WORKBENCH_PASS',name,'column order, blue unused selection, unchanged caret, insert, auto CAS, undo/redo, inventory, stable PBS');
  }catch(e){console.error('WP31B_WORKBENCH_FAILURE',name,errors,writes.length);throw e;}
  finally{await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));rmSync(folder,{recursive:true,force:true});}

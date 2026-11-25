@@ -64,9 +64,12 @@ for(const [name,engine] of [['chromium',chromium],['ipad-webkit',webkit]]){
   }})),folder);
   await page.route('https://cdn-mineru.openxlab.org.cn/**',r=>r.abort());
   await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
-  await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql:logical_block"]')&&document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded,null,{timeout:30000});
-  await page.locator('#settings-workspace .ocr-source-file-select').evaluate(select=>{select.value='sql:logical_block';select.dispatchEvent(new Event('change',{bubbles:true}));},undefined,{timeout:10000});
-  await page.waitForFunction(()=>document.querySelector('#workspace #editor')?.v2SourcePort?.getState().loaded&&document.querySelector('#workspace').getBoundingClientRect().width>0,null,{timeout:20000});
+  await page.waitForFunction(()=>{
+   const w=document.querySelector('#workspace'),nav=w?.querySelector('.ocr-source-file-select'),picker=w?.querySelector('.ocr-ag-module-select'),grid=w?.querySelector('.ocr-outline-grid')?.v2BaseGridPort,source=w?.querySelector('#editor')?.v2SourcePort;
+   return !w?.hidden&&document.querySelector('#settings-workspace')?.hidden&&nav?.value==='sql:logical_block'&&nav.ocrNavigationSelect?.tom.getValue()==='sql:logical_block'&&picker?.value==='frame'&&picker.selectedOptions[0]?.textContent==='逻辑块审阅'&&grid?.getColumns()?.[0]?.field==='pbs'&&grid.getDisplayedRows().length>0&&source?.getState().loaded;
+  },null,{timeout:45000});
+  assert.equal(writes.length,0,'opening existing logical table must not write SQL');
+  console.log('WP31C_STARTUP_PASS',name,'existing logical table auto selected, visible review, zero writes');
   const source=page.locator('#workspace #editor'),pos=initial.segments[0].endUtf16-1;
   const before=await source.evaluate(el=>({text:el.v2SourcePort.getMarkdown(),structure:el.v2SourcePort.getStructureRows()}));
   assert.equal(before.text,initial.markdown);

@@ -1013,7 +1013,7 @@ async function flushStructure(){
     if(!saveBlocked&&bound===workspace&&source.getState().dirty)scheduleStructureSave();
   }
 }
-async function ensureBase(path){
+async function ensureBase(path,{afterSave=false}={}){
   if(!path||persistedDirectory()!==path)return;
   if(pending===path)return;
   pending=path;
@@ -1027,6 +1027,10 @@ async function ensureBase(path){
       if(error.status!==409)throw error;
       state={exists:false};
     }
+    // Only an already-existing logical table at startup bypasses Settings.
+    // Keep first import and explicit directory Save on their established path.
+    const openLogicalOnStartup=!bound&&!active&&!afterSave&&state.exists&&
+      state.tables?.some(t=>t.name==='logical_block');
     if(!state.exists){
       report('正在从 MinerUJSON 重建两表 V2 SQLite（仅覆盖同名数据库）…');
       await request('import',path,{method:'POST'});
@@ -1083,6 +1087,16 @@ async function ensureBase(path){
     wireViewPicker();
     report(`✓ V2 SQLite 就绪 · ${state.tables.length} 张物理表 / ${state.blockCount} 原始块 / ${state.logicalCount} 逻辑块 · 源码窗已加载${port.getState().dirty?' · 内存有未保存编辑':''}`,'ok');
     if(port.getState().legacyArtificialCount)report('保留历史逻辑块 · 正文可编辑 · 不再允许分割或增删逻辑 ID','ok');
+    if(openLogicalOnStartup&&!active){
+      // Same authoritative native navigation event as a manual SQL selection.
+      // This shows Frame and selects its existing logical-block review preset.
+      const select=$('#settings-workspace .ocr-source-file-select');
+      if(select?.querySelector('option[value="sql:logical_block"]')){
+        select.value=valueForTable('logical_block');
+        select.dispatchEvent(new Event('change',{bubbles:true}));
+        return;
+      }
+    }
     if(active)await fetchPage();
   }catch(error){report('V2 两表初始化失败：'+error.message,'error');}
   finally{pending=null;}
@@ -1162,8 +1176,8 @@ window.addEventListener('beforeunload',event=>{
 // This event is issued ONLY after the original F02 probe returned readable,
 // writable and verified. Ignore unsaved directory adoptions explicitly.
 document.addEventListener('v2-workspace-verified',event=>{
-  const {path,uncommitted}=event.detail||{};
-  if(!uncommitted&&path===persistedDirectory())void ensureBase(path);
+  const {path,uncommitted,afterSave}=event.detail||{};
+  if(!uncommitted&&path===persistedDirectory())void ensureBase(path,{afterSave});
 });
 // Settings' navigation is asynchronous. It is created before F02 reports
 // successful startup verification; no second settings state is introduced.
