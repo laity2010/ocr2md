@@ -1,0 +1,68 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：0e898b330df24c20e8a82b43d90bfab81f391ab3
+原提交标题：feat(v2): persist editable CM6 MD Blocks with readonly OCR raw refs
+父提交：720d967e194dc7fc0f1bd571da703bc40f78b8e0
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP10_MD_BLOCK_CM6_PERSISTENCE.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_frame_publish.py
+M	scripts/v2_markdown_roundtrip.py
+A	scripts/v2_md_block.py
+M	scripts/v2_mineru_base.py
+M	scripts/v2_pdf_projection.py
+M	tests/test_v2_logical_init.py
+M	tests/test_v2_logical_rebuild.py
+M	tests/test_v2_markdown_roundtrip.py
+A	tests/test_v2_md_block.py
+M	tests/test_v2_mineru_base.py
+M	tests/test_v2_pbs_upgrade.py
+M	tests/test_v2_pdf_projection.py
+M	tests/test_v2_structure_commit.py
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+M	ui/v2-block-source.js
+M	ui/v2-mineru-base.css
+M	ui/v2-mineru-entry.js
+M	ui/v2-source-session.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP10_MD_BLOCK_CM6_PERSISTENCE.md
+来源提交：0e898b330df24c20e8a82b43d90bfab81f391ab3
+SHA256：b82318c5cbe504a8b87124cac0d7405f6ffc445695cbc920d7a2343f3262be44
+--- BEGIN ORIGINAL ---
+# WP10 · MD Block 持久化与 CM6 正文统一
+
+## 本航点的唯一数据权威
+
+仍然只有两张物理表：`mineru_base` 是不可修改的 MinerU JSON、bbox、原始 span 证据；`logical_block` 是唯一可写 Markdown 正文及 PBS 结构。逻辑表原九列 `markdown_text` 原地迁移改名为 **`md_block`**，另增加 **`raw_path`**（原根 `$`，直接子元素 `$.blocks[n]`），合计十列。`base_blockid` + `raw_path` 外联基础表原始 `block_json` 中该元素的 `lines[].spans[].content/html/image_path`，生成只读的 AG 显示字段 **Raw Block**；它不是 SQL 列、没有第二份原始文本持久化副本，不允许 CM6 修改。
+
+`md_block` 是 Markdown 工作正文的唯一持久化来源。新书或明确重建逻辑表时，一次性根据原始块类型/level/raw 生成单个元素对应的 Markdown；例如 title→`#`/`##` 前缀、`image_body`→`![](<路径>)`、行间公式→`$$` 围栏，原 HTML 表格保持 HTML。caption/body/footnote 仍分别独立成行，绝不可将不同 OCR 子元素合并生成一个 MD Block。普通打开、刷新和拖动**绝不从 Raw 重新生成 MD**。
+
+旧九列版本可通过现有 F02 授权的导入路径，在确认原始 MinerU SHA 与两表来源一致时执行**同一数据库内事务升级**，`markdown_text` 原地重命名为 `md_block`、补 `raw_path`。若旧文本与原始 Raw 完全相同，转换一次为 Markdown；已人工修改、不等于原始 Raw 的文本直接保留，PBS 与逻辑 ID 原样保留。迁移异常全部回滚；不重新生成表、不删数据、不触碰基础表。已在 SQLite 夹具测试覆盖。用户通过原导航 SQL 组弹窗的「重建逻辑表」仍可**明确覆盖**逻辑表，但普通浏览和编辑不自动覆盖。
+
+## CM6/Undo/Redo 与写回
+
+唯一 CM6 源码窗允许文字编辑。每个逻辑块的 MD Block 依逻辑顺序直接拼接、保留 WP08 原有空行归属：同组父子之间没有结构分隔符，最后一块确保显示最小空行；原始 Raw 不受文字编辑影响。位置映射依据逻辑 ID 和 UTF-16 偏移，不依赖空行断块。单次跨逻辑块整体替换/删除拒绝；普通文字输入在当前逻辑块，块的开始位置相邻时归后块。单击、选中、PDF 拖动和 Undo/Redo 仍使用现有 CM6 StateEffect/history 和四窗同步，不另建 CM 或历史表。
+
+850ms 空闲时从同一 CM6 文档取得结构和文本差量：`structure-commit` 仅更新 PBS/parent/order；新 `md-commit` 只传 `{logicalId,before,after}` 的逐行 MD Block，使用 SQLite BEGIN IMMEDIATE 和 before 乐观冲突验证，确认成功才更新已保存签名。撤销/重做是新的反向 SQL 差量，不重写整个文档。失败保留 CM6 内存状态并显示全局错误、拒绝覆盖其他会话。当前 SQL 事务分结构、正文两次提交，若两类同时改动可能一类成功另一类失败，后续统一事务可另行补强；它们都不允许修改 `mineru_base` 或 Raw Block。
+
+## AG 逻辑表列契约
+
+- 第 1 列 **PBS**，左固定、列宽自动适配显示值、`sortable=false`，列值由 p,b,s 派生，不增加物理 PBS 列。
+- 第 2 列 **Type**，适配当前全部类型最长值（有限宽度）、`sortable=false`；列头内原生下拉支持 `全部类型` 和全部实际 `block_type` 的值筛选。过滤仅影响显示，不改变 SQL、排序、焦点和 CM6。
+- 第 3 列 **MD Block**，对应 `logical_block.md_block`（正文内容由 CM6 编辑持久化），默认宽 420px。
+- 此后保留全部剩余 8 个物理字段，再显示只读外联 `Raw Block`。仅 PBS 左固定，其他列可横向滚动。基础表 18 列保持原样。
+
+## 测试与数据安全
+
+`tests/test_v2_md_block.py` 测试原生类型初始化、Raw 外联、9→10 列升级时保留人工正文和 PBS、MD 乐观差量保存/Undo/并发冲突、基础表原样。原 WP01-WP09 Python 测试更新字段断言并保留原逻辑校验；`tests/v2-mineru-base.browser.test.mjs` 验证 Chromium/iPad-WebKit AG 列、Type 筛选、CM6 编辑 + Undo + SQL、跨块编辑拒绝；`tests/v2-real-markdown-preview.browser.test.mjs` 验证真实 MinerU 267 行、V1 PDF 原始坐标、CM6/AG/预览联动与长按拖动；Frame layout 和其他 Lab 不修改。
+
+既有 WP09 的 SQL 组弹窗仅作为导入/重建入口，不得将重建按钮重新放在 AG 工具栏。
+
+--- END ORIGINAL ---
