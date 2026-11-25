@@ -7,3 +7,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_EXIT","utc":"2026-11-25T08:27:35.606211+00:00","phase":"WP30C 表格源码组织与既有CM6事务接入","step":"d1f0796adadd49a6af34826177398554","exit_code":0}
 
 WP30C 违宪追记：前轮在实施命令尚未核实退出、验收和发布未完成时中断；现同一实施session退出0，接续原ID，不抹除事实。
+
+FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_START","utc":"2026-11-25T08:52:02.032832+00:00","phase":"WP30C 直接测试与真实表格组织双浏览器验收","step":"99453e788ad54bebbab044e653d08719"}
