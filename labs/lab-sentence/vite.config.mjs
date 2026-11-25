@@ -33,7 +33,12 @@ export default defineConfig({
     if(id.endsWith("/ui/frame/frame.js")){
       const old="createFrameSettingsIO(localStorage,'lab-frame'";
       if(!code.includes(old))throw Error("Frame settings signature changed");
-      return code.replace(old,"createFrameSettingsIO(localStorage,'lab-sentence'");
+      const source=code.replace(old,"createFrameSettingsIO(localStorage,'lab-sentence'");
+      const probe="await frameWorkspaceIO.probe(selected);";
+      if(!source.includes(probe))throw Error("Frame F02 signature changed");
+      return "import {createSnapshotSession} from '../sentence/snapshot.js';\n"+source
+        .replace("const build=__FRAME_BUILD_VERSION__;","const sentenceSource=createSnapshotSession({report:topStatus});\nconst build=__FRAME_BUILD_VERSION__;")
+        .replace(probe,probe+"\n    if(generation===probeGeneration&&!uncommitted)void sentenceSource.load(selected);");
     }
     if(id.endsWith("/ui/frame/refresh.js")){
       const old="remote?.name==='lab-frame'";
