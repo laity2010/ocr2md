@@ -1,0 +1,23 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：a9abaf3a3ff33c8e03985063a44a5faa811120cf
+原提交标题：feat(v2): filter logical AG by focused PBS page with all toggle
+父提交：dc92269ee83b24bd33405dead70cfcc8fb3dcf6a
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_frame_publish.py
+M	scripts/v2_mineru_base.py
+M	tests/test_v2_mineru_base.py
+A	tests/v2-logical-ag-filter.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+A	ui/v2-logical-ag-filter.js
+M	ui/v2-mineru-base.css
+M	ui/v2-mineru-entry.js
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
