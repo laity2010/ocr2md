@@ -1,0 +1,40 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：f93901025765ac2f2195c8e2b979a61b05a1297a
+原提交标题：feat(v2 wp02): initialize flat logical rows with explicit authorized transaction
+父提交：15f59cb934ca72c81d2cc9b7ef939b01b033db53
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP02_LOGICAL_INITIALIZATION.md
+M	scripts/v2_mineru_base.py
+A	tests/test_v2_logical_init.py
+M	tests/v2-mineru-base.browser.test.mjs
+M	ui/v2-mineru-base.css
+M	ui/v2-mineru-entry.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP02_LOGICAL_INITIALIZATION.md
+来源提交：f93901025765ac2f2195c8e2b979a61b05a1297a
+SHA256：0f000dc5a12de60ddaf3d1aff4de795895630b441004429cb6543ec785f2e103
+--- BEGIN ORIGINAL ---
+# V2 WP02 · 初始逻辑表落盘（仅用户明确触发）
+
+基线：WP01 `15f59cb`。独立业务 API `POST /labs/lab-ocr-v2/api/mineru-base/logical-init`；请求正文 `{workspace,confirm:"initialize-logical"}`，沿用 Frame F02 授权 Cookie、同源 Origin、白名单目录校验和真实可读写 probe。不新增文件授权、表、另一个 AG/导航实例；不得默认自动初始化、更改用户书籍文件。
+
+## 映射与事务
+
+- WP00 的 `mineru_base` 始终不可变；读取 `WHERE blockid>0 ORDER BY blockid`，按 WP01 规则过滤 `para_blocks`，初始一对一写 `logical_block` 五字段。`logical_id=base_blockid`，`parent_id=NULL`，顺序为唯一的连续 1..N，`markdown_text` 为可读 Markdown 初始投影。样本：539 基础块+blockid=0 档案，224 逻辑块。
+- 先确认真实 SQLite 普通文件、双表 WP00 Schema、MinerU 来源 SHA 无变化、Frame F02 probe 有效。只在现有 SQL 文件上 `BEGIN IMMEDIATE`，事务内一次写入，核验外键与数量，失败自动回滚。不删除、不重建基础表、PDF、MinerUJSON。
+- 当前 `logical_block` 非空时，不重写任何行：即便有人工编辑、不同父子/排序或未来 SQL 逻辑，也只返回 `preserved=true`。若原始 MinerU 来源改变，明确拒绝初始化；如果逻辑表已经有状态，`import` 亦不得因文件变化而自动覆盖 SQLite。用户以后想清空、重建须另订有保护的迁移契约，不能悄悄运行。
+- V2 AG 中选中空 `逻辑表 · logical_block` 会出现「初始化逻辑表」按钮，用户点击才 POST；成功后 AG 仍只用已有 Grid 显示 5 列、224 行，按钮自动隐藏。WP02 只初始化扁平结构，没有 CM6 编辑、撤销、跨页合并或父子归属。
+
+## 验收
+
+- 纯转换 WP01 3/3；WP00 12/12。WP02 direct API 测试：一次写入 224、原始档案和 539 块完全不变、表数恒为 2、可重复、人工修改保护、变动来源保护、未授权/缺 confirm/错误 Origin 拒绝；浏览器 Chromium+WebKit 操作「初始化逻辑表」后 5 列/224 行，初始化按钮消失。
+- 所有验证使用临时 MinerU 样本和 SQLite。真实工作目录只会在用户实际点按钮时修改其 `ocr2md.v2.sqlite` 的**逻辑表**。提交/发布新前端与后端业务 API 不代表自动执行了用户工作目录初始化。
+
+--- END ORIGINAL ---
