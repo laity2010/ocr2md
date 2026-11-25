@@ -1,0 +1,48 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：4d81b21c1285b447bcf59a5e7846cb8bb373337a
+原提交标题：feat(v2): WP29 reproduce V1 media review and resumable adoption
+父提交：bca579a585534a65ea93750d4be86d9435d29f4b
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP29_MEDIA_VIEW.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_frame_publish.py
+M	scripts/v2_mineru_base.py
+A	tests/test_v2_media.py
+A	tests/v2-media-direct.browser.test.mjs
+M	tests/v2-owned-edit.browser.test.mjs
+A	ui/lab-ocr/media-view.css
+A	ui/lab-ocr/media-view.js
+M	ui/v2-ag-views.js
+M	ui/v2-markdown-preview.js
+A	ui/v2-media.js
+M	ui/v2-mineru-entry.js
+M	ui/v2-note-toolbar.js
+
+已核实问题及后续处理：发布证据：20261124-223244；媒体模块后续暴露裸图表链接漏识别、预览未使用已下载图片。WP29B/C 独立修正。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_3a4a24e0d9943ba1 2026-11-24T14:32:46.475027Z: completed=[domain,ui], current=publish: WP29 4d81b21 committed. V1 Media controller and byte store reused; actual Chromium/WebKit AG and MD preview adoption/undo/redo/reopen PASS; separate deterministic controller pause/resume/bulk both PASS and real loopback Range PASS. Direct regressions/layout PASS. No original data writes; CDN and physical iPad untested.
+任务检查点 tsk_3a4a24e0d9943ba1 2026-11-24T14:34:20.966395Z: completed=[publish]: WP29 4d81b21 pushed/published 261124-223244; gateway reloaded, all 70 manifest hashes and LAN actual version/HTTP 200 verified; worktree clean, other six labs preserved.
+任务检查点 tsk_3dd09fbeaab9515c 2026-11-24T14:45:17.970369Z: completed=[inspect], current=implement: 4d81b21 基线：AG 通过 media-status 取得本地路径，而 MD 预览只处理已经替换为 media/ 的 URL；复用既有 GET API，不改列布局/SQL。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP29_MEDIA_VIEW.md
+来源提交：4d81b21c1285b447bcf59a5e7846cb8bb373337a
+SHA256：9b33f4b9a2e0f51e8fc0994053f55e976f5f51dc6c7e1db18342ecab5fccb383
+--- BEGIN ORIGINAL ---
+# WP29 · V1 媒体 View
+基线 bca579a / 261124-222016。复用 bf32515 的 media-view.js（仅 V2 API 路径、销毁门禁、替换失败提示适配）、media-view.css、已存在且与 V1 cmp 一致的 media-module.js 和 scripts/v6_media.py。AG 采用 V1 列定义、固定列、78px 行高、缩略图、动作、功能菜单；同一现有 AG 实例，不修改其它视图或框架。清单为实时 CM6 MD Line + 授权工作目录 inventory 派生；稳定逻辑 ID、当前物理行及 URL 字符范围核对，所有替换通过唯一 CM6 replaceMdLines 事务，原 SQLite 旧值 CAS 保存。下载状态来自同一 V1 分块文件/metadata；不增加 SQL 表或另存正文。MD preview 仅将已批准的本地 media/哈希文件地址改为 V2 授权媒体 API 请求，不改变源码。仅支持 V1 已允许的 MinerU CDN 及 JPG/JPEG/PNG/GIF/WebP；不扩展任意网络主机、上传或剪贴板粘贴功能。
+测试：
+- tests/test_v2_media.py PASS：真实 loopback HTTP Range 分块 524288 字节与下一段、原子发布、重复下载无网络、GET 状态无新目录、库存、二进制读取、非法 URL/路径、方法和符号链接拒绝。F02 probe 是隔离 Stub；生产 handler 继续使用既有 cookie/目录及 POST Origin 检查。
+- V2_TEST_MEDIA_VIEW=1 node tests/v2-owned-edit.browser.test.mjs Chromium/WebKit PASS：隔离 SQLite 中两处相同远端链接、真实本地文件预览、未引用文件、实际 AG 固定列、链接统一替换一次 1 块 CAS 保存、实际 MD img naturalWidth、Undo/Redo/reopen、标题列序保持。预下载 fixture，不访问 CDN。
+- tests/v2-media-direct.browser.test.mjs Chromium/WebKit PASS：V1 控制器以受控 transport 模拟分块状态，实际暂停按钮、续传与批量替换、精确源位置与过期引用拒绝、同 URL 两处一次替换，保留尖括号语法。真正 Range 网络由上述独立 Python 测试验证。
+- AG、MD Line、断块、注释、LaTeX 直接回归、联邦布局检查通过。
+实际用户书籍未下载、未修改。真实远端 CDN 可达性和物理 iPad 验收待用户操作验证。
+
+--- END ORIGINAL ---
