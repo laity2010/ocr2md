@@ -1,0 +1,1 @@
+后验收：在本州END后执行真实Vite CLI未登记build负向测试，联邦check-start拒绝（未开始产物构建）；本地dist版本文件及统一manifest SHA256均未改变。该调用是门禁负向验证，不是未登记的实际构建。
