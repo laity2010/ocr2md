@@ -31,3 +31,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"ab3e2f7200644d299fb7e3efb2985a1e","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"f98903823a8c49eb92368e1350f5aa92","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"START","utc":"2026-11-25T11:13:33.467200+00:00","wp":"WP31A","goal":"用户批准WP31失败回退至WP30C 9e643da，失败629062d已留独立远端及FAIL END；从干净基线独立重做最小图片粘贴，仅原Main字节存储+V2授权传输+CM6普通文本事务，不新增事务计划/历史/持久化/表/PBS，不改V1 V3 Frame或原书；双浏览器最小真实CM6先验收再集成发布","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"f98903823a8c49eb92368e1350f5aa92","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_START","utc":"2026-11-25T11:14:38.859426+00:00","phase":"implement-minimal","step":"7405d9fce0a74491b974c5e6449dec6c"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"f98903823a8c49eb92368e1350f5aa92","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"9e643daece7be1c654403ed38e492152bf05f82e","event":"RUN_EXIT","utc":"2026-11-25T11:14:51.520457+00:00","phase":"implement-minimal","step":"7405d9fce0a74491b974c5e6449dec6c","exit_code":0}
