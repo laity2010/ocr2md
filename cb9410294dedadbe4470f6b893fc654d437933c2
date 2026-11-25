@@ -1,0 +1,167 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：cb9410294dedadbe4470f6b893fc654d437933c2
+原提交标题：feat(v2): one CM6 source line per logical OCR block
+父提交：929cdedf79870be7f8d01aa1b7382bb03d72383f
+原提交正文：已存在，见原 commit
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	docs/v2/WP08_CM6_GROUP_END_BLANK_LINE.md
+M	docs/v2/WP10_MD_BLOCK_CM6_PERSISTENCE.md
+M	docs/v2/WP13_CHILD_SINGLE_NEWLINE.md
+A	docs/v2/WP14_ONE_LOGICAL_BLOCK_ONE_LINE.md
+M	labs/lab-ocr-v2/vite.config.mjs
+M	scripts/v2_frame_publish.py
+M	scripts/v2_md_block.py
+A	tests/test_v2_one_line_conversion.py
+M	tests/v2-block-source-fixture.test.mjs
+M	tests/v2-block-source.test.mjs
+M	tests/v2-mineru-base.browser.test.mjs
+M	tests/v2-real-markdown-preview.browser.test.mjs
+A	tests/v2-single-line.test.mjs
+M	tests/v2-structure-move.test.mjs
+M	ui/v2-block-source.js
+M	ui/v2-markdown-preview.js
+M	ui/v2-mineru-entry.js
+A	ui/v2-preview-line-projection.js
+A	ui/v2-single-line.js
+M	ui/v2-source-session.js
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP08_CM6_GROUP_END_BLANK_LINE.md
+来源提交：cb9410294dedadbe4470f6b893fc654d437933c2
+SHA256：068ea17b97dc81a878d5a9c92b0749b4a61abe766ba8b45af0259bf4bcdbf122
+--- BEGIN ORIGINAL ---
+# WP08 · CM6 逻辑块拼接与空行归属
+
+> **历史记录 · WP14 已完全替换组末双 LF 规则（WP13 已修订同组拼接规则）**：本文件记载 WP08 原设计，其“同组无任何自动 LF、允许父子合为同一行”已不再适用。当前 V2 以 [`README.md`](../../README.md) 第 3 节及 [`WP13_CHILD_SINGLE_NEWLINE.md`](WP13_CHILD_SINGLE_NEWLINE.md) 为准：父子同组至少隔一个换行，不插空白行；真实原文空行不裁剪。
+
+## 目标与边界
+
+V2 唯一 CM6 文档直接顺序拼接 `logical_block` 每行的 `markdown_text`，**两个逻辑块之间没有结构性分隔符**。父块组采用 `(p,b)` 归类，同组只允许 `s0` 加平级子块 `s1+`，不允许孙块。任何源文本内部已有的 `\n`、`\n\n`、连续多个空行都属于产生它的逻辑块，不能靠空行猜测块 ID、裁剪原文或偷偷生成一个新逻辑行。
+
+对相邻两组，前一组最后一行末尾始终应能在 CM6 中看到一个空白行。这一**最小组末补尾**在最后一个实际子块上实现（若本组只有 `s0`，它也是组末）；同组 `s0 / s1 / s2…` 没有自动补尾，因此 OCR 识别得到的碎片可以直接连续显示。原文本自带的空行全部保留，即使位于同组的非末子块中也不能去掉。
+
+## 投影算法
+
+- 按 SQL 的 `logical_order` 取得所有子块；从 WP03 `markdown` / UTF-16 `segments` 验证并取得每一行的原文，该 WP03 HTTP 载荷用于无损传输的 `\n\n` **不是** CM6 文档分隔符。
+- 每个行文本 `rawText` 原样拼接。若下一行是相同 `(p,b)` 组，不添加任何字符；否则，在当前行末尾补齐 **最少** 的 LF，使其至少以 `\n\n` 结束。对于已结束为 `\n\n` / 更多换行的真实原文，新增 0 个 LF；末尾已有一个 `\n` 则只新增一个；末尾不是 LF 则新增两个。
+- `from` / `to` 精确标识 CM6 中每个逻辑块的所有可见字符（包含其组末自动空行），`groupEndPad` 只记录本次投影新加的 0/1/2 字符，明确其归属并防止拖动时把它当成永久文本带走。靠稳定 `logical_id` 定位，不在 Markdown 内插 CMD 注释，也不解析空行来决定块边界。
+- `logicalTextRows(source,blocks)` 剔除仅用于显示的 `groupEndPad`，保证读回与 SQL `markdown_text` **逐字节一致**。当父块归入其他父块成为子块，旧的自动空行随原组边界消失；由新组最后的子块重新补尾。用户或 OCR 自带的所有空行都保留，不被这一机制吞掉。
+- 同一行的子块边界也可能是同一个 CM6 文本行内的位置。UTF-16 光标落在两个相邻逻辑块的交界位置时，映射到**后一个子块**；落在前一组的空白行内，映射到该组末块；末尾光标仍归最后一块。
+
+## SQLite 安全边界及未来编辑
+
+**WP08 不开放源码文字编辑，不更改 SQLite 的物理表或现有 `markdown_text`。** 补齐的尾部 LF 当前属于末块的 **CM6 显示内容**，但并未虚称为 SQLite 已存原文。此做法可以避免对用户已标定文本进行批量迁移、也避免在重组中无法区分自动空行与真实用户空行。
+
+以后单独开放文本编辑时，必须支持：在末块尾部空行插入文字、继续输入多余空行，均归入该 `logical_id` 的正文；在文本写入时把被实际编辑的显示尾部升级为真实内容并通过验证过的文本写入 API 持久化。其他块不得被意外吞并。现有只读版不提供文本保存 API，不得将上述未来目标宣称已实现。
+
+## WP07 向后兼容与验收
+
+保持原始 PDF 物理 bbox、两层 PBS、根块移动携带子块、局部 b/s 插槽顺延、CM6 单编辑器、原生 Undo/Redo、850ms 空闲 SQLite 差量结构事务、只读源码、AG/Markdown/PDF 高亮。结构操作只更新结构列，不改写原始内容；重组 Markdown 时采用同一 `composeLogicalSource`，不自制第二份拼接规则。
+
+直接测试：
+
+- `node tests/v2-block-source.test.mjs`：包含已有空行、末块自动空行、UTF-16 emoji、非末子块新增空行的纯投影、归属与不跨块编辑边界。
+- `node tests/v2-block-source-fixture.test.mjs`：真实 224 块 MinerU 样本，SQL 原文逐行一致，`s0→s1` 后只有组末补尾，整份原文不损失。
+- `node tests/v2-structure-move.test.mjs` 和 `node tests/v2-focus-map.test.mjs`：父子结构重排之后唯一 CM6 拼接、空行归末块及无分隔子块光标归属。
+- `node tests/v2-mineru-base.browser.test.mjs`：Chromium/iPad-WebKit，实际 CM6 根块归入子块后无额外空行，同时 AG/SQL/Undo/Redo/只读正常。
+- `node tests/v2-real-markdown-preview.browser.test.mjs`：真实 V1 PDF 手势触发的源窗/阅读预览/AG/PDF 同步。
+
+历史 WP04“每个块后都加 `\n\n`”约定已被 WP08 替代，不能用旧项目文档或测试恢复。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP10_MD_BLOCK_CM6_PERSISTENCE.md
+来源提交：cb9410294dedadbe4470f6b893fc654d437933c2
+SHA256：81909ebed0cd2753fdf74da9d51464d5937d2f065ee7a28eccd8c08e4d91e386
+--- BEGIN ORIGINAL ---
+# WP10 · MD Block 持久化与 CM6 正文统一
+
+## 本航点的唯一数据权威
+
+仍然只有两张物理表：`mineru_base` 是不可修改的 MinerU JSON、bbox、原始 span 证据；`logical_block` 是唯一可写 Markdown 正文及 PBS 结构。逻辑表原九列 `markdown_text` 原地迁移改名为 **`md_block`**，另增加 **`raw_path`**（原根 `$`，直接子元素 `$.blocks[n]`），合计十列。`base_blockid` + `raw_path` 外联基础表原始 `block_json` 中该元素的 `lines[].spans[].content/html/image_path`，生成只读的 AG 显示字段 **Raw Block**；它不是 SQL 列、没有第二份原始文本持久化副本，不允许 CM6 修改。
+
+`md_block` 是 Markdown 工作正文的唯一持久化来源。新书或明确重建逻辑表时，一次性根据原始块类型/level/raw 生成单个元素对应的 Markdown；例如 title→`#`/`##` 前缀、`image_body`→`![](<路径>)`、行间公式→`$$` 围栏，原 HTML 表格保持 HTML。caption/body/footnote 仍分别独立成行，绝不可将不同 OCR 子元素合并生成一个 MD Block。普通打开、刷新和拖动**绝不从 Raw 重新生成 MD**。
+
+旧九列版本可通过现有 F02 授权的导入路径，在确认原始 MinerU SHA 与两表来源一致时执行**同一数据库内事务升级**，`markdown_text` 原地重命名为 `md_block`、补 `raw_path`。若旧文本与原始 Raw 完全相同，转换一次为 Markdown；已人工修改、不等于原始 Raw 的文本直接保留，PBS 与逻辑 ID 原样保留。迁移异常全部回滚；不重新生成表、不删数据、不触碰基础表。已在 SQLite 夹具测试覆盖。用户通过原导航 SQL 组弹窗的「重建逻辑表」仍可**明确覆盖**逻辑表，但普通浏览和编辑不自动覆盖。
+
+## CM6/Undo/Redo 与写回
+
+唯一 CM6 源码窗允许文字编辑。每个逻辑块的 MD Block 依逻辑顺序直接拼接、保留 WP08 原有空行归属：（经 WP14 修订）所有逻辑块无论父子关系均只隔一个 LF，末块不新增尾部空行；原始 Raw 不受文字编辑影响。位置映射依据逻辑 ID 和 UTF-16 偏移，不依赖空行断块。单次跨逻辑块整体替换/删除拒绝；普通文字输入在当前逻辑块，块的开始位置相邻时归后块。单击、选中、PDF 拖动和 Undo/Redo 仍使用现有 CM6 StateEffect/history 和四窗同步，不另建 CM 或历史表。
+
+850ms 空闲时从同一 CM6 文档取得结构和文本差量：`structure-commit` 仅更新 PBS/parent/order；新 `md-commit` 只传 `{logicalId,before,after}` 的逐行 MD Block，使用 SQLite BEGIN IMMEDIATE 和 before 乐观冲突验证，确认成功才更新已保存签名。撤销/重做是新的反向 SQL 差量，不重写整个文档。失败保留 CM6 内存状态并显示全局错误、拒绝覆盖其他会话。当前 SQL 事务分结构、正文两次提交，若两类同时改动可能一类成功另一类失败，后续统一事务可另行补强；它们都不允许修改 `mineru_base` 或 Raw Block。
+
+## AG 逻辑表列契约
+
+- 第 1 列 **PBS**，左固定、列宽自动适配显示值、`sortable=false`，列值由 p,b,s 派生，不增加物理 PBS 列。
+- 第 2 列 **Type**，适配当前全部类型最长值（有限宽度）、`sortable=false`；列头内原生下拉支持 `全部类型` 和全部实际 `block_type` 的值筛选。过滤仅影响显示，不改变 SQL、排序、焦点和 CM6。
+- 第 3 列 **MD Block**，对应 `logical_block.md_block`（正文内容由 CM6 编辑持久化），默认宽 420px。
+- 此后保留全部剩余 8 个物理字段，再显示只读外联 `Raw Block`。仅 PBS 左固定，其他列可横向滚动。基础表 18 列保持原样。
+
+## 测试与数据安全
+
+`tests/test_v2_md_block.py` 测试原生类型初始化、Raw 外联、9→10 列升级时保留人工正文和 PBS、MD 乐观差量保存/Undo/并发冲突、基础表原样。原 WP01-WP09 Python 测试更新字段断言并保留原逻辑校验；`tests/v2-mineru-base.browser.test.mjs` 验证 Chromium/iPad-WebKit AG 列、Type 筛选、CM6 编辑 + Undo + SQL、跨块编辑拒绝；`tests/v2-real-markdown-preview.browser.test.mjs` 验证真实 MinerU 267 行、V1 PDF 原始坐标、CM6/AG/预览联动与长按拖动；Frame layout 和其他 Lab 不修改。
+
+既有 WP09 的 SQL 组弹窗仅作为导入/重建入口，不得将重建按钮重新放在 AG 工具栏。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP13_CHILD_SINGLE_NEWLINE.md
+来源提交：cb9410294dedadbe4470f6b893fc654d437933c2
+SHA256：11644be8135a57575f685ec9ab2fd2abca3d4289f5fe3d2691b04c3b93fdcbce
+--- BEGIN ORIGINAL ---
+# WP13 · 子块归入时保留一个换行，不接成一行
+
+> **历史阶段说明**：WP14 已进一步统一所有逻辑块的 CM6 单行规则，包括跨父组严格一个 LF、不再组末补双 LF。以当前 V2 README 和 WP14 文档为准，保留本页为当时修复记录。
+
+## 用户验收要求
+
+- 从独立父块归入另一父组成为子块时，**只去掉自动提供的空白行，不抹掉换行**。示例：原 `父块\n\n子块` 归组后在 CM6 中为 `父块\n子块`，不能成为 `父块子块`。
+- 同组 s0/s1/s2 每个逻辑块各起一行。组末仍保证一个可见空白行，不加入第三层子块。
+- **原始正文无损是更高的数据安全约束**：如果 SQL `md_block` 本身以多个 `\n` 结束，这些真实保存的空行不因结构操作被裁掉；该例外必须与显示时补出的虚拟 LF 区别清楚。不得为了单行外观悄悄改写书籍正文。
+
+## 实施路径
+
+1. `ui/v2-block-source.js` 是 CM6 唯一拼接函数：相邻同组行不再直接 `A` + `B`；若 A 原文不以 LF 结束，在 A 的显示尾部补一个 `\n`。组末依旧通过 `groupEndPadding` 补齐 `\n\n`。后端 WP03 的 UTF-16 传输 `\n\n` 仍非显示分隔符。
+2. 保留已有 `groupEndPad` 接口名以免破坏 CM6 区间映射；语义拓展为块尾**虚拟 LF 数量**（同组 0/1，组末 0/1/2）。`logicalTextRows()` 剔除这一部分，保证 SQL 中每个 `md_block` 与 `logical_id` 不变。
+3. `ui/v2-source-session.js` 在实际 CM6 文本编辑中同样维持同组单 LF 和组末双 LF 的**最低显示要求**；用户在显示尾部输入的文本按既有 WP10 逻辑晋升为当前块自己的文字。结构拖动、原生 Undo/Redo、SQL 差量提交仍使用既有 API，无新物理表、额外 CM6 或新历史机制。
+4. V1 PDF 标签和 AG Grid 组件、固定源文件及发布流程完全不变。旧 WP08 同组无换行描述归为历史，不得当成当前需求。
+
+## 验收和风险说明
+
+- 直接测试：`tests/v2-block-source.test.mjs`（中文样例、已有 LF/空行、映射与禁止跨块编辑）；`tests/v2-block-source-fixture.test.mjs`（267 真实逻辑行的原文回读）；`tests/v2-structure-move.test.mjs`（拖动、父子编号、原文保留）；`tests/v2-focus-map.test.mjs`。
+- 浏览器测试：`tests/v2-mineru-base.browser.test.mjs`、`tests/v2-real-markdown-preview.browser.test.mjs`（真实 CM6、V1 PDF 拖动、AG/PDF 定位及 Undo/Redo，并在 Chromium / iPad-WebKit 运行）。
+- 原始 `md_block` 自带多个 LF 时，因为数据保护不得裁剪，投影中仍可能显示人为留出的空白行；**自动补尾**则不会导致父子之间产生空白行。这是明示的边界，不作数据迁移。
+
+--- END ORIGINAL ---
+
+历史原文（逐字节保全）：docs/v2/WP14_ONE_LOGICAL_BLOCK_ONE_LINE.md
+来源提交：cb9410294dedadbe4470f6b893fc654d437933c2
+SHA256：23d5830ac16216a696ca542ef91fc5385965d72f3e726cf45e41da0116f28758
+--- BEGIN ORIGINAL ---
+# WP14 · 每个逻辑块对应 CM6 一个行号、只隔一个 LF
+
+## 用户在 iPad Safari 的验收要求
+
+OCR 基础块转换为逻辑块后，不能让 OCR 中一段文字的物理断行扩张为多条 CM6 源码行。每个 `logical_id` 对应唯一的源码行号；相邻块之间只保留一个回车换行。长文本在 iPad 上可以自动软折行，但不新增行号。该规则不取决于 PBS 是否同一父组。
+
+## 数据权威与两表架构
+
+- 原始 `mineru_base` 和 MinerUJSON/PDF 继续**完全无损且只读**。在生成新 `logical_block.md_block` 时，把 OCR 原文的连续 CR/LF 与相邻空白压为单个空格，不冒险猜测断词连字符；保留所有 OCR 文字和公式符号。title、正文、HTML 表格、caption、footnote 和显示数学统一单行（显示数学采用 V1 可直接渲染的 `$$公式$$`）。禁止额外业务表和 Markdown 行表。
+- CM6 从 `md_block` 按 `logical_order` 投影，中间每一块仅一 LF，最后一个块不额外添加换行。虚拟 LF 属于前块区间，可区分真实 SQL 文本。`logicalTextRows` 读取回来的正文必须与现有持久化文本精确一致，结构拖动只更改 PBS/顺序。
+- 对已经使用的旧书籍，**不执行自动迁移或重建**，因为可能包含人工编辑。SQL 组现有操作弹窗新增「整理逻辑块为单行」，二次确认后使用唯一 CM6 的一个文本编辑事务，将当前所有多行 MD Block 规范为单行；原生 Undo/Redo 生效，旧值比对的 `md-commit` 空闲提交保证遇并发冲突不覆盖别处修改。`logical_id/p/b/s` 和 `Raw Block` 不变。
+- CM6 禁止 Enter / 换行粘贴引入第二条物理行到同一块；旧多行行块仍可正常只读加载并经显式整理。未开放的块拆分保持未开放。
+- Markdown 阅读预览只读取**当前 CM6 的逻辑块清单**并临时用双 LF 分隔供 V1 Markdown-it 识别不同段落、表格和脚注；它只在预览侧重映射 source-line 位置，不在源码/SQLite 制造额外换行，也不建立第二份可编辑正文。
+
+## 回归要求与风险
+
+- 真实 267 行书籍中，新初始化必须恰好 267 条源码物理行，且每个 `md_block` 不含 CR/LF；MinerU JSON、基础表 SHA 不变；SQL Markdown 传输格式的双 LF 仅用于带 UTF-16 offsets 的网络传输，不得混入 CM6。
+- 直接测试要涵盖中文、UTF-16、空块、表格、标题、`$$` 数学、尾部无回车，单行逆映射、PBS 拖动不改变行数。
+- Chromium 和 iPad-WebKit 浏览器测试需检查 CM6 行数、真实 PDF 拖动、AG 定位、MD 预览及 Undo/Redo/SQL 旧值回写、旧书籍二次确认整理与拒绝直接多行输入。
+- 已编辑的旧多行内容经过用户**明确确认整理**会删除其原有手工换行；不能自动猜测哪些换行有语义。代码围栏等内容若被整理也可能丢失多行块语法，按原生 Undo 回退；新数据原始块不受影响。对于是否需要更复杂的多行块专用视图，另行实验，不破坏此单行正文契约。
+
+--- END ORIGINAL ---
