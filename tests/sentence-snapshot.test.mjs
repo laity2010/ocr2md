@@ -28,3 +28,10 @@ test('stale results cannot replace the current snapshot',async()=>{
  const old=session.load('old');await session.load('new');resolve(null);await old;assert.equal(session.getSnapshot(),s);
  session.invalidate();assert.equal(session.getSnapshot(),null);
 });
+
+test('cancel pending preserves accepted source and ignores obsolete failure',async()=>{
+ const s=await importSnapshot(await fixture());let reject;const reports=[];
+ const session=createSnapshotSession({report:(...v)=>reports.push(v),reader:p=>p==='old'?new Promise((_,r)=>reject=r):Promise.resolve(s)});
+ await session.load('current');const old=session.load('old');session.cancelPending();reject(Error('obsolete'));assert.equal(await old,null);
+ assert.equal(session.getSnapshot(),s);assert.equal(reports.length,1);
+});

@@ -41,19 +41,31 @@ function pane(name,onModuleChange){
   host.id=name==='source'?'editor':'sentence-editor-'+name;
   element.append(bar,host);
   let view;
-  return {element,init(){
-    view=new EditorView({parent:host,state:EditorState.create({doc:'',extensions:[
+  const extensions=[
       ios?nativeIOSBasicSetup:basicSetup,
-      EditorState.readOnly.of(true),EditorView.editable.of(false),
+      EditorState.lineSeparator.of('\n'),EditorState.readOnly.of(true),EditorView.editable.of(false),
       EditorState.transactionFilter.of(tr=>tr.docChanged?[]:tr),
       EditorView.contentAttributes.of({tabindex:'0',spellcheck:'false','aria-label':names[name]+' · 只读源码'}),
       EditorView.lineWrapping,markdown({base:markdownLanguage}),obsidianMarkdown,
       syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers
-    ]})});
-  },layout(){view?.requestMeasure();},dispose(){view?.destroy();}};
+    ];
+  const stateFor=doc=>EditorState.create({doc,extensions});
+  return {element,init(){view=new EditorView({parent:host,state:stateFor('')});},
+    setMarkdown(text){
+      if(typeof text!=='string')throw TypeError('Expected Markdown text');
+      if(view.state.doc.toString()===text)return;
+      const state=stateFor(text);
+      if(state.doc.toString()!==text)throw Error('Markdown changed during CM6 import');
+      view.setState(state);
+    },layout(){view?.requestMeasure();},dispose(){view?.destroy();}};
 }
 export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
-  const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>pane(name,onModuleChange)});
+  let sourcePane;
+  const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>{
+    const component=pane(name,onModuleChange);
+    if(name==='source')sourcePane=component;
+    return component;
+  }});
   function add(name,position){
     const p=dockview.addPanel({id:name,component:name,title:names[name],...(position?{position}:{})});
     p.group.header.hidden=true;p.group.relayout();return p;
@@ -63,7 +75,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const splitter=add('splitter',{referencePanel:intl,direction:'below'});
   const wink=add('wink',{referencePanel:splitter,direction:'below'});
   let sized=false;
-  return Object.freeze({activate(){
+  return Object.freeze({setSourceMarkdown(text){sourcePane.setMarkdown(text);},activate(){
     const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;
     dockview.layout(w,h);
     if(!sized){

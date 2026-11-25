@@ -52,6 +52,7 @@ export function createSnapshotSession({report=()=>{},reader=readV2Snapshot}={}){
     return snapshot;
    }catch(error){if(seq===generation){current=null;report('分句快照读取失败：'+error.message,'error');}return null;}
   },
+  cancelPending(){generation++;},
   invalidate(){generation++;current=null;}
  });
 }
