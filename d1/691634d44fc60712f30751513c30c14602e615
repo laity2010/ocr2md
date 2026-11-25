@@ -25,3 +25,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_EXIT","utc":"2026-11-25T10:04:10.851178+00:00","phase":"WP30C 第三轮诊断脚本匹配引号失败未改文件；修正后真实预览验收","step":"34c4064a899c4a9abeba23167cb844ba","exit_code":0}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_START","utc":"2026-11-25T10:04:51.870152+00:00","phase":"WP30C 正式构建发布及线上核验","step":"1b8c436d6c0a4723a7e04fbda9d691a2"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"54708777fb5a4927bb78923be8ab03bc","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"d1691634d44fc60712f30751513c30c14602e615","event":"RUN_EXIT","utc":"2026-11-25T10:07:33.500876+00:00","phase":"WP30C 正式构建发布及线上核验","step":"1b8c436d6c0a4723a7e04fbda9d691a2","exit_code":0}
