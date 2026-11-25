@@ -1,0 +1,17 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：a03cecd35904db7e4412cb54b50788d1680c623e
+原提交标题：test(v2): fail release preflight for non-V1 AG Type filter and check native popup
+父提交：d838a99c5e79d87674d9e6a980ad2d3a48f8ae96
+原提交正文：空白
+
+合规判定：按当时原始证据核对；早期提交不按后来条款追溯定罪。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+M	scripts/v2_frame_publish.py
+A	tests/cross-version-ag-filter.browser.test.mjs
+M	tests/test_v2_gateway_publish_sync.py
+M	tests/v2-mineru-base.browser.test.mjs
+
+历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
+
