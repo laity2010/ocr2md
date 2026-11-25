@@ -19,17 +19,19 @@ try{
    await page.goto(vite.resolvedUrls.local[0]+'wp29-direct-fixture.html');
    const result=await page.evaluate(async()=>{
     const {findLabMedia,createLabOcrMediaView}=await import('/ui/lab-ocr/media-view.js');
-    const {mediaContext,planMediaEdits,resolveMediaRow,mediaFileUrl}=await import('/ui/v2-media.js');
+    const {mediaContext,planMediaEdits,planBareMediaNormalization,resolveMediaRow,mediaFileUrl}=await import('/ui/v2-media.js');
     const {composeOwnedSource}=await import('/ui/v2-block-source.js');
     const {createMdLineIndex}=await import('/ui/v2-md-line-index.js');
     const {EditorState}=await import('/node_modules/.vite/deps/@codemirror_state.js').catch(()=>import('/node_modules/@codemirror/state/dist/index.js'));
     const url='https://cdn-mineru.openxlab.org.cn/one.png',url2='https://cdn-mineru.openxlab.org.cn/two.jpg';
     const local='media/'+'a'.repeat(24)+'.png',local2='media/'+'b'.repeat(24)+'.jpg';
-    let text='![A](<'+url+'>) and ![B]('+url+')\n![C]('+url2+')\n\n',index;
+    let text='![A](<'+url+'>) and ![B]('+url+')\n'+url2+'\n\n',index;
     const reset=()=>{const c=composeOwnedSource([{logicalId:1,baseBlockId:1,logicalOrder:1,parentId:null,p:0,b:0,s:0,blockType:'text',markdownText:text}]);index=createMdLineIndex(EditorState.create({doc:c.source}).doc,c.blocks);};
     reset();
     const check=(ok,msg)=>{if(!ok)throw Error(msg);};
     check(findLabMedia(text).length===3,'M00 count');
+    const normalized=planBareMediaNormalization(index,text);
+    check(normalized.length===1&&normalized[0].beforeText===url2&&normalized[0].afterText==='![](<'+url2+'>)','bare normalization plan');
     const {renderMarkdown}=await import('/ui/markdown-preview.js');
     const sample='Caption\n'+url2+'\nNotes\n\n'+local2+'\n\n```text\n'+url+'\n```\n<!--\n'+url+'\n-->\n ordinary '+url+'\n';
     const bare=findLabMedia(sample);
@@ -59,7 +61,7 @@ try{
       },
       replace:edits=>{
        const plan=planMediaEdits(index,text,edits);check(plan.length>0,'no plan');
-       for(const edit of [...edits].sort((a,b)=>b.from-a.from))text=text.slice(0,edit.from)+edit.insert+text.slice(edit.to);
+       const lines=text.split('\n');for(const edit of plan){const at=lines.indexOf(edit.beforeText);check(at>=0,'current line');lines[at]=edit.afterText;}text=lines.join('\n');
        reset();replaces++;return {changed:edits.length};
       },onChanged:()=>{},onStatus:()=>{}
     });
@@ -81,7 +83,7 @@ try{
     check(text.includes('![A](<'+local+'>) and ![B]('+local+')'),'exact duplicate replacement');
     check(replaces===1,'one replacement for duplicated URL');
     await controller.downloadAll();
-    check(text.includes('![C]('+local2+')'),'bulk replacement');
+    check(text.includes('![](<'+local2+'>)'),'bulk replacement');
     check(replaces===2,'bulk one replacement');
     controller.dispose();return {chunks:chunk,replaces,localRefs:findLabMedia(text).filter(r=>r.local).length};
    });

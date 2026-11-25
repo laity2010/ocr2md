@@ -21,6 +21,7 @@ const inlineMode=process.env.V2_TEST_INLINE_MATH==='1';
 const latexMode=process.env.V2_TEST_LATEX_VIEW==='1'||inlineMode;
 const breakMode=process.env.V2_TEST_BREAK_VIEW==='1';
 const realMediaBook=process.env.V2_TEST_REAL_MEDIA_BOOK;
+const normalizeMediaMode=process.env.V2_TEST_NORMALIZE_MEDIA==='1';
 const mediaMode=process.env.V2_TEST_MEDIA_VIEW==='1'||Boolean(realMediaBook);
 const lineViewMode=process.env.V2_TEST_LINE_VIEW==='1';
 const initMode=process.env.V2_TEST_FRESH_OWNED_INIT==='1';
@@ -168,11 +169,49 @@ try{
      const read=()=>grid.evaluate(el=>el.v2BaseGridPort.getDisplayedRows());
      const expected=[[12,'p0b5s1'],[17,'p0b7s1'],[22,'p0b9s1'],[27,'p0b11s1'],[32,'p0b13s1'],[37,'p0b15s1'],[45,'p1b1s2'],[111,'p4b1s2'],[116,'p5b0s2'],[252,'p12b8s3'],[258,'p13b1s4']];
      await picker.selectOption('media');
-     await page.waitForFunction(focusOnly=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&(x.status==='已下载'||focusOnly&&x.local&&x.status==='本地'));},process.env.V2_TEST_FOCUS_STABILITY==='1',{timeout:30000});
+     await page.waitForFunction(focusOnly=>{const r=document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows();return r.length===11&&r.every(x=>x.line_id&&(x.status==='已下载'||focusOnly&&x.local&&x.status==='本地'));},normalizeMediaMode||process.env.V2_TEST_FOCUS_STABILITY==='1',{timeout:30000});
      const rows=await read();assert.deepEqual(rows.map(r=>[r.line_no,r.pbs]),expected);
      console.log("WP29C_ALL_ROWS_PASS",name,rows.length);
      assert.equal(writes.length,0);assert.equal((await snapshot()).doc,before.doc);
      await page.waitForFunction(()=>document.querySelector('#workspace .ocr-preview-pdf-host')?.v2PDFPort?.getState().loaded,null,{timeout:30000});
+     const headerOrder=['preview_path','source_kind','line_no','pbs','action','status','progress','adopted','url'];
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>!c.hide).map(c=>c.colId)),headerOrder);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned)),[]);
+     if(normalizeMediaMode){
+       // Actual header DOM order; widen the test viewport only to expose all five columns.
+       await page.setViewportSize({width:2100,height:1100});
+       await page.waitForFunction(()=>document.querySelectorAll('#workspace .ocr-outline-grid .ag-header-cell[col-id]').length>=5);
+       const headers=await grid.evaluate(el=>[...el.querySelectorAll('.ag-header-cell[col-id]')].filter(n=>n.getBoundingClientRect().width>0).sort((a,b)=>a.getBoundingClientRect().left-b.getBoundingClientRect().left).map(n=>n.getAttribute('col-id')));
+       assert.deepEqual(headers.slice(0,5),headerOrder.slice(0,5));
+       const lines=before.doc.split('\n');
+       for(const row of rows.slice(7)){assert.equal(lines[row.line_no-1],row.url);lines[row.line_no-1]='![](<'+row.url+'>)';}
+       const normalized=lines.join('\n');
+       await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+       await page.getByRole('menuitem',{name:'规范化图片链接'}).click();
+       await page.waitForFunction(expected=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===expected,normalized,{timeout:30000});
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:30000});
+       assert.equal(writes.length,1);assert.equal(writes[0].payload.changes.length,4);
+       assert.equal(api(folder,'markdown','GET').body.markdown,normalized);
+       assert.deepEqual((await read()).map(r=>[r.line_no,r.pbs]),expected);
+       for(const ref of rows.slice(7)){
+         await page.waitForFunction(line=>{const img=document.querySelector('#workspace .ocr-preview-md-scroll [data-source-start="'+line+'"] img[src*="media-file"]');return img?.complete&&img.naturalWidth>0;},ref.line_no,{timeout:30000});
+       }
+       await source.evaluate(el=>el.v2SourcePort.undo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:30000});
+       assert.equal((await snapshot()).doc,before.doc);
+       await source.evaluate(el=>el.v2SourcePort.redo());
+       await page.waitForFunction(()=>!document.querySelector('#workspace #editor').v2SourcePort.getState().dirty,null,{timeout:30000});
+       assert.equal((await snapshot()).doc,normalized);
+       await loadPage();assert.equal((await snapshot()).doc,normalized);
+       await picker.selectOption('media');
+       await page.waitForFunction(()=>document.querySelector('#workspace .ocr-outline-grid').v2BaseGridPort.getDisplayedRows().length===11);
+       assert.deepEqual((await read()).map(r=>[r.line_no,r.pbs]),expected);
+       await page.getByRole('button',{name:'当前 AG View 功能'}).click();
+       await page.getByRole('menuitem',{name:'规范化图片链接'}).click();
+       assert.equal((await snapshot()).doc,normalized);assert.equal(writes.length,3);assert.deepEqual(errors,[]);
+       console.log('WP29E_REAL_NORMALIZE_PASS',name,'four lines, 11 locations, actual header order, one CAS, undo/redo/reopen, idempotent');
+       continue;
+     }
      if(process.env.V2_TEST_FOCUS_STABILITY==='1'){
        // The first two media rows fit without scrolling. Capture actual
        // rendered nodes, not just rowData, before any selection.
@@ -221,7 +260,7 @@ try{
      }
      assert.equal(writes.length,0);
      let adopted=before.doc;
-     for(const ref of rows)adopted=adopted.split(ref.url).join(ref.preview_path);
+     for(const ref of rows){const parts=adopted.split('\n');const i=ref.line_no-1;parts[i]=parts[i]===ref.url?'![](<'+ref.preview_path+'>)':parts[i].split(ref.url).join(ref.preview_path);adopted=parts.join('\n');}
      await page.getByRole('button',{name:'当前 AG View 功能'}).click();
      await page.getByRole('menuitem',{name:'下载并替换全部'}).click();
      await page.waitForFunction(expected=>document.querySelector('#workspace #editor').v2SourcePort.getMarkdown()===expected,adopted,{timeout:30000});
@@ -260,7 +299,8 @@ try{
      assert.equal(refs.length,2);assert.equal(refs[0].line_no,1);assert.equal(refs[0].pbs,before.rows[0].p===0?'p0b'+before.rows[0].b+'s0':refs[0].pbs);
      assert(rows.some(r=>r.adopted==='未引用'&&!r.line_id));
      assert.equal(writes.length,0);
-     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned).map(c=>[c.colId,c.pinned])),[['line_no','left'],['pbs','left'],['action','right']]);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>c.pinned)),[]);
+     assert.deepEqual(await grid.evaluate(el=>el.v2BaseGridPort.getColumnState().filter(c=>!c.hide).slice(0,5).map(c=>c.colId)),['preview_path','source_kind','line_no','pbs','action']);
      const local=refs[0].preview_path;
      assert(/^media\/[0-9a-f]{24}\.png$/.test(local));
      const rowIndex=await grid.evaluate((el,id)=>{const p=el.v2BaseGridPort;p.focusRow('media_row_id',id);return p.getDisplayedRows().findIndex(r=>r.media_row_id===id);},refs[0].media_row_id);

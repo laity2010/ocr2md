@@ -51,7 +51,9 @@ installObsidianCallouts(md);
 // exact one-line source map; other renderer callers retain standard Markdown.
 md.block.ruler.before('paragraph','v2_bare_media',(state,startLine,endLine,silent)=>{
   if(!state.env.bareMedia||state.sCount[startLine]>3)return false;
-  const match=parseBareMediaLine(state.src.slice(state.bMarks[startLine],state.eMarks[startLine]));
+  const line=state.src.slice(state.bMarks[startLine],state.eMarks[startLine]);
+  const standard=/^ {0,3}!\[\]\(<([^<>\n]+)>\)[ \t]*$/.exec(line);
+  const match=parseBareMediaLine(standard?standard[1]:line);
   if(!match)return false;
   if(silent)return true;
   const token=state.push('v2_bare_media','p',0);

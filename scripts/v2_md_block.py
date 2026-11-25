@@ -81,7 +81,7 @@ def initial_md(raw,kind,element):
     if not isinstance(raw,str) or not isinstance(kind,str):raise ValueError('OCR 文本类型无效')
     # A table recovery override is not the original element's text.
     # Never discard recovered content by reprojecting a different element.
-    if kind not in ('image_body','image','inline_equation','interline_equation') and raw==raw_element_text(element):
+    if kind not in ('image_body','image','chart_body','inline_equation','interline_equation') and raw==raw_element_text(element):
         raw=inline_span_projection(element)
     raw=single_line_md(raw)
     if not raw:return ''
@@ -89,7 +89,7 @@ def initial_md(raw,kind,element):
         level=element.get('level',1)
         level=level if isinstance(level,int) and 1<=level<=6 else 1
         return '#'*level+' '+raw
-    if kind in ('image_body','image'):
+    if kind in ('image_body','image','chart_body'):
         return '![](<'+raw.replace('>','%3E')+'>)'
     if kind=='interline_equation':
         # V1 Markdown renderer recognizes a whole-line $$formula$$ token.

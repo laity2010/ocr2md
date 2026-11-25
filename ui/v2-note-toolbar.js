@@ -1,7 +1,7 @@
 /** Note-only adapter of the V1 action menu. No changes to Frame layout. */
 import {createNoteMatchRulesDialog} from './lab-ocr/note-match-rules-dialog.js';
 import './v2-note-toolbar.css';
-export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert,onInlineMath,onDownloadAll,onMediaScan}){
+export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert,onInlineMath,onDownloadAll,onMediaScan,onNormalizeMedia}){
   const trigger=document.createElement('button');
   trigger.type='button';trigger.className='ocr-ag-function-select';
   trigger.setAttribute('aria-label','当前 AG View 功能');
@@ -30,7 +30,7 @@ export function mountNoteToolbar(bar,{getConfig,onConfig,onStatus,onConvert,onIn
     e.stopPropagation();if(menu){close();return;}
     menu=document.createElement('div');menu.className='ocr-ag-function-menu';
     menu.setAttribute('role','menu');menu.setAttribute('aria-label','当前 AG View 功能');
-    const items=mode==='media'?[['download-all','下载并替换全部',onDownloadAll],['refresh','刷新媒体清单',onMediaScan]]:mode==='latex'?[['inline-math','补全行内公式定界',onInlineMath]]:[['rules','注释格式',rules],...(onConvert?[['convert','转换匹配',onConvert]]:[])];
+    const items=mode==='media'?[['download-all','下载并替换全部',onDownloadAll],['normalize-media','规范化图片链接',onNormalizeMedia],['refresh','刷新媒体清单',onMediaScan]]:mode==='latex'?[['inline-math','补全行内公式定界',onInlineMath]]:[['rules','注释格式',rules],...(onConvert?[['convert','转换匹配',onConvert]]:[])];
     for(const [id,label,run] of items){
       const option=document.createElement('button');option.type='button';option.className='ocr-ag-function-item';
       option.setAttribute('role','menuitem');option.dataset.action=id;option.textContent=label;

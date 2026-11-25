@@ -22,7 +22,7 @@ import {createBreakSession,resolveBreakPair,breakColumns} from './v2-block-break
 import {createBlockBreakReviewCell} from './lab-ocr/block-break-review-cell.js';
 import './v2-block-break.css';
 import {createLabOcrMediaView} from './lab-ocr/media-view.js';
-import {mediaContext,mediaColumns,planMediaEdits,resolveMediaRow} from './v2-media.js';
+import {mediaContext,mediaColumns,planMediaEdits,planBareMediaNormalization,resolveMediaRow} from './v2-media.js';
 import './lab-ocr/media-view.css';
 import {planV2InlineMath} from './v2-inline-math.js';
 // Exact, byte-identical V1 AG Grid Community IFilterComp and its original CSS.
@@ -192,6 +192,13 @@ function setMediaActive(value){
   mediaActive=true;controller.setActive(true);
   queueMicrotask(()=>{if(mediaController===controller&&mediaActive)
     void controller.scan().catch(error=>report('媒体清单刷新失败：'+error.message,'warning'));});
+}
+function normalizeMediaMarkdown(){
+ const p=sourceForNotes();
+ if(agView!=='media'||!p?.getState().loaded||rebuilding||saveBlocked)throw Error('媒体 View 或保存状态已变化');
+ const plan=planBareMediaNormalization(p.getMdLineIndex(),p.getMarkdown());
+ if(plan.length)p.replaceMdLines(plan);
+ report(plan.length?`✓ 已规范化 ${plan.length} 条图片引用 · 可撤销`:'图片引用已是规范格式','ok');
 }
 function focusAGMedia(port,focus){
   const rows=port.getDisplayedRows();
@@ -725,7 +732,7 @@ function renderGrid(state){
       noteSession.configure(config);noteFocusKey=null;savedNoteFilter=null;
       port.setFilterModel(null);renderGrid(logicalState);
       report('注释格式已应用并重新识别 · 仅当前会话','ok');
-    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),
+    },onStatus:report,onConvert:convertMatchedNotes,onInlineMath:completeInlineMath,onDownloadAll:()=>getMediaController().downloadAll(),onMediaScan:()=>getMediaController().scan(),onNormalizeMedia:normalizeMediaMarkdown,
   });
   noteToolbar?.setVisible(noteView||latexView||mediaView,mediaView?'media':latexView?'latex':'note-match');
   let view=null;

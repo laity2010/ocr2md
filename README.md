@@ -150,11 +150,12 @@
 - 审阅待定/断块合并/忽略；合并只接受 V1 安全条件（物理行相邻、后块单非空正文行），现有 CM6 replaceMdLines 原生事务使 A 承接正文、B 清空并保留真实 LF 与 ID/PBS，局部 SQL CAS 保存、Undo/Redo。原始坐标不变，空块原有虚线。未增加第三张表；人工忽略和已合并审阅回执仅当前会话，刷新重新派生未合并候选，合并正文长期保存。详见 [WP28](docs/v2/WP28_BLOCK_BREAK.md)。
 
 ### 3.2d 媒体 View（WP29）
+- **WP29E（图片格式与列序）**：`image_body` / `image` / `chart_body` 初始化统一输出标准 Markdown `![](<URL>)`；采用裸远端链接时补齐图片语法，已有标准定界符保留。历史裸路径只在用户明确点击「功能 → 规范化图片链接」时，经同一 CM6 行事务修正、支持 Undo/Redo/CAS；不得打开书籍时自动修改。保留独立图表行的预览映射。媒体 View 实际列序固定为预览、来源、源码行号、PBS、操作、其他列；不固定左右列，防止 AG 改变列序。详见 [WP29E](docs/v2/WP29E_MEDIA_MARKDOWN.md)。
 - **WP29D（公共 AG 焦点）**：定位仅调用 AG 原生单行选中 API，禁用其独立点击选择和选择框，由现有多窗焦点事件统一控制；保留橙色高亮。不得在纯焦点变化时重设 rowClassRules、redrawRows、rowData 或列定义。页范围变化或真实数据变更仍走原有数据投影。真实书籍双浏览器 DOM 身份回归见 [WP29D](docs/v2/WP29D_AG_FOCUS_STABILITY.md)。
 - **WP29C**：兼容 MinerU `chart_body` 的独立裸图片 URL 及采用后的独立 `media/` 本地路径；媒体扫描与 Markdown 预览使用同一 V2 行解析规则，保持物理行号、稳定逻辑 ID、PBS 与原始 PDF 定位。预览采用独立行映射，不改原文；正文仅显式替换 URL。实际书籍 11 张图片隔离副本 Chromium/WebKit 完整回归通过。见 [WP29C](docs/v2/WP29C_BARE_MEDIA.md)。
 - **WP29B**：Markdown 预览优先使用当前已授权书籍中已经完整下载的 MinerU 图片，即使 CM6 引用仍为远端 URL；只读复用 media-status / media-file，未下载或查询失败则保留远端 URL。替换引用仍需显式操作，不改正文、两表或 AG 列布局。Chromium/WebKit 完整媒体工作台回归通过；见 [WP29B](docs/v2/WP29B_MEDIA_PREVIEW.md)。
-- 复用 V1 bf32515 的 media-view、media-module 与 v6_media 字节服务；列定义为预览、源码行、PBS、来源、状态、进度、引用、媒体链接、操作；源码行/PBS 左固定、操作右固定、78px 行高、默认全文、原生多选过滤。功能菜单保留下载并替换全部、刷新媒体清单；切换回其它 View 恢复行高与既有布局。
-- 清单从唯一 CM6 正文的公共 MD Line 与当前书籍 media/ 文件动态派生；链接按当前源码偏移及旧值核验，多引用同一 URL 统一替换，保留 Markdown 定界符和其它字符；一笔 replaceMdLines 原生事务、原 SQLite CAS 保存及 Undo/Redo。未引用本地文件不制造源码位置，撤销链接不删除文件。MD 预览使用 V2 书籍授权的媒体文件 URL。
+- 复用 V1 bf32515 的 media-view、media-module 与 v6_media 字节服务；列定义按 WP29E 顺序、78px 行高、默认全文、原生多选过滤。功能菜单包括下载并替换全部、规范化图片链接、刷新媒体清单；切换回其它 View 恢复行高与既有布局。
+- 清单从唯一 CM6 正文的公共 MD Line 与当前书籍 media/ 文件动态派生；链接按当前源码偏移及旧值核验，多引用同一 URL 统一替换，保留已有 Markdown 定界符和其它字符，历史裸链接按 WP29E 补齐图片定界；一笔 replaceMdLines 原生事务、原 SQLite CAS 保存及 Undo/Redo。未引用本地文件不制造源码位置，撤销链接不删除文件。MD 预览使用 V2 书籍授权的媒体文件 URL。
 - 新增 F02 已授权工作目录下的 media-inventory/status/chunk/file API，沿用 V1 512 KiB 分块、partial 文件、校验及安全路径策略，仅下载明确允许的 MinerU CDN，不允许任意 URL 或路径；状态读取不主动建立媒体目录。无新增 SQL 表或第二正文。实际下载仅在隔离 loopback 夹具验证；真实 CDN、用户原书及 iPad 实机未执行。详见 [WP29](docs/v2/WP29_MEDIA_VIEW.md)。
 
 ### 3.3 已发布旧实现的历史记录（有冲突者已废止）

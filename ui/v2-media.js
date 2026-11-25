@@ -44,7 +44,8 @@ export function planMediaEdits(index,source,edits){
   if(!line||e.to>line.textTo||source.slice(e.from,e.to)!==e.expected)
    throw Error('媒体链接不在当前物理行');
   used.add(e.from);
-  const list=groups.get(line.source_line)??[];list.push(e);groups.set(line.source_line,list);
+  const list=groups.get(line.source_line)??[];const ref=current.find(r=>r.from===e.from&&r.to===e.to&&r.url===e.expected);
+  list.push({...e,insert:ref.bare?`![](<${e.insert}>)`:e.insert});groups.set(line.source_line,list);
  }
  return [...groups].map(([lineNo,list])=>{
   const line=index.atSourceLine(lineNo);
@@ -52,6 +53,16 @@ export function planMediaEdits(index,source,edits){
   for(const e of list.sort((a,b)=>b.from-a.from))
    after=after.slice(0,e.from-line.from)+e.insert+after.slice(e.to-line.from);
   return {ref:index.makeRef(lineNo),beforeText:line.md_line,afterText:after};
+ });
+}
+/** Explicit repair of historical naked image lines; never runs on load. */
+export function planBareMediaNormalization(index,source){
+ if(!index||typeof source!=='string')throw Error('媒体链接修订无效');
+ return findLabMedia(source).filter(r=>r.bare).map(r=>{
+  const line=index.atOffset(r.from);
+  if(!line||r.to>line.textTo||source.slice(r.from,r.to)!==r.url)throw Error('媒体链接位置已变化');
+  return {ref:index.makeRef(line.source_line),beforeText:line.md_line,
+    afterText:source.slice(line.from,r.from)+`![](<${r.url}>)`+source.slice(r.to,line.textTo)};
  });
 }
 export function resolveMediaRow(index,source,row){
@@ -65,14 +76,14 @@ const cmp=(a,b)=>String(a??'').localeCompare(String(b??''),'en',{numeric:true});
 export function mediaColumns(controller){
  return [
  {field:'preview_path',headerName:'预览',width:104,sortable:false,cellRenderer:controller.previewCell},
- {field:'line_no',headerName:'源码行',width:88,sortable:true,sort:'asc',pinned:'left',lockPinned:true,lockPosition:'left'},
- {field:'pbs',headerName:'PBS',width:110,sortable:true,comparator:cmp,pinned:'left',lockPinned:true,lockPosition:'left'},
  {field:'source_kind',headerName:'来源',width:86,sortable:true},
+ {field:'line_no',headerName:'源码行号',width:110,sortable:true,sort:'asc'},
+ {field:'pbs',headerName:'PBS',width:110,sortable:true,comparator:cmp},
+ {field:'action',headerName:'操作',width:99,sortable:false,cellRenderer:controller.actionCell},
  {field:'status',headerName:'状态',width:102,sortable:true},
  {field:'progress',headerName:'进度',width:102,sortable:false},
  {field:'adopted',headerName:'引用',width:84,sortable:true},
  {field:'url',headerName:'媒体链接',flex:2,minWidth:245,sortable:false},
- {field:'action',headerName:'操作',width:99,sortable:false,pinned:'right',lockPinned:true,lockPosition:'right',cellRenderer:controller.actionCell},
  {field:'media_row_id',headerName:'媒体行 ID',hide:true,sortable:false}
  ].map(c=>({pinned:null,sort:null,...c}));
 }

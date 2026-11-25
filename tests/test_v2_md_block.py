@@ -32,6 +32,9 @@ class MDTest(unittest.TestCase):
   image=next(r for r in rows if r['block_type']=='image_body')
   self.assertTrue(image['md_block'].startswith('![](<'))
   self.assertTrue(image['raw_block'].startswith('https://'))
+  charts=[r for r in rows if r['block_type']=='chart_body']
+  self.assertEqual(len(charts),4)
+  for chart in charts:self.assertEqual(chart['md_block'],'![](<'+chart['raw_block']+'>)')
   self.assertNotIn('raw_block',self.records()[0].keys()-{'raw_block'})
  def test_optimistic_md_update_undo_and_conflict(self):
   before=self.records()[0]
