@@ -11,6 +11,7 @@ import json
 import sqlite3
 from urllib.parse import parse_qs
 
+from .cas import commit_v3_md, commit_v3_structure
 from .db import V3Error
 from .importer import (
     existing_v3_markdown,
@@ -50,6 +51,16 @@ def _dispatch_mineru_base(
         if method != 'POST':
             raise V3Error(405, '导入操作仅允许 POST')
         return import_v3_book(folder, payload, common)
+
+    if operation == 'md-commit':
+        if method != 'POST':
+            raise V3Error(405, '正文增量提交仅允许 POST')
+        return commit_v3_md(folder, payload, common)
+
+    if operation == 'structure-commit':
+        if method != 'POST':
+            raise V3Error(405, '结构增量提交仅允许 POST')
+        return commit_v3_structure(folder, payload, common)
 
     if operation == 'markdown':
         if method != 'GET':
@@ -97,7 +108,12 @@ def handle(handler, subpath: str, parsed, common) -> None:
                 content_length = int(handler.headers.get('Content-Length', '-1'))
             except ValueError:
                 content_length = -1
-            if not (2 <= content_length <= 65536):
+            max_len = (
+                4 * 1024 * 1024 if operation == 'md-commit'
+                else 1024 * 1024 if operation == 'structure-commit'
+                else 65536
+            )
+            if not (2 <= content_length <= max_len):
                 raise V3Error(413, '请求体大小不合法')
             raw = handler.rfile.read(content_length)
             if len(raw) != content_length:

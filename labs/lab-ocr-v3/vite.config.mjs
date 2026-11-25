@@ -127,7 +127,7 @@ export default defineConfig({
             version,
             commit,
             frameBaseline,
-            stage:'wp02-sqlite-foundation',
+            stage:'wp03-summary-cas',
           })+'\n',
         });
       },
