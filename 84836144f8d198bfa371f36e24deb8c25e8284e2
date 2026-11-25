@@ -1,0 +1,40 @@
+OCR2MD Git 留痕整改（事后追加，UTC 2026-11-25T02:43:29+00:00）
+目标提交：84836144f8d198bfa371f36e24deb8c25e8284e2
+原提交标题：fix(v2): WP29B preview downloaded media before adoption
+父提交：4d81b21c1285b447bcf59a5e7846cb8bb373337a
+原提交正文：空白
+
+合规判定：违反现行 AGENTS §1 / BUILD §1 提交说明正文义务；此 Note 补齐可追溯记录，不改写原提交或免除历史违规。
+
+实际 Git 变更路径（来自原提交）：
+M	README.md
+A	docs/v2/WP29B_MEDIA_PREVIEW.md
+M	tests/v2-owned-edit.browser.test.mjs
+M	ui/v2-markdown-preview.js
+M	ui/v2-media.js
+M	ui/v2-mineru-entry.js
+
+已核实问题及后续处理：违宪：WP29B 上一答复在浏览器回归仍运行时结束，工作树未提交、未发布；用户再次追问后恢复同一航点，双浏览器测试通过，20261124-225113 发布，线上 SHA 一致。延迟完成不抹除原违规。
+
+原任务检查点摘录（不是本轮重跑）：
+任务检查点 tsk_3dd09fbeaab9515c 2026-11-24T14:52:36.87538Z: completed=[publish]: 84836144f8d198bfa371f36e24deb8c25e8284e2 已提交并推送；统一发布 20261124-225113，公网 HTTP 200 且 header 和 release-version.json SHA 一致，布局与七 Lab 哈希核验通过。
+
+验收范围以原始证据为准；未记录的测试、独立发布及物理实机验收不得推定通过。
+
+历史原文（逐字节保全）：docs/v2/WP29B_MEDIA_PREVIEW.md
+来源提交：84836144f8d198bfa371f36e24deb8c25e8284e2
+SHA256：0e00122440787acd992d6a8a13e952917a874a02d581e0d1ee1ef3f4bbe3311f
+--- BEGIN ORIGINAL ---
+# WP29B · 已下载但未采用的媒体预览
+
+基线：4d81b21。实机截图显示 AG 中有已下载的远端引用缩略图，但 Markdown 预览仍请求原远端链接而显示破图。修正：V2 预览仅对允许的 MinerU HTTPS 图片 URL 查询原书授权 media-status，complete 时使用同一 media-file 路径；缺失或失败保持远端；媒体状态更新触发预览查询，异步结果按工作目录和现存 URL 核验。没有自动下载、正文替换、SQL schema、AG 列布局或公共组件变更。
+
+验收记录：首次完整工作台测试在等待短暂 dirty 状态时超时（退出 1，原测试第 187 行），此时未采用图片的本地显示断言已通过。后续改用实际正文精确匹配及保存次数验证，而非仅捕获瞬态 dirty；保留原有保存、撤销、重做、重开、标题列序断言。
+
+- `V2_TEST_MEDIA_VIEW=1 node tests/v2-owned-edit.browser.test.mjs`：Chromium + WebKit PASS（退出 0）。阻断 CDN，未采用的两处远端引用可显示本地图片、原文不变且零写入；采用后一次 CAS 保存、撤销重做及重开通过。
+- `node tests/v2-media-direct.browser.test.mjs`：Chromium + WebKit PASS。
+- `python3 tests/test_v2_media.py`：PASS。
+
+测试为隔离夹具；未写用户数据库，实际 iPad Safari 仍待用户验收。
+
+--- END ORIGINAL ---
