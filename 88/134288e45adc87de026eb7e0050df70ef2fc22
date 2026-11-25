@@ -7,3 +7,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"121272a12daf4880bc5e030a20a4383a","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"121272a12daf4880bc5e030a20a4383a","branch":"refs/heads/experiment/lab-sentence","baseline":"88134288e45adc87de026eb7e0050df70ef2fc22","event":"RUN_START","utc":"2026-11-25T14:51:35.749520+00:00","phase":"preserve-failure","step":"147456c14c524bb88951e99b5c211e7f"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"121272a12daf4880bc5e030a20a4383a","branch":"refs/heads/experiment/lab-sentence","baseline":"88134288e45adc87de026eb7e0050df70ef2fc22","event":"RUN_EXIT","utc":"2026-11-25T14:52:02.484393+00:00","phase":"preserve-failure","step":"147456c14c524bb88951e99b5c211e7f","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"121272a12daf4880bc5e030a20a4383a","branch":"refs/heads/experiment/lab-sentence","baseline":"88134288e45adc87de026eb7e0050df70ef2fc22","event":"END","utc":"2026-11-25T14:52:18.381514+00:00","result":"FAIL","commit":"1530fc9d163954765053875f5464b5acbccb9e31","evidence":"构建及快照单测4/4 PASS，Chromium启动全文与只读及SQL导航前置断言通过；设置重入等待快照状态第55行超时，WebKit和布局回归未执行，失败证据保全，恢复WP01B2。","release":"FORBIDDEN","remote_ref":"refs/heads/evidence/sentence-wp01c-failed-20261125"}
