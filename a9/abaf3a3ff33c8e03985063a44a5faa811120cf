@@ -21,3 +21,7 @@ M	ui/v2-mineru-entry.js
 
 历史验收/故障证据缺失：BLOCKED（不能追证，未补造 PASS）。
 
+
+补充历史检查点证据：原注记的历史证据不足状态由以下可核对记录补充；并非本轮重测。
+tsk_cf16e843c459bb99 2026-11-23T02:09:10.479385Z: completed=[verify], current=publish: Python 三组 12+5+7、纯逻辑 JS、Chromium/WebKit 综合 AG 与真实 V1 PDF 多轨、Frame 隔离测试全部 PASS；WebKit 键盘测试稳定定位虚拟文档首块后通过；Vite build 成功且 commit a9abaf3 对应构建已生成。
+tsk_cf16e843c459bb99 2026-11-23T02:10:41.111409Z: completed=[publish]: V2 a9abaf3 已普通 push 至 origin；Vite 构建通过；统一 release manifest 发布成功（70 assets，其他 6 Lab 哈希未变），公网入口 HTTP 200、release-version SHA 与 sourceCommit 匹配；Mac Chromium 实际打开入口成功，无 pageerror。实机 iPad Safari 待用户端验收。
