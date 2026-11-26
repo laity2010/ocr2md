@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"90c6a901279049248bb40f4c9a859860","branch":"refs/heads/experiment/lab-sentence","baseline":"6177a6bcd1eca5b5584c8bf5856b484987573ea8","event":"START","utc":"2026-11-26T09:14:07.743610+00:00","wp":"WP04D","goal":"隔离三表的真实三引擎自动初始化；从WP04B已校验MDLine及候选生成WP04C持久计划、一致切分分歧/失败整行，UTF16无损及保护范围、版本指纹、事务和上游保护。仅隔离模块API，不改真实V2、UI、Gateway、宪法，不提前实施人工仲裁及恢复。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"90c6a901279049248bb40f4c9a859860","branch":"refs/heads/experiment/lab-sentence","baseline":"6177a6bcd1eca5b5584c8bf5856b484987573ea8","event":"RUN_START","utc":"2026-11-26T09:15:03.812613+00:00","phase":"isolated-init-test","step":"41502282b7f3456eabdb5ccc7a1857d0"}
