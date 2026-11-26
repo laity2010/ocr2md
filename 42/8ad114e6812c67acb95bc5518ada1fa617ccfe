@@ -5,3 +5,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/heads/experiment/lab-sentence","baseline":"428ad114e6812c67acb95bc5518ada1fa617ccfe","event":"RUN_EXIT","utc":"2026-11-26T14:03:32.499458+00:00","phase":"arbitration-store","step":"da4e109618914b4a9a3c82611837a6a6","exit_code":0}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/heads/experiment/lab-sentence","baseline":"428ad114e6812c67acb95bc5518ada1fa617ccfe","event":"RUN_START","utc":"2026-11-26T14:03:47.721114+00:00","phase":"cm6-arbitration-ui","step":"e09e40f038d24e6c9ff91267906e14bf"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/heads/experiment/lab-sentence","baseline":"428ad114e6812c67acb95bc5518ada1fa617ccfe","event":"RUN_EXIT","utc":"2026-11-26T14:05:54.273158+00:00","phase":"cm6-arbitration-ui","step":"e09e40f038d24e6c9ff91267906e14bf","exit_code":0}
