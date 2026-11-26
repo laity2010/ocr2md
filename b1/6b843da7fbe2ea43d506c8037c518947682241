@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"3e8a63bde1354909b7b5058ad53ea895","branch":"refs/heads/experiment/lab-sentence","baseline":"b16b843da7fbe2ea43d506c8037c518947682241","event":"START","utc":"2026-11-26T02:44:28.562799+00:00","wp":"WP03C","goal":"基线b16b843；修复SQL导航硬编码：未绑定仅全局设置，保存授权并成功读取后双导航生成SQL逻辑表，解绑/读取失败清空四窗移除SQL；沿用Tom Select及原设置，不改布局算法数据；双浏览器定向验收Git发布END。","retrospective":false}
