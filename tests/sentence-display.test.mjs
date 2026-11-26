@@ -67,9 +67,11 @@ test('pending MDLine retains all original trailing blanks; grid shares exact lin
  assert.deepEqual(filtered.snapshot.lines.map(l=>l.sourceLine),[1,2,3,8,9]);
  assert.deepEqual(filtered.results.lines.map(l=>l.sourceLine),[1,2,3,8,9]);
  assert.deepEqual(projectSentenceRows(rows,filtered.snapshot.lines,choices).map(r=>r.source_line),[1,2,3,8,9]);
- const all=projectSentenceRows(rows,lines);
- assert.equal(all[5],rows[5]);
+ const all=projectSentenceRows(rows,lines,choices);
+ assert.equal(all[5].display_state,'已采用（未落盘）');
+ assert.equal(all[5].display_engine,'intl');
  assert.equal(all[5].review_state,'disputed');
+ assert.equal(rows[5].display_state,undefined);
  assert.equal(all[5].sentence_text,'C. D.');
  assert.equal(reviewProjection(snapshot,results,true,choices).snapshot.markdown,snapshot.markdown);
  assert.equal(reviewProjection(snapshot,results,false,new Map([[1,'intl'],[6,'intl'],[8,'intl']])).snapshot.markdown,'');

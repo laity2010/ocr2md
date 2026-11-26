@@ -41,37 +41,3 @@ export async function requestSentence(workspace,snapshot,{reinitialize=false,fet
  require(result.state!=='stale'||result.rows.length===0,'过期句表不得显示为当前数据');
  return {...result,review:result.state==='ready'?persistedReview(snapshot,result.rows):null};
 }
-
-/** Only replace the acknowledged source line; validate exact text, candidate
- * identity and selected cut sequence before displaying it. */
-export function applyArbitrationRows(snapshot,rows,change,changed){
- const line=snapshot.lines[change.sourceLine-1];
- require(line&&line.sourceLine===change.sourceLine,'仲裁行不存在');
- const old=rows.filter(r=>r.source_line===change.sourceLine);
- require(old.length&&old[0].adopted_engine===change.previousEngine,'原仲裁状态不一致');
- require(Array.isArray(changed)&&changed.length>0&&changed.every(r=>r.source_line===change.sourceLine),'仲裁回执行不符');
- const first=changed[0],metadata=old[0].candidates_json;
- require(first.candidates_json===metadata&&first.adopted_engine===change.adoptedEngine&&
- first.review_state===(change.adoptedEngine===null?'disputed':'adopted'),'仲裁回执状态不符');
- const cuts=change.adoptedEngine===null?[]:JSON.parse(metadata)[change.adoptedEngine].boundaries;
- require(changed.length===cuts.length+1&&cuts.every((pos,i)=>changed[i].to_utf16===pos),'仲裁回执句界不符');
- require(changed.slice(1).every(r=>r.candidates_json===null&&r.review_state===null&&r.adopted_engine===null),'仲裁回执元数据不符');
- const reviewLine=persistedReview({...snapshot,lines:[line]},changed).lines[0];
- const next=rows.filter(r=>r.source_line!==change.sourceLine).concat(changed).sort((a,b)=>a.source_line-b.source_line||a.sentence_index-b.sentence_index);
- return {rows:next,reviewLine};
-}
-export async function requestArbitration(workspace,snapshot,rows,change,{fetcher=fetch}={}){
- const first=rows.find(r=>r.source_line===change.sourceLine&&r.sentence_index===0);
- require(first&&first.adopted_engine===change.previousEngine,'仲裁原状态不一致');
- const {sha256}=await import('./snapshot.js');
- const response=await fetcher('/labs/lab-sentence/api/sentence/arbitrate',{
-  method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({workspace,source_document_hash:snapshot.documentVersion,source_line:change.sourceLine,
-   source_line_hash:first.source_line_hash,candidates_hash:await sha256(first.candidates_json),
-   previous_engine:change.previousEngine,adopted_engine:change.adoptedEngine})
- });
- const result=await response.json().catch(()=>null);
- if(!response.ok)throw Error(result?.error||'仲裁 HTTP '+response.status);
- require(result?.state==='ready'&&result.source_document_hash===snapshot.documentVersion,'仲裁回执来源无效');
- return applyArbitrationRows(snapshot,rows,change,result.rows);
-}

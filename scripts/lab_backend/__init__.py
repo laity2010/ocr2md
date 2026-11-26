@@ -59,7 +59,7 @@ def file_identity(path):
     return st.st_dev, st.st_ino
 
 
-def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_sentence_rows, arbitration=None):
+def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_sentence_rows):
     """Authorized runtime service. No upstream private row reads or writes."""
     path = folder / DB_NAME
     identity = file_identity(path)
@@ -89,12 +89,6 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
         verify_identity()
         return sqlite3.connect(path.as_uri() + '?mode=rw', uri=True, timeout=10)
 
-    if operation == 'arbitrate':
-        if not isinstance(arbitration, dict):
-            raise SentenceError(422, '缺少仲裁参数')
-        with closing(connect()) as db:
-            changed = SentenceStore(db).arbitrate(markdown, **arbitration, verify_source=current)
-        return response('ready', changed)
     if operation == 'open':
         with closing(connect()) as db:
             state, rows = SentenceStore(db).inspect(markdown, verify_source=current)
@@ -126,7 +120,7 @@ def handle(handler, operation, parsed, common):
     try:
         if common is None:
             raise SentenceError(503, 'Frame 授权服务不可用')
-        if operation not in ('sentence/open','sentence/reinitialize','sentence/arbitrate'):
+        if operation not in ('sentence/open','sentence/reinitialize'):
             raise SentenceError(404, '未知分句接口')
         if handler.command != 'POST':
             raise SentenceError(405, '句表操作只允许 POST')
@@ -146,9 +140,6 @@ def handle(handler, operation, parsed, common):
         payload = json.loads(raw)
         op = operation.split('/')[-1]
         expected = {'workspace','source_document_hash'} | ({'confirm'} if op == 'reinitialize' else set())
-        arbitration_keys = {'source_line','source_line_hash','candidates_hash','previous_engine','adopted_engine'}
-        if op == 'arbitrate':
-            expected |= arbitration_keys
         if not isinstance(payload, dict) or set(payload) != expected:
             raise SentenceError(422, '句表请求字段不合法')
         digest = payload['source_document_hash']
@@ -156,20 +147,10 @@ def handle(handler, operation, parsed, common):
             raise SentenceError(422, '来源摘要无效')
         if op == 'reinitialize' and payload['confirm'] != 'reinitialize-sentence-table':
             raise SentenceError(422, '缺少重新初始化确认')
-        extra = {}
-        if op == 'arbitrate':
-            arbitration = {key:payload[key] for key in arbitration_keys}
-            if (type(arbitration['source_line']) is not int or arbitration['source_line'] < 1 or
-                any(not isinstance(arbitration[k], str) or not re.fullmatch('[0-9a-f]{64}', arbitration[k])
-                    for k in ('source_line_hash','candidates_hash')) or
-                any(arbitration[k] not in (None,'intl','sentence-splitter','wink-nlp')
-                    for k in ('previous_engine','adopted_engine'))):
-                raise SentenceError(422,'仲裁参数无效')
-            extra['arbitration'] = arbitration
         cookie = handler.headers.get('Cookie','')
         folder = common.checked_workspace(payload['workspace'], common.authorized_roots(cookie))
         common.probe(folder)
-        respond(200, dispatch(folder, op, digest, lambda: read_public_snapshot(folder,cookie), **extra))
+        respond(200, dispatch(folder, op, digest, lambda: read_public_snapshot(folder,cookie)))
     except SentenceError as error:
         respond(error.code, {'error': str(error)})
     except (ValueError, TypeError, KeyError, UnicodeDecodeError):
