@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection} from '../ui/sentence/display.js';
+import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection,sentenceAtOffset} from '../ui/sentence/display.js';
 test('logical block selection uses exact UTF16 offsets and retains previous block in separator',()=>{
  const a={from:0,to:3},b={from:5,to:10};const blocks=[a,b];
  assert.equal(blockAtOffset([],0),null);
@@ -33,4 +33,17 @@ test('review projection filters unresolved disagreements without changing input'
  assert.equal(reviewProjection(snapshot,results,false,new Map([[2,'intl']])).snapshot.markdown,'');
  assert.equal(reviewProjection(snapshot,results,true,new Map([[2,'intl']])).snapshot,snapshot);
  assert.equal(snapshot.markdown,'A. B.\n\nC. D.');
+});
+
+test('focused sentence uses engine-specific exact source spans and local marker coordinates',()=>{
+ const b={from:10,text:'A. B. $x$ C.'};
+ const c=(ends)=>({units:ends.map(([from,to])=>({sourceRanges:[{from,to}]}))});
+ const a=c([[0,2],[3,12]]),joined=c([[0,12]]);
+ const mark={pos:22,label:'│',style:'ocr-sb-agreed',title:'end'};
+ assert.equal(sentenceAtOffset(b,a,11).text,'A.');
+ assert.equal(sentenceAtOffset(b,joined,11).text,b.text);
+ assert.equal(sentenceAtOffset(b,a,12).text,'B. $x$ C.');
+ assert.deepEqual(sentenceAtOffset(b,a,22,[mark]),{text:'B. $x$ C.',marks:[{...mark,pos:9}],label:'2 / 2 句'});
+ assert.equal(sentenceAtOffset(b,{units:[]},11).text,'');
+ assert.equal(sentenceAtOffset(b,{error:'bad'},11).label,'分句失败');
 });

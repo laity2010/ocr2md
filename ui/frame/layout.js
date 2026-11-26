@@ -2,7 +2,7 @@
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateEffect,StateField} from '@codemirror/state';
 import {EditorView,Decoration,WidgetType} from '@codemirror/view';
-import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection} from '../sentence/display.js';
+import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection,sentenceAtOffset} from '../sentence/display.js';
 import {basicSetup} from 'codemirror';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
@@ -80,7 +80,7 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
   host.className='ocr-cm-source frame-editor v2-source-session'+(ios?' ocr-ios-native-selection':'');
   host.id=name==='source'?'editor':'sentence-editor-'+name;
   element.append(bar,host);
-  let view,syncing=false,suppressUntil=0,lastGesture=0;
+  let view,syncing=false,suppressUntil=0,lastGesture=0,displayKey=null;
   const extensions=[
       ios?nativeIOSBasicSetup:basicSetup,
       EditorState.lineSeparator.of('\n'),EditorState.readOnly.of(true),EditorView.editable.of(false),
@@ -114,10 +114,11 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
   },
     setMarkdown(text,marks,label){
       if(title)title.textContent=names[name]+(label?' · '+label:'');
-      if(marks===undefined&&view.state.doc.toString()===text)return;
+      const key=marks===undefined?null:JSON.stringify([text,marks]);
+      if((marks===undefined&&view.state.doc.toString()===text)||(key!==null&&displayKey===key))return;
       const state=stateFor(text,marks);
       if(state.doc.toString()!==text)throw Error('Markdown changed during CM6 import');
-      view.setState(state);
+      view.setState(state);displayKey=key;
     },setCheck(checked,disabled){check.checked=checked;check.disabled=disabled;},highlight(focus){view.dispatch({effects:setFocus.of(focus)});},
     getPosition:()=>view.state.selection.main.head,
     locate(pos,select=true,anchor='center'){
@@ -130,7 +131,7 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
 export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const panes=new Map();
   const engineIds={intl:'intl',splitter:'sentence-splitter',wink:'wink-nlp'};
-  let snapshot=null,results=null,visible=null,lastSync=0,all=false,active=null,reviewVersion=null;
+  let snapshot=null,results=null,visible=null,visibleRows=null,marks=null,all=false,active=null,reviewVersion=null;
   const adopted=new Map(),disputed=new Set();
   function refreshChecks(){
     panes.get('source').setCheck(all,!snapshot);
@@ -142,13 +143,11 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   function render(sourcePos){
     const projection=reviewProjection(snapshot,results,all,adopted);
     visible=projection.snapshot;
-    const marks=boundaryDisplay(visible,projection.results);
+    visibleRows=new Map(projection.results.blocks.map(row=>[row.logicalId,row]));
+    marks=boundaryDisplay(visible,projection.results);
     active=null;
     panes.get('source').setMarkdown(visible.markdown,marks.source.marks);
-    for(const [name,id] of Object.entries(engineIds)){
-      const item=marks[id];
-      panes.get(name).setMarkdown(visible.markdown,item.marks,item.count+' 句'+(item.failed?' · '+item.failed+' 块失败':''));
-    }
+
     if(visible.blocks.length){
       const origin=b=>b.sourceFrom??b.from;
       const block=visible.blocks.find(b=>sourcePos>=origin(b)&&sourcePos<origin(b)+b.text.length)
@@ -156,7 +155,10 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
       const pos=block.from+Math.max(0,Math.min(block.text.length-1,sourcePos-origin(block)));
       panes.get('source').locate(pos);
       onSelection('source',pos);
-    }else refreshChecks();
+    }else{
+      for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');
+      refreshChecks();
+    }
   }
   function sourcePosition(){
     if(!active)return 0;
@@ -175,20 +177,19 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
     if(all)refreshChecks();else render(pos);
   }
   function onSelection(name,pos){
-    if(!visible)return;
+    if(name!=='source'||!visible)return;
     const block=blockAtOffset(visible.blocks,pos);
     if(!block)return;
     active=block;refreshChecks();
-    for(const [id,component] of panes){
-      component.highlight({from:block.from,to:block.to,pos});
-      if(id!==name)component.locate(pos);
+    panes.get('source').highlight({from:block.from,to:block.to,pos});
+    const row=visibleRows.get(block.logicalId);
+    for(const [name,id] of Object.entries(engineIds)){
+      const item=sentenceAtOffset(block,row?.candidates.find(c=>c.engine===id),pos,marks[id].marks);
+      panes.get(name).setMarkdown(item.text,item.marks,item.label);
     }
   }
-  function onScroll(name,pos){
-    if(!visible||performance.now()-lastSync<35)return;
-    lastSync=performance.now();
-    for(const [id,component] of panes)if(id!==name)component.locate(pos,false,'start');
-  }
+  // The right caret alone controls review; scrolling or selecting a left sentence does not move it.
+  function onScroll(){}
   const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>{
     const component=pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt);
     panes.set(name,component);return component;
@@ -203,7 +204,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const wink=add('wink',{referencePanel:splitter,direction:'below'});
   let sized=false;
   return Object.freeze({setSourceMarkdown(text){
-    snapshot=null;results=null;visible=null;active=null;
+    snapshot=null;results=null;visible=null;visibleRows=null;marks=null;active=null;
     refreshChecks();
     panes.get('source').setMarkdown(text,[]);
     panes.get('source').highlight(null);
