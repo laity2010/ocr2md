@@ -228,6 +228,9 @@ class SentenceStore:
             return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_READ and database == 'main' and arg1 in ('sentence', 'sqlite_master', 'sqlite_schema'):
             return sqlite3.SQLITE_OK
+        # Read-only schema metadata for detecting foreign-key write effects.
+        if action == sqlite3.SQLITE_PRAGMA and database == 'main' and arg1 == 'foreign_key_list':
+            return sqlite3.SQLITE_OK
         if action == sqlite3.SQLITE_FUNCTION and arg2 == 'char':
             return sqlite3.SQLITE_OK
         if action in (sqlite3.SQLITE_INSERT, sqlite3.SQLITE_UPDATE, sqlite3.SQLITE_DELETE) and database == 'main':
@@ -242,13 +245,25 @@ class SentenceStore:
 
     def _schema(self, create=False):
         catalog = self._db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master").fetchall()
-        tables = {row[1]: row[3] for row in catalog if row[0] == 'table' and not row[1].startswith('sqlite_')}
-        _require(set(tables) in ({'mineru_base', 'logical_block'}, {'mineru_base', 'logical_block', 'sentence'}),
-                 'unexpected database table inventory')
-        _require(not any(row[0] in ('trigger', 'view') and (row[1] == 'sentence' or row[2] == 'sentence')
-                         for row in catalog), 'unexpected sentence trigger/view')
-        if 'sentence' in tables:
-            _require(tables['sentence'] == DDL, 'unsupported sentence schema')
+        # Only this module's own table is a schema contract. The source
+        # document is supplied by the public snapshot, not by private SQL.
+        owned = [r for r in catalog if r[1].casefold() == 'sentence']
+        _require(not any(r[0] == 'trigger' and r[2].casefold() == 'sentence'
+                         for r in catalog), 'unexpected sentence trigger')
+        if create:
+            # Guard against external FK side effects, even if a caller's
+            # dedicated connection has foreign_keys disabled. Never read rows.
+            for kind, name, _, _sql in catalog:
+                if kind != 'table' or name.casefold() == 'sentence' or name.startswith('sqlite_'):
+                    continue
+                identifier = '"' + name.replace('"', '""') + '"'
+                _require(not any(fk[2].casefold() == 'sentence' for fk in
+                                 self._db.execute('PRAGMA main.foreign_key_list(' + identifier + ')')),
+                         'external foreign key depends on sentence')
+        if owned:
+            _require(len(owned) == 1 and owned[0][0] == 'table' and
+                     owned[0][1] == 'sentence' and owned[0][3] == DDL,
+                     'unsupported sentence schema')
         else:
             _require(create, 'sentence table has not been initialized')
             self._creating = True
@@ -272,7 +287,7 @@ class SentenceStore:
         db.execute('BEGIN IMMEDIATE')
         try:
             if initialize_only:
-                _require(not db.execute("SELECT name FROM main.sqlite_master WHERE name='sentence'").fetchone(),
+                _require(not db.execute("SELECT name FROM main.sqlite_master WHERE name='sentence' COLLATE NOCASE").fetchone(),
                          'sentence table already exists; automatic initialization refused')
             self._schema(create=True)
             db.execute('DELETE FROM main.sentence')

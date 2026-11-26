@@ -134,9 +134,8 @@ class SentenceStoreTests(unittest.TestCase):
                 names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
                 self.assertEqual(names, {'mineru_base','logical_block','sentence'})
                 self.assertEqual(SentenceStore(db).read(markdown), rows)
-            # Existing upstream API still refuses three tables: explicit integration gate.
-            with self.assertRaises(base.BaseError):
-                base.existing_markdown(folder)
+            # V2's own public projection must coexist with the sentence table.
+            self.assertEqual(base.existing_markdown(folder), snapshot)
 
     def test_atomic_failure_first_initialization_and_replacement(self):
         with tempfile.TemporaryDirectory(prefix='sentence-rollback-') as temp:
@@ -162,18 +161,58 @@ class SentenceStoreTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     store.read(new)
 
-    def test_unknown_table_or_schema_is_rejected(self):
-        for extra in ('CREATE TABLE extra(id)', 'CREATE TABLE sentence(id)'):
+    def test_foreign_tables_are_not_a_schema_error_but_own_schema_is_strict(self):
+        for extra in ('CREATE TABLE sentence(id)', 'CREATE VIEW sentence AS SELECT 1', 'CREATE TABLE Sentence(id)'):
             with closing(sqlite3.connect(':memory:')) as db:
-                db.executescript('CREATE TABLE mineru_base(id); CREATE TABLE logical_block(id);'+extra)
+                db.execute(extra)
                 store = SentenceStore(db)
-                with self.assertRaises(ValueError):
+                with self.assertRaisesRegex(ValueError, 'unsupported sentence schema'):
                     store.replace_all('', [])
+        # Independent store must not require upstream private tables at all.
         with closing(sqlite3.connect(':memory:')) as db:
-            db.executescript('CREATE TABLE mineru_base(id); CREATE TABLE logical_block(id);')
+            db.executescript("CREATE TABLE extra(id); INSERT INTO extra VALUES(7);")
             store = SentenceStore(db)
-            store.replace_all('', [])
+            store.initialize('', [])
             self.assertEqual(store.read(''), [])
+            with self.assertRaises(sqlite3.DatabaseError):
+                db.execute('DELETE FROM extra')
+
+    def test_other_state_schema_and_rows_survive_sentence_replacement(self):
+        with tempfile.TemporaryDirectory(prefix='sentence-jurisdiction-') as temp:
+            path=Path(temp)/'isolated.sqlite'
+            with closing(sqlite3.connect(path)) as db:
+                db.executescript("CREATE TABLE translation(id INTEGER PRIMARY KEY,body TEXT);"
+                                 "INSERT INTO translation VALUES(1,'keep');"
+                                 "CREATE VIEW future_view AS SELECT * FROM translation;")
+                db.commit()
+                before=db.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY name').fetchall()
+                store=SentenceStore(db)
+                store.initialize('A. B.',build_sentence_rows('A. B.',[plan([2],'agreed')]))
+                store.replace_all('New.',build_sentence_rows('New.',[plan()]))
+                with self.assertRaises(sqlite3.DatabaseError):
+                    db.execute("UPDATE translation SET body='bad'")
+                with self.assertRaises(sqlite3.DatabaseError):
+                    db.execute("SELECT * FROM translation")
+            with closing(sqlite3.connect(path)) as db:
+                self.assertEqual(db.execute('SELECT * FROM translation').fetchall(),[(1,'keep')])
+                self.assertEqual(db.execute("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name!='sentence' ORDER BY name").fetchall(),before)
+                db.execute("CREATE TABLE cross_ref(line INTEGER,idx INTEGER, FOREIGN KEY(line,idx) REFERENCES sentence(source_line,sentence_index) ON DELETE CASCADE)")
+                db.execute("INSERT INTO cross_ref VALUES(1,0)")
+                db.commit()
+                store=SentenceStore(db)
+                with self.assertRaisesRegex(ValueError,'external foreign key'):
+                    store.replace_all('', [])
+                self.assertEqual(rebuild_markdown(store.read('New.')),'New.')
+            with closing(sqlite3.connect(path)) as db:
+                self.assertEqual(db.execute("SELECT * FROM cross_ref").fetchall(),[(1,0)])
+                self.assertEqual(db.execute('SELECT * FROM translation').fetchall(),[(1,'keep')])
+                db.execute('CREATE TRIGGER contaminate AFTER DELETE ON sentence BEGIN DELETE FROM translation; END')
+                db.commit()
+                store=SentenceStore(db)
+                with self.assertRaisesRegex(ValueError,'unexpected sentence trigger'):
+                    store.replace_all('', [])
+            with closing(sqlite3.connect(path)) as db:
+                self.assertEqual(db.execute('SELECT * FROM translation').fetchall(),[(1,'keep')])
 
 
 if __name__ == '__main__':

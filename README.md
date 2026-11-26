@@ -3,13 +3,15 @@
 继承统一根目录 AGENTS.md、BUILD.md、COMM.md、GIT.md 及本州 AGENTS.md。
 独立框架型 Lab，以已验收 Frame 1dbc2b7 为基线，保留四窗和 F02 授权。唯一入口 /labs/lab-sentence/；设置和运行数据独立。不写 V2 逻辑表或旧分句 Lab。
 
-## WP04 数据契约（WP04D 隔离自动初始化已实现，尚未接入运行工作台）
+## WP04 数据契约（WP04D2 自有表管辖权修正；尚未接入运行持久化）
 
 ### 1. 数据权威与隔离
 
-目标是**同一 SQLite、三张业务表**：既有 `mineru_base`（OCR 原始块）、`logical_block`（上游 Markdown 正文权威）、新增 `sentence`（本模块唯一可写业务表）。不新增分句点表、仲裁表或重复的 MDLine 实体表；不向上游任何表追加分句字段，不修改上游正文、PBS、类型、结构、原始数据或其他字段。分句点、候选方案、采用状态、句文本及来源映射全部归 `sentence` 管理；下游无损重组仅为输出与验收，不回写上游。
+当前两州的目标是**同一 SQLite、两州各自拥有的三张业务表（不是全库数量上限）**：既有 `mineru_base`（OCR 原始块）、`logical_block`（上游 Markdown 正文权威）、新增 `sentence`（本模块唯一可写业务表）。不新增分句点表、仲裁表或重复的 MDLine 实体表；不向上游任何表追加分句字段，不修改上游正文、PBS、类型、结构、原始数据或其他字段。分句点、候选方案、采用状态、句文本及来源映射全部归 `sentence` 管理；下游无损重组仅为输出与验收，不回写上游。
 
-现有 V2 基线 `3b9a50bf1f0e181ddbd637f55a74564c82b7a400`：`scripts/v2_mineru_base.py:assert_schema` 严格要求恰好两张表；`logical_block.md_block` 保存真实 LF 的多行 Markdown，而 MDLine 是派生行级投影，不是第三张物理表。不可在运行中的 V2 用户库直接建表：当前校验会拒绝三表库，且联邦要求活动 Lab 数据隔离。本 Lab 首先只在经授权的独立测试/实验 SQLite 中验证同库三表（复制或生成隔离夹具而非修改原库）；实际整合须单独验证上游识别本模块自有表而仍严格保护其两表 Schema、未知表拒绝规则及已有读写/初始化行为。不得绕过上游校验、修改联邦宪法或把隔离夹具当成用户数据。未解决该集成门禁前不对现用 V2 文件执行迁移，不宣称三表共存已上线。
+历史 V2 基线 3b9a50b 的校验误将本州两表架构解释为全库恰好两表。WP04D2 对 V2 和 Sentence 各自执行细则作修正：V2 只校验并管理 mineru_base 与 logical_block；分句仅校验和管理 sentence，不要求存在任何特定外州表，也不限制同库其他业务表数量。两州使用各自公开 API，分句不直接读取上游私有表；SQLite authorizer 保持本表写入限制。外州独立表可共存；会导致跨州写入的触发器或外键依赖不允许进入写事务。未来校译业务表可独立存在，不修改本州 Schema。既有州宪法及联邦宪法不变；本节只是落实数据权威和模块边界的执行细则。
+
+同库共存已在隔离夹具验证，运行持久化尚未接入工作台。不可将隔离验收当作真实用户库迁移授权；正式接入仍需明确连接的目录授权、同一事务内来源版本校验、并发首次建表与整库换档协调、数据归属及运行回归。logical_block.md_block 保存真实 LF 的多行 Markdown；MDLine 是派生行级投影，不是新的实体表。
 
 ### 2. MDLine 输入与无损转换
 
@@ -48,14 +50,21 @@
 - WP04B：MDLine 输入解耦；保留已验收四窗，不改上游。
 - WP04C：隔离同库第三张表和无损转换 API；验证严格上游数据保护及 SQL 事务。
 - WP04D：三引擎自动初始化句表（无争议拆分、分歧整行）；完整覆盖。
+- WP04D2：两州数据表管辖权修正及隔离同库共存验证。
 - WP04E：采用、改选、取消及局部事务持久化。
 - WP04F：导航挂载分句表与 SQL 组重初始化功能。
-- WP04G：已有句表加载、上游变化检测及失效；明确三表兼容门禁的验证范围。
-- WP04H：三表架构、原文无损、上下游隔离、异常回滚、双浏览器及集成总体验收；未通过兼容门禁不得迁移现用 V2 用户库。
+- WP04G：已有句表加载、上游变化检测及失效；来源修订与共享连接安全门禁。
+- WP04H：三表架构、原文无损、上下游隔离、异常回滚、双浏览器及集成总体验收；未通过运行整合门禁不得迁移现用用户库。
 
 WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已在隔离 SQLite 验证持久层，WP04D 已完成隔离三引擎自动初始化；线上候选与采用状态仍仅在内存，未接入持久层。以下历史实现说明不代表运行工作台持久化已交付。WP03D 恢复基线 `05f8a3396efb75e3043e96abce4fd130ca3f0200`。
 
 ## 当前实现
+
+### WP04D2 数据表管辖权（隔离验收）
+
+SentenceStore 的公开 API 和 sentence DDL 不变。取消整库表清单断言；仅验证自有表的准确名称、对象类型、DDL 和本表触发器。初始化或替换在 BEGIN IMMEDIATE 内检查外部表的只读外键元数据，拒绝引用 sentence 的跨域依赖（即便 foreign_keys 关闭），并保留原 authorizer 对外表正文读取、修改、删除、DDL、ATTACH 等操作的拒绝。不检查或改写其他州的数据，不新增任何表或运行接口。
+
+Python 8/8、Node 14/14 PASS：真实 V2 夹具 497 MDLine 初始化为 677 句记录、三引擎零错误；V2 公共 Markdown 快照在三表及四表（含独立 translation 示例表）条件下逐字节相等；上游两表全量记录、Schema 和 user_version 不变，未来表结构/行记录不变；未知独立表允许，错误 sentence Schema/同名 View/大小写冲突、外表读写、跨表触发器和外键写入风险均拒绝；原子回滚及重开通过。未改变 UI、现用用户数据库或联邦/州宪法；本州 ISOLATED，运行持久化仍待接入。
 
 ### WP04D 三引擎自动初始化（隔离验收）
 
@@ -68,12 +77,12 @@ WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已
 | `initialize_sentence_table(connection,snapshot)`（scripts/sentence_initialize.py） | 已授权隔离专用连接＋公开快照；调用 Node，核对文档 SHA，复用 build_sentence_rows 和 store.initialize；返回完整句记录。无文件路径打开器，无上游写入 API。 |
 | `SentenceStore.initialize(markdown,rows)` | BEGIN IMMEDIATE 后拒绝已经存在的 sentence 表，仅允许首次原子建表写入；防止自动初始化覆盖已有仲裁。重复调用可能重新计算候选，但不会写表。已有句表的直接加载和版本失效由 WP04G 处理；显式重新初始化由 WP04F 负责。 |
 
-本航点按内部切点判定持久方案是否一致，不将末句终点/尾部空格视为额外切点。后续 WP04E 接通审阅时须使用相同判定语义，避免 UI 与持久状态不一致。隔离调用方提供源快照和对应授权连接；正式集成仍须解决上游当前修订的事务性核验及 V2 两表兼容门禁。
+本航点按内部切点判定持久方案是否一致，不将末句终点/尾部空格视为额外切点。后续 WP04E 接通审阅时须使用相同判定语义，避免 UI 与持久状态不一致。隔离调用方提供源快照和对应授权连接；正式集成仍须解决上游当前修订的事务性核验及共享连接授权。历史 V2 两表数量限制已由 WP04D2 修正。
 
-验收：Node 14/14、Python 7/7 PASS。真实隔离 V2 夹具 497 MDLine 生成 677 条句记录：84 行 agreed、55 行 disputed、358 行 no_split，实际三引擎错误 0、人工采用 0。所有分歧及无分句行均只有一条原始行记录，所有一致拆分句数与切点数一致；全文逐字符复原、重复初始化拒绝、关库重开一致、上游两表全量记录/Schema/user_version 不变、非法快照拒绝、插入中途故障回滚并可重试。额外模拟引擎异常与分歧测试通过。未变更运行界面，不进行新的线上 UI 发布，仍保持 WP04B。现行 V2 公共读取接口仍拒绝三表数据库，不能直接迁移现用用户库。
+验收：Node 14/14、Python 7/7 PASS。真实隔离 V2 夹具 497 MDLine 生成 677 条句记录：84 行 agreed、55 行 disputed、358 行 no_split，实际三引擎错误 0、人工采用 0。所有分歧及无分句行均只有一条原始行记录，所有一致拆分句数与切点数一致；全文逐字符复原、重复初始化拒绝、关库重开一致、上游两表全量记录/Schema/user_version 不变、非法快照拒绝、插入中途故障回滚并可重试。额外模拟引擎异常与分歧测试通过。未变更运行界面，不进行新的线上 UI 发布，仍保持 WP04B。WP04D 时 V2 公共读取接口拒绝三表数据库（历史限制，WP04D2 已修正）；未迁移现用用户库。
 
 
-- WP04C：新增独立 Python 持久层 `scripts/sentence_store.py` 与直接测试 `tests/test_sentence_store.py`。仅操作调用方授权提供的隔离 SQLite 专用连接，不提供路径打开器、不接入 Gateway、不直接读取上游私有表。已有两张上游表保持原样；第三张 `sentence` 表的 11 列及复合主键 `(source_line,sentence_index)` 见上节，采用 WITHOUT ROWID，不创建其他业务表、元数据表、触发器或 View。SQLite authorizer 默认拒绝非本表写入、上游正文读取、额外建表、附加数据库等；仅受控建表期间允许必要的 SQLite 内部目录操作。已存在的未知表、不同 sentence Schema、sentence 相关触发器/View 拒绝。隔离实验不替代上游现行 Schema 审计；正式接入前仍须获授权并验证在同一事务中来源版本有效、目录归属和上游兼容性。
+- WP04C：新增独立 Python 持久层 `scripts/sentence_store.py` 与直接测试 `tests/test_sentence_store.py`。仅操作调用方授权提供的隔离 SQLite 专用连接，不提供路径打开器、不接入 Gateway、不直接读取上游私有表。已有两张上游表保持原样；第三张 `sentence` 表的 11 列及复合主键 `(source_line,sentence_index)` 见上节，采用 WITHOUT ROWID，不创建其他业务表、元数据表、触发器或 View。SQLite authorizer 默认拒绝非本表写入、上游正文读取、额外建表、附加数据库等；仅受控建表期间允许必要的 SQLite 内部目录操作。不同 sentence Schema、同名非表对象、sentence 上的触发器拒绝；WP04C 历史整库清单限制由 WP04D2 取消。隔离实验不替代上游现行 Schema 审计；正式接入前仍须获授权并验证在同一事务中来源版本有效、目录归属和上游兼容性。
 
 ### WP04C 公开 API 与验收
 
@@ -87,7 +96,7 @@ WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已
 
 每行计划字段 `boundaries`、`candidates`、`review_state`、`adopted_engine`；候选键严格为 intl/sentence-splitter/wink-nlp，各含非空 `version`（引擎版本及配置指纹）、`status`（ok/error）、内部切点 `boundaries` 和 `protected_ranges`（有序不重叠的行内 UTF-16 半开区间）。不允许句界切开保护区间。首句保存 JSON 元数据，其余句无重复元数据。状态为 agreed/no_split/disputed/adopted/engine_error；一致或无分句不指定单一采用引擎，人工采用才登记引擎 ID。未仲裁和失败行保留整行。实际引擎候选到持久计划的转换和自动初始化已于 WP04D 在隔离环境验证；局部事务仲裁属于 WP04E。WP04C 历史测试使用明确指定的测试计划，不把它们冒充实际引擎自动初始化结果。
 
-验收：`python3 -m unittest discover -s tests -p test_sentence_store.py -v` 5/5 PASS：真实 V2 隔离夹具 497 条 MDLine 全部写入第三表、重复初始化及重开一致；上游两表全部记录、Schema 和 user_version 前后相等；权限拒绝、首次建表及替换过程注入失败均回滚；各状态、UTF-16、空行、原始 LF、受保护区间、错误数据拒绝及无损重组测试通过。原 WP04B Node 直接测试 12/12 PASS，三引擎各 497 行零错误；未改运行 UI，继承 WP04B 浏览器验收。**现用 V2 仍拒绝三表数据库，测试明确复现此门禁；没有对用户数据库迁移，也未挂载新运行接口或发布新 UI。** 本航点按 ISOLATED 留痕，线上保持 WP04B。
+验收：`python3 -m unittest discover -s tests -p test_sentence_store.py -v` 5/5 PASS：真实 V2 隔离夹具 497 条 MDLine 全部写入第三表、重复初始化及重开一致；上游两表全部记录、Schema 和 user_version 前后相等；权限拒绝、首次建表及替换过程注入失败均回滚；各状态、UTF-16、空行、原始 LF、受保护区间、错误数据拒绝及无损重组测试通过。原 WP04B Node 直接测试 12/12 PASS，三引擎各 497 行零错误；未改运行 UI，继承 WP04B 浏览器验收。**WP04C 历史测试复现 V2 拒绝三表数据库（WP04D2 已修正）；没有对用户数据库迁移，也未挂载新运行接口或发布新 UI。** 本航点按 ISOLATED 留痕，线上保持 WP04B。
 
 
 - WP04B（替代 WP02A–WP03D 的逻辑块级输入和审阅粒度）：snapshot.js 仅在 V2 公开 GET 传输适配器验证 v3 真实 LF、摘要、位置和来源清单；旧 v2 虚拟分隔符显式拒绝。createMDLineSnapshot(markdown) 生成无 PBS/逻辑 ID 的不可变行序列（sourceLine、from/to、textTo、text、eol、sha256），文档修订使用 Markdown SHA-256。保留空行、真实 LF、无末尾 LF 和 UTF-16 坐标；终端 LF 后不制造额外行。splitLine/rebuildLine/splitSnapshot 复用三引擎适配器，文档级保护围栏、注释、表格、公式等，逐行生成候选与无损原始片段。lineAtOffset/lineCandidateDisplay 及 reviewProjection 按行聚焦、筛选、采用；行内移动不重置左窗，跨行切换，EOF 虚拟光标行清空左窗，左窗不控制右窗。切换目录或读取失败清空旧仲裁；同文档版本会话内保留。原有导航、四窗比例、颜色、只读及上游 GET 边界不变；没有 SQL 写入或第三张表。直接测试 12/12 PASS；隔离 V2 267 逻辑块投影为 497 MDLine，三引擎各 497 行无错误；Chromium/WebKit 行级焦点、空行、EOF、筛选、采用、只读、导航失效及空白框架回归 PASS。物理 iPad 未验收；旧字体和打包体积警告保留。

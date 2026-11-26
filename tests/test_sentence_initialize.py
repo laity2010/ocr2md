@@ -27,6 +27,8 @@ class InitializationTests(unittest.TestCase):
             path = folder / base.DB_NAME
             with closing(sqlite3.connect(path)) as db:
                 before = upstream_evidence(db)
+                db.executescript("CREATE TABLE translation(id INTEGER PRIMARY KEY,body TEXT); INSERT INTO translation VALUES(1,'preserve');")
+                db.commit()
                 rows = initialize_sentence_table(db, snapshot)
                 self.assertEqual(rebuild_markdown(rows), markdown)
                 self.assertEqual(SentenceStore(db).read(markdown), rows)
@@ -58,10 +60,10 @@ class InitializationTests(unittest.TestCase):
             with closing(sqlite3.connect(path)) as db:
                 self.assertEqual(upstream_evidence(db), before)
                 self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
-                                 {'mineru_base','logical_block','sentence'})
+                                 {'mineru_base','logical_block','sentence','translation'})
+                self.assertEqual(db.execute('SELECT * FROM translation').fetchall(),[(1,'preserve')])
                 self.assertEqual(SentenceStore(db).read(markdown), rows)
-            with self.assertRaises(base.BaseError):
-                base.existing_markdown(folder)
+            self.assertEqual(base.existing_markdown(folder), snapshot)
             print('WP04D_REAL_INIT', json.dumps(dict(mdlines=len(groups), sentence_rows=len(rows), states=states),sort_keys=True))
 
     def test_failed_init_keeps_upstream_and_can_retry(self):
