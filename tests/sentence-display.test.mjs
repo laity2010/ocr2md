@@ -73,3 +73,21 @@ test('pending MDLine retains all original trailing blanks; grid shares exact lin
  assert.equal(reviewProjection(snapshot,results,true,choices).snapshot.markdown,snapshot.markdown);
  assert.equal(reviewProjection(snapshot,results,false,new Map([[1,'intl'],[6,'intl'],[8,'intl']])).snapshot.markdown,'');
 });
+
+
+test('source uses only selected cuts, green solid markers, explicit cancellation and unchanged engine comparison',()=>{
+ const line={sourceLine:4,sha256:'hash',from:10,sourceFrom:50,text:'A. B. C.',eol:'\\n'};
+ const snapshot={documentVersion:'v',lines:[line]};
+ const row={sourceLine:4,sourceSha256:'hash',reviewState:'adopted',adoptedEngine:'intl',
+  candidates:[{engine:'intl',boundaries:[2,5]},{engine:'sentence-splitter',boundaries:[5]},{engine:'wink-nlp',boundaries:[]}]};
+ const results={documentVersion:'v',lines:[row]},pending=boundaryDisplay(snapshot,results,new Map());
+ const selected=boundaryDisplay(snapshot,results,new Map([[4,'intl']]));
+ const pick=d=>d.source.marks.map(({pos,label,style,title})=>({pos,label,style,title}));
+ assert.deepEqual(pick(selected),[2,5].map(n=>({pos:10+n,label:'│',style:'ocr-sb-agreed',title:'采用句界 · intl · MD '+(50+n)})));
+ assert.deepEqual(boundaryDisplay(snapshot,results),selected);
+ assert.deepEqual(pick(boundaryDisplay(snapshot,results,new Map([[4,'sentence-splitter']]))),[{pos:15,label:'│',style:'ocr-sb-agreed',title:'采用句界 · sentence-splitter · MD 55'}]);
+ assert.deepEqual(boundaryDisplay(snapshot,results,new Map([[4,'wink-nlp']])).source.marks,[]);
+ assert.deepEqual(pending.source.marks.map(m=>[m.pos,m.label,m.style]),[[12,'┆','ocr-sb-split'],[15,'┆','ocr-sb-split']]);
+ for(const id of ['intl','sentence-splitter','wink-nlp'])assert.deepEqual(selected[id],pending[id]);
+ assert.equal(row.adoptedEngine,'intl');
+});

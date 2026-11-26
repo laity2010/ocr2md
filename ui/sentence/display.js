@@ -9,7 +9,7 @@ export function lineAtOffset(lines,offset){
 /** The original Sentence Lab boundary union, mapped to V2's immutable UTF-16 source.
  * The end of the final source fragment defines a sentence boundary, just as
  * the original benchmark's sentences[].fragments.at(-1).to did. */
-export function boundaryDisplay(snapshot,results){
+export function boundaryDisplay(snapshot,results,adopted=null){
  const ids=['intl','sentence-splitter','wink-nlp'];
  if(snapshot.documentVersion!==results.documentVersion)throw Error('Candidate source version mismatch');
  const panes=Object.fromEntries(['source',...ids].map(id=>[id,{marks:[],count:0,failed:0}]));
@@ -29,11 +29,15 @@ export function boundaryDisplay(snapshot,results){
     byPos.get(pos).add(id);
    }
   }
+  // Explicit live choices override the saved row, including cancellation.
+  const chosen=adopted===null?(row.adoptedEngine??null):(adopted.get(line.sourceLine)??null);
   for(const [pos,votes] of byPos){
    const agreed=ids.every(id=>votes.has(id)),style=agreed?'ocr-sb-agreed':'ocr-sb-split';
    const names=ids.filter(id=>votes.has(id));
    const title='句界 · '+names.join(' / ')+' · MD '+((line.sourceFrom??line.from)+pos-line.from);
-   panes.source.marks.push({pos,label:agreed?'│':'┆',style,title});
+   if(chosen===null)panes.source.marks.push({pos,label:agreed?'│':'┆',style,title});
+   else if(votes.has(chosen))panes.source.marks.push({pos,label:'│',style:'ocr-sb-agreed',
+    title:'采用句界 · '+chosen+' · MD '+((line.sourceFrom??line.from)+pos-line.from)});
    for(const id of names)panes[id].marks.push({pos,label:'│',style,title});
   }
  }

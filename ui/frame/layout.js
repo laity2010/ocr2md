@@ -34,10 +34,11 @@ class BreakWidget extends WidgetType {
 }
 
 const setFocus=StateEffect.define();
+const setMarks=StateEffect.define();
 const decorations=marks=>Decoration.set(marks.map(m=>Decoration.widget({
  widget:new BreakWidget(m.label,m.style,m.title),side:1
 }).range(m.pos)),true);
-const marksField=StateField.define({create:()=>Decoration.none,update:value=>value,provide:f=>EditorView.decorations.from(f)});
+const marksField=StateField.define({create:()=>Decoration.none,update(value,tr){for(const e of tr.effects)if(e.is(setMarks))value=e.value;return value;},provide:f=>EditorView.decorations.from(f)});
 const focusField=StateField.define({create:()=>Decoration.none,update(value,tr){
  for(const e of tr.effects)if(e.is(setFocus)){
   if(!e.value)return Decoration.none;
@@ -126,6 +127,11 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt,onHistory){
       if(title)title.textContent=names[name]+(label?' · '+label:'');
       const key=marks===undefined?null:JSON.stringify([text,marks]);
       if((marks===undefined&&view.state.doc.toString()===text)||(key!==null&&displayKey===key))return;
+      // Changing review markers on the same immutable source is a decoration
+      // transaction, not a document reload. Preserve caret, scroll and focus.
+      if(name==='source'&&marks!==undefined&&view.state.doc.toString()===text){
+        view.dispatch({effects:setMarks.of(decorations(marks))});displayKey=key;return;
+      }
       const state=stateFor(text,marks);
       if(state.doc.toString()!==text)throw Error('Markdown changed during CM6 import');
       view.setState(state);displayKey=key;
@@ -179,7 +185,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{},onStatus=(
     const projection=reviewProjection(snapshot,results,all,adopted());
     visible=projection.snapshot;
     visibleRows=new Map(projection.results.lines.map(row=>[row.sourceLine,row]));
-    marks=boundaryDisplay(visible,projection.results);
+    marks=boundaryDisplay(visible,projection.results,adopted());
     active=null;
     panes.get('source').setMarkdown(visible.markdown,marks.source.marks);
     refreshGrid();
@@ -210,7 +216,11 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{},onStatus=(
     const id=engineIds[name],pos=sourcePosition(),line=active.sourceLine;
     const old=adopted().get(line)??null;
     if(!review.choose(line,checked?id:old===id?null:old)){refreshChecks();return;}
-    if(all){refreshChecks();refreshGrid();panes.get('sentence').focus(line,pos-(active.sourceFrom??active.from));}
+    if(all){
+      marks=boundaryDisplay(visible,results,adopted());
+      panes.get('source').setMarkdown(visible.markdown,marks.source.marks);
+      refreshChecks();refreshGrid();panes.get('sentence').focus(line,pos-(active.sourceFrom??active.from));
+    }
     else render(pos);
   }
   function onHistory(direction){

@@ -123,18 +123,38 @@ try{
    const adoptedCount=payload.rows.length+JSON.parse(lineRows(first.sourceLine)[0].candidates_json).intl.boundaries.length;
    await page.waitForFunction(n=>document.querySelector('[data-sentence-pane="sentence"] .sentence-engine-label')?.textContent.endsWith(' · '+n+' 条'),adoptedCount);
    const select=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),pos);
+   const expectSourceMarks=async(engine)=>{
+    const row=expected.lines[first.sourceLine-1],cuts=engine===null?Array.from(new Set(row.candidates.flatMap(c=>c.boundaries))).sort((a,b)=>a-b):row.candidates.find(c=>c.engine===engine).boundaries;
+    const want=cuts.map(cut=>{
+     const voters=row.candidates.filter(c=>c.boundaries.includes(cut)).map(c=>c.engine);
+     const agreed=voters.length===3;
+     return {title:(engine===null?'句界 · '+voters.join(' / '):'采用句界 · '+engine)+' · MD '+(first.sourceFrom+cut),label:engine!==null||agreed?'│':'┆',style:engine!==null||agreed?'ocr-sb-agreed':'ocr-sb-split'};
+    });
+    await page.waitForFunction(({from,want})=>{
+     const v=document.querySelector('#editor .cm-content').cmTile.root.view;
+     const n=v.domAtPos(from).node,el=n.nodeType===1?n:n.parentElement;
+     const line=el.closest('.cm-line');
+     if(!line)return false;
+     const actual=Array.from(line.querySelectorAll('.ocr-sb-boundary'),e=>({title:e.title,label:e.textContent,style:e.classList.contains('ocr-sb-agreed')?'ocr-sb-agreed':'ocr-sb-split'}));
+     return JSON.stringify(actual)===JSON.stringify(want);
+    },{from:first.sourceFrom,want},{timeout:10000});
+   };
    await select(first.sourceFrom);
    await page.waitForFunction(()=>document.querySelector('[data-sentence-pane="intl"] input[type="checkbox"]').checked);
    await gridRow(first.sourceLine).first().waitFor({state:'visible'});
    assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
    const splitter=page.getByRole('checkbox',{name:'采用 Sentence Splitter',exact:true});
+   await expectSourceMarks('intl');
+   await page.evaluate(()=>{const v=document.querySelector('#editor .cm-content').cmTile.root.view;window.__reviewDoc=v.state.doc;window.__reviewCaret=v.state.selection.main.head;window.__engineStates=Array.from(document.querySelectorAll('[id^="sentence-editor-"] .cm-content'),e=>e.cmTile.root.view.state);});
    await splitter.check();assert.equal(await adopt.isChecked(),false);
+   await expectSourceMarks('sentence-splitter');
+   assert(await page.evaluate(()=>{const v=document.querySelector('#editor .cm-content').cmTile.root.view;return v.state.doc===window.__reviewDoc&&v.state.selection.main.head===window.__reviewCaret&&Array.from(document.querySelectorAll('[id^="sentence-editor-"] .cm-content'),e=>e.cmTile.root.view.state).every((s,i)=>s===window.__engineStates[i]);}));
    // Both keyboard undo/redo are immediate even with the SQL request held.
    await page.locator('#editor .cm-content').focus();
    const mod=await page.evaluate(()=>/Mac/.test(navigator.platform)?'Meta':'Control');
-   await page.keyboard.press(mod+'+z');assert(await adopt.isChecked());
-   await page.keyboard.press(mod+'+Shift+z');assert(await splitter.isChecked());
-   await splitter.uncheck();
+   await page.keyboard.press(mod+'+z');assert(await adopt.isChecked());await expectSourceMarks('intl');
+   await page.keyboard.press(mod+'+Shift+z');assert(await splitter.isChecked());await expectSourceMarks('sentence-splitter');
+   await splitter.uncheck();await expectSourceMarks(null);
    await all.uncheck();await expectDocs(pending.markdown);await gridCount(pending);
    assert.equal(batches.length,1);
    failSave=true;releaseFirst();
@@ -153,11 +173,12 @@ try{
    await page.reload({waitUntil:'domcontentloaded'});await expectDocs(reduced.markdown);
    assert(await undo.isDisabled());assert(await redo.isDisabled());
    await all.check();await expectDocs(fixture.markdown);
-   await select(first.sourceFrom);assert(await adopt.isChecked());await adopt.uncheck();
+   await select(first.sourceFrom);assert(await adopt.isChecked());await expectSourceMarks('intl');await adopt.uncheck();await expectSourceMarks(null);
    await all.uncheck();await expectDocs(pending.markdown);await gridCount(pending);
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('仲裁已保存'),null,{timeout:15000});
    assert.deepEqual(currentRows,payload.rows);
    await all.check();await expectDocs(fixture.markdown);
+   console.log('SENTENCE_ADOPTED_SOURCE_MARKS_PASS',name);
    console.log('SENTENCE_IDLE_REVIEW_PASS',name,'zero net-zero requests; in-flight choice+history; failed batch retry; reload');
    assert.equal(await page.locator('#workspace select.ocr-navigation-native option[value="frame"]').evaluate(e=>e.parentElement.label),'SQL');
    assert.equal(await page.locator('#workspace .ocr-navigation-select .item').textContent(),'逻辑表 · logical_block');
