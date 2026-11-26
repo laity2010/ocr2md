@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"RUN_START","utc":"2026-11-26T09:23:32.870925+00:00","phase":"v2-jurisdiction-test","step":"3d785f6e3a2e4a71b75f7a201ddf37cf"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"RUN_EXIT","utc":"2026-11-26T09:24:24.282246+00:00","phase":"v2-jurisdiction-test","step":"3d785f6e3a2e4a71b75f7a201ddf37cf","exit_code":1}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"RUN_START","utc":"2026-11-26T09:24:53.151479+00:00","phase":"v2-jurisdiction-regression","step":"f0e19c1715144a29ba58cca8e291507a"}
