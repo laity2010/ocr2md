@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"START","utc":"2026-11-26T09:22:33.772262+00:00","wp":"WP04D2-V2","goal":"V2两表为本州所有而非整库数量；兼容外部表，仅本州公开读取与写入；阻止含外部对象的整库替换，避免触发器外键跨表写入；保留两表自身校验、已有UI与独立Lab数据保护。隔离测试及V2既有发布闭环。","retrospective":false}
