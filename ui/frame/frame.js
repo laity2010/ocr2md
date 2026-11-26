@@ -111,9 +111,8 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,rei
       loadedPath=selected;loadedSnapshot=snapshot;
       loadedRows=result.state==='ready'?result.rows:null;sentenceCandidates=result.review;
       frame.setSourceMarkdown(snapshot.markdown,{resetReview:reinitialize||result.state==='stale'});
-      if(sentenceCandidates)frame.setReview(snapshot,sentenceCandidates);
-      if(currentModule==='sentence'&&loadedRows!==null)frame.showTable(loadedRows);
-      else if(currentModule==='sentence'){currentModule='frame';frame.showSource();}
+      if(sentenceCandidates)frame.setReview(snapshot,sentenceCandidates,loadedRows);
+      if(currentModule==='sentence'&&loadedRows===null)currentModule='frame';
       syncLogicalNavigation(true);
       if(result.state==='stale')topStatus('句表与已保存 MDLine 不一致 · 请通过 SQL 组重新初始化句表','warning');
       else {
@@ -245,8 +244,8 @@ async function showModule(name){
     frameFileSelect.value=loadedPath?currentModule:'';
     // The native select is the Main NavigationSelect public business port.
     frameFileSelect.ocrNavigationSelect?.refresh();
-    if(currentModule==='sentence')frame.showTable(loadedRows);else frame.showSource();
     frame.activate();
+    if(currentModule==='sentence')frame.focusTable();else if(loadedPath)frame.focusSource();
     const snapshot=loadedSnapshot;
     if(snapshot&&loadedRows===null)topStatus('句表与已保存 MDLine 不一致 · 请通过 SQL 组重新初始化句表','warning');
     else topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.lines.length+' MDLine · '+loadedRows.length+' 句记录':'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');

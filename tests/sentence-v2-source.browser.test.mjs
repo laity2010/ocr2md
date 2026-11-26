@@ -4,7 +4,7 @@ import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
 import {persistedReview} from "../ui/sentence/persisted.js";
-import {boundaryDisplay,isDisputed,reviewProjection} from "../ui/sentence/display.js";
+import {boundaryDisplay,isDisputed,reviewProjection,projectSentenceRows} from "../ui/sentence/display.js";
 const payload=JSON.parse(execFileSync("python3",["-c","import sys,tempfile,json,sqlite3; from pathlib import Path; sys.path.insert(0,sys.argv[1]); sys.path.insert(0,sys.argv[2]); from test_v2_owned_edit import prepare_owned_book; from sentence_initialize import initialize_sentence_table; from v2_mineru_base import DB_NAME; tmp=tempfile.TemporaryDirectory(prefix='sentence-fixture-'); folder=Path(tmp.name); snapshot=prepare_owned_book(folder); db=sqlite3.connect(folder/DB_NAME); rows=initialize_sentence_table(db,snapshot); db.close(); print(json.dumps(dict(snapshot=snapshot,rows=rows),ensure_ascii=False))","../lab-ocr-v2/tests","scripts"],{encoding:"utf8",maxBuffer:32*1024*1024}));
 const fixture=payload.snapshot,sourceSnapshot=await importSnapshot(fixture),expected=persistedReview(sourceSnapshot,payload.rows);
 const url="http://127.0.0.1:5399/labs/lab-sentence/";
@@ -34,7 +34,7 @@ try{
    await page.goto(url,{waitUntil:"domcontentloaded"});
    await page.locator("#settings-workspace .ocr-source-file-select").waitFor({state:"attached",timeout:25000});
    assert.equal(await page.locator(".frame-brand").textContent(),"OCR2MD lab-sentence");
-   assert.equal(await page.locator("#workspace .dv-content-container").count(),4);
+   assert.equal(await page.locator("#workspace .dv-content-container").count(),5);
    const metadata=await (await page.request.get(url+"release-version.json")).json();
    assert.equal(metadata.name,"lab-sentence");
    assert.match(metadata.commit,/^[0-9a-f]{40}$/);
@@ -50,18 +50,41 @@ try{
     await page.waitForFunction(text=>document.querySelector('#editor .cm-content').cmTile.root.view.state.doc.toString()===text,text);
    };
    await expectDocs(pending.markdown);
+   const gridCount=async (projection)=>page.waitForFunction(n=>document.querySelector('[data-sentence-pane="sentence"] .sentence-engine-label')?.textContent.endsWith(' · '+n+' 条'),projectSentenceRows(payload.rows,projection.lines,new Map()).length);
+   const gridRow=(line,index=0)=>page.locator('.sentence-table-grid .ag-row[row-id="'+line+':'+index+'"]');
+   await gridCount(pending);
+   // The fixture contains real trailing blank lines. Check independently of
+   // the implementation's expected projection.
+   const expectedLines=[];
+   for(const [i,line] of sourceSnapshot.lines.entries()){
+    if(!isDisputed(expected.lines[i]))continue;
+    expectedLines.push(line);
+    for(let j=i+1;j<sourceSnapshot.lines.length&&/^[ \t]*$/.test(sourceSnapshot.lines[j].text);j++)expectedLines.push(sourceSnapshot.lines[j]);
+   }
+   assert(expectedLines.some(l=>l.text===''),'fixture has no trailing blank lines');
+   assert.equal(pending.markdown,expectedLines.map(l=>l.text+l.eol).join(''));
+   assert.deepEqual(pending.lines.map(l=>l.sourceLine),expectedLines.map(l=>l.sourceLine));
+   assert.equal(await page.locator('.sentence-table-grid').isVisible(),true);
    const first=pending.lines[0],adopt=page.getByRole('checkbox',{name:'采用 Intl',exact:true});
+   await gridRow(first.sourceLine).first().waitFor({state:'visible'});
+   assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
    await adopt.click();
    const chosen=new Map([[first.sourceLine,'intl']]);
-   await expectDocs(reviewProjection(sourceSnapshot,expected,false,chosen).snapshot.markdown);
-   await all.check();await expectDocs(fixture.markdown);
+   const reduced=reviewProjection(sourceSnapshot,expected,false,chosen).snapshot;
+   await expectDocs(reduced.markdown);await gridCount(reduced);
+   // AG row-removal animation may retain the previous DOM briefly.
+   await gridRow(first.sourceLine).first().waitFor({state:"detached",timeout:5000});
+   assert.equal(await gridRow(first.sourceLine).count(),0);
+   await all.check();await expectDocs(fixture.markdown);await gridCount(sourceSnapshot);
    const select=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),pos);
    await select(first.sourceFrom);
    await page.waitForFunction(()=>document.querySelector('[data-sentence-pane="intl"] input[type="checkbox"]').checked);
+   await gridRow(first.sourceLine).first().waitFor({state:'visible'});
+   assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
    const splitter=page.getByRole('checkbox',{name:'采用 Sentence Splitter',exact:true});
    await splitter.check();assert.equal(await adopt.isChecked(),false);
    await splitter.uncheck();
-   await all.uncheck();await expectDocs(pending.markdown);
+   await all.uncheck();await expectDocs(pending.markdown);await gridCount(pending);
    await all.check();await expectDocs(fixture.markdown);
    assert.equal(await page.locator('#workspace select.ocr-navigation-native option[value="frame"]').evaluate(e=>e.parentElement.label),'SQL');
    assert.equal(await page.locator('#workspace .ocr-navigation-select .item').textContent(),'逻辑表 · logical_block');
@@ -110,7 +133,7 @@ try{
    const blank=sourceSnapshot.lines.find(l=>!l.text&&l.eol);
    assert(blank);await select(blank.from);await expectBlocks(blank);
    await select(fixture.markdown.length);
-   await page.waitForFunction(()=>Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]) input')).every(e=>e.disabled));
+   await page.waitForFunction(()=>Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]):not([data-sentence-pane="sentence"]) input')).every(e=>e.disabled));
    await select(points[0]);await expectBlocks(block);
    const before=await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.selection.main.head);
    await page.locator('#sentence-editor-intl .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({selection:{anchor:1}}));
@@ -131,9 +154,22 @@ try{
    await openNav();
    await page.locator('.ocr-navigation-popup:visible [data-value="sentence"]').click();
    await page.locator('.sentence-table-grid .ag-root').waitFor({state:'visible'});
-   assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
-   assert.equal(await page.locator('#editor').isVisible(),false);
-   assert.equal(await page.locator('.sentence-table-grid .ag-row[row-index="0"] [col-id="sentence_text"]').textContent(),payload.rows[0].sentence_text);
+   assert.equal(await page.locator('#workspace .dv-content-container').count(),5);
+   assert.equal(await page.locator('#editor').isVisible(),true);
+   assert.equal(await page.locator('.sentence-table-grid').isVisible(),true);
+   assert.equal(await all.isVisible(),true);
+   await select(0);
+   await gridRow(payload.rows[0].source_line,payload.rows[0].sentence_index).first().waitFor({state:'visible'});
+   assert.equal(await gridRow(payload.rows[0].source_line,payload.rows[0].sentence_index).locator('[col-id="sentence_text"]').textContent(),payload.rows[0].sentence_text);
+   const pair=payload.rows.find(r=>r.sentence_index===1);
+   assert(pair);
+   const pairLine=sourceSnapshot.lines[pair.source_line-1];
+   await select(pairLine.from);
+   await gridRow(pair.source_line,1).locator('[col-id="source_line"]').click();
+   await page.waitForFunction(pos=>document.querySelector('#editor .cm-content').cmTile.root.view.state.selection.main.head===pos,pairLine.from+pair.from_utf16);
+   assert(await gridRow(pair.source_line,0).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
+   await expectBlocks(pairLine);
+   console.log('SENTENCE_FIVE_PANE_SYNC_PASS',name,pending.lines.length,'pending lines with blanks');
    const header=page.locator('.sentence-table-grid .ag-header-cell[col-id="review_state"]');
    // Actual V1 native multi-value filter, not a replacement select.
    await header.locator('.ag-header-cell-filter-button').click();
@@ -173,6 +209,7 @@ try{
    await openNav();await page.locator('.ocr-navigation-popup:visible [data-value="settings"]').click();
    await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('句表与已保存 MDLine 不一致'));
    assert.equal(await page.locator('select.ocr-navigation-native option[value="sentence"]').count(),0);
+   assert.equal(await page.locator('.sentence-table-grid').count(),0);
    assert.equal(resets,2);
    assert(opens>=2);
    await page.locator('#settings-workspace .ocr-navigation-select .ts-control').click();
@@ -193,6 +230,7 @@ try{
    await page.locator('.ocr-navigation-popup:visible [data-value="settings"]').click();
    await page.locator('#settings-workspace').waitFor({state:'visible'});
    await page.waitForFunction(()=>document.querySelectorAll('select.ocr-navigation-native optgroup[label="SQL"]').length===0);
+   assert.equal(await page.locator('.sentence-table-grid').count(),0);
    assert.deepEqual(await page.locator('#workspace .cm-content').evaluateAll(es=>es.map(e=>e.cmTile.root.view.state.doc.toString())),['','','','']);
    await page.locator('#settings-workspace .ocr-navigation-select .ts-control').click();
    assert.equal(await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').count(),0);

@@ -56,10 +56,15 @@ export function reviewProjection(snapshot,results,all,adopted){
  const rows=results.lines;
  if(all)return {snapshot,results};
  let markdown='';const lines=[],visibleRows=[];
+ let trailing=false;
  for(const [i,b] of snapshot.lines.entries()){
   const row=rows[i];
   if(row?.sourceLine!==b.sourceLine||row.sourceSha256!==b.sha256)throw Error('Candidate line identity mismatch');
-  if(!isDisputed(row)||adopted.has(b.sourceLine))continue;
+  const pending=isDisputed(row)&&!adopted.has(b.sourceLine);
+  // Keep only genuine trailing blank source lines of a visible disagreement.
+  // No invented LF, and no blank lines belonging to a hidden paragraph.
+  if(!pending&&!(trailing&&/^[ \t]*$/.test(b.text))){trailing=false;continue;}
+  trailing=true;
   const from=markdown.length;markdown+=b.text+b.eol;
   lines.push({...b,sourceFrom:b.from,from,textTo:from+b.text.length,to:markdown.length});
   visibleRows.push(row);
@@ -74,4 +79,18 @@ export function lineCandidateDisplay(line,candidate,marks=[]){
  const end=line.from+line.text.length;
  return {text:line.text,marks:marks.filter(m=>m.pos>line.from&&m.pos<=end).map(m=>({...m,pos:m.pos-line.from})),
   label:candidate.boundaries?(candidate.boundaries.length?(candidate.boundaries.length+1)+' 句':'无分句'):(candidate.units.length?candidate.units.length+' 句':'无分句')};
+}
+
+
+// The grid and source use the same visible MDLine set. Keep persisted text
+// and ranges untouched; show temporary review choices as explicitly unsaved.
+export function projectSentenceRows(rows,visibleLines,adopted){
+ const lines=new Set(visibleLines.map(line=>line.sourceLine));
+ return rows.filter(row=>lines.has(row.source_line)).map(row=>{
+  if(row.sentence_index!==0)return row;
+  const choice=adopted.get(row.source_line)??null;
+  if(choice===(row.adopted_engine??null))return row;
+  return {...row,display_state:choice?'已采用（未落盘）':'待仲裁（未落盘）',
+   display_engine:choice??''};
+ });
 }

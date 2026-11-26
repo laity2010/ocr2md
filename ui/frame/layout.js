@@ -1,8 +1,8 @@
-/** Lab-Sentence: one source pane and three independent read-only CM6 panes. */
+/** Lab-Sentence: three engine panes, source pane and a synchronized sentence-grid pane. */
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateEffect,StateField} from '@codemirror/state';
 import {EditorView,Decoration,WidgetType} from '@codemirror/view';
-import {lineAtOffset,boundaryDisplay,isDisputed,reviewProjection,lineCandidateDisplay} from '../sentence/display.js';
+import {lineAtOffset,boundaryDisplay,isDisputed,reviewProjection,lineCandidateDisplay,projectSentenceRows} from '../sentence/display.js';
 import {basicSetup} from 'codemirror';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
@@ -17,7 +17,7 @@ import '../outline-grid.css';
 import '../settings-module.css';
 import '../sentence/layout.css';
 import {createSentenceGrid} from '../sentence/grid.js';
-const names={source:'原文',intl:'Intl',splitter:'Sentence Splitter',wink:'Wink NLP'};
+const names={source:'原文',sentence:'分句表',intl:'Intl',splitter:'Sentence Splitter',wink:'Wink NLP'};
 class BreakWidget extends WidgetType {
   constructor(label,style,title){super();this.label=label;this.style=style;this.title=title;}
   eq(other){return other instanceof BreakWidget &&
@@ -81,7 +81,6 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
   host.className='ocr-cm-source frame-editor v2-source-session'+(ios?' ocr-ios-native-selection':'');
   host.id=name==='source'?'editor':'sentence-editor-'+name;
   element.append(bar,host);
-  let tableHost=null,grid=null;
   let view,syncing=false,suppressUntil=0,lastGesture=0,displayKey=null;
   const extensions=[
       ios?nativeIOSBasicSetup:basicSetup,
@@ -128,27 +127,32 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
       try{view.dispatch({...(select?{selection:{anchor:pos}}:{}),effects:EditorView.scrollIntoView(pos,{y:anchor})});}
       finally{syncing=false;}
     },
-    showTable(rows){
-      if(name!=='source')return;
-      if(!tableHost){
-        tableHost=document.createElement('div');
-        tableHost.className='sentence-table-grid ocr-outline-grid';
-        element.append(tableHost);
-      }
-      host.hidden=true;tableHost.hidden=false;check.parentElement.hidden=true;
-      if(grid)grid.setRows(rows);else grid=createSentenceGrid(tableHost,rows);
-    },showSource(){
-      if(name!=='source')return;
-      if(tableHost)tableHost.hidden=true;
-      host.hidden=false;check.parentElement.hidden=false;
-      view?.requestMeasure();
-    },clearTable(){grid?.dispose();grid=null;tableHost?.remove();tableHost=null;},
-    layout(){view?.requestMeasure();},dispose(){grid?.dispose();view?.destroy();}};
+    activate(){view?.focus();},
+    layout(){view?.requestMeasure();},dispose(){view?.destroy();}};
+}
+function sentencePane(onRowFocus){
+ const element=document.createElement('div');
+ element.className='sentence-pane ocr-source-pane';
+ element.dataset.sentencePane='sentence';
+ const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
+ const title=document.createElement('span');title.className='sentence-engine-label';title.textContent='分句表 · sentence';
+ bar.append(title);element.append(bar);
+ let host=null,grid=null;
+ return {element,init(){},setRows(rows){
+  if(rows===null){grid?.dispose();grid=null;host?.remove();host=null;title.textContent='分句表 · sentence';return;}
+  title.textContent='分句表 · sentence · '+rows.length+' 条';
+  if(!grid){
+   host=document.createElement('div');host.className='sentence-table-grid ocr-outline-grid';
+   host.tabIndex=0;host.setAttribute('aria-label','分句表');element.append(host);
+   grid=createSentenceGrid(host,rows,{onRowFocus});
+  }else grid.setRows(rows);
+ },focus(line,offset,scroll){grid?.focus(line,offset,scroll);},
+ activate(){grid?.activate();},layout(){},dispose(){grid?.dispose();}};
 }
 export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const panes=new Map();
   const engineIds={intl:'intl',splitter:'sentence-splitter',wink:'wink-nlp'};
-  let snapshot=null,results=null,visible=null,visibleRows=null,marks=null,all=false,active=null,reviewVersion=null;
+  let snapshot=null,results=null,visible=null,visibleRows=null,marks=null,all=false,active=null,reviewVersion=null,persistedRows=null;
   const adopted=new Map(),disputed=new Set();
   function refreshChecks(){
     panes.get('source').setCheck(all,!snapshot);
@@ -157,6 +161,9 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
       panes.get(name).setCheck(allowed&&adopted.get(active.sourceLine)===id,!allowed);
     }
   }
+  function refreshGrid(){
+    panes.get("sentence").setRows(persistedRows===null?null:projectSentenceRows(persistedRows,visible?.lines??[],adopted));
+  }
   function render(sourcePos){
     const projection=reviewProjection(snapshot,results,all,adopted);
     visible=projection.snapshot;
@@ -164,6 +171,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
     marks=boundaryDisplay(visible,projection.results);
     active=null;
     panes.get('source').setMarkdown(visible.markdown,marks.source.marks);
+    refreshGrid();
 
     if(visible.lines.length){
       const origin=b=>b.sourceFrom??b.from;
@@ -174,7 +182,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
       onSelection('source',pos);
     }else{
       for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');
-      panes.get('source').highlight(null);refreshChecks();
+      panes.get('source').highlight(null);panes.get('sentence').focus(null,0,false);refreshChecks();
     }
   }
   function sourcePosition(){
@@ -191,13 +199,14 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
     const id=engineIds[name],pos=sourcePosition();
     if(checked)adopted.set(active.sourceLine,id);
     else if(adopted.get(active.sourceLine)===id)adopted.delete(active.sourceLine);
-    if(all)refreshChecks();else render(pos);
+    if(all){refreshChecks();refreshGrid();panes.get('sentence').focus(active.sourceLine,pos-(active.sourceFrom??active.from));}else render(pos);
   }
   function onSelection(name,pos){
     if(name!=='source'||!visible)return;
     const line=lineAtOffset(visible.lines,pos);
-    if(!line){active=null;panes.get('source').highlight(null);for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');refreshChecks();return;}
+    if(!line){active=null;panes.get('sentence').focus(null,0,false);panes.get('source').highlight(null);for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');refreshChecks();return;}
     panes.get('source').highlight({from:line.from,to:line.to,pos:Math.min(pos,line.textTo)});
+    panes.get('sentence').focus(line.sourceLine,Math.max(0,pos-line.from));
     if(active===line)return;
     active=line;refreshChecks();
     const row=visibleRows.get(line.sourceLine);
@@ -206,10 +215,17 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
       panes.get(name).setMarkdown(item.text,item.marks,item.label);
     }
   }
-  // The right caret alone controls review; scrolling or selecting a left line does not move it.
+  function onGridFocus(row){
+    const line=visible?.lines.find(l=>l.sourceLine===row.source_line);
+    if(!line)return;
+    const pos=line.from+Math.min(line.text.length,row.from_utf16);
+    panes.get('source').locate(pos);
+    onSelection('source',pos);
+  }
+  // Only source or sentence-grid selection controls review, never left engines.
   function onScroll(){}
   const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>{
-    const component=pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt);
+    const component=name==='sentence'?sentencePane(onGridFocus):pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt);
     panes.set(name,component);return component;
   }});
   function add(name,position){
@@ -220,25 +236,28 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const intl=add('intl',{referencePanel:source,direction:'left'});
   const splitter=add('splitter',{referencePanel:intl,direction:'below'});
   const wink=add('wink',{referencePanel:splitter,direction:'below'});
+  const sentence=add('sentence',{referencePanel:source,direction:'below'});
   let sized=false;
   return Object.freeze({setSourceMarkdown(text,{resetReview=false}={}){
-    if(resetReview){adopted.clear();all=false;reviewVersion=null;panes.get('source').clearTable();panes.get('source').showSource();}
+    if(resetReview){adopted.clear();all=false;reviewVersion=null;}
+    persistedRows=null;panes.get('sentence').setRows(null);
     snapshot=null;results=null;visible=null;visibleRows=null;marks=null;active=null;
     refreshChecks();
     panes.get('source').setMarkdown(text,[]);
     panes.get('source').highlight(null);
     for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');
-  },setReview(next,candidates){
+  },setReview(next,candidates,rows){
     if(next.documentVersion!==candidates.documentVersion)throw Error('Candidate source version mismatch');
     if(reviewVersion!==next.documentVersion){adopted.clear();all=false;reviewVersion=next.documentVersion;for(const row of candidates.lines)if(row.adoptedEngine)adopted.set(row.sourceLine,row.adoptedEngine);}
-    snapshot=next;results=candidates;disputed.clear();
+    snapshot=next;results=candidates;persistedRows=rows;disputed.clear();
     for(const row of results.lines)if(isDisputed(row))disputed.add(row.sourceLine);
     render(0);
-  },showTable(rows){panes.get('source').showTable(rows);},showSource(){panes.get('source').showSource();},activate(){
+  },focusTable(){panes.get('sentence').activate();},focusSource(){panes.get('source').activate();},activate(){
     const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;
     dockview.layout(w,h);
     if(!sized){
       source.api.setSize({width:Math.round(w*.4)});
+      sentence.api.setSize({height:Math.round(h*.4)});
       wink.api.setSize({height:Math.round(h/3)});
       intl.api.setSize({height:Math.round(h/3)});
       sized=true;

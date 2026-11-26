@@ -15,16 +15,16 @@ try{
    await page.goto(url,{waitUntil:"domcontentloaded"});
    await page.locator("#settings-workspace .ocr-source-file-select").waitFor({state:"attached",timeout:25000});
    assert.equal(await page.locator(".frame-brand").textContent(),"OCR2MD lab-sentence");
-   assert.equal(await page.locator("#workspace .dv-content-container").count(),4);
+   assert.equal(await page.locator("#workspace .dv-content-container").count(),5);
    const metadata=await (await page.request.get(url+"release-version.json")).json();
    assert.equal(metadata.name,"lab-sentence");
    assert.match(metadata.commit,/^[0-9a-f]{40}$/);
    assert.equal(await page.locator("#workspace").isVisible(),true);
    const panes=page.locator('#workspace [data-sentence-pane]');
    await panes.first().waitFor();
-   assert.equal(await panes.count(),4);
+   assert.equal(await panes.count(),5);
    const rects=await panes.evaluateAll(es=>Object.fromEntries(es.map(e=>{const r=e.getBoundingClientRect();return [e.dataset.sentencePane,{x:r.x,y:r.y,w:r.width,h:r.height}]})));
-   const {source,intl,splitter,wink}=rects;
+   const {source,intl,splitter,wink,sentence}=rects;
    assert(Math.abs(source.w/(source.w+intl.w)-.4)<.055,JSON.stringify(rects));
    assert(source.x>intl.x+intl.w-3,JSON.stringify(rects));
    assert.equal(await page.locator('#workspace [data-sentence-pane="source"] #undo').count(),1);
@@ -32,10 +32,12 @@ try{
    assert.equal(await page.getByRole('checkbox',{name:'全部',exact:true}).isChecked(),false);
    for(const r of [intl,splitter,wink]){
     assert(Math.abs(r.x-intl.x)<3&&Math.abs(r.w-intl.w)<3,JSON.stringify(rects));
-    assert(Math.abs(r.h/source.h-1/3)<.065,JSON.stringify(rects));
+    assert(Math.abs(r.h/(source.h+sentence.h)-1/3)<.065,JSON.stringify(rects));
    }
    assert(intl.y<splitter.y&&splitter.y<wink.y);
-   assert(Math.abs(source.y-intl.y)<3&&Math.abs(source.y+source.h-wink.y-wink.h)<3,JSON.stringify(rects));
+   assert(Math.abs(source.y-intl.y)<3&&Math.abs(sentence.y+sentence.h-wink.y-wink.h)<3,JSON.stringify(rects));
+   assert(Math.abs(sentence.x-source.x)<3&&Math.abs(sentence.w-source.w)<3&&sentence.y>=source.y+source.h-3,JSON.stringify(rects));
+   assert(Math.abs(sentence.h/(sentence.h+source.h)-.4)<.08,JSON.stringify(rects));
    assert.equal(await page.locator('#workspace .ocr-outline-grid,#workspace .ocr-preview-pane,#workspace .ocr-detached-pdf-pane').count(),0);
    const styles=await page.locator('#workspace .cm-editor').evaluateAll(es=>es.map(e=>({background:getComputedStyle(e).backgroundColor,font:getComputedStyle(e).fontFamily,readOnly:e.querySelector('.cm-content').getAttribute('contenteditable'),lines:!!e.querySelector('.cm-lineNumbers'),wrap:!!e.querySelector('.cm-lineWrapping')})));
    assert.equal(styles.length,4);assert(styles.every(v=>v.background==='rgb(47, 56, 62)'&&v.font.includes('Sarasa')&&v.readOnly==='false'&&v.lines&&v.wrap),JSON.stringify(styles));
