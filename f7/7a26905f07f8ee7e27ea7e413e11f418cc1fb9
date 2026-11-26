@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"979117a4ce2649909684c0d4f3fbe512","branch":"refs/heads/experiment/lab-sentence","baseline":"f77a26905f07f8ee7e27ea7e413e11f418cc1fb9","event":"START","utc":"2026-11-26T02:00:57.748162+00:00","wp":"WP03B","goal":"基线f77a269；右窗保持全文/待审筛选及原导航、句界和块高亮；左三只读CM6仅显示右焦点对应各引擎的一句原始源码及句界，左窗操作不反向改变右焦点；保留块级采用和布局，不改分句或数据库；定向双浏览器验收Git发布END。","retrospective":false}
