@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"cede303cc7d24490a330ad716a09c6c3","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"cede303cc7d24490a330ad716a09c6c3","branch":"refs/heads/experiment/lab-sentence","baseline":"ceb50c9dcae9e6fc092aa271d2f2d4359c6793b6","event":"RUN_START","utc":"2026-11-26T09:26:45.598986+00:00","phase":"sentence-jurisdiction-test","step":"e86e6ca62aa749dd888b93ea4cfd1e98"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"cede303cc7d24490a330ad716a09c6c3","branch":"refs/heads/experiment/lab-sentence","baseline":"ceb50c9dcae9e6fc092aa271d2f2d4359c6793b6","event":"RUN_EXIT","utc":"2026-11-26T09:27:21.628986+00:00","phase":"sentence-jurisdiction-test","step":"e86e6ca62aa749dd888b93ea4cfd1e98","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"cede303cc7d24490a330ad716a09c6c3","branch":"refs/heads/experiment/lab-sentence","baseline":"ceb50c9dcae9e6fc092aa271d2f2d4359c6793b6","event":"RUN_START","utc":"2026-11-26T09:28:20.708637+00:00","phase":"sentence-jurisdiction-commit","step":"473e6b24c8d64c04b8154aa079eef596"}
