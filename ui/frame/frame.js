@@ -3,7 +3,7 @@ import '../styles.css';
 import '../obsidian-everforest.css';
 import './frame.css';
 import {createFrameWorkspace} from './layout.js';
-import {requestSentence} from '../sentence/persisted.js';
+import {requestSentence,saveSentenceChoices} from '../sentence/persisted.js';
 import {createSnapshotSession} from '../sentence/snapshot.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
@@ -90,11 +90,20 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,rei
   if(reinitialize&&rebuilding)return;
   if(reinitialize)rebuilding=true;
   const generation=++probeGeneration;
+  if(!uncommitted){
+    frame.setLocked(true);
+    if(frame.hasPending()&&!await frame.flush()){
+      if(generation===probeGeneration)frame.setLocked(false);
+      if(reinitialize)rebuilding=false;
+      return;
+    }
+    if(generation!==probeGeneration){if(reinitialize)rebuilding=false;return;}
+  }
   if(!uncommitted&&selected!==loadedPath)clearLogicalSource();
   if(!selected){
     if(generation===probeGeneration)topStatus(afterSave?'✓ 全局设置已保存 · 尚未绑定工作目录':
       '尚未绑定工作区资料目录','warning');
-    rebuilding=false;return;
+    rebuilding=false;if(!uncommitted)frame.setLocked(false);return;
   }
   topStatus((afterSave?'✓ 全局设置已保存 · ':'')+'正在验证工作区文件读写…');
   try{
@@ -111,7 +120,7 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,rei
       loadedPath=selected;loadedSnapshot=snapshot;
       loadedRows=result.state==='ready'?result.rows:null;sentenceCandidates=result.review;
       frame.setSourceMarkdown(snapshot.markdown,{resetReview:reinitialize||result.state==='stale'});
-      if(sentenceCandidates)frame.setReview(snapshot,sentenceCandidates,loadedRows);
+      if(sentenceCandidates)frame.setReview(snapshot,sentenceCandidates,loadedRows,batch=>saveSentenceChoices(selected,snapshot,batch));
       if(currentModule==='sentence'&&loadedRows===null)currentModule='frame';
       syncLogicalNavigation(true);
       if(result.state==='stale')topStatus('句表与已保存 MDLine 不一致 · 请通过 SQL 组重新初始化句表','warning');
@@ -125,7 +134,7 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,rei
       if(!uncommitted&&!reinitialize)clearLogicalSource();
       topStatus((reinitialize?'重新初始化未确认成功：':afterSave?'全局设置已保存，但工作区加载失败：':'工作区加载失败：')+error.message,'error');
     }
-  }finally{if(reinitialize)rebuilding=false;}
+  }finally{if(reinitialize)rebuilding=false;if(generation===probeGeneration)frame.setLocked(false);}
 }
 // The chooser reports every explicit adoption, including an unchanged path.
 // Changed paths already trigger the Settings-owned `settings.changed` port.
@@ -248,11 +257,16 @@ async function showModule(name){
     if(currentModule==='sentence')frame.focusTable();else if(loadedPath)frame.focusSource();
     const snapshot=loadedSnapshot;
     if(snapshot&&loadedRows===null)topStatus('句表与已保存 MDLine 不一致 · 请通过 SQL 组重新初始化句表','warning');
-    else topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.lines.length+' MDLine · '+loadedRows.length+' 句记录':'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');
+    else if(frame.hasPending())topStatus('● 分句仲裁待保存','warning');
+    else topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.lines.length+' MDLine · '+frame.rowCount()+' 句记录':'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');
 
   }
 }
 $('global-save').addEventListener('click',async()=>{
+  if(frame.hasPending()){
+    if(!await frame.flush())return;
+    if(currentModule!=='settings'||!settings?.hasUnsaved())return;
+  }
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
   if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
   try{const saved=await settings.save();
@@ -262,7 +276,13 @@ $('global-save').addEventListener('click',async()=>{
 });
 // Navigation lives inside each AG pane; the brand is a normal /labs/ link.
 // No engineering dialog or dirty-state confirmation intercepts navigation.
-startFrameAutoUpdate({version:build,report:topStatus});
+window.addEventListener('beforeunload',event=>{
+  if(frame.hasPending()){event.preventDefault();event.returnValue='';}
+});
+startFrameAutoUpdate({version:build,report:topStatus,reload:()=>{
+  // Pending user edits are never deliberately discarded by auto-update.
+  void frame.flush().then(ok=>{if(ok&&!frame.hasPending())location.reload();});
+}});
 showModule('frame');
 void getSettings().then(module=>{if(currentModule==='frame')void verifyWorkspaceIO(module.get('workspace.dataDirectory'));}).catch(error=>topStatus('全局设置加载失败：'+error.message,'error'));
 // Reuse Main Settings / CM6 with frame-local IO. No beforeunload/dirty gate,

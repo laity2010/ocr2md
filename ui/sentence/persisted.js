@@ -1,4 +1,5 @@
 /** WP04E: the persisted plans, not a second browser engine run, drive review. */
+import {sha256} from './snapshot.js';
 const ids=['intl','sentence-splitter','wink-nlp'];
 const require=(ok,message)=>{if(!ok)throw Error(message);};
 export function persistedReview(snapshot,rows){
@@ -40,4 +41,32 @@ export async function requestSentence(workspace,snapshot,{reinitialize=false,fet
  require(result?.source_document_hash===snapshot.documentVersion&&['ready','stale'].includes(result.state)&&Array.isArray(result.rows),'句表回执无效');
  require(result.state!=='stale'||result.rows.length===0,'过期句表不得显示为当前数据');
  return {...result,review:result.state==='ready'?persistedReview(snapshot,result.rows):null};
+}
+
+/** Idle save of final changes only. No source text or boundary edits accepted. */
+export async function saveSentenceChoices(workspace,snapshot,batch,{fetcher=fetch}={}){
+ const changes=await Promise.all(batch.map(async c=>({
+  source_line:c.line,source_line_hash:c.first.source_line_hash,candidates_hash:await sha256(c.first.candidates_json),
+  previous_engine:c.previous,adopted_engine:c.next
+ })));
+ const response=await fetcher('/labs/lab-sentence/api/sentence/save',{
+  method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({workspace,source_document_hash:snapshot.documentVersion,changes})
+ });
+ const result=await response.json().catch(()=>null);
+ if(!response.ok)throw Error(result?.error||'保存 HTTP '+response.status);
+ require(result?.state==='ready'&&result.source_document_hash===snapshot.documentVersion&&Array.isArray(result.rows),'保存回执无效');
+ const ordered=[...batch].sort((a,b)=>a.line-b.line);
+ let i=0;
+ for(const c of ordered){
+  const line=snapshot.lines[c.line-1],group=[];
+  while(i<result.rows.length&&result.rows[i].source_line===c.line)group.push(result.rows[i++]);
+  const review=persistedReview({...snapshot,lines:[line]},group).lines[0];
+  require(review.adoptedEngine===c.next&&review.reviewState===(c.next===null?'disputed':'adopted')&&
+   group[0].candidates_json===c.first.candidates_json,'保存回执采用状态不符');
+  const cuts=c.next===null?[]:JSON.parse(c.first.candidates_json)[c.next].boundaries;
+  require(group.length===cuts.length+1&&cuts.every((cut,j)=>group[j].to_utf16===cut),'保存回执切点不符');
+  require(group.slice(1).every(r=>r.candidates_json===null&&r.review_state===null&&r.adopted_engine===null),'保存回执元数据不符');
+ }
+ require(i===result.rows.length,'保存回执存在额外行');
 }

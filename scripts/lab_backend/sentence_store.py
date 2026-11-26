@@ -243,14 +243,14 @@ class SentenceStore:
                 return sqlite3.SQLITE_OK
         return sqlite3.SQLITE_DENY
 
-    def _schema(self, create=False):
+    def _schema(self, create=False, *, writing=False):
         catalog = self._db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master").fetchall()
         # Only this module's own table is a schema contract. The source
         # document is supplied by the public snapshot, not by private SQL.
         owned = [r for r in catalog if r[1].casefold() == 'sentence']
         _require(not any(r[0] == 'trigger' and r[2].casefold() == 'sentence'
                          for r in catalog), 'unexpected sentence trigger')
-        if create:
+        if create or writing:
             # Guard against external FK side effects, even if a caller's
             # dedicated connection has foreign_keys disabled. Never read rows.
             for kind, name, _, _sql in catalog:
@@ -296,6 +296,75 @@ class SentenceStore:
             db.executemany(INSERT, (tuple(r[c] for c in COLUMNS) for r in rows))
             _require(rebuild_markdown(self._read()) == markdown, 'SQLite roundtrip mismatch')
             db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+
+    def save_choices(self, markdown, changes, *, verify_source=None):
+        """One idle batch. Validate all lines before replacing any; no SQL history."""
+        _require(isinstance(changes, list) and 0 < len(changes) <= 4096, 'invalid batch size')
+        db = self._db
+        _require(not db.in_transaction, 'dedicated idle connection required')
+        db.execute('BEGIN IMMEDIATE')
+        try:
+            if verify_source is not None:
+                verify_source()
+            self._schema(writing=True)
+            original = self._read()
+            _require(rebuild_markdown(original) == markdown, 'stale sentence table')
+            groups = defaultdict(list)
+            for row in original:
+                groups[row['source_line']].append(row)
+            replacements = {}
+            writes = []
+            for change in changes:
+                _require(isinstance(change, dict) and set(change) == {
+                    'source_line','source_line_hash','candidates_hash','previous_engine','adopted_engine'
+                }, 'invalid change fields')
+                number = change['source_line']
+                before, after = change['previous_engine'], change['adopted_engine']
+                _require(type(number) is int and number in groups and number not in replacements,
+                         'invalid or duplicate source line')
+                _require(before in (None, *ENGINES) and after in (None, *ENGINES) and before != after,
+                         'invalid choice transition')
+                group = groups[number]
+                first = group[0]
+                _require(first['review_state'] in ('disputed','adopted') and
+                         first['source_line_hash'] == change['source_line_hash'] and
+                         _sha(first['candidates_json']) == change['candidates_hash'],
+                         'source or candidate conflict')
+                actual = first['adopted_engine']
+                # An acknowledged response can be lost. Repeating the same
+                # target is idempotent, but never overwrite a third choice.
+                _require(actual in (before, after), 'concurrent arbitration conflict')
+                if actual == after:
+                    replacements[number] = group
+                    continue
+                text = ''.join(row['sentence_text'] for row in group)
+                eol = group[-1]['line_eol']
+                candidates = json.loads(first['candidates_json'])
+                cuts = [] if after is None else candidates[after]['boundaries']
+                state = 'disputed' if after is None else 'adopted'
+                metadata = _metadata(text, cuts, candidates, state, after)
+                pieces = split_mdline(text, cuts)
+                _, end = _offsets(text)
+                points = [0, *cuts, end]
+                replacements[number] = [dict(zip(COLUMNS, (
+                    first['source_document_hash'], number, first['source_line_hash'],
+                    i, points[i], points[i+1], piece,
+                    eol if i == len(pieces)-1 else '', metadata if i == 0 else None,
+                    state if i == 0 else None, after if i == 0 else None,
+                ))) for i,piece in enumerate(pieces)]
+                writes.append(number)
+            expected = [row for number,group in groups.items()
+                        for row in replacements.get(number, group)]
+            _require(rebuild_markdown(expected) == markdown, 'batch does not roundtrip')
+            for number in writes:
+                db.execute('DELETE FROM main.sentence WHERE source_line=?', (number,))
+                db.executemany(INSERT, (tuple(row[c] for c in COLUMNS) for row in replacements[number]))
+            _require(self._read() == expected, 'unexpected batch write result')
+            db.commit()
+            return [row for number in sorted(replacements) for row in replacements[number]]
         except BaseException:
             db.rollback()
             raise

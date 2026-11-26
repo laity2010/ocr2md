@@ -59,7 +59,7 @@ def file_identity(path):
     return st.st_dev, st.st_ino
 
 
-def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_sentence_rows):
+def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_sentence_rows, changes=None):
     """Authorized runtime service. No upstream private row reads or writes."""
     path = folder / DB_NAME
     identity = file_identity(path)
@@ -89,6 +89,10 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
         verify_identity()
         return sqlite3.connect(path.as_uri() + '?mode=rw', uri=True, timeout=10)
 
+    if operation == 'save':
+        with closing(connect()) as db:
+            changed = SentenceStore(db).save_choices(markdown, changes, verify_source=current)
+        return response('ready', changed)
     if operation == 'open':
         with closing(connect()) as db:
             state, rows = SentenceStore(db).inspect(markdown, verify_source=current)
@@ -120,7 +124,7 @@ def handle(handler, operation, parsed, common):
     try:
         if common is None:
             raise SentenceError(503, 'Frame 授权服务不可用')
-        if operation not in ('sentence/open','sentence/reinitialize'):
+        if operation not in ('sentence/open','sentence/reinitialize','sentence/save'):
             raise SentenceError(404, '未知分句接口')
         if handler.command != 'POST':
             raise SentenceError(405, '句表操作只允许 POST')
@@ -132,7 +136,7 @@ def handle(handler, operation, parsed, common):
             size = int(handler.headers.get('Content-Length', '-1'))
         except ValueError:
             size = -1
-        if not 2 <= size <= 8192:
+        if not 2 <= size <= (2*1024*1024 if operation == 'sentence/save' else 8192):
             raise SentenceError(413, '请求体超限')
         raw = handler.rfile.read(size)
         if len(raw) != size:
@@ -140,6 +144,7 @@ def handle(handler, operation, parsed, common):
         payload = json.loads(raw)
         op = operation.split('/')[-1]
         expected = {'workspace','source_document_hash'} | ({'confirm'} if op == 'reinitialize' else set())
+        if op == 'save': expected.add('changes')
         if not isinstance(payload, dict) or set(payload) != expected:
             raise SentenceError(422, '句表请求字段不合法')
         digest = payload['source_document_hash']
@@ -147,10 +152,27 @@ def handle(handler, operation, parsed, common):
             raise SentenceError(422, '来源摘要无效')
         if op == 'reinitialize' and payload['confirm'] != 'reinitialize-sentence-table':
             raise SentenceError(422, '缺少重新初始化确认')
+        extra = {}
+        if op == 'save':
+            changes = payload['changes']
+            fields = {'source_line','source_line_hash','candidates_hash','previous_engine','adopted_engine'}
+            if not isinstance(changes,list) or not 0 < len(changes) <= 4096:
+                raise SentenceError(422,'无效保存批次')
+            seen = set()
+            for c in changes:
+                if (not isinstance(c,dict) or set(c)!=fields or type(c['source_line']) is not int or
+                    c['source_line']<1 or c['source_line'] in seen or
+                    any(not isinstance(c[k],str) or not re.fullmatch('[0-9a-f]{64}',c[k])
+                        for k in ('source_line_hash','candidates_hash')) or
+                    any(c[k] not in (None,'intl','sentence-splitter','wink-nlp') for k in ('previous_engine','adopted_engine')) or
+                    c['previous_engine']==c['adopted_engine']):
+                    raise SentenceError(422,'无效仲裁变更')
+                seen.add(c['source_line'])
+            extra['changes'] = changes
         cookie = handler.headers.get('Cookie','')
         folder = common.checked_workspace(payload['workspace'], common.authorized_roots(cookie))
         common.probe(folder)
-        respond(200, dispatch(folder, op, digest, lambda: read_public_snapshot(folder,cookie)))
+        respond(200, dispatch(folder, op, digest, lambda: read_public_snapshot(folder,cookie), **extra))
     except SentenceError as error:
         respond(error.code, {'error': str(error)})
     except (ValueError, TypeError, KeyError, UnicodeDecodeError):

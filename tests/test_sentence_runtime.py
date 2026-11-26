@@ -106,6 +106,14 @@ class RuntimeTests(unittest.TestCase):
         result,calls=request('sentence/open','POST','https://example.test',body)
         self.assertEqual(result[0],200)
         self.assertEqual(calls,1)
+        batch={**body,'changes':[{'source_line':1,'source_line_hash':'b'*64,'candidates_hash':'c'*64,'previous_engine':None,'adopted_engine':'intl'}]}
+        for payload in ({**batch,'changes':[]},{**batch,'changes':batch['changes']*2},{**batch,'rows':[]}):
+            result,calls=request('sentence/save','POST','https://example.test',payload)
+            self.assertEqual(result[0],422);self.assertEqual(calls,0)
+        result,calls=request('sentence/save','POST','https://example.test',batch,'bad')
+        self.assertEqual(result[0],403);self.assertEqual(calls,0)
+        result,calls=request('sentence/save','POST','https://example.test',batch)
+        self.assertEqual(result[0],200);self.assertEqual(calls,1)
         result,calls=request('sentence/reinitialize','POST','https://example.test',{**body,'confirm':'reinitialize-sentence-table'})
         self.assertEqual(result[0],200)
         self.assertEqual(calls,1)

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {spawn,execFileSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
@@ -18,16 +19,44 @@ try{
    await page.route("**/labs/lab-frame/api/workspace-io/session",r=>r.fulfill({json:{authorized:true}}));
    await page.route("**/labs/lab-frame/api/workspace-io/roots",r=>r.fulfill({json:{allowedRoots:["/fixture"]}}));
    await page.route("**/labs/lab-frame/api/workspace-io/probe",r=>r.fulfill({json:{verified:true,readable:true,writable:true}}));
-   let failRead=false,stale=false,opens=0,resets=0,failReset=false;
-   await page.route("**/labs/lab-sentence/api/sentence/*",r=>{
+   let failRead=false,stale=false,opens=0,resets=0,failReset=false,failSave=false;
+   let currentRows=payload.rows,releaseFirst,startFirst;
+   const batches=[],firstStarted=new Promise(resolve=>startFirst=resolve);
+   const lineRows=line=>currentRows.filter(r=>r.source_line===line);
+   function saveBatch(changes){
+    const changed=[];
+    for(const c of changes){
+     const group=lineRows(c.source_line),first=group[0],line=sourceSnapshot.lines[c.source_line-1];
+     assert.equal(c.source_line_hash,line.sha256);
+     assert.equal(c.candidates_hash,createHash('sha256').update(first.candidates_json).digest('hex'));
+     assert.equal(c.previous_engine,first.adopted_engine);
+     const points=[0,...(c.adopted_engine===null?[]:JSON.parse(first.candidates_json)[c.adopted_engine].boundaries),line.text.length];
+     const next=points.slice(0,-1).map((from,i)=>({...first,
+      sentence_index:i,from_utf16:from,to_utf16:points[i+1],sentence_text:line.text.slice(from,points[i+1]),
+      line_eol:i===points.length-2?line.eol:'',candidates_json:i===0?first.candidates_json:null,
+      review_state:i===0?(c.adopted_engine===null?'disputed':'adopted'):null,
+      adopted_engine:i===0?c.adopted_engine:null
+     }));
+     currentRows=currentRows.filter(r=>r.source_line!==c.source_line).concat(next).sort((a,b)=>a.source_line-b.source_line||a.sentence_index-b.sentence_index);
+     changed.push(...next);
+    }
+    return changed.sort((a,b)=>a.source_line-b.source_line||a.sentence_index-b.sentence_index);
+   }
+   await page.route("**/labs/lab-sentence/api/sentence/*",async r=>{
     assert.equal(r.request().method(),"POST");const body=r.request().postDataJSON();
     assert.equal(body.workspace,"/fixture");assert.equal(body.source_document_hash,fixture.sha256);
+    if(r.request().url().endsWith("/save")){
+     batches.push(body.changes);
+     if(batches.length===1)await new Promise(resolve=>{releaseFirst=resolve;startFirst();});
+     if(failSave&&batches.length>1)return r.fulfill({status:503,json:{error:"injected idle save failure"}});
+     return r.fulfill({json:{state:'ready',source_document_hash:fixture.sha256,rows:saveBatch(body.changes)}});
+    }
     if(r.request().url().endsWith("/reinitialize")){
      resets++;assert.equal(body.confirm,"reinitialize-sentence-table");
      if(failReset)return r.fulfill({status:503,json:{error:"injected reset failure"}});
-     stale=false;
+     stale=false;currentRows=payload.rows;
     }else{opens++;assert(!("confirm" in body));}
-    return r.fulfill({json:{state:stale?"stale":"ready",source_document_hash:fixture.sha256,rows:stale?[]:payload.rows}});
+    return r.fulfill({json:{state:stale?"stale":"ready",source_document_hash:fixture.sha256,rows:stale?[]:currentRows}});
    });
    await page.route("**/labs/lab-ocr-v2/api/mineru-base/markdown?*",r=>{assert.equal(r.request().method(),"GET");assert.equal(new URL(r.request().url()).searchParams.get("workspace"),"/fixture");return failRead?r.fulfill({status:404,json:{error:"missing table"}}):r.fulfill({json:fixture});});
    await page.addInitScript(()=>localStorage.setItem("ocr2md.lab-sentence.settings.json.v1",JSON.stringify({settings:{"globalUi.font.family":{key:"family",category1:"全局 UI",category2:"字体",comment:"Sarasa",value:"Sarasa",range:{kind:"readonly"}},"globalUi.font.size":{key:"size",category1:"全局 UI",category2:"字体",comment:"字号",value:16,range:{min:8,max:32,step:1}},"workspace.dataDirectory":{key:"dataDirectory",category1:"工作区",category2:"目录",comment:"资料目录绑定",value:"/fixture",range:{kind:"server-directory"}}}})));
@@ -68,14 +97,31 @@ try{
    const first=pending.lines[0],adopt=page.getByRole('checkbox',{name:'采用 Intl',exact:true});
    await gridRow(first.sourceLine).first().waitFor({state:'visible'});
    assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
+   const undo=page.locator('#workspace #undo'),redo=page.locator('#workspace #redo');
+   assert(await undo.isDisabled());assert(await redo.isDisabled());
+   // Execute a burst of native UI actions in the same browser turn.
+   await page.evaluate(()=>{
+    const a=document.querySelector('[data-sentence-pane="intl"] input');
+    const u=document.querySelector('#workspace #undo'),r=document.querySelector('#workspace #redo');
+    a.click();u.click();r.click();u.click();
+   });
+   await expectDocs(pending.markdown);await gridCount(pending);
+   await sleep(1100);assert.equal(batches.length,0);
+   assert(await undo.isDisabled());assert(await redo.isEnabled());
    await adopt.click();
    const chosen=new Map([[first.sourceLine,'intl']]);
    const reduced=reviewProjection(sourceSnapshot,expected,false,chosen).snapshot;
    await expectDocs(reduced.markdown);await gridCount(reduced);
-   // AG row-removal animation may retain the previous DOM briefly.
    await gridRow(first.sourceLine).first().waitFor({state:"detached",timeout:5000});
    assert.equal(await gridRow(first.sourceLine).count(),0);
-   await all.check();await expectDocs(fixture.markdown);await gridCount(sourceSnapshot);
+   // Hold the first SQL response indefinitely while changing the memory state.
+   await Promise.race([firstStarted,sleep(12000).then(()=>{throw Error('idle save not started')})]);
+   assert.equal(batches.length,1);
+   assert(await undo.isEnabled());assert(await all.isEnabled());
+   assert.equal(lineRows(first.sourceLine)[0].adopted_engine,null);
+   await all.check();await expectDocs(fixture.markdown);
+   const adoptedCount=payload.rows.length+JSON.parse(lineRows(first.sourceLine)[0].candidates_json).intl.boundaries.length;
+   await page.waitForFunction(n=>document.querySelector('[data-sentence-pane="sentence"] .sentence-engine-label')?.textContent.endsWith(' · '+n+' 条'),adoptedCount);
    const select=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),pos);
    await select(first.sourceFrom);
    await page.waitForFunction(()=>document.querySelector('[data-sentence-pane="intl"] input[type="checkbox"]').checked);
@@ -83,15 +129,41 @@ try{
    assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
    const splitter=page.getByRole('checkbox',{name:'采用 Sentence Splitter',exact:true});
    await splitter.check();assert.equal(await adopt.isChecked(),false);
+   // Both keyboard undo/redo are immediate even with the SQL request held.
+   await page.locator('#editor .cm-content').focus();
+   const mod=await page.evaluate(()=>/Mac/.test(navigator.platform)?'Meta':'Control');
+   await page.keyboard.press(mod+'+z');assert(await adopt.isChecked());
+   await page.keyboard.press(mod+'+Shift+z');assert(await splitter.isChecked());
    await splitter.uncheck();
    await all.uncheck();await expectDocs(pending.markdown);await gridCount(pending);
+   assert.equal(batches.length,1);
+   failSave=true;releaseFirst();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('尚未确认保存'),null,{timeout:15000});
+   assert.equal(batches.length,2);
+   assert.equal(lineRows(first.sourceLine)[0].adopted_engine,'intl');
+   await expectDocs(pending.markdown);assert(await undo.isEnabled());assert(await all.isEnabled());
+   failSave=false;await page.locator('#global-save').click();
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('仲裁已保存'),null,{timeout:15000});
+   assert.equal(batches.length,3);assert.deepEqual(batches[1],batches[2]);assert.deepEqual(currentRows,payload.rows);
+   // A real saved choice survives reload; native history is session-only.
+   await select(first.from);await page.waitForFunction(()=>!document.querySelector('[data-sentence-pane="intl"] input').disabled);
+   await adopt.click();await expectDocs(reduced.markdown);
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('仲裁已保存'),null,{timeout:15000});
+   assert.equal(lineRows(first.sourceLine)[0].adopted_engine,'intl');
+   await page.reload({waitUntil:'domcontentloaded'});await expectDocs(reduced.markdown);
+   assert(await undo.isDisabled());assert(await redo.isDisabled());
    await all.check();await expectDocs(fixture.markdown);
+   await select(first.sourceFrom);assert(await adopt.isChecked());await adopt.uncheck();
+   await all.uncheck();await expectDocs(pending.markdown);await gridCount(pending);
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('仲裁已保存'),null,{timeout:15000});
+   assert.deepEqual(currentRows,payload.rows);
+   await all.check();await expectDocs(fixture.markdown);
+   console.log('SENTENCE_IDLE_REVIEW_PASS',name,'zero net-zero requests; in-flight choice+history; failed batch retry; reload');
    assert.equal(await page.locator('#workspace select.ocr-navigation-native option[value="frame"]').evaluate(e=>e.parentElement.label),'SQL');
    assert.equal(await page.locator('#workspace .ocr-navigation-select .item').textContent(),'逻辑表 · logical_block');
    assert.equal(await page.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
    await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({changes:{from:0,insert:'SHOULD NOT WRITE'}}));
    assert.equal(await readDoc(),fixture.markdown);
-   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),sourceSnapshot.lines.length*3,{timeout:60000});
    assert.equal(await readDoc(),fixture.markdown);
    const projection=boundaryDisplay(sourceSnapshot,expected);
    const engines=[['intl','intl'],['splitter','sentence-splitter'],['wink','wink-nlp']];
@@ -194,7 +266,7 @@ try{
    await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
    await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('677 句记录'));
    assert.equal(resets,1);
-   await expectDocs(pending.markdown);
+   await expectDocs(pending.markdown);assert(await undo.isDisabled());assert(await redo.isDisabled());
    failReset=true;
    await sqlMenu();
    await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();

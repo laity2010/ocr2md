@@ -3,7 +3,7 @@
 继承统一根目录 AGENTS.md、BUILD.md、COMM.md、GIT.md 及本州 AGENTS.md。
 独立框架型 Lab，以已验收 Frame 1dbc2b7 为基线，保留 F02 授权，WP04E2 将分句工作台扩为五窗。唯一入口 /labs/lab-sentence/；设置和运行数据独立。不写 V2 逻辑表或旧分句 Lab。
 
-## WP04 数据契约（WP04E2 五窗联动；人工仲裁尚未持久化）
+## WP04 数据契约（WP04F2 CM6 内存仲裁与空闲持久化）
 
 ### 1. 数据权威与隔离
 
@@ -35,7 +35,7 @@ WP04E 已接入现有动态 Lab Gateway 和 F02 授权：保存目录后自动�
 | candidates_json | 仅句序 0 保存各引擎标识、版本/配置、状态及候选句界/受保护范围；不复制全文 |
 | review_state / adopted_engine | 仅句序 0 保存一致、待仲裁、已仲裁、无分句或引擎错误等状态及有效采用方案 |
 
-句序 0 同时是普通句记录与本行元数据承载者，不另建元数据表或伪句。初始化、采用、改选和取消按整条 MDLine 原子替换所属句记录及其元数据。事务中核对输入修订、行摘要、区间连续覆盖、候选身份和采用有效性；提交失败保持旧表及 UI 状态，禁止写上游表。源行引用不含 PBS；上游全文哈希变化时旧句表保留但不作为当前结果显示，只提示用户通过 SQL 组明确重新初始化；不追踪上游编辑过程，不自动迁移旧仲裁或增量重分。无变化的快照重开直接恢复句表，不重复计算，不将旧修订的结果当作当前结果。
+句序 0 同时是普通句记录与本行元数据承载者，不另建元数据表或伪句。初始化事务建立句表；采用、改选、取消、Undo/Redo 立即修改 CM6 内存，空闲时仅将最终变化的 MDLine 按批次原子替换句记录。事务核对输入修订、行摘要、区间连续覆盖、候选身份与前后选择；失败保留旧表（已确认回滚时）及新内存状态/历史，未收到回执不推定是否提交。禁止写上游表。源行引用不含 PBS；上游全文哈希变化时旧句表保留但不作为当前结果显示，只提示用户通过 SQL 组明确重新初始化；不追踪上游编辑过程，不自动迁移旧仲裁或增量重分。无变化的快照重开直接恢复句表，不重复计算，不将旧修订的结果当作当前结果。
 
 ### 4. 初始化、人工仲裁与导航
 
@@ -53,14 +53,32 @@ WP04E 已接入现有动态 Lab Gateway 和 F02 授权：保存目录后自动�
 - WP04D2：两州数据表管辖权修正及隔离同库共存验证。
 - WP04E：首次初始化、已有句表直接加载、来源哈希校验、SQL 导航及明确重初始化（已实现）。
 - WP04E2：五窗布局、分歧尾随空行保留、源码和句表同步（已实现）。
-- WP04F：采用、改选、取消及局部事务持久化。
+- WP04F：同步 SQL 仲裁架构偏离用户预期，已回退（a441fe2 → 74a07f4，树等同 428ad11）。
+- WP04F2：CM6 内存仲裁、Undo/Redo 及空闲批量持久化（已实现）。
 - WP04G：总体验收（含跨模块安全、异常回滚及实际设备验收）。原独立来源失效航点取消，简单哈希检查已并入 WP04E。
 
-WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已在隔离 SQLite 验证持久层，WP04D 已完成隔离三引擎自动初始化；WP04E 接入初始化、句表读取和显式重初始化；本航点人工采用仍是原有内存交互，WP04F 才落盘。以下历史实现说明不代表运行工作台持久化已交付。WP03D 恢复基线 `05f8a3396efb75e3043e96abce4fd130ca3f0200`。
+WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已在隔离 SQLite 验证持久层，WP04D 已完成隔离三引擎自动初始化；WP04E 接入初始化、句表读取和显式重初始化；WP04F2 已接通内存仲裁及空闲持久化；旧 WP04F 已回退。以下历史实现说明不代表运行工作台持久化已交付。WP03D 恢复基线 `05f8a3396efb75e3043e96abce4fd130ca3f0200`。
 
 ## 当前实现
 
-### WP04E2 五窗布局及分歧空行同步
+### WP04F2 CM6 内存仲裁与空闲持久化
+
+用户验收指出 WP04F（a441fe2）将每次点击阻塞在 SQL 事务，偏离实时内存架构。按 BUILD 回退契约，WP04F2-R 以 74a07f4 完整恢复已验收 428ad11 源码树，Node15/15、Python11/11、Chromium/WebKit 及发布复验通过，保留失败提交和 Git Notes；不回退用户 SQLite。WP04F2 从恢复提交独立构建。
+
+唯一实时权威为 ui/sentence/review-session.js 的 CM6 StateField（按 MDLine 保存采用选择）；使用 CM6 原生 history、invertedEffects、isolateHistory、undo/redo。独立无正文 EditorState 避免只读源码状态与筛选投影重建破坏历史；原右上按钮、Mod-Z / Mod-Shift-Z / Mod-Y 与 historyUndo/historyRedo 绑定。不记录光标、筛选或滚动；原五窗、布局、只读源文及 SQL 菜单不变。采用/改选/取消/Undo/Redo 同步改变内存状态，源码待审范围、真实尾随空行、左窗 checkbox、AG 句记录均由此派生。AG 显示当前真实内存分句结果，不冒称已落盘；全局状态提示待保存、保存中、已确认保存或错误。
+
+沿用 V2 的 850ms 尾部空闲间隔。每次内存仲裁重置定时器；与最后已确认的持久化采用状态比较，只保存净变化的 MDLine，净变化为零不发送请求。普通保存过程中不禁用采用、Undo/Redo 或全部；一个在途批次，后续内存修改与其回执独立，确认后更新已保存比较基准而不是覆盖实时状态。失败保留内存和历史及未确认批次，不自动无休止重试；下次编辑或全局保存可重试同一批次，已应用同一目标时幂等返回。若存在真正并发第三种选择、来源或候选变更则拒绝，不强制覆盖。明确重初始化、目录切换及重新加载前先保存，失败保留当前内存；切换/重初始化成功或不同来源/不同记录清空会话历史，刷新仅恢复已保存结果。未保存时 beforeunload 依浏览器能力提示；自动更新回调先 flush，不主动丢弃内存，浏览器强制关闭仍可能丢失尚未落盘内容。未添加本地恢复日志或额外表。
+
+| API | 契约 |
+| --- | --- |
+| createReviewSession(snapshot,rows,{save,report,delay,timers}) | choose/history 同步提交 CM6 effect，choices/rows/depth/pending 派生实时状态；flush 显式等待队列，dispose 清定时器。默认 850ms，测试注入虚拟时钟。 |
+| choiceRows(line,group,engine) | 由已验证 MDLine 与持久候选无损生成当前句记录，不生成其他原文。 |
+| saveSentenceChoices(workspace,snapshot,batch) | POST /labs/lab-sentence/api/sentence/save；workspace、source_document_hash、changes[]；每条仅 source_line、source_line_hash、candidates_hash、previous_engine、adopted_engine。校验批次回执的行身份、原文、候选、采用状态、切点和元数据；不发送句文本/任意切点。 |
+| SentenceStore.save_choices(markdown,changes,verify_source=...) | BEGIN IMMEDIATE 复核公开来源与文件身份、自有 Schema、外键/触发器保护、全文无损；校验所有行、候选与前后选择，按行 DELETE/INSERT 一次提交；同目标幂等，不写其他行；失败整体回滚。最多 4096 行/批，2 MiB 请求上限。 |
+
+验收：Node 18/18，Python 12/12；虚拟时钟证明连续操作及撤销抵消零请求、多行合并一个批次，慢响应期间继续审阅，失败及重试保留历史；真实隔离 SQLite 多行事务、原文无损、幂等、冲突、回滚、上游与示例外州表不变；Chromium/WebKit 实际五窗、采用/改选/取消、快捷键、零净变更请求、扣留网络回执期间操作、失败重试、刷新恢复、原导航和 SQL 组菜单、过期清理 PASS，空白五窗 PASS。前两轮浏览器测试分别因模拟故障注入在错误批次、刷新用例前焦点落在不可仲裁空行而失败，修正测试并复验；原生产实现保持不变。未主动写入真实用户库，物理 iPad、任意跨进程整库换档竞争未验收；既有 Sarasa/chunk 警告保留。数据表 Schema、上游、公共组件和宪法未修改。
+
+### WP04E2 五窗布局及分歧空行同步（历史，临时投影由 WP04F2 实时内存句记录取代）
 
 保留左侧三引擎 CM6（等高）和原左右 60/40 宽度；右侧分为上方原源码 CM6、下方独立 Dockview 句表窗（默认右列高度 60/40，可原生拖动分割线）。原导航、Undo/Redo、全部/采用控件、SQL 组重初始化和全局设置不移动。SQL 选择句表仅聚焦右下窗，不再替换源码；选择逻辑表聚焦右上源码。空白框架为五窗，未绑定或来源失效时右下窗为空且没有 AG 实例。
 
@@ -119,7 +137,7 @@ Python 8/8、Node 14/14 PASS：真实 V2 夹具 497 MDLine 初始化为 677 句�
 | `SentenceStore(connection).replace_all(markdown,rows)` | 专用隔离连接上事务性建表或替换本表；写入后再次读取并无损比对，异常整体回滚。 |
 | `SentenceStore(connection).read(markdown)` | 同一事务读取有序句记录并比对提供的已保存 Markdown；拒绝陈旧、损坏或不完整结果。 |
 
-每行计划字段 `boundaries`、`candidates`、`review_state`、`adopted_engine`；候选键严格为 intl/sentence-splitter/wink-nlp，各含非空 `version`（引擎版本及配置指纹）、`status`（ok/error）、内部切点 `boundaries` 和 `protected_ranges`（有序不重叠的行内 UTF-16 半开区间）。不允许句界切开保护区间。首句保存 JSON 元数据，其余句无重复元数据。状态为 agreed/no_split/disputed/adopted/engine_error；一致或无分句不指定单一采用引擎，人工采用才登记引擎 ID。未仲裁和失败行保留整行。实际引擎候选到持久计划的转换和自动初始化已于 WP04D 在隔离环境验证；局部事务仲裁属于 WP04F。WP04C 历史测试使用明确指定的测试计划，不把它们冒充实际引擎自动初始化结果。
+每行计划字段 `boundaries`、`candidates`、`review_state`、`adopted_engine`；候选键严格为 intl/sentence-splitter/wink-nlp，各含非空 `version`（引擎版本及配置指纹）、`status`（ok/error）、内部切点 `boundaries` 和 `protected_ranges`（有序不重叠的行内 UTF-16 半开区间）。不允许句界切开保护区间。首句保存 JSON 元数据，其余句无重复元数据。状态为 agreed/no_split/disputed/adopted/engine_error；一致或无分句不指定单一采用引擎，人工采用才登记引擎 ID。未仲裁和失败行保留整行。实际引擎候选到持久计划的转换和自动初始化已于 WP04D 在隔离环境验证；局部事务仲裁已由 WP04F2 空闲批量落盘。WP04C 历史测试使用明确指定的测试计划，不把它们冒充实际引擎自动初始化结果。
 
 验收：`python3 -m unittest discover -s tests -p test_sentence_store.py -v` 5/5 PASS：真实 V2 隔离夹具 497 条 MDLine 全部写入第三表、重复初始化及重开一致；上游两表全部记录、Schema 和 user_version 前后相等；权限拒绝、首次建表及替换过程注入失败均回滚；各状态、UTF-16、空行、原始 LF、受保护区间、错误数据拒绝及无损重组测试通过。原 WP04B Node 直接测试 12/12 PASS，三引擎各 497 行零错误；未改运行 UI，继承 WP04B 浏览器验收。**WP04C 历史测试复现 V2 拒绝三表数据库（WP04D2 已修正）；没有对用户数据库迁移，也未挂载新运行接口或发布新 UI。** 本航点按 ISOLATED 留痕，线上保持 WP04B。
 
