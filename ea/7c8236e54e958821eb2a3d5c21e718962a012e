@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"20a5a964eca1420f99d9ae253c6d1133","branch":"refs/heads/experiment/lab-sentence","baseline":"ea7c8236e54e958821eb2a3d5c21e718962a012e","event":"START","utc":"2026-11-26T01:34:46.580832+00:00","wp":"WP03A","goal":"基线ea7c823；V2右源码及原导航undo redo原位、左三个引擎上下等高，句界高对比；源码工具栏全部默认不选，显示未仲裁分歧块，勾选全部恢复全文；引擎栏采用互斥，可在全部模式撤销/改选，仲裁后移出待审；四窗同源只读、会话仲裁，不改V2、算法、设置、数据库；双浏览器验收Git发布END。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"20a5a964eca1420f99d9ae253c6d1133","branch":"refs/heads/experiment/lab-sentence","baseline":"ea7c8236e54e958821eb2a3d5c21e718962a012e","event":"RUN_START","utc":"2026-11-26T01:35:36.382916+00:00","phase":"build-test","step":"62bc182f36454f6b802fd25b696baa01"}
