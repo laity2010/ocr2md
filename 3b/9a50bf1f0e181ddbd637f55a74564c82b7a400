@@ -15,3 +15,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"RUN_START","utc":"2026-11-26T09:27:00.822051+00:00","phase":"v2-jurisdiction-final-tests","step":"9f4fe1316c224916bd4b30cffd871646"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"RUN_EXIT","utc":"2026-11-26T09:28:04.137014+00:00","phase":"v2-jurisdiction-final-tests","step":"9f4fe1316c224916bd4b30cffd871646","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"203309d9a9a14369b49538c3d27ecdea","branch":"refs/heads/experiment/lab-ocr-v2","baseline":"3b9a50bf1f0e181ddbd637f55a74564c82b7a400","event":"RUN_START","utc":"2026-11-26T09:28:56.153079+00:00","phase":"v2-jurisdiction-commit-release","step":"6fe241deb23342cd912c30b2606310eb"}
