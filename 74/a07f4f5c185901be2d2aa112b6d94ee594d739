@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/heads/experiment/lab-sentence","baseline":"74a07f4f5c185901be2d2aa112b6d94ee594d739","event":"START","utc":"2026-11-26T14:24:44.587814+00:00","wp":"WP04F2","goal":"从已验收恢复SHA74a07f4重建：CM6 StateField与原生History即时仲裁，五窗内存同步；复用V2的850ms空闲调度，最终差量一次事务批量写本州sentence；失败保留内存，避免旧回执覆盖新修改；上游/Schema/五窗不变；原子事务与慢响应/失败/撤销零写盘验收。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/heads/experiment/lab-sentence","baseline":"74a07f4f5c185901be2d2aa112b6d94ee594d739","event":"RUN_START","utc":"2026-11-26T14:26:01.799660+00:00","phase":"idle-review-implementation","step":"1f2e9c85e2f14cc384663608af2814ce"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/heads/experiment/lab-sentence","baseline":"74a07f4f5c185901be2d2aa112b6d94ee594d739","event":"RUN_EXIT","utc":"2026-11-26T14:26:12.404509+00:00","phase":"idle-review-implementation","step":"1f2e9c85e2f14cc384663608af2814ce","exit_code":0}
