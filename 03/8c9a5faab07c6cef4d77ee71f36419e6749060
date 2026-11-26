@@ -5,3 +5,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"8af98f967c5b496d8e0b5377661614cd","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"8af98f967c5b496d8e0b5377661614cd","branch":"refs/heads/experiment/lab-sentence","baseline":"038c9a5faab07c6cef4d77ee71f36419e6749060","event":"RUN_EXIT","utc":"2026-11-26T09:09:27.177393+00:00","phase":"isolated-build-test","step":"6919535e460045fbbdabe5a75016df8f","exit_code":0}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"8af98f967c5b496d8e0b5377661614cd","branch":"refs/heads/experiment/lab-sentence","baseline":"038c9a5faab07c6cef4d77ee71f36419e6749060","event":"RUN_START","utc":"2026-11-26T09:09:53.998664+00:00","phase":"contract-regression","step":"d2e201ee0e4a4f5d9f8acdf10eb934b9"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"8af98f967c5b496d8e0b5377661614cd","branch":"refs/heads/experiment/lab-sentence","baseline":"038c9a5faab07c6cef4d77ee71f36419e6749060","event":"RUN_EXIT","utc":"2026-11-26T09:10:08.709270+00:00","phase":"contract-regression","step":"d2e201ee0e4a4f5d9f8acdf10eb934b9","exit_code":0}
