@@ -2,7 +2,7 @@
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateEffect,StateField} from '@codemirror/state';
 import {EditorView,Decoration,WidgetType} from '@codemirror/view';
-import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection,sentenceAtOffset} from '../sentence/display.js';
+import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection,blockCandidateDisplay} from '../sentence/display.js';
 import {basicSetup} from 'codemirror';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
@@ -180,15 +180,16 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
     if(name!=='source'||!visible)return;
     const block=blockAtOffset(visible.blocks,pos);
     if(!block)return;
-    active=block;refreshChecks();
     panes.get('source').highlight({from:block.from,to:block.to,pos});
+    if(active===block)return;
+    active=block;refreshChecks();
     const row=visibleRows.get(block.logicalId);
     for(const [name,id] of Object.entries(engineIds)){
-      const item=sentenceAtOffset(block,row?.candidates.find(c=>c.engine===id),pos,marks[id].marks);
+      const item=blockCandidateDisplay(block,row?.candidates.find(c=>c.engine===id),marks[id].marks);
       panes.get(name).setMarkdown(item.text,item.marks,item.label);
     }
   }
-  // The right caret alone controls review; scrolling or selecting a left sentence does not move it.
+  // The right caret alone controls review; scrolling or selecting a left block does not move it.
   function onScroll(){}
   const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>{
     const component=pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt);

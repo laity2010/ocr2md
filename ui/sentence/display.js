@@ -67,16 +67,11 @@ export function reviewProjection(snapshot,results,all,adopted){
  return {snapshot:{...snapshot,markdown,blocks},results:{...results,blocks:visibleRows}};
 }
 
-// One existing candidate sentence at a source cursor. Preserve its exact
-// Markdown substring, including protected material between source fragments.
-export function sentenceAtOffset(block,candidate,offset,marks=[]){
+// Project all boundaries of the focused logical block to local CM6 offsets.
+// Keep original Markdown, including protected material, without re-splitting.
+export function blockCandidateDisplay(block,candidate,marks=[]){
  if(!candidate||candidate.error)return {text:'',marks:[],label:'分句失败'};
- const units=candidate.units;
- if(!units.length)return {text:'',marks:[],label:'无分句'};
- const local=Math.max(0,Math.min(block.text.length,offset-block.from));
- let index=units.findIndex(u=>u.sourceRanges.at(-1).to>local);
- if(index<0)index=units.length-1;
- const ranges=units[index].sourceRanges;
- const from=ranges[0].from,to=ranges.at(-1).to;
- return {text:block.text.slice(from,to),marks:marks.filter(m=>m.pos===block.from+to).map(m=>({...m,pos:to-from})),label:(index+1)+' / '+units.length+' 句'};
+ const end=block.from+block.text.length;
+ return {text:block.text,marks:marks.filter(m=>m.pos>block.from&&m.pos<=end).map(m=>({...m,pos:m.pos-block.from})),
+  label:candidate.units.length?candidate.units.length+' 句':'无分句'};
 }

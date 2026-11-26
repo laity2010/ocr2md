@@ -4,7 +4,7 @@ import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
 import {splitSnapshot} from "../ui/sentence/split.js";
-import {boundaryDisplay,isDisputed,reviewProjection,sentenceAtOffset} from "../ui/sentence/display.js";
+import {boundaryDisplay,isDisputed,reviewProjection} from "../ui/sentence/display.js";
 const fixture=JSON.parse(execFileSync("python3",["-c","import sys,tempfile,json; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from test_v2_owned_edit import prepare_owned_book; tmp=tempfile.TemporaryDirectory(prefix='sentence-fixture-'); print(json.dumps(prepare_owned_book(Path(tmp.name)),ensure_ascii=False))","../lab-ocr-v2/tests"],{encoding:"utf8",maxBuffer:32*1024*1024}));
 const sourceSnapshot=await importSnapshot(fixture),expected=splitSnapshot(sourceSnapshot);
 const url="http://127.0.0.1:5399/labs/lab-sentence/";
@@ -62,19 +62,21 @@ try{
    assert.equal(await readDoc(),fixture.markdown);
    const projection=boundaryDisplay(sourceSnapshot,expected);
    const engines=[['intl','intl'],['splitter','sentence-splitter'],['wink','wink-nlp']];
-   const expectSentences=async(block,pos)=>{
+   const expectBlocks=async(block)=>{
     const row=expected.blocks.find(r=>r.logicalId===block.logicalId);
     for(const [pane,id] of engines){
-     const c=row.candidates.find(c=>c.engine===id),local=pos-block.from;
-     const unit=c.units.find(u=>u.sourceRanges.at(-1).to>local)??c.units.at(-1);
-     const text=unit?block.text.slice(unit.sourceRanges[0].from,unit.sourceRanges.at(-1).to):'';
+     const c=row.candidates.find(c=>c.engine===id);
+     const text=c.error?'':block.text;
      const host=page.locator('#sentence-editor-'+pane+' .cm-content');
      await page.waitForFunction(({pane,text})=>document.querySelector('#sentence-editor-'+pane+' .cm-content').cmTile.root.view.state.doc.toString()===text,{pane,text});
      assert.equal(await host.getAttribute('contenteditable'),'false');
-     if(unit){
-      const end=block.from+unit.sourceRanges.at(-1).to;
-      const mark=projection[id].marks.find(m=>m.pos===end);
-      if(mark)assert.equal(await page.locator('#sentence-editor-'+pane+' .ocr-sb-boundary[title='+JSON.stringify(mark.title)+']').count(),1);
+     const marks=projection[id].marks.filter(m=>m.pos>block.from&&m.pos<=block.to);
+     for(const mark of marks){
+      await host.evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),mark.pos-block.from);
+      const widget=page.locator('#sentence-editor-'+pane+' .ocr-sb-boundary[title='+JSON.stringify(mark.title)+']');
+      await widget.waitFor({state:'visible'});
+      assert.equal(await widget.textContent(),'│');
+      assert(await widget.evaluate((e,style)=>e.classList.contains(style),mark.style));
      }
     }
     assert.equal(await readDoc(),fixture.markdown);
@@ -86,10 +88,15 @@ try{
    assert(block,'expected multi-sentence disagreement');
    const row=expected.blocks.find(r=>r.logicalId===block.logicalId);
    const points=[block.from+row.candidates[0].units[0].sourceRanges[0].from,block.from+row.candidates[0].units[1].sourceRanges[0].from];
-   for(const pos of points){
-    await select(pos);await expectSentences(block,pos);
-    await page.locator('#editor .ocr-sb-active-line').first().waitFor({state:'visible'});
-   }
+   await select(points[0]);await expectBlocks(block);
+   await page.locator('#editor .ocr-sb-active-line').first().waitFor({state:'visible'});
+   await page.evaluate(()=>{window.__sentenceBlockStates=Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content'),e=>e.cmTile.root.view.state);});
+   await select(points[1]);
+   await page.waitForFunction(pos=>document.querySelector('#editor .cm-content').cmTile.root.view.state.selection.main.head===pos,points[1]);
+   assert(await page.evaluate(()=>Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content'),e=>e.cmTile.root.view.state).every((state,i)=>state===window.__sentenceBlockStates[i])));
+   const next=sourceSnapshot.blocks.find(b=>b.logicalId!==block.logicalId&&b.text!==block.text&&b.text.length>0);
+   assert(next);await select(next.from);await expectBlocks(next);
+   await select(points[0]);await expectBlocks(block);
    const before=await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.selection.main.head);
    await page.locator('#sentence-editor-intl .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({selection:{anchor:1}}));
    assert.equal(await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.selection.main.head),before);
@@ -99,7 +106,7 @@ try{
     const widget=page.locator('#editor .ocr-sb-boundary[title='+JSON.stringify(mark.title)+']');
     await widget.waitFor({state:'visible'});assert.equal(await widget.textContent(),mark.label);
    }
-   console.log("SENTENCE_CURRENT_FOCUS_PASS",name,fixture.rowCount,fixture.markdown.length,"right full source, engine-specific single sentences, adoption/filter, readonly");
+   console.log("SENTENCE_BLOCK_FOCUS_PASS",name,fixture.rowCount,fixture.markdown.length,"right full source, engine-specific complete logical blocks, stable same-block states and cross-block switch, adoption/filter, readonly");
    // Both native menus and the actual Tom Select dropdown must reflect the
    // successfully loaded table. Then force the existing GET to fail.
    assert.equal(await page.locator('select.ocr-navigation-native optgroup[label="SQL"]').count(),2);
