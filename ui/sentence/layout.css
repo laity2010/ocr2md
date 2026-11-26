@@ -27,6 +27,12 @@
 #workspace .ocr-sb-active-line {background:rgba(233,172,101,.16)}
 #workspace .ocr-sb-boundary{display:inline-block;color:#e9ac65;padding:0 1px;font-weight:800;
   vertical-align:baseline;font-family:"OCR2MD Sarasa",monospace;pointer-events:none}
-#workspace .ocr-sb-boundary.ocr-sb-agreed{color:#83aa8b}
-#workspace .ocr-sb-boundary.ocr-sb-split{color:#e9ac65;background:#5e4837;border-radius:2px}
+#workspace .ocr-sb-boundary.ocr-sb-agreed{color:#d9ffc0;background:#416342;border-radius:2px;text-shadow:0 0 3px #a7c080}
+#workspace .ocr-sb-boundary.ocr-sb-split{color:#fff3cb;background:#ad5c18;border-radius:2px;text-shadow:0 0 3px #ffe0a2}
 #workspace .sentence-active-block{background:rgba(233,172,101,.10)}
+
+#workspace .ocr-sb-boundary{font-size:1.16em;font-weight:900;padding:0 2px;line-height:1}
+#workspace .sentence-review-check{display:inline-flex;align-items:center;gap:3px;white-space:nowrap;flex:none;font:calc(12px * var(--ocr-frame-scale)) "OCR2MD Sarasa",monospace;color:#d3c6aa;cursor:pointer}
+#workspace .sentence-review-check input{margin:0;width:15px;height:15px;accent-color:#a7c080}
+#workspace .sentence-review-check:has(input:checked){color:#a7c080;font-weight:700}
+#workspace .sentence-review-check:has(input:disabled){opacity:.45;cursor:default}

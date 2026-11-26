@@ -32,10 +32,37 @@ export function boundaryDisplay(snapshot,results){
   for(const [pos,votes] of byPos){
    const agreed=ids.every(id=>votes.has(id)),style=agreed?'ocr-sb-agreed':'ocr-sb-split';
    const names=ids.filter(id=>votes.has(id));
-   const title='句界 · '+names.join(' / ')+' · MD '+pos;
+   const title='句界 · '+names.join(' / ')+' · MD '+((block.sourceFrom??block.from)+pos-block.from);
    panes.source.marks.push({pos,label:agreed?'│':'┆',style,title});
    for(const id of names)panes[id].marks.push({pos,label:'│',style,title});
   }
  }
  return panes;
+}
+
+
+// Pure review projection. The full source remains immutable; filtered views
+// keep a source offset for each logical block and share one identical document.
+export function isDisputed(row){
+ const ids=['intl','sentence-splitter','wink-nlp'];
+ const candidates=ids.map(id=>row.candidates.find(c=>c.engine===id));
+ if(candidates.some(c=>!c||c.error))return false;
+ const signatures=candidates.map(c=>JSON.stringify(c.units.map(u=>u.sourceRanges.at(-1)?.to)));
+ return signatures.some(s=>s!==signatures[0]);
+}
+export function reviewProjection(snapshot,results,all,adopted){
+ if(snapshot.documentVersion!==results.documentVersion)throw Error('Candidate source version mismatch');
+ const rows=results.blocks;
+ if(all)return {snapshot,results};
+ let markdown='';const blocks=[],visibleRows=[];
+ for(const [i,b] of snapshot.blocks.entries()){
+  const row=rows[i];
+  if(row?.logicalId!==b.logicalId||row.sourceSha256!==b.sha256)throw Error('Candidate block identity mismatch');
+  if(!isDisputed(row)||adopted.has(b.logicalId))continue;
+  if(markdown&&!markdown.endsWith('\n'))markdown+='\n\n';
+  const from=markdown.length;markdown+=b.text;
+  blocks.push({...b,sourceFrom:b.from,from,to:markdown.length});
+  visibleRows.push(row);
+ }
+ return {snapshot:{...snapshot,markdown,blocks},results:{...results,blocks:visibleRows}};
 }

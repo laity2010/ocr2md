@@ -26,6 +26,10 @@ try{
    const rects=await panes.evaluateAll(es=>Object.fromEntries(es.map(e=>{const r=e.getBoundingClientRect();return [e.dataset.sentencePane,{x:r.x,y:r.y,w:r.width,h:r.height}]})));
    const {source,intl,splitter,wink}=rects;
    assert(Math.abs(source.w/(source.w+intl.w)-.4)<.055,JSON.stringify(rects));
+   assert(source.x>intl.x+intl.w-3,JSON.stringify(rects));
+   assert.equal(await page.locator('#workspace [data-sentence-pane="source"] #undo').count(),1);
+   assert.equal(await page.locator('#workspace [data-sentence-pane="source"] #redo').count(),1);
+   assert.equal(await page.getByRole('checkbox',{name:'全部',exact:true}).isChecked(),false);
    for(const r of [intl,splitter,wink]){
     assert(Math.abs(r.x-intl.x)<3&&Math.abs(r.w-intl.w)<3,JSON.stringify(rects));
     assert(Math.abs(r.h/source.h-1/3)<.065,JSON.stringify(rects));

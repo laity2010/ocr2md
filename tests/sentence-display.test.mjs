@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {blockAtOffset,boundaryDisplay} from '../ui/sentence/display.js';
+import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection} from '../ui/sentence/display.js';
 test('logical block selection uses exact UTF16 offsets and retains previous block in separator',()=>{
  const a={from:0,to:3},b={from:5,to:10};const blocks=[a,b];
  assert.equal(blockAtOffset([],0),null);
@@ -19,4 +19,18 @@ test('original Sentence Lab union: green consensus, amber disagreement and exact
  assert.equal(d.intl.count,3);assert.equal(d['sentence-splitter'].count,2);
  assert.throws(()=>boundaryDisplay(snapshot,{...results,documentVersion:'wrong'}));
  assert.equal(boundaryDisplay(snapshot,{...results,blocks:[{...row,candidates:row.candidates.slice(0,2)}]})['wink-nlp'].failed,1);
+});
+
+test('review projection filters unresolved disagreements without changing input',()=>{
+ const candidate=(engine,ends)=>({engine,units:ends.map(to=>({sourceRanges:[{from:to-1,to}]}))});
+ const blocks=[{logicalId:1,sha256:'a',from:0,to:5,text:'A. B.'},{logicalId:2,sha256:'b',from:7,to:12,text:'C. D.'}];
+ const snapshot={documentVersion:'v',markdown:'A. B.\n\nC. D.',blocks};
+ const results={documentVersion:'v',blocks:blocks.map((b,i)=>({logicalId:b.logicalId,sourceSha256:b.sha256,candidates:[candidate('intl',[2,5]),candidate('sentence-splitter',i?[5]:[2,5]),candidate('wink-nlp',[2,5])]}))};
+ assert.equal(isDisputed(results.blocks[0]),false);assert.equal(isDisputed(results.blocks[1]),true);
+ const filtered=reviewProjection(snapshot,results,false,new Map());
+ assert.equal(filtered.snapshot.markdown,'C. D.');assert.equal(filtered.snapshot.blocks[0].sourceFrom,7);
+ assert.equal(boundaryDisplay(filtered.snapshot,filtered.results).source.marks[0].title,'句界 · intl / wink-nlp · MD 9');
+ assert.equal(reviewProjection(snapshot,results,false,new Map([[2,'intl']])).snapshot.markdown,'');
+ assert.equal(reviewProjection(snapshot,results,true,new Map([[2,'intl']])).snapshot,snapshot);
+ assert.equal(snapshot.markdown,'A. B.\n\nC. D.');
 });

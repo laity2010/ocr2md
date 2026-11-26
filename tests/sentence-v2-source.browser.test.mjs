@@ -4,7 +4,7 @@ import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
 import {splitSnapshot} from "../ui/sentence/split.js";
-import {boundaryDisplay} from "../ui/sentence/display.js";
+import {boundaryDisplay,isDisputed,reviewProjection} from "../ui/sentence/display.js";
 const fixture=JSON.parse(execFileSync("python3",["-c","import sys,tempfile,json; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from test_v2_owned_edit import prepare_owned_book; tmp=tempfile.TemporaryDirectory(prefix='sentence-fixture-'); print(json.dumps(prepare_owned_book(Path(tmp.name)),ensure_ascii=False))","../lab-ocr-v2/tests"],{encoding:"utf8",maxBuffer:32*1024*1024}));
 const sourceSnapshot=await importSnapshot(fixture),expected=splitSnapshot(sourceSnapshot);
 const url="http://127.0.0.1:5399/labs/lab-sentence/";
@@ -30,8 +30,28 @@ try{
    assert.equal(await page.locator("#workspace").isVisible(),true);
    await page.waitForFunction(n=>document.querySelector("#status")?.textContent.includes("V2 已保存逻辑表 · "+n+" 块"),fixture.rowCount,{timeout:30000});
    const readDoc=()=>page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.doc.toString());
-   await page.waitForFunction(text=>document.querySelector('#editor .cm-content')?.cmTile?.root?.view?.state.doc.toString()===text,fixture.markdown);
-   assert.equal(await readDoc(),fixture.markdown);
+   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),fixture.rowCount*3,{timeout:60000});
+   const all=page.getByRole('checkbox',{name:'全部',exact:true});
+   assert.equal(await all.isChecked(),false);
+   const pending=reviewProjection(sourceSnapshot,expected,false,new Map()).snapshot;
+   assert(pending.blocks.length>0&&pending.blocks.length<sourceSnapshot.blocks.length);
+   const expectDocs=async text=>{
+    await page.waitForFunction(text=>[...document.querySelectorAll('#workspace .cm-content')].every(e=>e.cmTile.root.view.state.doc.toString()===text),text);
+   };
+   await expectDocs(pending.markdown);
+   const first=pending.blocks[0],adopt=page.getByRole('checkbox',{name:'采用 Intl',exact:true});
+   await adopt.click();
+   const chosen=new Map([[first.logicalId,'intl']]);
+   await expectDocs(reviewProjection(sourceSnapshot,expected,false,chosen).snapshot.markdown);
+   await all.check();await expectDocs(fixture.markdown);
+   const select=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),pos);
+   await select(first.sourceFrom);
+   await page.waitForFunction(()=>document.querySelector('[data-sentence-pane="intl"] input[type="checkbox"]').checked);
+   const splitter=page.getByRole('checkbox',{name:'采用 Sentence Splitter',exact:true});
+   await splitter.check();assert.equal(await adopt.isChecked(),false);
+   await splitter.uncheck();
+   await all.uncheck();await expectDocs(pending.markdown);
+   await all.check();await expectDocs(fixture.markdown);
    assert.equal(await page.locator('#workspace select.ocr-navigation-native option[value="frame"]').evaluate(e=>e.parentElement.label),'SQL');
    assert.equal(await page.locator('#workspace .ocr-navigation-select .item').textContent(),'逻辑表 · logical_block');
    assert.equal(await page.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
@@ -83,7 +103,7 @@ try{
    await page.waitForFunction(old=>Math.abs(document.querySelector('#editor .cm-scroller').scrollTop-old)>150,oldTop);
    await expectFull();
    assert.equal(await page.locator('#workspace .sentence-unit-even,#workspace .sentence-unit-odd').count(),0);
-   console.log("SENTENCE_ORIGINAL_VISUAL_PASS",name,fixture.rowCount,fixture.markdown.length,"full source, agreed/disputed widgets, block focus, bidirectional position and scroll");
+   console.log("SENTENCE_REVIEW_VISUAL_PASS",name,fixture.rowCount,fixture.markdown.length,"full source, agreed/disputed widgets, block focus, bidirectional position and scroll");
   }finally{await b.close();}
  }
 }finally{server.kill("SIGTERM");}
