@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/heads/experiment/lab-sentence","baseline":"54e5942aab36f4423fb0b4611fea32d9cdbf71b6","event":"START","utc":"2026-11-26T09:56:16.396622+00:00","wp":"WP04E","goal":"复用动态Lab Gateway和F02授权，保存目录后自动初始化或加载句表；原文变化只提示显式重初始化；SQL组菜单和只读AG句表，保留四窗、导航与内存仲裁；上游仅公开只读接口，不改宪法、V2或其他州；隔离测试和发布。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/heads/experiment/lab-sentence","baseline":"54e5942aab36f4423fb0b4611fea32d9cdbf71b6","event":"RUN_START","utc":"2026-11-26T09:56:59.757672+00:00","phase":"backend-connect","step":"db33fc2f513f4609991126101df5c2f6"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/heads/experiment/lab-sentence","baseline":"54e5942aab36f4423fb0b4611fea32d9cdbf71b6","event":"RUN_EXIT","utc":"2026-11-26T09:57:26.980438+00:00","phase":"backend-connect","step":"db33fc2f513f4609991126101df5c2f6","exit_code":0}
