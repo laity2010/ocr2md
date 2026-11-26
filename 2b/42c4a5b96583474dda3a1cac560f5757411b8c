@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"915f3bc24e4041fda268f1e30f79b2cb","branch":"refs/heads/experiment/lab-sentence","baseline":"2b42c4a5b96583474dda3a1cac560f5757411b8c","event":"START","utc":"2026-11-26T13:45:24.563240+00:00","wp":"WP04E2","goal":"右侧源码上/句表下五窗；原三引擎与导航不变；分歧行保留原末尾空行，句表同全部筛选和双向定位，内存采用状态显式未落盘；不修改SQL/API或上游。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"915f3bc24e4041fda268f1e30f79b2cb","branch":"refs/heads/experiment/lab-sentence","baseline":"2b42c4a5b96583474dda3a1cac560f5757411b8c","event":"RUN_START","utc":"2026-11-26T13:46:13.494803+00:00","phase":"five-pane-implementation","step":"e9202ce0e6624b98b1203443f0ddda47"}
