@@ -16,6 +16,7 @@ import '../workspace.css';
 import '../outline-grid.css';
 import '../settings-module.css';
 import '../sentence/layout.css';
+import {createSentenceGrid} from '../sentence/grid.js';
 const names={source:'原文',intl:'Intl',splitter:'Sentence Splitter',wink:'Wink NLP'};
 class BreakWidget extends WidgetType {
   constructor(label,style,title){super();this.label=label;this.style=style;this.title=title;}
@@ -67,7 +68,7 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
     for(const [label,text,value] of [['全局设置','settings.json','settings']]){
       const group=document.createElement('optgroup');group.label=label;group.append(new Option(text,value));select.append(group);
     }
-    select.value='';select.addEventListener('change',()=>{if(select.value==='settings')onModuleChange('settings');});
+    select.value='';select.addEventListener('change',()=>{if(select.value)onModuleChange(select.value);});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     for(const [id,text,label] of [['undo','↶','撤销'],['redo','↷','重做']]){
       const b=document.createElement('button');b.type='button';b.id=id;b.textContent=text;b.title='只读源码';b.disabled=true;b.setAttribute('aria-label',label);actions.append(b);
@@ -80,6 +81,7 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
   host.className='ocr-cm-source frame-editor v2-source-session'+(ios?' ocr-ios-native-selection':'');
   host.id=name==='source'?'editor':'sentence-editor-'+name;
   element.append(bar,host);
+  let tableHost=null,grid=null;
   let view,syncing=false,suppressUntil=0,lastGesture=0,displayKey=null;
   const extensions=[
       ios?nativeIOSBasicSetup:basicSetup,
@@ -126,7 +128,22 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
       try{view.dispatch({...(select?{selection:{anchor:pos}}:{}),effects:EditorView.scrollIntoView(pos,{y:anchor})});}
       finally{syncing=false;}
     },
-    layout(){view?.requestMeasure();},dispose(){view?.destroy();}};
+    showTable(rows){
+      if(name!=='source')return;
+      if(!tableHost){
+        tableHost=document.createElement('div');
+        tableHost.className='sentence-table-grid ocr-outline-grid';
+        element.append(tableHost);
+      }
+      host.hidden=true;tableHost.hidden=false;check.parentElement.hidden=true;
+      if(grid)grid.setRows(rows);else grid=createSentenceGrid(tableHost,rows);
+    },showSource(){
+      if(name!=='source')return;
+      if(tableHost)tableHost.hidden=true;
+      host.hidden=false;check.parentElement.hidden=false;
+      view?.requestMeasure();
+    },clearTable(){grid?.dispose();grid=null;tableHost?.remove();tableHost=null;},
+    layout(){view?.requestMeasure();},dispose(){grid?.dispose();view?.destroy();}};
 }
 export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const panes=new Map();
@@ -205,7 +222,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const wink=add('wink',{referencePanel:splitter,direction:'below'});
   let sized=false;
   return Object.freeze({setSourceMarkdown(text,{resetReview=false}={}){
-    if(resetReview){adopted.clear();all=false;reviewVersion=null;}
+    if(resetReview){adopted.clear();all=false;reviewVersion=null;panes.get('source').clearTable();panes.get('source').showSource();}
     snapshot=null;results=null;visible=null;visibleRows=null;marks=null;active=null;
     refreshChecks();
     panes.get('source').setMarkdown(text,[]);
@@ -213,11 +230,11 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
     for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');
   },setReview(next,candidates){
     if(next.documentVersion!==candidates.documentVersion)throw Error('Candidate source version mismatch');
-    if(reviewVersion!==next.documentVersion){adopted.clear();all=false;reviewVersion=next.documentVersion;}
+    if(reviewVersion!==next.documentVersion){adopted.clear();all=false;reviewVersion=next.documentVersion;for(const row of candidates.lines)if(row.adoptedEngine)adopted.set(row.sourceLine,row.adoptedEngine);}
     snapshot=next;results=candidates;disputed.clear();
     for(const row of results.lines)if(isDisputed(row))disputed.add(row.sourceLine);
     render(0);
-  },activate(){
+  },showTable(rows){panes.get('source').showTable(rows);},showSource(){panes.get('source').showSource();},activate(){
     const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;
     dockview.layout(w,h);
     if(!sized){

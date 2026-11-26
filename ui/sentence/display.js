@@ -20,9 +20,9 @@ export function boundaryDisplay(snapshot,results){
   for(const id of ids){
    const candidate=row.candidates.find(c=>c.engine===id);
    if(!candidate||candidate.error){panes[id].failed++;continue;}
-   panes[id].count+=candidate.units.length;
-   for(const unit of candidate.units){
-    const end=unit.sourceRanges.at(-1)?.to;
+   const ends=candidate.boundaries??candidate.units.map(u=>u.sourceRanges.at(-1)?.to);
+   panes[id].count+=candidate.boundaries?(ends.length?ends.length+1:0):candidate.units.length;
+   for(const end of ends){
     if(!Number.isInteger(end)||end<=0||end>line.text.length)throw Error('Invalid sentence boundary');
     const pos=line.from+end;
     if(!byPos.has(pos))byPos.set(pos,new Set());
@@ -44,6 +44,7 @@ export function boundaryDisplay(snapshot,results){
 // Pure review projection. The full source remains immutable; filtered views
 // keep a source offset for each logical line and share one identical document.
 export function isDisputed(row){
+ if(row.reviewState)return ['disputed','adopted'].includes(row.reviewState);
  const ids=['intl','sentence-splitter','wink-nlp'];
  const candidates=ids.map(id=>row.candidates.find(c=>c.engine===id));
  if(candidates.some(c=>!c||c.error))return false;
@@ -72,5 +73,5 @@ export function lineCandidateDisplay(line,candidate,marks=[]){
  if(!candidate||candidate.error)return {text:'',marks:[],label:'分句失败'};
  const end=line.from+line.text.length;
  return {text:line.text,marks:marks.filter(m=>m.pos>line.from&&m.pos<=end).map(m=>({...m,pos:m.pos-line.from})),
-  label:candidate.units.length?candidate.units.length+' 句':'无分句'};
+  label:candidate.boundaries?(candidate.boundaries.length?(candidate.boundaries.length+1)+' 句':'无分句'):(candidate.units.length?candidate.units.length+' 句':'无分句')};
 }

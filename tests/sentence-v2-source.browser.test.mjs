@@ -3,10 +3,10 @@ import {spawn,execFileSync} from "node:child_process";
 import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
-import {splitSnapshot} from "../ui/sentence/split.js";
+import {persistedReview} from "../ui/sentence/persisted.js";
 import {boundaryDisplay,isDisputed,reviewProjection} from "../ui/sentence/display.js";
-const fixture=JSON.parse(execFileSync("python3",["-c","import sys,tempfile,json; from pathlib import Path; sys.path.insert(0,sys.argv[1]); from test_v2_owned_edit import prepare_owned_book; tmp=tempfile.TemporaryDirectory(prefix='sentence-fixture-'); print(json.dumps(prepare_owned_book(Path(tmp.name)),ensure_ascii=False))","../lab-ocr-v2/tests"],{encoding:"utf8",maxBuffer:32*1024*1024}));
-const sourceSnapshot=await importSnapshot(fixture),expected=splitSnapshot(sourceSnapshot);
+const payload=JSON.parse(execFileSync("python3",["-c","import sys,tempfile,json,sqlite3; from pathlib import Path; sys.path.insert(0,sys.argv[1]); sys.path.insert(0,sys.argv[2]); from test_v2_owned_edit import prepare_owned_book; from sentence_initialize import initialize_sentence_table; from v2_mineru_base import DB_NAME; tmp=tempfile.TemporaryDirectory(prefix='sentence-fixture-'); folder=Path(tmp.name); snapshot=prepare_owned_book(folder); db=sqlite3.connect(folder/DB_NAME); rows=initialize_sentence_table(db,snapshot); db.close(); print(json.dumps(dict(snapshot=snapshot,rows=rows),ensure_ascii=False))","../lab-ocr-v2/tests","scripts"],{encoding:"utf8",maxBuffer:32*1024*1024}));
+const fixture=payload.snapshot,sourceSnapshot=await importSnapshot(fixture),expected=persistedReview(sourceSnapshot,payload.rows);
 const url="http://127.0.0.1:5399/labs/lab-sentence/";
 const server=spawn("node",["node_modules/vite/bin/vite.js","preview","--config","labs/lab-sentence/vite.config.mjs","--host","127.0.0.1","--port","5399","--strictPort"],{stdio:["ignore","ignore","inherit"]});
 try{
@@ -18,7 +18,17 @@ try{
    await page.route("**/labs/lab-frame/api/workspace-io/session",r=>r.fulfill({json:{authorized:true}}));
    await page.route("**/labs/lab-frame/api/workspace-io/roots",r=>r.fulfill({json:{allowedRoots:["/fixture"]}}));
    await page.route("**/labs/lab-frame/api/workspace-io/probe",r=>r.fulfill({json:{verified:true,readable:true,writable:true}}));
-   let failRead=false;
+   let failRead=false,stale=false,opens=0,resets=0,failReset=false;
+   await page.route("**/labs/lab-sentence/api/sentence/*",r=>{
+    assert.equal(r.request().method(),"POST");const body=r.request().postDataJSON();
+    assert.equal(body.workspace,"/fixture");assert.equal(body.source_document_hash,fixture.sha256);
+    if(r.request().url().endsWith("/reinitialize")){
+     resets++;assert.equal(body.confirm,"reinitialize-sentence-table");
+     if(failReset)return r.fulfill({status:503,json:{error:"injected reset failure"}});
+     stale=false;
+    }else{opens++;assert(!("confirm" in body));}
+    return r.fulfill({json:{state:stale?"stale":"ready",source_document_hash:fixture.sha256,rows:stale?[]:payload.rows}});
+   });
    await page.route("**/labs/lab-ocr-v2/api/mineru-base/markdown?*",r=>{assert.equal(r.request().method(),"GET");assert.equal(new URL(r.request().url()).searchParams.get("workspace"),"/fixture");return failRead?r.fulfill({status:404,json:{error:"missing table"}}):r.fulfill({json:fixture});});
    await page.addInitScript(()=>localStorage.setItem("ocr2md.lab-sentence.settings.json.v1",JSON.stringify({settings:{"globalUi.font.family":{key:"family",category1:"全局 UI",category2:"字体",comment:"Sarasa",value:"Sarasa",range:{kind:"readonly"}},"globalUi.font.size":{key:"size",category1:"全局 UI",category2:"字体",comment:"字号",value:16,range:{min:8,max:32,step:1}},"workspace.dataDirectory":{key:"dataDirectory",category1:"工作区",category2:"目录",comment:"资料目录绑定",value:"/fixture",range:{kind:"server-directory"}}}})));
    await page.goto(url,{waitUntil:"domcontentloaded"});
@@ -83,11 +93,11 @@ try{
    };
    const block=sourceSnapshot.lines.find(b=>{
     const row=expected.lines.find(r=>r.sourceLine===b.sourceLine);
-    return row.candidates.every(c=>c.units.length>1)&&isDisputed(row);
+    return row.candidates.every(c=>c.boundaries.length>0)&&isDisputed(row);
    });
    assert(block,'expected multi-sentence disagreement');
    const row=expected.lines.find(r=>r.sourceLine===block.sourceLine);
-   const points=[block.from+row.candidates[0].units[0].sourceRanges[0].from,block.from+row.candidates[0].units[1].sourceRanges[0].from];
+   const points=[block.from,block.from+row.candidates[0].boundaries[0]];
    await select(points[0]);await expectBlocks(block);
    await page.locator('#editor .ocr-sb-active-line').first().waitFor({state:'visible'});
    await page.evaluate(()=>{window.__sentenceBlockStates=Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content'),e=>e.cmTile.root.view.state);});
@@ -112,6 +122,69 @@ try{
     await widget.waitFor({state:'visible'});assert.equal(await widget.textContent(),mark.label);
    }
    console.log("SENTENCE_MDLINE_FOCUS_PASS",name,fixture.rowCount,fixture.markdown.length,"right full source, complete MDLine candidates, stable same-line states and cross-line switch, adoption/filter, readonly");
+   assert.equal(await page.locator('select.ocr-navigation-native option[value="sentence"]').count(),2);
+   const openNav=async()=>{
+    // Native dialog focus restoration may already reopen Tom Select. Do not
+    // toggle an already-open dropdown closed before clicking its SQL group.
+    if(!await page.locator('.ocr-navigation-popup:visible').count())await page.locator('#workspace .ocr-navigation-select .ts-control').click();
+   };
+   await openNav();
+   await page.locator('.ocr-navigation-popup:visible [data-value="sentence"]').click();
+   await page.locator('.sentence-table-grid .ag-root').waitFor({state:'visible'});
+   assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
+   assert.equal(await page.locator('#editor').isVisible(),false);
+   assert.equal(await page.locator('.sentence-table-grid .ag-row[row-index="0"] [col-id="sentence_text"]').textContent(),payload.rows[0].sentence_text);
+   const header=page.locator('.sentence-table-grid .ag-header-cell[col-id="review_state"]');
+   // Actual V1 native multi-value filter, not a replacement select.
+   await header.locator('.ag-header-cell-filter-button').click();
+   await page.locator('.ag-popup').getByText('all',{exact:true}).waitFor({state:'visible'});
+   await page.keyboard.press('Escape');
+   await openNav();await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').click();
+   await page.locator('#editor').waitFor({state:'visible'});
+   await expectDocs(fixture.markdown);
+   const sqlMenu=async()=>{
+    await openNav();
+    await page.locator('.ocr-navigation-popup:visible .optgroup-header').filter({hasText:/^SQL$/}).click();
+    await page.locator('#sentence-sql-actions-dialog').waitFor({state:'visible'});
+   };
+   await sqlMenu();
+   await page.getByRole('button',{name:'取消',exact:true}).click();
+   assert.equal(resets,0);
+   await page.locator('#sentence-sql-actions-dialog').waitFor({state:'hidden'});
+   console.log('SENTENCE_CANCEL_NAV_STATE',name,await page.locator('.ocr-navigation-popup:visible').count());
+   await sqlMenu();
+   await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();
+   assert.equal(resets,0);
+   await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
+   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('677 句记录'));
+   assert.equal(resets,1);
+   await expectDocs(pending.markdown);
+   failReset=true;
+   await sqlMenu();
+   await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();
+   await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
+   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('重新初始化未确认成功'));
+   assert.equal(resets,2);
+   await expectDocs(pending.markdown);
+   failReset=false;
+   console.log('SENTENCE_SQL_NAV_GRID_REINIT_PASS',name,'677 persisted rows, native filter, cancel, confirmed reset, failure keeps review');
+   // Reopening a saved directory with stale rows never auto-reinitializes.
+   stale=true;
+   await openNav();await page.locator('.ocr-navigation-popup:visible [data-value="settings"]').click();
+   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('句表与已保存 MDLine 不一致'));
+   assert.equal(await page.locator('select.ocr-navigation-native option[value="sentence"]').count(),0);
+   assert.equal(resets,2);
+   assert(opens>=2);
+   await page.locator('#settings-workspace .ocr-navigation-select .ts-control').click();
+   await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').click();
+   await expectDocs(fixture.markdown);
+   await sqlMenu();
+   await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();
+   await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
+   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('677 句记录'));
+   assert.equal(resets,3);
+   await expectDocs(pending.markdown);
+   console.log('SENTENCE_STALE_EXPLICIT_RESET_PASS',name);
    // Both native menus and the actual Tom Select dropdown must reflect the
    // successfully loaded table. Then force the existing GET to fail.
    assert.equal(await page.locator('select.ocr-navigation-native optgroup[label="SQL"]').count(),2);
