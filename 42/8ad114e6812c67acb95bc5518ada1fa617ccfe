@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/heads/experiment/lab-sentence","baseline":"428ad114e6812c67acb95bc5518ada1fa617ccfe","event":"START","utc":"2026-11-26T14:02:00.511028+00:00","wp":"WP04F","goal":"采用/改选/取消仅局部替换sentence当前MDLine，来源/候选/原状态CAS与事务回滚；CM6原生History可逆effect，先确认SQL再推进历史，五窗布局/原文/导航/全部筛选不变，不增加表、不写其他州；双浏览器和正式发布。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/heads/experiment/lab-sentence","baseline":"428ad114e6812c67acb95bc5518ada1fa617ccfe","event":"RUN_START","utc":"2026-11-26T14:02:42.920288+00:00","phase":"arbitration-store","step":"da4e109618914b4a9a3c82611837a6a6"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"edb5b1a148d04022a2599c00cd21f150","branch":"refs/heads/experiment/lab-sentence","baseline":"428ad114e6812c67acb95bc5518ada1fa617ccfe","event":"RUN_EXIT","utc":"2026-11-26T14:03:32.499458+00:00","phase":"arbitration-store","step":"da4e109618914b4a9a3c82611837a6a6","exit_code":0}
