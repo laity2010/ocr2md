@@ -25,3 +25,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/heads/experiment/lab-sentence","baseline":"54e5942aab36f4423fb0b4611fea32d9cdbf71b6","event":"RUN_EXIT","utc":"2026-11-26T10:09:29.613086+00:00","phase":"commit-release","step":"2dd38174f9964bb788d89135f1596a16","exit_code":1}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/heads/experiment/lab-sentence","baseline":"54e5942aab36f4423fb0b4611fea32d9cdbf71b6","event":"RUN_START","utc":"2026-11-26T10:09:51.953047+00:00","phase":"live-auth-verification","step":"4a31f2d46cec41728cb0ef9c486a0991"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"9718a19655994f7da771bc99ba6fbae0","branch":"refs/heads/experiment/lab-sentence","baseline":"54e5942aab36f4423fb0b4611fea32d9cdbf71b6","event":"RUN_EXIT","utc":"2026-11-26T10:10:03.578342+00:00","phase":"live-auth-verification","step":"4a31f2d46cec41728cb0ef9c486a0991","exit_code":0}
