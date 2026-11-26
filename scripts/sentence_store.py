@@ -257,13 +257,23 @@ class SentenceStore:
             finally:
                 self._creating = False
 
+    def initialize(self, markdown, rows):
+        """Create the sentence table once; never overwrite an existing table."""
+        return self._replace(markdown, rows, initialize_only=True)
+
     def replace_all(self, markdown, rows):
-        """Initialize/replace only sentence, atomically; supplied source is immutable."""
+        """Explicitly initialize/replace only sentence; supplied source is immutable."""
+        return self._replace(markdown, rows, initialize_only=False)
+
+    def _replace(self, markdown, rows, *, initialize_only):
         _require(rebuild_markdown(rows) == markdown, 'rows differ from supplied Markdown snapshot')
         db = self._db
         _require(not db.in_transaction, 'unexpected active transaction')
         db.execute('BEGIN IMMEDIATE')
         try:
+            if initialize_only:
+                _require(not db.execute("SELECT name FROM main.sqlite_master WHERE name='sentence'").fetchone(),
+                         'sentence table already exists; automatic initialization refused')
             self._schema(create=True)
             db.execute('DELETE FROM main.sentence')
             db.executemany(INSERT, (tuple(r[c] for c in COLUMNS) for r in rows))

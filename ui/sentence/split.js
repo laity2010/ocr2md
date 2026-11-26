@@ -32,16 +32,27 @@ function documentMask(text){
  }
  return mask;
 }
-function project(line,protectedMask){
+function lineProtection(line,protectedMask){
  const text=line.text,mask=protectedMask?protectedMask.slice():documentMask(text);
  for(const m of text.matchAll(/^[ \t]*(?:>[ \t]*)*(?:\[![^\]\n]+\][+-]?[^\n]*|#{1,6}[ \t]+|[-*+][ \t]+|\d+[.)][ \t]+)/gm))mask.fill(1,m.index,m.index+m[0].length);
+ return mask;
+}
+function protectionRanges(mask){
+ const ranges=[];
+ for(let i=0;i<mask.length;i++)if(mask[i]){
+  const last=ranges.at(-1);if(last?.[1]===i)last[1]++;else ranges.push([i,i+1]);
+ }
+ return ranges;
+}
+function project(line,protectedMask){
+ const text=line.text,mask=lineProtection(line,protectedMask);
  let prose='',space=false;const offsets=[];
  for(let i=0;i<text.length;i++){
   if(mask[i]||/\s/u.test(text[i])){space=!!prose;continue;}
   if(space){prose+=' ';offsets.push(null);space=false;}
   prose+=text[i];offsets.push(i);
  }
- return {prose,offsets};
+ return {prose,offsets,protectedRanges:protectionRanges(mask)};
 }
 
 // Splitter may emit punctuation-only gaps. Attach those to a neighboring
@@ -63,7 +74,7 @@ function completeRanges(prose,ranges,engine){
 }
 
 export function splitLine(line,engine,protectedMask){
- const {prose,offsets}=project(line,protectedMask),units=[],pieces=[];
+ const {prose,offsets,protectedRanges}=project(line,protectedMask),units=[],pieces=[];
  const ranges=prose?completeRanges(prose,engineAdapter(engine).segment(prose),engine):[];
  let cursor=0;
  const append=(kind,from,to,unit)=>{
@@ -88,7 +99,7 @@ export function splitLine(line,engine,protectedMask){
   units.push({original,sourceRanges});
  }
  append('raw',cursor,line.text.length);
- const result={engine,sourceLine:line.sourceLine,sourceSha256:line.sha256,units,pieces,sourceLength:line.text.length};
+ const result={engine,sourceLine:line.sourceLine,sourceSha256:line.sha256,units,pieces,protectedRanges,sourceLength:line.text.length};
  if(rebuildLine(result)!==line.text)throw Error('Source reconstruction mismatch');
  // Every eligible UTF-16 unit must be assigned exactly once, including dots.
  const expected=offsets.filter(x=>x!==null),actual=units.flatMap(u=>u.sourceRanges.flatMap(r=>Array.from({length:r.to-r.from},(_,i)=>r.from+i)));
@@ -112,7 +123,7 @@ export function splitSnapshot(snapshot){
   sourceLine:line.sourceLine,sourceSha256:line.sha256,
   candidates:engineCatalog.map(({id})=>{
    try{return splitLine(line,id,mask.subarray(line.from,line.textTo));}
-   catch(error){return {engine:id,sourceLine:line.sourceLine,error:error.message};}
+   catch(error){return {engine:id,sourceLine:line.sourceLine,sourceSha256:line.sha256,protectedRanges:protectionRanges(lineProtection(line,mask.subarray(line.from,line.textTo))),error:error.message||String(error)};}
   })
  }))};
 }
