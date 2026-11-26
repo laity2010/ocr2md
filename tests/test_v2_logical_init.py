@@ -213,14 +213,24 @@ class LogicalInitTest(unittest.TestCase):
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')],old)
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
 
-    def test_failed_migration_rolls_back_ddl_and_preserves_logic(self):
+    def test_migration_trigger_rejected_before_ddl_and_preserves_logic(self):
         old,baseline=self.make_five_column_database()
         with closing(sqlite3.connect(self.db_path)) as db:
             db.execute('CREATE TRIGGER forbid_logical_update BEFORE UPDATE ON logical_block '
                        "BEGIN SELECT RAISE(ABORT, 'injected migration failure'); END;")
             db.commit()
-        with self.assertRaises(sqlite3.DatabaseError):
+        with self.assertRaisesRegex(base.BaseError,'触发器'):
             self.import_book()
+        with closing(sqlite3.connect(self.db_path)) as db:
+            self.assertEqual(tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)')),base.LEGACY_LOGICAL_COLS)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')],old)
+            self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM mineru_base ORDER BY blockid')],baseline)
+
+    def test_failed_migration_rolls_back_ddl_and_preserves_logic(self):
+        old,baseline=self.make_five_column_database()
+        with patch.object(base,'raw_bindings',side_effect=sqlite3.DatabaseError('injected after DDL')):
+            with self.assertRaisesRegex(sqlite3.DatabaseError,'injected after DDL'):
+                self.import_book()
         with closing(sqlite3.connect(self.db_path)) as db:
             self.assertEqual(tuple(r[1] for r in db.execute('PRAGMA table_info(logical_block)')),base.LEGACY_LOGICAL_COLS)
             self.assertEqual([tuple(row) for row in db.execute('SELECT * FROM logical_block ORDER BY logical_order')],old)

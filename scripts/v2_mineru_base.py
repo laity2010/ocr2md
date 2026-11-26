@@ -91,9 +91,15 @@ def typed(obj,key):
     value=obj.get(key)
     return compact(value) if value is not None else None
 
+OWN_TABLES=frozenset(('mineru_base','logical_block'))
+
 def assert_schema(db, *, allow_legacy=False):
-    tables={r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-    if tables!={'mineru_base','logical_block'}:raise BaseError(409,'现有 SQLite 不符合 V2 两表结构，拒绝覆盖')
+    # V2 owns two tables, not the SQLite container. Foreign tables are not
+    # schema errors and are not consulted for the V2 document projection.
+    tables=set(physical_tables(db))
+    if not OWN_TABLES.issubset(tables):raise BaseError(409,'现有 SQLite 缺少 V2 两表结构，拒绝覆盖')
+    if tuple(r[1] for r in db.execute('PRAGMA main.table_info(mineru_base)'))!=COLUMNS:
+        raise BaseError(409,'现有 SQLite 基础表结构不兼容，拒绝覆盖')
     # Only the verified WP03 five-column table may be migrated in place.
     columns=tuple(row[1] for row in db.execute('PRAGMA table_info(logical_block)'))
     if columns!=LOGICAL_COLS and not (allow_legacy and columns in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS,OLD_PBS_LOGICAL_COLS)):
@@ -107,6 +113,43 @@ def assert_schema(db, *, allow_legacy=False):
     except (ValueError,TypeError):raise BaseError(409,'数据库原始档案损坏')
     if meta.get('schema')!=SCHEMA:raise BaseError(409,'现有 SQLite 的 Schema 版本不同，拒绝覆盖')
     return meta
+
+def assert_write_scope(db, *, migration=False):
+    """Call under the write lock before any existing-database mutation.
+
+    Reject cross-state side effects, not the existence of independent tables.
+    No external row data is read. Legacy ALTER can rewrite dependent SQL
+    definitions, so refuse that migration if views/triggers are present.
+    """
+    catalog=list(db.execute("SELECT type,name,tbl_name FROM main.sqlite_master"))
+    for kind,name,table in catalog:
+        if kind=='trigger' and (table.casefold() in OWN_TABLES or migration):
+            raise BaseError(409,'存在跨表触发器或迁移依赖，禁止 V2 写入')
+        if migration and kind=='view':
+            raise BaseError(409,'存在外部 View，禁止旧版 Schema 迁移')
+        if kind=='table' and name not in OWN_TABLES and not name.startswith('sqlite_'):
+            identifier='"'+name.replace('"','""')+'"'
+            for fk in db.execute('PRAGMA main.foreign_key_list('+identifier+')'):
+                if fk[2].casefold() in OWN_TABLES:
+                    raise BaseError(409,'存在外州到 V2 的外键依赖，禁止跨表写入')
+    # No application-specific foreign keys may be introduced into our tables.
+    for table in OWN_TABLES:
+        for fk in db.execute('PRAGMA main.foreign_key_list('+table+')'):
+            if fk[2].casefold() not in OWN_TABLES:
+                raise BaseError(409,'V2 表存在外州外键依赖，禁止写入')
+
+def assert_container_replaceable(path):
+    """Whole-file replacement is safe only for an exclusively V2 container."""
+    with closing(sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True)) as db:
+        objects=db.execute("SELECT type,name,tbl_name FROM main.sqlite_master "
+                           "WHERE substr(name,1,7) != 'sqlite_'").fetchall()
+        for kind,name,table in objects:
+            if ((kind=='table' and name in OWN_TABLES) or
+                (kind=='index' and name=='logical_block_pbs_unique' and table=='logical_block')):
+                continue
+            raise BaseError(409,'SQLite 存在非 V2 自有对象，禁止整库覆盖')
+        if not set(r[1] for r in objects if r[0]=='table').issubset(OWN_TABLES):
+            raise BaseError(409,'SQLite 存在外州数据，禁止整库覆盖')
 
 def create_schema(db):
     db.executescript('''
@@ -187,7 +230,7 @@ def write_initial_logical(db):
                     r.block_type,*coords[r.logical_id],bindings[r.logical_id][1]) for r in rows])
     inserted=db.execute('SELECT count(*) FROM logical_block').fetchone()[0]
     if inserted!=len(rows):raise BaseError(500,'逻辑表初始化行数不一致')
-    if list(db.execute('PRAGMA foreign_key_check')):
+    if list(db.execute('PRAGMA foreign_key_check(logical_block)')):
         raise BaseError(500,'逻辑表存在失效基础块引用')
     return inserted
 
@@ -227,6 +270,7 @@ def new_book(folder:Path,*,overwrite=False,owned=False):
             for suffix in ('-wal','-shm','-journal'):
                 if os.path.lexists(folder/(DB_NAME+suffix)):
                     raise BaseError(409,'SQLite 存在未结束的日志文件，请先关闭其他数据库连接')
+            assert_container_replaceable(folder/DB_NAME)
         fd=os.open(stage,os.O_RDWR|os.O_CREAT|os.O_EXCL|getattr(os,'O_NOFOLLOW',0),0o600,dir_fd=fd_parent)
         os.close(fd)
         try:
@@ -260,6 +304,9 @@ def new_book(folder:Path,*,overwrite=False,owned=False):
                 now=os.stat(DB_NAME,dir_fd=fd_parent,follow_symlinks=False)
                 if (now.st_ino,now.st_mtime_ns,now.st_size)!=(current.st_ino,current.st_mtime_ns,current.st_size):
                     raise BaseError(409,'转换期间数据库已变化，拒绝覆盖')
+                if any(os.path.lexists(folder/(DB_NAME+suffix)) for suffix in ('-wal','-shm','-journal')):
+                    raise BaseError(409,'SQLite 存在未结束的日志文件，请先关闭其他数据库连接')
+                assert_container_replaceable(folder/DB_NAME)
                 os.replace(stage,DB_NAME,src_dir_fd=fd_parent,dst_dir_fd=fd_parent)
             os.fsync(fd_parent)
         finally:
@@ -332,7 +379,8 @@ def existing_state(folder:Path,offset=0,table='mineru_base'):
     with closing(sqlite3.connect('file:'+str(db_path)+'?mode=ro',uri=True)) as db:
         db.row_factory=sqlite3.Row
         meta=assert_schema(db)
-        names=physical_tables(db)
+        names=[name for name in physical_tables(db) if name in OWN_TABLES]
+        if table not in names:raise BaseError(404,'指定表不存在或不属于 V2 数据域')
         if table=='logical_block':offset=0
         chosen=read_table(db,table,offset)
         catalog=[]
@@ -464,6 +512,7 @@ def migrate_legacy_type_column(folder: Path, common):
         if now not in (LEGACY_LOGICAL_COLS,PRE_PBS_LOGICAL_COLS,OLD_PBS_LOGICAL_COLS):
             raise BaseError(409,'升级期间逻辑表结构已改变，拒绝覆盖')
         assert_schema(db,allow_legacy=True)
+        assert_write_scope(db,migration=True)
         if now==LEGACY_LOGICAL_COLS:
             db.execute("ALTER TABLE logical_block ADD COLUMN block_type TEXT NOT NULL DEFAULT ''")
             db.execute('UPDATE logical_block SET block_type=COALESCE(('
@@ -506,7 +555,7 @@ def migrate_legacy_type_column(folder: Path, common):
             finish_fresh_owned_logical(db)
         db.execute('CREATE UNIQUE INDEX IF NOT EXISTS logical_block_pbs_unique ON logical_block(p,b,s)')
         assert_schema(db)
-        if list(db.execute('PRAGMA foreign_key_check')):
+        if list(db.execute('PRAGMA foreign_key_check(logical_block)')):
             raise BaseError(409,'迁移后存在无效基础块来源')
         if any(sha(require_regular(folder/rel))!=sha(raw) for rel,raw,_ in sources):
             raise BaseError(409,'迁移期间 MinerUJSON 已改变，拒绝提交')
@@ -534,6 +583,7 @@ def backfill_empty_logical(folder: Path, common, *, owned=False):
         db.execute('PRAGMA foreign_keys=ON')
         db.execute('BEGIN IMMEDIATE')
         meta=assert_schema(db)
+        assert_write_scope(db)
         sources=mineru_sources(folder)
         if [(p,sha(raw)) for p,raw,_ in sources]!=[
             (src['path'],src['sha256']) for src in meta['sources']]:
@@ -572,6 +622,7 @@ def rebuild_logical_only(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             meta=assert_schema(db)
+            assert_write_scope(db)
             if is_owned_lf(db) and not owned:raise BaseError(409,'真实换行模式禁止旧版逻辑表重建')
             expected=[(item['path'],item['sha256']) for item in meta['sources']]
             if [(rel,sha(raw)) for rel,raw,_ in sources]!=expected:
@@ -608,7 +659,7 @@ def rebuild_logical_only(folder:Path,payload,common):
             if [tuple(row) for row in db.execute(
                     'SELECT * FROM mineru_base ORDER BY blockid')]!=base_snapshot:
                 raise BaseError(409,'重建过程中原始基础表发生变化，已回滚')
-            if list(db.execute('PRAGMA foreign_key_check')):
+            if list(db.execute('PRAGMA foreign_key_check(logical_block)')):
                 raise BaseError(409,'重建后的逻辑块引用失败，已回滚')
             if [(rel,sha(require_regular(folder/rel))) for rel,_,_ in sources]!=expected:
                 raise BaseError(409,'重建期间源 MinerU 改变，已回滚')
@@ -710,6 +761,7 @@ def commit_md(folder:Path,payload,common):
         try:
             db.execute('BEGIN IMMEDIATE')
             assert_schema(db)
+            assert_write_scope(db)
             if owned!=is_owned_lf(db):
                 raise BaseError(409,'正文协议与数据库不一致，请刷新；拒绝旧客户端修改真实换行')
             if owned:
@@ -805,6 +857,7 @@ def commit_structure(folder:Path,payload,common):
         db.execute('PRAGMA foreign_keys=ON')
         db.execute('BEGIN IMMEDIATE')
         assert_schema(db)
+        assert_write_scope(db)
         if owned!=is_owned_lf(db):
             raise BaseError(409,'真实换行归组需 WP23F 原子正文/结构协议')
         old={r['logical_id']:dict(r) for r in db.execute(
@@ -875,7 +928,7 @@ def commit_structure(folder:Path,payload,common):
                 if row['parent_id']!=(None if row['s']==0 else root):
                     raise ValueError('PBS 父子层级与 parent_id 不一致')
         except ValueError as err:raise BaseError(409,'结构事务被拒绝：'+str(err)) from err
-        if list(db.execute('PRAGMA foreign_key_check')):
+        if list(db.execute('PRAGMA foreign_key_check(logical_block)')):
             raise BaseError(409,'结构事务破坏基础块引用')
         db.commit()
         return {'saved':True,'changedRows':len(changes),'logicalCount':len(records),**({'textChangedRows':len(text_changes)} if owned else {})}
@@ -954,8 +1007,9 @@ def dispatch(operation,method,folder,payload,query,common):
         exists=os.path.lexists(folder/DB_NAME)
         if exists:
             # Compatible + identical input is stable across refreshes. The
-            # user's explicit V2 import approval also permits overwriting an
-            # incompatible old schema or a different-source V2 database.
+            # user's explicit V2 import approval may replace an exclusively
+            # V2 old schema or different-source V2 database.
+            # A foreign object always prevents whole-container replacement.
             try:
                 result=existing_state(folder)
             except BaseError as error:

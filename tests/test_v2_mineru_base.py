@@ -118,26 +118,20 @@ class MineruBaseTest(unittest.TestCase):
         self.assertEqual(newsha,hashlib.sha256(self.source.read_bytes()).hexdigest())
         self.assertEqual(self.source.read_bytes(),self.original+b' ')
         self.assertEqual(v.existing_state(self.book)['blockCount'],539)
-    def test_old_database_atomic_replace_after_verified_import(self):
+    def test_foreign_database_is_not_replaced_by_v2_import(self):
         path=self.book/v.DB_NAME
         with closing(sqlite3.connect(path)) as db:
-            db.execute('CREATE TABLE unrelated(a INTEGER)');db.execute('INSERT INTO unrelated VALUES (12)');db.commit()
+            db.execute('CREATE TABLE unrelated(a INTEGER)')
+            db.execute('INSERT INTO unrelated VALUES (12)')
+            db.commit()
         before=path.read_bytes()
         with self.assertRaisesRegex(v.BaseError,'两表结构'):
             v.existing_state(self.book)
-        adapter=StubF02()
-        replaced=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
-        self.assertEqual(adapter.calls,1)
-        self.assertTrue(replaced['created']);self.assertTrue(replaced['replaced'])
-        self.assertNotEqual(path.read_bytes(),before)
-        with closing(sqlite3.connect(path)) as db:
-            self.assertEqual({x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
-                {'mineru_base','logical_block'})
-        self.assertEqual(v.existing_state(self.book)['blockCount'],539)
+        with self.assertRaisesRegex(v.BaseError,'非 V2 自有对象'):
+            v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},StubF02())
+        self.assertEqual(path.read_bytes(),before)
         self.assertEqual(self.source.read_bytes(),self.original)
         self.assertFalse(list(self.book.glob('.ocr2md-v2-*.tmp')))
-        repeat=v.dispatch('import','POST',self.book,{'confirm':'import-mineru-base'},{},adapter)
-        self.assertEqual(repeat['created'],False);self.assertEqual(adapter.calls,1)
     def test_unknown_nonempty_nine_column_logical_sqlite_rejected_without_loss(self):
         v.new_book(self.book)
         db_path=self.book/v.DB_NAME
