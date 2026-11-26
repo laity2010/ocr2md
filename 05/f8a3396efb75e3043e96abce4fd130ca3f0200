@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"ae4a5c36665242028816036fd8778a95","branch":"refs/heads/experiment/lab-sentence","baseline":"05f8a3396efb75e3043e96abce4fd130ca3f0200","event":"START","utc":"2026-11-26T05:18:37.268570+00:00","wp":"WP04A","goal":"核定同一SQL三表目标及MDLine只读边界、独立句表初始化和仲裁、无损转换、SQL组重初始化；记录V2严格两表兼容门禁及隔离验证条件；仅Sentence README，不改宪法、上游代码、运行产物或用户SQL。","retrospective":false}
