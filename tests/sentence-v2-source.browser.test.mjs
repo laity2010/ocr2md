@@ -18,8 +18,9 @@ try{
    await page.route("**/labs/lab-frame/api/workspace-io/session",r=>r.fulfill({json:{authorized:true}}));
    await page.route("**/labs/lab-frame/api/workspace-io/roots",r=>r.fulfill({json:{allowedRoots:["/fixture"]}}));
    await page.route("**/labs/lab-frame/api/workspace-io/probe",r=>r.fulfill({json:{verified:true,readable:true,writable:true}}));
-   await page.route("**/labs/lab-ocr-v2/api/mineru-base/markdown?*",r=>{assert.equal(r.request().method(),"GET");assert.equal(new URL(r.request().url()).searchParams.get("workspace"),"/fixture");return r.fulfill({json:fixture});});
-   await page.addInitScript(()=>localStorage.setItem("ocr2md.lab-sentence.settings.json.v1",JSON.stringify({settings:{"workspace.dataDirectory":{key:"dataDirectory",category1:"工作区",category2:"目录",comment:"资料目录绑定",value:"/fixture",range:{kind:"server-directory"}}}})));
+   let failRead=false;
+   await page.route("**/labs/lab-ocr-v2/api/mineru-base/markdown?*",r=>{assert.equal(r.request().method(),"GET");assert.equal(new URL(r.request().url()).searchParams.get("workspace"),"/fixture");return failRead?r.fulfill({status:404,json:{error:"missing table"}}):r.fulfill({json:fixture});});
+   await page.addInitScript(()=>localStorage.setItem("ocr2md.lab-sentence.settings.json.v1",JSON.stringify({settings:{"globalUi.font.family":{key:"family",category1:"全局 UI",category2:"字体",comment:"Sarasa",value:"Sarasa",range:{kind:"readonly"}},"globalUi.font.size":{key:"size",category1:"全局 UI",category2:"字体",comment:"字号",value:16,range:{min:8,max:32,step:1}},"workspace.dataDirectory":{key:"dataDirectory",category1:"工作区",category2:"目录",comment:"资料目录绑定",value:"/fixture",range:{kind:"server-directory"}}}})));
    await page.goto(url,{waitUntil:"domcontentloaded"});
    await page.locator("#settings-workspace .ocr-source-file-select").waitFor({state:"attached",timeout:25000});
    assert.equal(await page.locator(".frame-brand").textContent(),"OCR2MD lab-sentence");
@@ -99,6 +100,19 @@ try{
     await widget.waitFor({state:'visible'});assert.equal(await widget.textContent(),mark.label);
    }
    console.log("SENTENCE_CURRENT_FOCUS_PASS",name,fixture.rowCount,fixture.markdown.length,"right full source, engine-specific single sentences, adoption/filter, readonly");
+   // Both native menus and the actual Tom Select dropdown must reflect the
+   // successfully loaded table. Then force the existing GET to fail.
+   assert.equal(await page.locator('select.ocr-navigation-native optgroup[label="SQL"]').count(),2);
+   failRead=true;
+   await page.locator('#workspace .ocr-navigation-select .ts-control').click();
+   await page.locator('.ocr-navigation-popup:visible [data-value="settings"]').click();
+   await page.locator('#settings-workspace').waitFor({state:'visible'});
+   await page.waitForFunction(()=>document.querySelectorAll('select.ocr-navigation-native optgroup[label="SQL"]').length===0);
+   assert.deepEqual(await page.locator('#workspace .cm-content').evaluateAll(es=>es.map(e=>e.cmTile.root.view.state.doc.toString())),['','','','']);
+   await page.locator('#settings-workspace .ocr-navigation-select .ts-control').click();
+   assert.equal(await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').count(),0);
+   console.log("SENTENCE_NAV_FAILURE_CLEAR_PASS",name);
+
   }finally{await b.close();}
  }
 }finally{server.kill("SIGTERM");}

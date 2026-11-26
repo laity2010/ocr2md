@@ -32,9 +32,27 @@ enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
 let settings=null,loadingSettings=null,currentModule='frame';
 // Only one I/O probe may publish status; switching Settings cancels older
 // announcements without touching the shared status or Save component.
-let probeGeneration=0;
+let probeGeneration=0,loadedPath='';
+function syncLogicalNavigation(loaded){
+  for(const select of [frameFileSelect,$('settings-workspace').querySelector('.ocr-source-file-select')]){
+    if(!select)continue;
+    const group=select.querySelector('optgroup[label="SQL"]');
+    if(loaded&&!group){
+      const sql=document.createElement('optgroup');sql.label='SQL';
+      sql.append(new Option('逻辑表 · logical_block','frame'));
+      select.prepend(sql);
+    }else if(!loaded&&group)group.remove();
+    select.value=select===frameFileSelect?(loaded?'frame':''):'settings';
+    select.ocrNavigationSelect?.refresh();
+  }
+}
+function clearLogicalSource(){
+  sentenceSource.invalidate();sentenceCandidates=null;loadedPath='';
+  frame.setSourceMarkdown('');syncLogicalNavigation(false);
+}
 async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}){
   const generation=++probeGeneration;
+  if(!uncommitted&&selected!==loadedPath)clearLogicalSource();
   if(!selected){
     if(generation===probeGeneration)topStatus(afterSave?'✓ 全局设置已保存 · 尚未绑定工作目录':
       '尚未绑定工作区资料目录','warning');
@@ -48,21 +66,25 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
     if(generation===probeGeneration&&!uncommitted){
       const snapshot=await sentenceSource.load(selected);
       if(generation===probeGeneration){
-        frame.setSourceMarkdown(snapshot?.markdown??'');
+        if(!snapshot){clearLogicalSource();return;}
+        frame.setSourceMarkdown(snapshot.markdown);
         sentenceCandidates=null;
         if(snapshot){
           const {splitSnapshot}=await import('../sentence/split.js');
           if(generation!==probeGeneration)return;
           sentenceCandidates=splitSnapshot(snapshot);
           frame.setReview(snapshot,sentenceCandidates);
+          loadedPath=selected;syncLogicalNavigation(true);
           const failures=sentenceCandidates.blocks.flatMap(row=>row.candidates).filter(c=>c.error).length;
           topStatus('V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · 三引擎分句 '+(snapshot.blocks.length*3-failures)+'/'+(snapshot.blocks.length*3)+(failures?' · '+failures+' 个候选失败':''),failures?'warning':'ok');
         }
       }
     }
   }catch(error){
-    if(generation===probeGeneration)topStatus(
-      (afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
+    if(generation===probeGeneration){
+      if(!uncommitted)clearLogicalSource();
+      topStatus((afterSave?'全局设置已保存，但':'')+'工作区文件读写验证失败：'+error.message,'error');
+    }
   }
 }
 // The chooser reports every explicit adoption, including an unchanged path.
@@ -173,16 +195,16 @@ async function showModule(name){
         module.activate();
         topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');
         // Initial entry and any reentry check the already-saved directory.
-        void verifyWorkspaceIO(module.get('workspace.dataDirectory'));
+        void verifyWorkspaceIO(module.get('workspace.dataDirectory'),{uncommitted:module.hasUnsaved()});
       }}
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
   }else{
     // Leaving Settings does not add a second file to the single-file menu.
-    frameFileSelect.value='frame';
+    frameFileSelect.value=loadedPath?'frame':'';
     // The native select is the Main NavigationSelect public business port.
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
-    const snapshot=sentenceSource.getSnapshot();
+    const snapshot=loadedPath?sentenceSource.getSnapshot():null;
     topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · '+snapshot.documentVersion.slice(0,12):'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');
 
   }

@@ -64,10 +64,10 @@ function pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt){
   if(name==='source'){
     const select=document.createElement('select');select.className='ocr-source-file-select';
     select.setAttribute('aria-label','源码文件导航');
-    for(const [label,text,value] of [['SQL','逻辑表 · logical_block','frame'],['全局设置','settings.json','settings']]){
+    for(const [label,text,value] of [['全局设置','settings.json','settings']]){
       const group=document.createElement('optgroup');group.label=label;group.append(new Option(text,value));select.append(group);
     }
-    select.value='frame';select.addEventListener('change',()=>{if(select.value==='settings')onModuleChange('settings');});
+    select.value='';select.addEventListener('change',()=>{if(select.value==='settings')onModuleChange('settings');});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     for(const [id,text,label] of [['undo','↶','撤销'],['redo','↷','重做']]){
       const b=document.createElement('button');b.type='button';b.id=id;b.textContent=text;b.title='只读源码';b.disabled=true;b.setAttribute('aria-label',label);actions.append(b);

@@ -19,6 +19,8 @@
 
 - WP03B：右窗焦点唯一决定左三窗所显示的各引擎当前句。sentenceAtOffset(block,candidate,offset,marks) 只截取已有候选首末源片段之间的原始 Markdown，保留句界颜色；句间空隙取后一句，块末取最后一句，无分句或失败则留空并显示状态。右窗光标、筛选、块高亮和采用语义保持；左窗不再全文滚动或反向改变右窗焦点。未变更分句算法或数据。
 
+- WP03C：逻辑表导航由成功载入的已保存 V2 快照生成，未绑定仅全局设置，空白四窗不预设 SQL 项。已保存目录变更、解绑或读取失败时清除旧原文及候选、移除两处导航中的 SQL 组；未保存目录仅探测，不加载。仍用原生 select + 公共 Tom Select 适配器，不改变设置、分句或数据库。
+
 ## 构建和验收
 
 使用联邦 .ops/git-gate.py；正式构建使用 labs/lab-sentence/vite.config.mjs，发布使用 scripts/sentence_publish.py。无用户资料测试。F02 使用原 Frame 公共授权 API。

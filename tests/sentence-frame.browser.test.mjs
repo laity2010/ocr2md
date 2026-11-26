@@ -39,13 +39,15 @@ try{
    assert.equal(await page.locator('#workspace .ocr-outline-grid,#workspace .ocr-preview-pane,#workspace .ocr-detached-pdf-pane').count(),0);
    const styles=await page.locator('#workspace .cm-editor').evaluateAll(es=>es.map(e=>({background:getComputedStyle(e).backgroundColor,font:getComputedStyle(e).fontFamily,readOnly:e.querySelector('.cm-content').getAttribute('contenteditable'),lines:!!e.querySelector('.cm-lineNumbers'),wrap:!!e.querySelector('.cm-lineWrapping')})));
    assert.equal(styles.length,4);assert(styles.every(v=>v.background==='rgb(47, 56, 62)'&&v.font.includes('Sarasa')&&v.readOnly==='false'&&v.lines&&v.wrap),JSON.stringify(styles));
+   assert.equal(await page.locator('select.ocr-navigation-native optgroup[label="SQL"]').count(),0);
    await page.locator('#workspace .ocr-navigation-select .ts-control').click();
+   assert.equal(await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').count(),0);
    await page.locator('.ocr-navigation-popup:visible [data-value="settings"]').click();
    await page.locator('#settings-workspace').waitFor({state:'visible'});
    await page.locator('#settings-workspace .ocr-navigation-select .ts-control').click();
-   await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').click();
-   await page.locator('#workspace').waitFor({state:'visible'});
-   assert.equal(await page.locator('#workspace .cm-editor').count(),4);
+   assert.equal(await page.locator('.ocr-navigation-popup:visible [data-value="frame"]').count(),0);
+   assert.deepEqual(await page.locator('#settings-workspace select.ocr-navigation-native').evaluate(e=>Object.keys(e.ocrNavigationSelect.tom.options)),['settings']);
+   assert.equal(await page.locator('#settings-workspace .ocr-navigation-select .item').textContent(),'settings.json');
    console.log("SENTENCE_FRAME_PASS",name);
   }finally{await b.close();}
  }
