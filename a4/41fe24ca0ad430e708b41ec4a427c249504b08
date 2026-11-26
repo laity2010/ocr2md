@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"4ad92bba2c6e4824b257cddef2f56a98","branch":"refs/heads/experiment/lab-sentence","baseline":"a441fe24ca0ad430e708b41ec4a427c249504b08","event":"START","utc":"2026-11-26T14:20:26.618864+00:00","wp":"WP04F2-R","goal":"WP04F a441fe2 偏离用户CM内存实时编辑和空闲落盘预期，每次仲裁等待HTTP/SQL。保留原提交及失败证据，revert到已验收428ad11源码，复验并发布，不回退用户数据。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"4ad92bba2c6e4824b257cddef2f56a98","branch":"refs/heads/experiment/lab-sentence","baseline":"a441fe24ca0ad430e708b41ec4a427c249504b08","event":"RUN_START","utc":"2026-11-26T14:20:57.649844+00:00","phase":"rollback-test-publish","step":"f813411ad70c486391b36b9f18e822db"}
