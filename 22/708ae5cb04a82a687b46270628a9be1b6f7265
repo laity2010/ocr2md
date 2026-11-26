@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"a3ef7c7c1f024c9dbb42dc6c3739772b","branch":"refs/heads/experiment/lab-sentence","baseline":"22708ae5cb04a82a687b46270628a9be1b6f7265","event":"START","utc":"2026-11-26T03:19:57.557876+00:00","wp":"WP03D","goal":"基线22708ae；左三引擎展示右焦点完整逻辑块及所有句界，块内移动不重置，跨块切换；保留布局导航筛选采用只读算法和数据；双浏览器回归、Git发布END。","retrospective":false}
