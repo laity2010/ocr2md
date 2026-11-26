@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"979117a4ce2649909684c0d4f3fbe512","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"979117a4ce2649909684c0d4f3fbe512","branch":"refs/heads/experiment/lab-sentence","baseline":"f77a26905f07f8ee7e27ea7e413e11f418cc1fb9","event":"RUN_START","utc":"2026-11-26T02:01:33.980092+00:00","phase":"build-test","step":"6bc833b1c142450b9baca45aa008d5cd"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"979117a4ce2649909684c0d4f3fbe512","branch":"refs/heads/experiment/lab-sentence","baseline":"f77a26905f07f8ee7e27ea7e413e11f418cc1fb9","event":"RUN_EXIT","utc":"2026-11-26T02:02:46.998192+00:00","phase":"build-test","step":"6bc833b1c142450b9baca45aa008d5cd","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"979117a4ce2649909684c0d4f3fbe512","branch":"refs/heads/experiment/lab-sentence","baseline":"f77a26905f07f8ee7e27ea7e413e11f418cc1fb9","event":"RUN_START","utc":"2026-11-26T02:35:29.375356+00:00","phase":"commit-release","step":"6c839ee0b3a5458383227ffb29206ce6"}
