@@ -2,7 +2,7 @@
 import {createDockview,themeAbyss} from 'dockview';
 import {EditorState,StateEffect,StateField} from '@codemirror/state';
 import {EditorView,Decoration,WidgetType} from '@codemirror/view';
-import {blockAtOffset,boundaryDisplay,isDisputed,reviewProjection,blockCandidateDisplay} from '../sentence/display.js';
+import {lineAtOffset,boundaryDisplay,isDisputed,reviewProjection,lineCandidateDisplay} from '../sentence/display.js';
 import {basicSetup} from 'codemirror';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
@@ -136,60 +136,60 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   function refreshChecks(){
     panes.get('source').setCheck(all,!snapshot);
     for(const [name,id] of Object.entries(engineIds)){
-      const allowed=!!active&&disputed.has(active.logicalId);
-      panes.get(name).setCheck(allowed&&adopted.get(active.logicalId)===id,!allowed);
+      const allowed=!!active&&disputed.has(active.sourceLine);
+      panes.get(name).setCheck(allowed&&adopted.get(active.sourceLine)===id,!allowed);
     }
   }
   function render(sourcePos){
     const projection=reviewProjection(snapshot,results,all,adopted);
     visible=projection.snapshot;
-    visibleRows=new Map(projection.results.blocks.map(row=>[row.logicalId,row]));
+    visibleRows=new Map(projection.results.lines.map(row=>[row.sourceLine,row]));
     marks=boundaryDisplay(visible,projection.results);
     active=null;
     panes.get('source').setMarkdown(visible.markdown,marks.source.marks);
 
-    if(visible.blocks.length){
+    if(visible.lines.length){
       const origin=b=>b.sourceFrom??b.from;
-      const block=visible.blocks.find(b=>sourcePos>=origin(b)&&sourcePos<origin(b)+b.text.length)
-        ??visible.blocks.find(b=>origin(b)>=sourcePos)??visible.blocks.at(-1);
-      const pos=block.from+Math.max(0,Math.min(block.text.length-1,sourcePos-origin(block)));
+      const line=visible.lines.find(b=>sourcePos>=origin(b)&&sourcePos<origin(b)+b.text.length+b.eol.length)
+        ??visible.lines.find(b=>origin(b)>=sourcePos)??visible.lines.at(-1);
+      const pos=line.from+Math.max(0,Math.min(line.text.length,sourcePos-origin(line)));
       panes.get('source').locate(pos);
       onSelection('source',pos);
     }else{
       for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');
-      refreshChecks();
+      panes.get('source').highlight(null);refreshChecks();
     }
   }
   function sourcePosition(){
     if(!active)return 0;
     const pos=panes.get('source').getPosition();
-    return (active.sourceFrom??active.from)+Math.max(0,Math.min(active.text.length-1,pos-active.from));
+    return (active.sourceFrom??active.from)+Math.max(0,Math.min(active.text.length,pos-active.from));
   }
   function onAll(checked){
     if(!snapshot)return;
     const pos=sourcePosition();all=checked;render(pos);
   }
   function onAdopt(name,checked){
-    if(!active||!disputed.has(active.logicalId))return;
+    if(!active||!disputed.has(active.sourceLine))return;
     const id=engineIds[name],pos=sourcePosition();
-    if(checked)adopted.set(active.logicalId,id);
-    else if(adopted.get(active.logicalId)===id)adopted.delete(active.logicalId);
+    if(checked)adopted.set(active.sourceLine,id);
+    else if(adopted.get(active.sourceLine)===id)adopted.delete(active.sourceLine);
     if(all)refreshChecks();else render(pos);
   }
   function onSelection(name,pos){
     if(name!=='source'||!visible)return;
-    const block=blockAtOffset(visible.blocks,pos);
-    if(!block)return;
-    panes.get('source').highlight({from:block.from,to:block.to,pos});
-    if(active===block)return;
-    active=block;refreshChecks();
-    const row=visibleRows.get(block.logicalId);
+    const line=lineAtOffset(visible.lines,pos);
+    if(!line){active=null;panes.get('source').highlight(null);for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');refreshChecks();return;}
+    panes.get('source').highlight({from:line.from,to:line.to,pos:Math.min(pos,line.textTo)});
+    if(active===line)return;
+    active=line;refreshChecks();
+    const row=visibleRows.get(line.sourceLine);
     for(const [name,id] of Object.entries(engineIds)){
-      const item=blockCandidateDisplay(block,row?.candidates.find(c=>c.engine===id),marks[id].marks);
+      const item=lineCandidateDisplay(line,row?.candidates.find(c=>c.engine===id),marks[id].marks);
       panes.get(name).setMarkdown(item.text,item.marks,item.label);
     }
   }
-  // The right caret alone controls review; scrolling or selecting a left block does not move it.
+  // The right caret alone controls review; scrolling or selecting a left line does not move it.
   function onScroll(){}
   const dockview=createDockview(container,{theme:themeAbyss,createComponent:({name})=>{
     const component=pane(name,onModuleChange,onSelection,onScroll,onAll,onAdopt);
@@ -204,7 +204,8 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
   const splitter=add('splitter',{referencePanel:intl,direction:'below'});
   const wink=add('wink',{referencePanel:splitter,direction:'below'});
   let sized=false;
-  return Object.freeze({setSourceMarkdown(text){
+  return Object.freeze({setSourceMarkdown(text,{resetReview=false}={}){
+    if(resetReview){adopted.clear();all=false;reviewVersion=null;}
     snapshot=null;results=null;visible=null;visibleRows=null;marks=null;active=null;
     refreshChecks();
     panes.get('source').setMarkdown(text,[]);
@@ -214,7 +215,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{}}={}){
     if(next.documentVersion!==candidates.documentVersion)throw Error('Candidate source version mismatch');
     if(reviewVersion!==next.documentVersion){adopted.clear();all=false;reviewVersion=next.documentVersion;}
     snapshot=next;results=candidates;disputed.clear();
-    for(const row of results.blocks)if(isDisputed(row))disputed.add(row.logicalId);
+    for(const row of results.lines)if(isDisputed(row))disputed.add(row.sourceLine);
     render(0);
   },activate(){
     const w=container.clientWidth,h=container.clientHeight;if(!w||!h)return;

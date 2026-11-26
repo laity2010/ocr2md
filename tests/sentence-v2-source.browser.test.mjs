@@ -29,20 +29,20 @@ try{
    assert.equal(metadata.name,"lab-sentence");
    assert.match(metadata.commit,/^[0-9a-f]{40}$/);
    assert.equal(await page.locator("#workspace").isVisible(),true);
-   await page.waitForFunction(n=>document.querySelector("#status")?.textContent.includes("V2 已保存逻辑表 · "+n+" 块"),fixture.rowCount,{timeout:30000});
+   await page.waitForFunction(n=>document.querySelector("#status")?.textContent.includes("V2 已保存逻辑表 · "+n+" MDLine"),sourceSnapshot.lines.length,{timeout:30000});
    const readDoc=()=>page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.doc.toString());
-   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),fixture.rowCount*3,{timeout:60000});
+   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),sourceSnapshot.lines.length*3,{timeout:60000});
    const all=page.getByRole('checkbox',{name:'全部',exact:true});
    assert.equal(await all.isChecked(),false);
    const pending=reviewProjection(sourceSnapshot,expected,false,new Map()).snapshot;
-   assert(pending.blocks.length>0&&pending.blocks.length<sourceSnapshot.blocks.length);
+   assert(pending.lines.length>0&&pending.lines.length<sourceSnapshot.lines.length);
    const expectDocs=async text=>{
     await page.waitForFunction(text=>document.querySelector('#editor .cm-content').cmTile.root.view.state.doc.toString()===text,text);
    };
    await expectDocs(pending.markdown);
-   const first=pending.blocks[0],adopt=page.getByRole('checkbox',{name:'采用 Intl',exact:true});
+   const first=pending.lines[0],adopt=page.getByRole('checkbox',{name:'采用 Intl',exact:true});
    await adopt.click();
-   const chosen=new Map([[first.logicalId,'intl']]);
+   const chosen=new Map([[first.sourceLine,'intl']]);
    await expectDocs(reviewProjection(sourceSnapshot,expected,false,chosen).snapshot.markdown);
    await all.check();await expectDocs(fixture.markdown);
    const select=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),pos);
@@ -58,12 +58,12 @@ try{
    assert.equal(await page.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
    await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({changes:{from:0,insert:'SHOULD NOT WRITE'}}));
    assert.equal(await readDoc(),fixture.markdown);
-   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),fixture.rowCount*3,{timeout:60000});
+   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),sourceSnapshot.lines.length*3,{timeout:60000});
    assert.equal(await readDoc(),fixture.markdown);
    const projection=boundaryDisplay(sourceSnapshot,expected);
    const engines=[['intl','intl'],['splitter','sentence-splitter'],['wink','wink-nlp']];
    const expectBlocks=async(block)=>{
-    const row=expected.blocks.find(r=>r.logicalId===block.logicalId);
+    const row=expected.lines.find(r=>r.sourceLine===block.sourceLine);
     for(const [pane,id] of engines){
      const c=row.candidates.find(c=>c.engine===id);
      const text=c.error?'':block.text;
@@ -81,12 +81,12 @@ try{
     }
     assert.equal(await readDoc(),fixture.markdown);
    };
-   const block=sourceSnapshot.blocks.find(b=>{
-    const row=expected.blocks.find(r=>r.logicalId===b.logicalId);
+   const block=sourceSnapshot.lines.find(b=>{
+    const row=expected.lines.find(r=>r.sourceLine===b.sourceLine);
     return row.candidates.every(c=>c.units.length>1)&&isDisputed(row);
    });
    assert(block,'expected multi-sentence disagreement');
-   const row=expected.blocks.find(r=>r.logicalId===block.logicalId);
+   const row=expected.lines.find(r=>r.sourceLine===block.sourceLine);
    const points=[block.from+row.candidates[0].units[0].sourceRanges[0].from,block.from+row.candidates[0].units[1].sourceRanges[0].from];
    await select(points[0]);await expectBlocks(block);
    await page.locator('#editor .ocr-sb-active-line').first().waitFor({state:'visible'});
@@ -94,8 +94,13 @@ try{
    await select(points[1]);
    await page.waitForFunction(pos=>document.querySelector('#editor .cm-content').cmTile.root.view.state.selection.main.head===pos,points[1]);
    assert(await page.evaluate(()=>Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]) .cm-content'),e=>e.cmTile.root.view.state).every((state,i)=>state===window.__sentenceBlockStates[i])));
-   const next=sourceSnapshot.blocks.find(b=>b.logicalId!==block.logicalId&&b.text!==block.text&&b.text.length>0);
+   const next=sourceSnapshot.lines.find(b=>b.sourceLine!==block.sourceLine&&b.text!==block.text&&b.text.length>0);
    assert(next);await select(next.from);await expectBlocks(next);
+   await select(points[0]);await expectBlocks(block);
+   const blank=sourceSnapshot.lines.find(l=>!l.text&&l.eol);
+   assert(blank);await select(blank.from);await expectBlocks(blank);
+   await select(fixture.markdown.length);
+   await page.waitForFunction(()=>Array.from(document.querySelectorAll('[data-sentence-pane]:not([data-sentence-pane="source"]) input')).every(e=>e.disabled));
    await select(points[0]);await expectBlocks(block);
    const before=await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.state.selection.main.head);
    await page.locator('#sentence-editor-intl .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({selection:{anchor:1}}));
@@ -106,7 +111,7 @@ try{
     const widget=page.locator('#editor .ocr-sb-boundary[title='+JSON.stringify(mark.title)+']');
     await widget.waitFor({state:'visible'});assert.equal(await widget.textContent(),mark.label);
    }
-   console.log("SENTENCE_BLOCK_FOCUS_PASS",name,fixture.rowCount,fixture.markdown.length,"right full source, engine-specific complete logical blocks, stable same-block states and cross-block switch, adoption/filter, readonly");
+   console.log("SENTENCE_MDLINE_FOCUS_PASS",name,fixture.rowCount,fixture.markdown.length,"right full source, complete MDLine candidates, stable same-line states and cross-line switch, adoption/filter, readonly");
    // Both native menus and the actual Tom Select dropdown must reflect the
    // successfully loaded table. Then force the existing GET to fail.
    assert.equal(await page.locator('select.ocr-navigation-native optgroup[label="SQL"]').count(),2);

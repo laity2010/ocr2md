@@ -48,7 +48,7 @@ function syncLogicalNavigation(loaded){
 }
 function clearLogicalSource(){
   sentenceSource.invalidate();sentenceCandidates=null;loadedPath='';
-  frame.setSourceMarkdown('');syncLogicalNavigation(false);
+  frame.setSourceMarkdown('',{resetReview:true});syncLogicalNavigation(false);
 }
 async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}){
   const generation=++probeGeneration;
@@ -75,8 +75,8 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
           sentenceCandidates=splitSnapshot(snapshot);
           frame.setReview(snapshot,sentenceCandidates);
           loadedPath=selected;syncLogicalNavigation(true);
-          const failures=sentenceCandidates.blocks.flatMap(row=>row.candidates).filter(c=>c.error).length;
-          topStatus('V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · 三引擎分句 '+(snapshot.blocks.length*3-failures)+'/'+(snapshot.blocks.length*3)+(failures?' · '+failures+' 个候选失败':''),failures?'warning':'ok');
+          const failures=sentenceCandidates.lines.flatMap(row=>row.candidates).filter(c=>c.error).length;
+          topStatus('V2 已保存逻辑表 · '+snapshot.lines.length+' MDLine · 三引擎分句 '+(snapshot.lines.length*3-failures)+'/'+(snapshot.lines.length*3)+(failures?' · '+failures+' 个候选失败':''),failures?'warning':'ok');
         }
       }
     }
@@ -205,7 +205,7 @@ async function showModule(name){
     frameFileSelect.dispatchEvent(new Event('change',{bubbles:true}));
     frame.activate();
     const snapshot=loadedPath?sentenceSource.getSnapshot():null;
-    topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.blocks.length+' 块 · '+snapshot.documentVersion.slice(0,12):'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');
+    topStatus(snapshot?'V2 已保存逻辑表 · '+snapshot.lines.length+' MDLine · '+snapshot.documentVersion.slice(0,12):'分句工作台 · 尚未加载逻辑表',snapshot?'ok':'warning');
 
   }
 }

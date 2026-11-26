@@ -1,9 +1,9 @@
 /** Read-only display projection; neither source nor candidate is mutated. */
-export function blockAtOffset(blocks,offset){
- if(!blocks.length)return null;
- let lo=0,hi=blocks.length;
- while(lo<hi){const mid=(lo+hi)>>>1;if(blocks[mid].from<=offset)lo=mid+1;else hi=mid;}
- return blocks[Math.max(0,lo-1)];
+export function lineAtOffset(lines,offset){
+ if(!lines.length||!Number.isInteger(offset)||offset<0||offset>lines.at(-1).to||(offset===lines.at(-1).to&&lines.at(-1).eol))return null;
+ let lo=0,hi=lines.length;
+ while(lo<hi){const mid=(lo+hi)>>>1;if(lines[mid].from<=offset)lo=mid+1;else hi=mid;}
+ return lines[Math.max(0,lo-1)];
 }
 
 /** The original Sentence Lab boundary union, mapped to V2's immutable UTF-16 source.
@@ -13,9 +13,9 @@ export function boundaryDisplay(snapshot,results){
  const ids=['intl','sentence-splitter','wink-nlp'];
  if(snapshot.documentVersion!==results.documentVersion)throw Error('Candidate source version mismatch');
  const panes=Object.fromEntries(['source',...ids].map(id=>[id,{marks:[],count:0,failed:0}]));
- for(const [i,block] of snapshot.blocks.entries()){
-  const row=results.blocks[i];
-  if(row?.logicalId!==block.logicalId||row.sourceSha256!==block.sha256)throw Error('Candidate block identity mismatch');
+ for(const [i,line] of snapshot.lines.entries()){
+  const row=results.lines[i];
+  if(row?.sourceLine!==line.sourceLine||row.sourceSha256!==line.sha256)throw Error('Candidate line identity mismatch');
   const byPos=new Map();
   for(const id of ids){
    const candidate=row.candidates.find(c=>c.engine===id);
@@ -23,8 +23,8 @@ export function boundaryDisplay(snapshot,results){
    panes[id].count+=candidate.units.length;
    for(const unit of candidate.units){
     const end=unit.sourceRanges.at(-1)?.to;
-    if(!Number.isInteger(end)||end<=0||end>block.text.length)throw Error('Invalid sentence boundary');
-    const pos=block.from+end;
+    if(!Number.isInteger(end)||end<=0||end>line.text.length)throw Error('Invalid sentence boundary');
+    const pos=line.from+end;
     if(!byPos.has(pos))byPos.set(pos,new Set());
     byPos.get(pos).add(id);
    }
@@ -32,7 +32,7 @@ export function boundaryDisplay(snapshot,results){
   for(const [pos,votes] of byPos){
    const agreed=ids.every(id=>votes.has(id)),style=agreed?'ocr-sb-agreed':'ocr-sb-split';
    const names=ids.filter(id=>votes.has(id));
-   const title='句界 · '+names.join(' / ')+' · MD '+((block.sourceFrom??block.from)+pos-block.from);
+   const title='句界 · '+names.join(' / ')+' · MD '+((line.sourceFrom??line.from)+pos-line.from);
    panes.source.marks.push({pos,label:agreed?'│':'┆',style,title});
    for(const id of names)panes[id].marks.push({pos,label:'│',style,title});
   }
@@ -42,7 +42,7 @@ export function boundaryDisplay(snapshot,results){
 
 
 // Pure review projection. The full source remains immutable; filtered views
-// keep a source offset for each logical block and share one identical document.
+// keep a source offset for each logical line and share one identical document.
 export function isDisputed(row){
  const ids=['intl','sentence-splitter','wink-nlp'];
  const candidates=ids.map(id=>row.candidates.find(c=>c.engine===id));
@@ -52,26 +52,25 @@ export function isDisputed(row){
 }
 export function reviewProjection(snapshot,results,all,adopted){
  if(snapshot.documentVersion!==results.documentVersion)throw Error('Candidate source version mismatch');
- const rows=results.blocks;
+ const rows=results.lines;
  if(all)return {snapshot,results};
- let markdown='';const blocks=[],visibleRows=[];
- for(const [i,b] of snapshot.blocks.entries()){
+ let markdown='';const lines=[],visibleRows=[];
+ for(const [i,b] of snapshot.lines.entries()){
   const row=rows[i];
-  if(row?.logicalId!==b.logicalId||row.sourceSha256!==b.sha256)throw Error('Candidate block identity mismatch');
-  if(!isDisputed(row)||adopted.has(b.logicalId))continue;
-  if(markdown&&!markdown.endsWith('\n'))markdown+='\n\n';
-  const from=markdown.length;markdown+=b.text;
-  blocks.push({...b,sourceFrom:b.from,from,to:markdown.length});
+  if(row?.sourceLine!==b.sourceLine||row.sourceSha256!==b.sha256)throw Error('Candidate line identity mismatch');
+  if(!isDisputed(row)||adopted.has(b.sourceLine))continue;
+  const from=markdown.length;markdown+=b.text+b.eol;
+  lines.push({...b,sourceFrom:b.from,from,textTo:from+b.text.length,to:markdown.length});
   visibleRows.push(row);
  }
- return {snapshot:{...snapshot,markdown,blocks},results:{...results,blocks:visibleRows}};
+ return {snapshot:{...snapshot,markdown,lines},results:{...results,lines:visibleRows}};
 }
 
-// Project all boundaries of the focused logical block to local CM6 offsets.
+// Project all boundaries of the focused logical line to local CM6 offsets.
 // Keep original Markdown, including protected material, without re-splitting.
-export function blockCandidateDisplay(block,candidate,marks=[]){
+export function lineCandidateDisplay(line,candidate,marks=[]){
  if(!candidate||candidate.error)return {text:'',marks:[],label:'分句失败'};
- const end=block.from+block.text.length;
- return {text:block.text,marks:marks.filter(m=>m.pos>block.from&&m.pos<=end).map(m=>({...m,pos:m.pos-block.from})),
+ const end=line.from+line.text.length;
+ return {text:line.text,marks:marks.filter(m=>m.pos>line.from&&m.pos<=end).map(m=>({...m,pos:m.pos-line.from})),
   label:candidate.units.length?candidate.units.length+' 句':'无分句'};
 }
