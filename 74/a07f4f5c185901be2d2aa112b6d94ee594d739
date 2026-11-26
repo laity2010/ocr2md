@@ -17,3 +17,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/heads/experiment/lab-sentence","baseline":"74a07f4f5c185901be2d2aa112b6d94ee594d739","event":"RUN_EXIT","utc":"2026-11-26T14:31:18.819929+00:00","phase":"idle-review-browser-regression","step":"770fe554056f4c819a800000e0af826d","exit_code":1}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/heads/experiment/lab-sentence","baseline":"74a07f4f5c185901be2d2aa112b6d94ee594d739","event":"RUN_START","utc":"2026-11-26T14:31:42.078914+00:00","phase":"idle-review-browser-regression-2","step":"7b47d4c367d34e1d8751bd97d1aac155"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"43a76b34ae7d4f28b36024df2bd7db22","branch":"refs/heads/experiment/lab-sentence","baseline":"74a07f4f5c185901be2d2aa112b6d94ee594d739","event":"RUN_EXIT","utc":"2026-11-26T14:33:13.564895+00:00","phase":"idle-review-browser-regression-2","step":"7b47d4c367d34e1d8751bd97d1aac155","exit_code":0}
