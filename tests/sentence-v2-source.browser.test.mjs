@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {spawn,execFileSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {setTimeout as sleep} from "node:timers/promises";
 import {chromium,webkit} from "playwright";
 import {importSnapshot} from "../ui/sentence/snapshot.js";
@@ -18,16 +19,36 @@ try{
    await page.route("**/labs/lab-frame/api/workspace-io/session",r=>r.fulfill({json:{authorized:true}}));
    await page.route("**/labs/lab-frame/api/workspace-io/roots",r=>r.fulfill({json:{allowedRoots:["/fixture"]}}));
    await page.route("**/labs/lab-frame/api/workspace-io/probe",r=>r.fulfill({json:{verified:true,readable:true,writable:true}}));
-   let failRead=false,stale=false,opens=0,resets=0,failReset=false;
+   let failRead=false,stale=false,opens=0,resets=0,failReset=false,failArbitration=false,arbitrations=0;
+   let currentRows=payload.rows;
+   const lineRows=line=>currentRows.filter(r=>r.source_line===line);
+   const applyChoice=body=>{
+    const old=lineRows(body.source_line),first=old[0],line=sourceSnapshot.lines[body.source_line-1];
+    assert(first&&line);assert.equal(body.previous_engine,first.adopted_engine);
+    assert.equal(body.source_line_hash,line.sha256);
+    assert.equal(body.candidates_hash,createHash('sha256').update(first.candidates_json).digest('hex'));
+    const points=[0,...(body.adopted_engine===null?[]:JSON.parse(first.candidates_json)[body.adopted_engine].boundaries),line.text.length];
+    const changed=points.slice(0,-1).map((start,i)=>({...first,sentence_index:i,from_utf16:start,to_utf16:points[i+1],
+     sentence_text:line.text.slice(start,points[i+1]),line_eol:i===points.length-2?line.eol:'',
+     candidates_json:i===0?first.candidates_json:null,review_state:i===0?(body.adopted_engine===null?'disputed':'adopted'):null,
+     adopted_engine:i===0?body.adopted_engine:null}));
+    currentRows=currentRows.filter(r=>r.source_line!==body.source_line).concat(changed).sort((a,b)=>a.source_line-b.source_line||a.sentence_index-b.sentence_index);
+    return changed;
+   };
    await page.route("**/labs/lab-sentence/api/sentence/*",r=>{
     assert.equal(r.request().method(),"POST");const body=r.request().postDataJSON();
     assert.equal(body.workspace,"/fixture");assert.equal(body.source_document_hash,fixture.sha256);
+    if(r.request().url().endsWith("/arbitrate")){
+     arbitrations++;
+     if(failArbitration)return r.fulfill({status:503,json:{error:"injected arbitration failure"}});
+     return r.fulfill({json:{state:'ready',source_document_hash:fixture.sha256,rows:applyChoice(body)}});
+    }
     if(r.request().url().endsWith("/reinitialize")){
      resets++;assert.equal(body.confirm,"reinitialize-sentence-table");
      if(failReset)return r.fulfill({status:503,json:{error:"injected reset failure"}});
-     stale=false;
+     stale=false;currentRows=payload.rows;
     }else{opens++;assert(!("confirm" in body));}
-    return r.fulfill({json:{state:stale?"stale":"ready",source_document_hash:fixture.sha256,rows:stale?[]:payload.rows}});
+    return r.fulfill({json:{state:stale?"stale":"ready",source_document_hash:fixture.sha256,rows:stale?[]:currentRows}});
    });
    await page.route("**/labs/lab-ocr-v2/api/mineru-base/markdown?*",r=>{assert.equal(r.request().method(),"GET");assert.equal(new URL(r.request().url()).searchParams.get("workspace"),"/fixture");return failRead?r.fulfill({status:404,json:{error:"missing table"}}):r.fulfill({json:fixture});});
    await page.addInitScript(()=>localStorage.setItem("ocr2md.lab-sentence.settings.json.v1",JSON.stringify({settings:{"globalUi.font.family":{key:"family",category1:"全局 UI",category2:"字体",comment:"Sarasa",value:"Sarasa",range:{kind:"readonly"}},"globalUi.font.size":{key:"size",category1:"全局 UI",category2:"字体",comment:"字号",value:16,range:{min:8,max:32,step:1}},"workspace.dataDirectory":{key:"dataDirectory",category1:"工作区",category2:"目录",comment:"资料目录绑定",value:"/fixture",range:{kind:"server-directory"}}}})));
@@ -50,7 +71,7 @@ try{
     await page.waitForFunction(text=>document.querySelector('#editor .cm-content').cmTile.root.view.state.doc.toString()===text,text);
    };
    await expectDocs(pending.markdown);
-   const gridCount=async (projection)=>page.waitForFunction(n=>document.querySelector('[data-sentence-pane="sentence"] .sentence-engine-label')?.textContent.endsWith(' · '+n+' 条'),projectSentenceRows(payload.rows,projection.lines,new Map()).length);
+   const gridCount=async (projection)=>page.waitForFunction(n=>document.querySelector('[data-sentence-pane="sentence"] .sentence-engine-label')?.textContent.endsWith(' · '+n+' 条'),projectSentenceRows(currentRows,projection.lines).length);
    const gridRow=(line,index=0)=>page.locator('.sentence-table-grid .ag-row[row-id="'+line+':'+index+'"]');
    await gridCount(pending);
    // The fixture contains real trailing blank lines. Check independently of
@@ -68,13 +89,39 @@ try{
    const first=pending.lines[0],adopt=page.getByRole('checkbox',{name:'采用 Intl',exact:true});
    await gridRow(first.sourceLine).first().waitFor({state:'visible'});
    assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
-   await adopt.click();
+   const undo=page.locator('#workspace #undo'),redo=page.locator('#workspace #redo');
+   assert(await undo.isDisabled());assert(await redo.isDisabled());
+   const waitSaved=()=>page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('仲裁已保存'));
+   const waitFailed=()=>page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('仲裁未确认成功'));
+   failArbitration=true;
+   await adopt.click();await waitFailed();await expectDocs(pending.markdown);await gridCount(pending);
+   assert(await undo.isDisabled());assert(await redo.isDisabled());assert.equal(lineRows(first.sourceLine)[0].adopted_engine,null);
+   failArbitration=false;
+   await adopt.click();await waitSaved();
    const chosen=new Map([[first.sourceLine,'intl']]);
    const reduced=reviewProjection(sourceSnapshot,expected,false,chosen).snapshot;
    await expectDocs(reduced.markdown);await gridCount(reduced);
-   // AG row-removal animation may retain the previous DOM briefly.
    await gridRow(first.sourceLine).first().waitFor({state:"detached",timeout:5000});
-   assert.equal(await gridRow(first.sourceLine).count(),0);
+   assert.equal(lineRows(first.sourceLine)[0].adopted_engine,'intl');
+   assert(await undo.isEnabled());assert(await redo.isDisabled());
+   // Undo restores exact original row and all trailing blank lines.
+   await undo.click();await waitSaved();await expectDocs(pending.markdown);await gridCount(pending);
+   assert.deepEqual(lineRows(first.sourceLine),payload.rows.filter(r=>r.source_line===first.sourceLine));
+   assert(await undo.isDisabled());assert(await redo.isEnabled());
+   // Source keyboard shortcut uses the same native history as the toolbar.
+   await page.locator('#editor .cm-content').focus();
+   const mod=await page.evaluate(()=>/Mac/.test(navigator.platform)?'Meta':'Control');
+   await page.keyboard.press(mod+'+Shift+z');await waitSaved();await expectDocs(reduced.markdown);await gridCount(reduced);
+   assert(await undo.isEnabled());assert(await redo.isDisabled());
+   // A failed undo does not change history, SQL receipt or the five-pane view.
+   failArbitration=true;await undo.click();await waitFailed();await expectDocs(reduced.markdown);
+   assert(await undo.isEnabled());assert(await redo.isDisabled());assert.equal(lineRows(first.sourceLine)[0].adopted_engine,'intl');
+   failArbitration=false;
+   // Reload: persisted adopted row restored, session history starts empty.
+   await page.reload({waitUntil:'domcontentloaded'});await expectDocs(reduced.markdown);await gridCount(reduced);
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('三引擎分句'));
+   assert(await undo.isDisabled());assert(await redo.isDisabled());
+   console.log('SENTENCE_PERSISTED_HISTORY_PASS',name,arbitrations);
    await all.check();await expectDocs(fixture.markdown);await gridCount(sourceSnapshot);
    const select=pos=>page.locator('#editor .cm-content').evaluate((e,pos)=>e.cmTile.root.view.dispatch({selection:{anchor:pos},scrollIntoView:true}),pos);
    await select(first.sourceFrom);
@@ -82,8 +129,14 @@ try{
    await gridRow(first.sourceLine).first().waitFor({state:'visible'});
    assert(await gridRow(first.sourceLine).first().evaluate(e=>e.classList.contains('sentence-grid-active')));
    const splitter=page.getByRole('checkbox',{name:'采用 Sentence Splitter',exact:true});
-   await splitter.check();assert.equal(await adopt.isChecked(),false);
-   await splitter.uncheck();
+   await splitter.click();await waitSaved();assert.equal(await splitter.isChecked(),true);assert.equal(await adopt.isChecked(),false);
+   assert.equal(lineRows(first.sourceLine)[0].adopted_engine,'sentence-splitter');
+   await splitter.click();await waitSaved();assert.equal(await splitter.isChecked(),false);
+   assert.equal(lineRows(first.sourceLine)[0].adopted_engine,null);
+   assert.deepEqual(currentRows,payload.rows);
+   // Undo cancellation and redoing it must also replace just that line.
+   await undo.click();await waitSaved();assert.equal(lineRows(first.sourceLine)[0].adopted_engine,'sentence-splitter');
+   await redo.click();await waitSaved();assert.deepEqual(currentRows,payload.rows);
    await all.uncheck();await expectDocs(pending.markdown);await gridCount(pending);
    await all.check();await expectDocs(fixture.markdown);
    assert.equal(await page.locator('#workspace select.ocr-navigation-native option[value="frame"]').evaluate(e=>e.parentElement.label),'SQL');
@@ -91,7 +144,6 @@ try{
    assert.equal(await page.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
    await page.locator('#editor .cm-content').evaluate(e=>e.cmTile.root.view.dispatch({changes:{from:0,insert:'SHOULD NOT WRITE'}}));
    assert.equal(await readDoc(),fixture.markdown);
-   await page.waitForFunction(n=>document.querySelector('#status')?.textContent.includes('三引擎分句 '+n+'/'+n),sourceSnapshot.lines.length*3,{timeout:60000});
    assert.equal(await readDoc(),fixture.markdown);
    const projection=boundaryDisplay(sourceSnapshot,expected);
    const engines=[['intl','intl'],['splitter','sentence-splitter'],['wink','wink-nlp']];
@@ -194,7 +246,7 @@ try{
    await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
    await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('677 句记录'));
    assert.equal(resets,1);
-   await expectDocs(pending.markdown);
+   await expectDocs(pending.markdown);assert(await undo.isDisabled());assert(await redo.isDisabled());
    failReset=true;
    await sqlMenu();
    await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();

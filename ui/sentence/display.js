@@ -82,15 +82,8 @@ export function lineCandidateDisplay(line,candidate,marks=[]){
 }
 
 
-// The grid and source use the same visible MDLine set. Keep persisted text
-// and ranges untouched; show temporary review choices as explicitly unsaved.
-export function projectSentenceRows(rows,visibleLines,adopted){
+// The grid uses exactly the persisted rows acknowledged by SQLite.
+export function projectSentenceRows(rows,visibleLines){
  const lines=new Set(visibleLines.map(line=>line.sourceLine));
- return rows.filter(row=>lines.has(row.source_line)).map(row=>{
-  if(row.sentence_index!==0)return row;
-  const choice=adopted.get(row.source_line)??null;
-  if(choice===(row.adopted_engine??null))return row;
-  return {...row,display_state:choice?'已采用（未落盘）':'待仲裁（未落盘）',
-   display_engine:choice??''};
- });
+ return rows.filter(row=>lines.has(row.source_line));
 }

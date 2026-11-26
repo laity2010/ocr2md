@@ -3,7 +3,7 @@
 继承统一根目录 AGENTS.md、BUILD.md、COMM.md、GIT.md 及本州 AGENTS.md。
 独立框架型 Lab，以已验收 Frame 1dbc2b7 为基线，保留 F02 授权，WP04E2 将分句工作台扩为五窗。唯一入口 /labs/lab-sentence/；设置和运行数据独立。不写 V2 逻辑表或旧分句 Lab。
 
-## WP04 数据契约（WP04E2 五窗联动；人工仲裁尚未持久化）
+## WP04 数据契约（WP04F 人工仲裁持久化与 CM6 历史）
 
 ### 1. 数据权威与隔离
 
@@ -53,14 +53,29 @@ WP04E 已接入现有动态 Lab Gateway 和 F02 授权：保存目录后自动�
 - WP04D2：两州数据表管辖权修正及隔离同库共存验证。
 - WP04E：首次初始化、已有句表直接加载、来源哈希校验、SQL 导航及明确重初始化（已实现）。
 - WP04E2：五窗布局、分歧尾随空行保留、源码和句表同步（已实现）。
-- WP04F：采用、改选、取消及局部事务持久化。
+- WP04F：采用、改选、取消及局部事务持久化、CM6 Undo/Redo（已实现）。
 - WP04G：总体验收（含跨模块安全、异常回滚及实际设备验收）。原独立来源失效航点取消，简单哈希检查已并入 WP04E。
 
-WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已在隔离 SQLite 验证持久层，WP04D 已完成隔离三引擎自动初始化；WP04E 接入初始化、句表读取和显式重初始化；本航点人工采用仍是原有内存交互，WP04F 才落盘。以下历史实现说明不代表运行工作台持久化已交付。WP03D 恢复基线 `05f8a3396efb75e3043e96abce4fd130ca3f0200`。
+WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已在隔离 SQLite 验证持久层，WP04D 已完成隔离三引擎自动初始化；WP04E 接入初始化、句表读取和显式重初始化；WP04F 已接通局部仲裁持久化及 CM6 原生历史。以下历史实现说明不代表运行工作台持久化已交付。WP03D 恢复基线 `05f8a3396efb75e3043e96abce4fd130ca3f0200`。
 
 ## 当前实现
 
-### WP04E2 五窗布局及分歧空行同步
+### WP04F 人工仲裁持久化与 CM6 Undo/Redo
+
+保持 WP04E2 五窗布局、原导航、全部筛选及只读上游原文。采用/改选/取消仅修改本州 sentence 中当前 MDLine 的句记录。持久化确认前保持旧投影与 checkbox 状态，操作期间禁用采用、撤销/重做及全部控件；成功后以单行回执更新句表、三窗状态和源码待审集合，失败不推进历史。已有句表重开直接恢复已采用结果，不重新分句。取消采用恢复原 MDLine 和其尾随真实空行；不伪造未落盘句记录。
+
+| 新增公开 API | 契约 |
+| --- | --- |
+| POST /labs/lab-sentence/api/sentence/arbitrate | 沿用现有 F02/同源授权。workspace、source_document_hash、source_line、source_line_hash、candidates_hash、previous_engine、adopted_engine；引擎为原三家之一或 null。服务端仅从已持久候选构造分句点和原文，禁止客户端传入新文本或句界。回执仅返回本行实际句记录。 |
+| SentenceStore.arbitrate(markdown, ...) | BEGIN IMMEDIATE 内复核公开上游来源、文件身份、自有 Schema 及外键/触发器保护；验证全文无损、源行及候选摘要、当前采用状态（CAS）；DELETE WHERE source_line=? 与该行 INSERT 同一事务，验证其他行完全相同与全文无损后提交。异常回滚。 |
+| requestArbitration / applyArbitrationRows | 校验回执来源、行号、原句文本、候选元数据、采用状态及切点；仅合并确认的当前行，返回新句记录及对应审阅投影。 |
+| createReviewHistory | CM6 history/invertedEffects/isolateHistory/undo/redo 原生 effect-only EditorState；prepare/prepareHistory 先产生可逆事务，SQL 成功后才 commit；depth/reset 使用 CM6 自身历史。无自制 undo/redo 栈，无 SQL 历史表。 |
+
+CM6 原生 undo/redo 拒绝 readOnly EditorState，因此历史使用独立的无正文 CM6 EditorState，源窗仍严格只读；原右上按钮及 Mod-Z / Mod-Shift-Z / Mod-Y、historyUndo/historyRedo 事件接入同一异步事务。每次人工仲裁独立历史事件；光标、滚动、筛选、原文投影重建不入历史。刷新/重新初始化/切换来源或加载不同句记录清空会话历史；同一来源同一已保存记录的重开可保留当前会话历史。已保存的仲裁跨刷新保留。网络丢失回执时不声称已回滚或已保存，提示重新打开目录核对；旧状态比较拒绝误覆盖。
+
+验收：Python 全量 13/13（含新增局部事务、真实 V2 隔离夹具采用/改选/取消/恢复、CAS 冲突、故障回滚、上游与未来示例表全量不变），运行 HTTP 授权回归 3/3；Node 原直接回归 16/16，新增回执直接测试 2/2（含 CM6 history）；Chromium/WebKit 空白框架、真实句表夹具回执驱动的采用、改选、取消、失败不推进、按钮及键盘撤销/重做、刷新恢复、原五窗及 SQL 重建/过期清理 PASS。早期通配符误纳入并行历史浏览器测试、脚本转义错误、异步 checkbox 测试预期即时选中失败，保留实际记录并按正确范围与异步等待复验。物理 iPad、任意跨进程整库换档竞争与真实用户目录未主动测试。保留字体/chunk 及重复静动态 import 构建警告。未修改数据库 Schema、上游、宪法、网关工程或布局。
+
+### WP04E2 五窗布局及分歧空行同步（历史，临时状态由 WP04F 持久化取代）
 
 保留左侧三引擎 CM6（等高）和原左右 60/40 宽度；右侧分为上方原源码 CM6、下方独立 Dockview 句表窗（默认右列高度 60/40，可原生拖动分割线）。原导航、Undo/Redo、全部/采用控件、SQL 组重初始化和全局设置不移动。SQL 选择句表仅聚焦右下窗，不再替换源码；选择逻辑表聚焦右上源码。空白框架为五窗，未绑定或来源失效时右下窗为空且没有 AG 实例。
 

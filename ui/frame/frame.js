@@ -3,7 +3,7 @@ import '../styles.css';
 import '../obsidian-everforest.css';
 import './frame.css';
 import {createFrameWorkspace} from './layout.js';
-import {requestSentence} from '../sentence/persisted.js';
+import {requestSentence,requestArbitration} from '../sentence/persisted.js';
 import {createSnapshotSession} from '../sentence/snapshot.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
@@ -26,7 +26,7 @@ const io=createFrameSettingsIO(localStorage,'lab-sentence',()=>publishedDirector
 function setSize(size){document.documentElement.style.setProperty('--ocr-frame-font-size',size+'px');
   document.documentElement.style.setProperty('--ocr-frame-scale',String(size/16));}
 setSize(io.getInitialSize());
-const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule});
+const frame=createFrameWorkspace($('workspace'),{onStatus:topStatus,onModuleChange:showModule,onArbitrate:persistArbitration});
 // Main's Tom Select adapter owns the visible control, never a parallel picker.
 const frameFileSelect=$('workspace').querySelector('.ocr-source-file-select');
 enhanceNavigationSelect(frameFileSelect,{search:true,kind:'files'});
@@ -34,6 +34,13 @@ let settings=null,loadingSettings=null,currentModule='frame';
 // Only one I/O probe may publish status; switching Settings cancels older
 // announcements without touching the shared status or Save component.
 let probeGeneration=0,loadedPath='',rebuilding=false;
+async function persistArbitration(change){
+  if(!loadedPath||!loadedSnapshot||loadedRows===null||rebuilding)throw Error('当前句表不可写');
+  const result=await requestArbitration(loadedPath,loadedSnapshot,loadedRows,change);
+  loadedRows=result.rows;
+  sentenceCandidates={...sentenceCandidates,lines:sentenceCandidates.lines.map(row=>row.sourceLine===change.sourceLine?result.reviewLine:row)};
+  return result;
+}
 function wireSQLGroup(select){
   const adapter=select.ocrNavigationSelect;
   adapter.tom.dropdown.addEventListener('click',event=>{
@@ -64,7 +71,7 @@ function clearLogicalSource(){
   frame.setSourceMarkdown('',{resetReview:true});syncLogicalNavigation(false);
 }
 function openSQLActions(){
-  if(!loadedPath||rebuilding)return;
+  if(!loadedPath||rebuilding||frame.isBusy())return;
   if(settings?.hasUnsaved()){topStatus('请先保存全局设置，再重新初始化句表','warning');return;}
   let dialog=$('sentence-sql-actions-dialog');
   if(!dialog){
@@ -87,14 +94,16 @@ function openSQLActions(){
   dialog.showModal();
 }
 async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,reinitialize=false}={}){
-  if(reinitialize&&rebuilding)return;
+  if(reinitialize&&(rebuilding||frame.isBusy()))return;
   if(reinitialize)rebuilding=true;
   const generation=++probeGeneration;
+  frame.setLocked(true);await frame.whenIdle();
+  if(generation!==probeGeneration){if(reinitialize)rebuilding=false;return;}
   if(!uncommitted&&selected!==loadedPath)clearLogicalSource();
   if(!selected){
     if(generation===probeGeneration)topStatus(afterSave?'✓ 全局设置已保存 · 尚未绑定工作目录':
       '尚未绑定工作区资料目录','warning');
-    rebuilding=false;return;
+    rebuilding=false;frame.setLocked(false);return;
   }
   topStatus((afterSave?'✓ 全局设置已保存 · ':'')+'正在验证工作区文件读写…');
   try{
@@ -125,7 +134,7 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,rei
       if(!uncommitted&&!reinitialize)clearLogicalSource();
       topStatus((reinitialize?'重新初始化未确认成功：':afterSave?'全局设置已保存，但工作区加载失败：':'工作区加载失败：')+error.message,'error');
     }
-  }finally{if(reinitialize)rebuilding=false;}
+  }finally{if(reinitialize)rebuilding=false;if(generation===probeGeneration)frame.setLocked(false);}
 }
 // The chooser reports every explicit adoption, including an unchanged path.
 // Changed paths already trigger the Settings-owned `settings.changed` port.

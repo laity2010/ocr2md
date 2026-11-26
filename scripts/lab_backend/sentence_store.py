@@ -136,21 +136,24 @@ def build_sentence_rows(markdown, plans):
     for number, ((text, eol), plan) in enumerate(zip(lines, plans), 1):
         _require(isinstance(plan, dict) and set(plan) == {'boundaries', 'candidates', 'review_state', 'adopted_engine'},
                  'invalid line plan')
-        cuts = plan['boundaries']
-        pieces = split_mdline(text, cuts)
-        metadata = _metadata(text, cuts, plan['candidates'], plan['review_state'], plan['adopted_engine'])
-        _, end = _offsets(text)
-        points = [0, *cuts, end]
-        line_digest = _sha(text + eol)
-        for index, piece in enumerate(pieces):
-            result.append(dict(zip(COLUMNS, (
-                digest, number, line_digest, index, points[index], points[index + 1],
-                piece, eol if index == len(pieces) - 1 else '',
-                metadata if index == 0 else None,
-                plan['review_state'] if index == 0 else None,
-                plan['adopted_engine'] if index == 0 else None,
-            ))))
+        result.extend(_line_rows(digest, number, text, eol, plan))
     return result
+
+
+def _line_rows(digest, number, text, eol, plan):
+    cuts = plan['boundaries']
+    pieces = split_mdline(text, cuts)
+    metadata = _metadata(text, cuts, plan['candidates'], plan['review_state'], plan['adopted_engine'])
+    _, end = _offsets(text)
+    points = [0, *cuts, end]
+    line_digest = _sha(text + eol)
+    return [dict(zip(COLUMNS, (
+        digest, number, line_digest, index, points[index], points[index+1],
+        piece, eol if index == len(pieces)-1 else '',
+        metadata if index == 0 else None,
+        plan['review_state'] if index == 0 else None,
+        plan['adopted_engine'] if index == 0 else None,
+    ))) for index, piece in enumerate(pieces)]
 
 
 def rebuild_markdown(rows):
@@ -243,14 +246,14 @@ class SentenceStore:
                 return sqlite3.SQLITE_OK
         return sqlite3.SQLITE_DENY
 
-    def _schema(self, create=False):
+    def _schema(self, create=False, *, write=False):
         catalog = self._db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master").fetchall()
         # Only this module's own table is a schema contract. The source
         # document is supplied by the public snapshot, not by private SQL.
         owned = [r for r in catalog if r[1].casefold() == 'sentence']
         _require(not any(r[0] == 'trigger' and r[2].casefold() == 'sentence'
                          for r in catalog), 'unexpected sentence trigger')
-        if create:
+        if create or write:
             # Guard against external FK side effects, even if a caller's
             # dedicated connection has foreign_keys disabled. Never read rows.
             for kind, name, _, _sql in catalog:
@@ -296,6 +299,50 @@ class SentenceStore:
             db.executemany(INSERT, (tuple(r[c] for c in COLUMNS) for r in rows))
             _require(rebuild_markdown(self._read()) == markdown, 'SQLite roundtrip mismatch')
             db.commit()
+        except BaseException:
+            db.rollback()
+            raise
+
+    def arbitrate(self, markdown, *, source_line, source_line_hash, candidates_hash,
+                  previous_engine, adopted_engine, verify_source=None):
+        """CAS and atomically replace only one disputed/adopted MDLine.
+        The persisted candidate metadata determines all cuts; no client text or cuts.
+        """
+        _require(type(source_line) is int and source_line >= 1, 'invalid source line')
+        _require(previous_engine is None or previous_engine in ENGINES, 'invalid previous engine')
+        _require(adopted_engine is None or adopted_engine in ENGINES, 'invalid adopted engine')
+        _require(previous_engine != adopted_engine, 'no arbitration change')
+        db = self._db
+        _require(not db.in_transaction, 'unexpected active transaction')
+        db.execute('BEGIN IMMEDIATE')
+        try:
+            if verify_source is not None:
+                verify_source()
+            self._schema(write=True)
+            rows = self._read()
+            _require(rebuild_markdown(rows) == markdown, 'stale or incomplete sentence table')
+            group = [r for r in rows if r['source_line'] == source_line]
+            _require(bool(group), 'missing source line')
+            first = group[0]
+            _require(first['source_line_hash'] == source_line_hash and
+                     _sha(first['candidates_json']) == candidates_hash and
+                     first['adopted_engine'] == previous_engine and
+                     first['review_state'] in ('disputed','adopted'), 'arbitration conflict')
+            candidates = json.loads(first['candidates_json'])
+            text = ''.join(r['sentence_text'] for r in group)
+            eol = group[-1]['line_eol']
+            plan = dict(boundaries=[] if adopted_engine is None else candidates[adopted_engine]['boundaries'],
+                        candidates=candidates, review_state='disputed' if adopted_engine is None else 'adopted',
+                        adopted_engine=adopted_engine)
+            changed = _line_rows(_sha(markdown), source_line, text, eol, plan)
+            db.execute('DELETE FROM main.sentence WHERE source_line=?', (source_line,))
+            db.executemany(INSERT, (tuple(r[c] for c in COLUMNS) for r in changed))
+            actual = self._read()
+            expected = sorted([r for r in rows if r['source_line'] != source_line] + changed,
+                              key=lambda r:(r['source_line'],r['sentence_index']))
+            _require(actual == expected and rebuild_markdown(actual) == markdown, 'arbitration roundtrip mismatch')
+            db.commit()
+            return changed
         except BaseException:
             db.rollback()
             raise
