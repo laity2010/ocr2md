@@ -63,7 +63,7 @@ export function createMdLineIndex(doc,intervals){
         logical_id:block.logicalId,base_blockid:block.baseBlockId,
         pbs:'p'+block.p+'b'+block.b+'s'+block.s,p:block.p,b:block.b,s:block.s,
         line_offset:owned.length,source_line:number,from,to,textTo:line.to,
-        md_line:text,block_type:block.blockType,
+        md_line:text,block_type:block.blockType,type:block.blockType,
         line_type:title?'title':text.trim()===''?'blank':'text',
         title_level:title?titleSourceParts(text).level:null,
       });

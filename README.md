@@ -146,11 +146,19 @@ assert_schema 仅要求 mineru_base、logical_block 两张本州表存在，校�
 | revision | 索引独有、不透明的内存令牌，不可作为持久化/跨进程 ID |
 | eofOwner | 最后真实块的 logical_id，空文档为 null；不制造额外 MD 行 |
 
-每行字段：logical_id、base_blockid、pbs、p/b/s、line_offset、source_line、from/to（UTF-16 半开区间，包含真实 LF）、textTo（LF 前）、md_line（不含 LF）、block_type（持久化继承类型）、line_type（title/text/blank）、title_level（非标题 null）。标题识别复用现有 V1 ATX 规则及 WP23H 的跨块围栏排除；不将有标题的整个块改为 title。其他 View 的派生属性依各自适配器。空行文字完全保留；行偏移和物理行号不是持久化身份。CM6 自动视觉折行不增加 MD Line。
+每行字段：logical_id、base_blockid、pbs、p/b/s、line_offset、source_line、from/to（UTF-16 半开区间，包含真实 LF）、textTo（LF 前）、md_line（不含 LF）、block_type（持久化继承类型）、type（原始元素类型，等于 block_type）、line_type（title/text/blank）、title_level（非标题 null）。标题识别复用现有 V1 ATX 规则及 WP23H 的跨块围栏排除；不将有标题的整个块改为 title。其他 View 的派生属性依各自适配器。空行文字完全保留；行偏移和物理行号不是持久化身份。CM6 自动视觉折行不增加 MD Line。
 
 输入校验：全量逻辑区间连续无重叠；稳定 ID、顺序、PBS 组及编号合法唯一；拒绝任何 groupEndPad（含 0）、不完整尾部、缺真实 LF、跨行切割及不合法输入。组末至少两个 LF、组内至少一个 LF。空文档允许空索引。所有真实 LF 必须存在，绝不补删。每行按原序拼接 md_line + LF 与完整正文及每块 SQL md_block 一致。索引是单次修订只读快照，不负责订阅、编辑、缓存失效、SQL 写回或新行归属；CM6/AG/PDF/MD 通过正式调用接入。
 
 直接测试：`node tests/v2-md-line-index.test.mjs`、`node tests/v2-md-line-index.fixture.test.mjs`；真实工作台测试 `tests/v2-owned-edit.browser.test.mjs` 按受影响模式运行 Chromium/WebKit，核对编辑、定位、Undo/Redo、SQLite CAS 和重开。任何新 View 复用当前修订的公共行索引与唯一正文，不另立行集权威。
+
+### 3.2 · WP32 MDLine 原始类型继承（增补）
+
+MDLine 的 type 直接继承逻辑行 block_type，即初始化时对应的 MinerU 原始元素 type；子元素分别继承自身类型，不用共享 base_blockid 的父类型覆盖。空行仍保留物理归属及原始 type，line_type 与 title_level 保持原来的实时 Markdown 派生语义，不因标题修订或类型继承互相覆盖。此处不增加分类器、不改正文或持久化字段、不增加实体表。
+
+既有授权只读 GET /labs/lab-ocr-v2/api/mineru-base/markdown 的 v2-logical-md/v3 响应增补 mdLines 数组，按实际物理行顺序，每项提供 source_line、logical_id、base_blockid、line_offset、from、to、textTo、type；坐标与当前 CM6 公共行索引一致（UTF-16 半开区间，包含真实 LF，textTo 为 LF 前）。原 markdown、sha256、rowCount、segments 及版本不变；v2 旧虚拟换行格式不提供该字段。下游以 mdLines 的 type 为上游继承属性，不另写分类器；手动插入正文中的 HTML/图片不会自动改变原始块 type。该接口不新增 level 分类，也不改其他州。
+
+验收：直接索引 14 行、Python Markdown 往返 6/6、真实隔离 SQLite 新书491行/已编辑497行，以及 Chromium/WebKit 的 CM6 索引与公开 mdLines 全字段逐行一致；涵盖 table_caption、table_body、table_footnote、image_body、原始标题及空行、UTF-16 和原文无损。原用户库未主动写入，物理 iPad 未实机验证。
 
 ### 3.2a 注释匹配 View（WP26）
 - WP26A 已通过隔离验收：复用 V1 bf32515 识别与配对算法、双端表格、注号排序、页范围、原生表头筛选及当前修订端点定位。默认全文；无新 SQL 业务表或独立正文，不改变标题 View。详见 WP26A（Git `335fbad`）。

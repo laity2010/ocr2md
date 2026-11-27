@@ -138,6 +138,26 @@ def to_markdown(rows, *, format=FORMAT):
             'rowCount':len(validated),'lengthUtf16':start_utf16,'segments':spans}
 
 
+def mdline_type_rows(rows):
+    """Read-only physical MDLine metadata from one validated real-LF revision.
+
+    The logical block already carries its own original MinerU element type.
+    Children may share a base_blockid with their parent; never substitute
+    the parent's type. No Markdown syntax classification or text duplication.
+    """
+    result=[]
+    offset=0
+    for block in owned_rows(rows):
+        for line_offset,text in enumerate(block.markdown_text.split('\n')[:-1]):
+            text_to=offset+length_utf16(text)
+            result.append(dict(source_line=len(result)+1,logical_id=block.logical_id,
+                               base_blockid=block.base_blockid,line_offset=line_offset,
+                               **{'from':offset,'to':text_to+1,'textTo':text_to},
+                               type=block.block_type))
+            offset=text_to+1
+    return result
+
+
 def from_markdown(snapshot):
     """Strict inverse, reconstructing every original logical row without tags.
 

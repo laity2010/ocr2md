@@ -33,6 +33,12 @@ assert.deepEqual(index.rows.map(project),[
   [13,'p1b0s0',1,'title','blank','  '],
   [14,'p1b0s0',2,'title','blank',''],
 ]);
+assert.deepEqual(index.rows.map(r=>r.type),index.rows.map(r=>r.block_type));
+assert.equal(index.atSourceLine(3).type,'text','edited heading keeps original element type');
+assert.equal(index.atSourceLine(5).type,'table','blank root retains provenance');
+assert.equal(index.atSourceLine(6).type,'table_body');
+assert.equal(index.atSourceLine(8).type,'table_footnote');
+assert.equal(index.atSourceLine(12).type,'title','edited title keeps original element type');
 assert.equal(index.atSourceLine(3).title_level,2);
 assert.equal(index.atSourceLine(7).title_level,null);
 assert.equal(index.atSourceLine(1).textTo,4,'UTF-16 surrogate pair counts twice');

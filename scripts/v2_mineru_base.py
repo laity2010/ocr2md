@@ -17,7 +17,7 @@ from urllib.parse import parse_qs
 from v2_logical_contract import initial_rows, validate_initial, raw_element_text
 from v2_md_block import initial_md, raw_bindings, raw_at
 from v2_table_recovery import table_overrides
-from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown, preview_owned_migration, OWNED_FORMAT, FORMAT
+from v2_markdown_roundtrip import from_sql_rows, to_markdown, from_markdown, preview_owned_migration, mdline_type_rows, OWNED_FORMAT, FORMAT
 from v2_pdf_projection import project_pdf, PDFProjectionError
 from v2_pbs import initial_pbs, validate_pbs
 
@@ -422,6 +422,8 @@ def existing_markdown(folder:Path):
             result=to_markdown(originals,format=OWNED_FORMAT if is_owned_lf(db) else FORMAT)
             if from_markdown(result)!=originals:
                 raise BaseError(409,'只读 Markdown 往返结果与逻辑表不一致')
+            if result['schema']==OWNED_FORMAT:
+                result['mdLines']=mdline_type_rows(originals)
         except ValueError as error:
             raise BaseError(409,'逻辑表无法无损重构：'+str(error)) from error
         return result

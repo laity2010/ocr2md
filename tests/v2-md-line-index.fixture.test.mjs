@@ -36,7 +36,7 @@ with tempfile.TemporaryDirectory(prefix='wp25a-fresh-') as fresh, tempfile.Tempo
 `;
 const fixtures=JSON.parse(execFileSync('python3',['-c',py],{encoding:'utf8',maxBuffer:16*1024*1024}));
 
-function verifyFixture(createIndex,doc,blocks,sqlRows){
+function verifyFixture(createIndex,doc,blocks,sqlRows,mdLines){
   const check=(ok,message)=>{if(!ok)throw Error(message);};
   const index=createIndex(doc,blocks);
   let cursor=0,blank=0,title=0,children=0,lookups=0;
@@ -51,7 +51,9 @@ function verifyFixture(createIndex,doc,blocks,sqlRows){
       const actual=doc.line(row.source_line);
       check(row.source_line===pieces.length+1&&row.line_offset===offset&&
         row.logical_id===id&&row.base_blockid===base&&row.p===p&&row.b===b&&row.s===s&&
-        row.pbs===('p'+p+'b'+b+'s'+s)&&row.block_type===type,'row identity '+id+'/'+offset);
+        row.pbs===('p'+p+'b'+b+'s'+s)&&row.block_type===type&&row.type===type,'row identity '+id+'/'+offset);
+      const remote=mdLines[row.source_line-1];
+      check(remote&&['source_line','logical_id','base_blockid','line_offset','from','to','textTo','type'].every(k=>remote[k]===row[k]),'public MDLine metadata parity '+row.source_line);
       check(row.from===cursor&&row.from===actual.from&&row.textTo===actual.to&&
         row.to===actual.to+1&&row.md_line===actual.text&&
         doc.sliceString(row.from,row.to)===row.md_line+'\n','actual CM6 line '+row.source_line);
@@ -69,6 +71,9 @@ function verifyFixture(createIndex,doc,blocks,sqlRows){
     check(strings.join('')===body&&block.to===cursor,'exact SQL MD Block '+id);
   }
   check(cursor===doc.length&&pieces.join('')===doc.toString(),'whole document roundtrip');
+  check(mdLines.length===index.rows.length,'public MDLine coverage');
+  const types=new Set(mdLines.map(row=>row.type));
+  for(const type of ['table_caption','table_body','table_footnote','image_body'])check(types.has(type),'missing original type '+type);
   check(index.rows.length===doc.lines-1&&index.atSourceLine(doc.lines)===null&&
     index.atOffset(doc.length)===null&&index.eofOwner===sqlRows.at(-1)[0],'EOF ownership');
   check(index.forBlock(sqlRows[0][0]).length>0&&blank>0&&title>0&&children>0,'fixture coverage');
@@ -81,7 +86,7 @@ for(const [name,fixture] of Object.entries(fixtures)){
  const {source,blocks}=composeBlockSource(fixture.snapshot);
  assert.equal(blocks.length,267);
  const doc=EditorState.create({doc:source}).doc;
- expected[name]=verifyFixture(createMdLineIndex,doc,blocks,fixture.rows);
+ expected[name]=verifyFixture(createMdLineIndex,doc,blocks,fixture.rows,fixture.snapshot.mdLines);
  console.log('WP25A_REAL_SQL_CM6_INDEX_PASS',name,JSON.stringify(expected[name]));
 }
 
@@ -98,7 +103,7 @@ window.verifyMDLine=(fixture)=>{
   parent:document.querySelector('#editor')});
  try{
    if(!editor.contentDOM.isConnected)throw Error('CM6 not mounted');
-   return verifyFixture(createMdLineIndex,editor.state.doc,blocks,fixture.rows);
+   return verifyFixture(createMdLineIndex,editor.state.doc,blocks,fixture.rows,fixture.snapshot.mdLines);
  }finally{editor.destroy();}
 };
 `,resolveDir:process.cwd()},bundle:true,write:false,format:'iife',platform:'browser'});

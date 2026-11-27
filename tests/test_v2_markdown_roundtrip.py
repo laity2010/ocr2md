@@ -11,7 +11,7 @@ sys.path.insert(0,str(Path(__file__).parents[1]/'scripts'))
 import v2_mineru_base as base
 import frame_workspace_io as f02
 from v2_logical_contract import LogicalRow
-from v2_markdown_roundtrip import to_markdown,from_markdown,from_sql_rows,length_utf16
+from v2_markdown_roundtrip import to_markdown,from_markdown,from_sql_rows,length_utf16,mdline_type_rows,OWNED_FORMAT
 FIXTURE=Path(__file__).parents[1]/'packages/minerujson-md/fixtures/buffetts-alpha.mineru.json'
 class StubF02:
     def probe(self,path):pass
@@ -84,6 +84,33 @@ class MarkdownRoundtripTest(unittest.TestCase):
             to_markdown([LogicalRow(1,1,2,1,'x')])
         with self.assertRaisesRegex(ValueError,'顺序'):
             to_markdown([LogicalRow(1,1,None,2,'x')])
+    def test_physical_mdline_type_inherits_original_element_without_reclassification(self):
+        rows=[
+            LogicalRow(1,1,None,1,'# edited😀\n\n','text',0,0,0),
+            LogicalRow(2,2,None,2,'\n','table',0,1,0),
+            LogicalRow(3,2,2,3,'> Table 1. Caption\n','table_caption',0,1,1),
+            LogicalRow(4,2,2,4,'>> <!-- image -->\n>> <table>\n>> </table>\n','table_body',0,1,2),
+            LogicalRow(5,2,2,5,'> Note.\n\n','table_footnote',0,1,3),
+            LogicalRow(6,6,None,6,'\n','image',0,2,0),
+            LogicalRow(7,6,6,7,'![](a.png)\n\n','image_body',0,2,1),
+        ]
+        snap=to_markdown(rows,format=OWNED_FORMAT)
+        mdlines=mdline_type_rows(rows)
+        self.assertEqual([r['type'] for r in mdlines],
+                         ['text','text','table','table_caption','table_body','table_body','table_body',
+                          'table_footnote','table_footnote','image','image_body','image_body'])
+        self.assertEqual(mdlines[0]['textTo'],length_utf16('# edited😀'))
+        self.assertEqual(mdlines[3]['logical_id'],3)
+        self.assertEqual(mdlines[3]['base_blockid'],2)
+        self.assertEqual([r['source_line'] for r in mdlines],list(range(1,13)))
+        self.assertEqual(mdlines[-1]['to'],snap['lengthUtf16'])
+        data=snap['markdown'].encode('utf-16-le')
+        self.assertEqual(b''.join(data[r['from']*2:r['to']*2] for r in mdlines),data)
+        self.assertEqual(mdline_type_rows([]),[])
+        self.assertEqual(from_markdown({**snap,'mdLines':mdlines}),rows)
+        with self.assertRaises(ValueError):
+            mdline_type_rows([LogicalRow(1,1,None,1,'no owned LF','text',0,0,0)])
+
     def test_sql_read_only_refuses_invalid_ancestry_or_null_text(self):
         self.initialize()
         with closing(sqlite3.connect(self.book/base.DB_NAME)) as db:
