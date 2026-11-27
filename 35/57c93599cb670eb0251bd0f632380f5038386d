@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/heads/main","baseline":"3557c93599cb670eb0251bd0f632380f5038386d","event":"START","utc":"2026-11-27T08:22:19.431888+00:00","wp":"FEDERAL-SQL-NAV","goal":"仅修订联邦COMM.md：统一SQL组标题数据操作弹窗、已有表/View导航与只读恢复、显式初始化及数据保护；规定后续跨版本测试门禁，不改变任何州运行代码、发布或数据库。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/heads/main","baseline":"3557c93599cb670eb0251bd0f632380f5038386d","event":"RUN_START","utc":"2026-11-27T08:23:17.179421+00:00","phase":"federal-sql-nav-legislation","step":"5c3fff1fe91b4d5a95e2483da302816b"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/heads/main","baseline":"3557c93599cb670eb0251bd0f632380f5038386d","event":"RUN_EXIT","utc":"2026-11-27T08:23:25.131387+00:00","phase":"federal-sql-nav-legislation","step":"5c3fff1fe91b4d5a95e2483da302816b","exit_code":0}
