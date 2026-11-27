@@ -2,6 +2,7 @@
 import {createDockview,themeAbyss} from 'dockview';
 import {mountReadingSource,mountReadingPreview} from '../translation/reading.js';
 import {placeholder} from '../translation/refill.js';
+import {createReadingDocument} from '../translation/document.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
@@ -35,23 +36,39 @@ const translatedColumns=[
   {field:'source_document_hash',headerName:'文档哈希',width:165},
   {field:'sentence_sha256',headerName:'分句哈希',width:165},
 ];
-function mountEmptyGrid(host,picker,onLocate){
+// Same entity rows, two display projections; text is the primary column
+// in the pending view while raw remains available for checking.
+const pendingColumns=[...translatedColumns.slice(0,2),translatedColumns[7],...translatedColumns.slice(3,7),translatedColumns[2],...translatedColumns.slice(8)];
+function mountEmptyGrid(host,picker,onLocate,onViewChange){
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{editable:false,resizable:true,sortable:false,suppressMovable:true},
     getRowId:({data})=>data.source_line+':'+data.sentence_index,
     columnDefs:emptyColumns,rowData:[],rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},onRowClicked:({data})=>{if(data)onLocate(data.source_line+':'+data.sentence_index,'ag');}});
   let active='empty';
-  function showRows(rows){
-    const next=rows===null?'empty':'translation';
+  const filters=new Map();
+  function change(){onViewChange(picker.value);}
+  picker.addEventListener('change',change);
+  function showRows(rows,mode='original'){
+    const next=rows===null?'empty':mode;
     if(active!==next){
+      if(next==='empty')filters.clear();
+      else if(active!=='empty')filters.set(active,grid.getFilterModel());
       grid.setFilterModel(null);
-      grid.setGridOption('columnDefs',next==='translation'?translatedColumns:emptyColumns);
-      active=next;grid.setGridOption('rowData',rows??[]);
+      grid.setGridOption('columnDefs',next==='pending'?pendingColumns:next==='original'?translatedColumns:emptyColumns);
+      active=next;
+      grid.setGridOption('rowData',rows??[]);
+      if(filters.has(next))grid.setFilterModel(filters.get(next));
     }else grid.setGridOption('rowData',rows??[]);
-    picker.options[0].textContent=next==='translation'?'译句表':'空白框架';
+    if(next==='empty'){
+      picker.replaceChildren(new Option('空白框架','frame'),new Option('全局设置','settings'));
+      picker.value='frame';picker.disabled=true;picker.title='空白框架 AG 模块切换不可用';
+    }else{
+      if(picker.disabled)picker.replaceChildren(new Option('原句表','original'),new Option('待译句表','pending'));
+      picker.disabled=false;picker.value=next;picker.title='';
+    }
   }
-  return {dispose(){grid.destroy();},layout:()=>{},setTranslationRows:showRows,
+  return {dispose(){picker.removeEventListener('change',change);grid.destroy();},layout:()=>{},setTranslationRows:showRows,
     locate(row,{scroll=true}={}){
       const node=row&&grid.getRowNode(row.key);
       if(!node||node.rowIndex==null){grid.deselectAll();return;}
@@ -59,7 +76,7 @@ function mountEmptyGrid(host,picker,onLocate){
       if(scroll)grid.ensureIndexVisible(node.rowIndex,'middle');
     }};
 }
-function blankPane(name,onModuleChange,register,onLocate,onStatus){
+function blankPane(name,onModuleChange,register,onLocate,onStatus,onViewChange){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -79,7 +96,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
-    owned=()=>mountEmptyGrid(grid,picker,onLocate);
+    owned=()=>mountEmptyGrid(grid,picker,onLocate,onViewChange);
   }else if(name==='source'){
     element.className='ocr-source-pane ocr-source-file-source';
     const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
@@ -154,7 +171,7 @@ function addPanel(dockview,id,component,title,position){
 }
 /** Public F01: three original groups; WP04 replaces PDF with Prompt mode. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
-  let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,readingPath='',focused=null;
+  let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,fullModel=null,readingPath='',focused=null,tableRows=null,viewMode='original';
   function locate(value,origin){
     if(!readingModel)return;
     const row=typeof value==='string'?readingModel.byKey(value):value;
@@ -169,20 +186,39 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     if(name==='preview')previewReader=port;
   }
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,onModuleChange,register,locate,onStatus)});
+    createComponent:({name})=>blankPane(name,onModuleChange,register,locate,onStatus,switchReadingView)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
+  function visibleRows(){return tableRows===null?null:viewMode==='pending'?tableRows.filter(r=>r.translatable):tableRows;}
+  function applyReading(model,path='',viewSwitch=false){
+    const keep=model&&readingPath===path&&focused&&(viewSwitch||readingModel?.text===model.text);
+    readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
+    sourceReader?.setDocument(model);
+    previewReader?.setDocument(model,sourceReader?.getMarkdown()??'',path);
+    if(focused){
+      originalGrid?.locate(focused,{scroll:viewSwitch});sourceReader?.locate(focused,{scroll:viewSwitch});previewReader?.locate(focused,{scroll:viewSwitch});
+    }else{originalGrid?.locate(null);sourceReader?.locate(null);previewReader?.locate(null);}
+  }
+  function switchReadingView(mode){
+    if(!fullModel||!tableRows||!['original','pending'].includes(mode)||viewMode===mode)return;
+    const next=mode==='pending'?createReadingDocument({rows:tableRows},{pending:true}):fullModel;
+    viewMode=mode;
+    const rows=visibleRows();
+    originalGrid?.setTranslationRows(rows,viewMode);
+    applyReading(next,readingPath,true);
+    onStatus('✓ '+(mode==='pending'?'待译句表':'原句表')+' · '+rows.length+' 句','ok');
+  }
   return Object.freeze({isPromptActive:()=>previewReader?.isPromptActive()??false,
     getPromptText:()=>previewReader?.getPromptText()??null,
-    savePrompt:()=>previewReader?.savePrompt(),setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
+    savePrompt:()=>previewReader?.savePrompt(),setTranslationRows(rows){
+      tableRows=rows;
+      if(rows===null)viewMode='original';
+      originalGrid?.setTranslationRows(visibleRows(),viewMode);
+    },
     setReadingDocument(model,path=''){
-      const keep=model&&readingModel?.text===model.text&&readingPath===path&&focused;
-      readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
-      sourceReader?.setDocument(model);
-      previewReader?.setDocument(model,sourceReader?.getMarkdown()??'',path);
-      if(focused){originalGrid?.locate(focused,{scroll:false});sourceReader?.locate(focused,{scroll:false});previewReader?.locate(focused,{scroll:false});}
-      else{originalGrid?.locate(null);sourceReader?.locate(null);previewReader?.locate(null);}
+      fullModel=model;
+      applyReading(model&&viewMode==='pending'?createReadingDocument({rows:tableRows},{pending:true}):model,path);
     },activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);previewReader?.layout();},
     dispose(){dockview.dispose();}});

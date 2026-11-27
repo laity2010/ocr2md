@@ -133,9 +133,46 @@ try{
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')),settingsBefore);
    assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
    await mode.selectOption('md');
+   // WP04F2: AG owns the two views, not SQL navigation.
+   const agPicker=workspace.locator('.ocr-ag-module-select');
+   assert.deepEqual(await agPicker.locator('option').allTextContents(),['原句表','待译句表']);
+   assert.equal(await agPicker.inputValue(),'original');
+   const beforeViewCalls=prepCalls.length, beforeViewReads=reads.length;
+   await agPicker.selectOption('pending');await count(4);
+   assert.equal(await workspace.locator('#editor .cm-line').allTextContents().then(x=>x.join('\n')),prepared.rows.map(r=>r.translatable?r.raw:r.raw.replace(/[^\n]/g,'')).join(''));
+   assert.equal(await preview.locator('.ocr-math').count(),0);
+   assert.equal(await preview.locator('.ocr-reviewed-inline-latex.translation-protected-preview').count(),1);
+   assert((await source.locator('.translation-protected-source').allTextContents()).join('').includes('$r_t$'));
+   assert.equal(await grid.locator('.ag-row [col-id="source_line"]').last().textContent(),'4');
+   await grid.locator('.ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=0);
+   assert.equal(await grid.locator('.ag-header-cell[col-id="text"]').count(),1);
+   await grid.locator('.ag-row [col-id="source_line"]').last().click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('<table>'));
+   await agPicker.selectOption('original');await count(5);
+   assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
+   assert.equal(await preview.locator('.ocr-math.translation-protected-preview').count(),1);
+   assert.equal(prepCalls.length,beforeViewCalls);assert.equal(reads.length,beforeViewReads);
+   console.log('TRANSLATION_WP04F2_BROWSER_PASS',name,'pending view and reversible reading projection without SQL');
    const scroll=grid.locator('.ag-body-horizontal-scroll-viewport');
-   await scroll.evaluate(el=>el.scrollLeft=530);
-   const transButton=grid.locator('.ag-header-cell[col-id="translatable"] .ag-header-cell-filter-button');
+   // Column definitions are replaced on view switch. WebKit may restore
+   // horizontal scroll asynchronously. Reveal actual virtualized columns
+   // rather than assuming an unchanged fixed pixel position.
+   async function revealColumn(id){
+     const header=grid.locator('.ag-header-cell[col-id="'+id+'"]');
+     const max=await scroll.evaluate(el=>el.scrollWidth-el.clientWidth);
+     for(const x of [530,0,...Array.from({length:Math.ceil(max/80)+1},(_,i)=>Math.min(max,i*80))]){
+       await scroll.evaluate((el,x)=>{el.scrollLeft=x;},x);
+       await page.waitForTimeout(150);
+       if(await header.count()){
+         // The header itself can be wider than the available center pane.
+         // Playwright performs actual scrolling and hit-testing on the
+         // interactive filter button below, and all result assertions remain.
+         return header;
+       }
+     }
+     throw Error('Unable to reveal column '+id+' '+JSON.stringify(await grid.locator('.ag-header-cell').evaluateAll(xs=>xs.map(x=>x.getAttribute('col-id')))));
+   }
+   const transButton=(await revealColumn('translatable')).locator('.ag-header-cell-filter-button');
    await transButton.waitFor();
    if(name==='iPad-WebKit')await transButton.tap();else await transButton.click();
    const transPopup=page.locator('.ocr-enum-filter[aria-label="可翻译 筛选"]:visible');
@@ -145,9 +182,9 @@ try{
    await tcb('all').uncheck();await count(0);await tcb('否').check();await count(1);
    assert.equal(await grid.locator('.ag-row [col-id="source_line"]').textContent(),'5');
    await page.keyboard.press('Escape');
-   await scroll.evaluate(el=>el.scrollLeft=740);
+   await revealColumn('protected');
    await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ag-row [col-id="protected"]')].some(el=>el.textContent.includes('latex')&&el.textContent.includes('$$x=1$$')));
-   await scroll.evaluate(el=>el.scrollLeft=1000);
+   await revealColumn('text');
    await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ag-row [col-id="text"]')].some(el=>el.textContent.includes('⟦P0⟧')));
    await chooseNav(workspace,'translation');await count(1);
    await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/a');

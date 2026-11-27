@@ -1,6 +1,6 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP04F1，继承 WP00–04）
+## 当前可运行基线（WP04F2，继承 WP00–04F1）
 
 独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt。
 
@@ -23,6 +23,14 @@
 | POST translation/initialize | ocr2md-translation-preparation/v2，created/ready/migrated，事务与旧表安全；同上 |
 | initializeTable / initializePreparation / validatePreparation | 单次逻辑初始化、双摘要和逐行回填验证、取消和失败不返回中间表；tests/translation-preparation.test.mjs |
 | createFrameWorkspace.setTranslationRows / createReadingDocument(table) | 单表 AG 与 RAW 阅读坐标；tests/translation-reading.test.mjs、双浏览器门禁 |
+
+## WP04F2 · AG 原句表 / 待译句表
+
+初始化成功后，AG 自身下拉启用「原句表」（默认）与「待译句表」，源导航仍仅一个 SQL 初始化与译句表入口。原句视图以 raw 为主列、显示全部记录；待译视图以 text 为主列、仅保留 translatable=true 的记录，raw 与回填元素仍可核对。两视图的筛选状态独立。切换为纯内存派生，不建 SQL view/表、不调用初始化 API、不写数据库；换目录或清空时恢复原句视图、清除筛选及禁用业务下拉。
+
+两阅读窗随 AG 视图切换：原句视图保留全文 RAW，待译视图只拼接可译句原始 RAW，完整不可译句仅保留原 LF 分隔（物理 MDLine 行号不变），可译句内部 protected 继续按原坐标投影并淡化。保留原 source_line/sentence_index 作为定位身份；省略区不定位到其他句；切回原句表恢复全文。待译视图不以 text 的占位符破坏预览；仅 AG 主列显示占位文本。跨句 Markdown/HTML 结构若依赖被省略句中的标记，派生预览可能与全文不同，原句视图始终保留完整结构。Prompt 状态与历史不受切换影响。
+
+`createReadingDocument(table,{pending:true})` 为待译阅读投影，默认仍为无损全文模式。tests/translation-reading.test.mjs 覆盖同行与跨行省略、保留行号、保护坐标、全不可译及原始记录不变；tests/cross-version-ag-filter.browser.test.mjs 覆盖真实 AG 切换、两窗省略/淡化、定位、切回及无 API 请求。
 
 ## WP03 · 无损 MDLine 阅读与保护淡化
 

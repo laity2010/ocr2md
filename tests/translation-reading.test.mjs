@@ -33,3 +33,21 @@ test('last line without LF has a real half-open interval; no extra line or newli
  assert.equal(model.text.endsWith('\n'),false);
  assert.equal(model.lineOffset(last.source_line+1),model.text.length);
 });
+test('pending projection omits wholly protected sentences, keeps physical lines and original identities',()=>{
+ const rows=[
+   {source_line:1,sentence_index:0,raw:'$x$ ',protected:[{from:0,to:4,kind:'latex',text:'$x$ '}],translatable:false},
+   {source_line:1,sentence_index:1,raw:'A $y$.\n\n',protected:[{from:2,to:5,kind:'latex',text:'$y$'}],translatable:true},
+   {source_line:3,sentence_index:0,raw:'$$z$$\n',protected:[{from:0,to:6,kind:'latex',text:'$$z$$\n'}],translatable:false},
+   {source_line:4,sentence_index:0,raw:'Tail.',protected:[],translatable:true}
+ ];
+ const before=JSON.stringify(rows),full=createReadingDocument({rows}),pending=createReadingDocument({rows},{pending:true});
+ assert.equal(full.text,'$x$ A $y$.\n\n$$z$$\nTail.');
+ assert.equal(pending.text,'A $y$.\n\n\nTail.');
+ assert.deepEqual(pending.sentences.map(s=>s.key),['1:1','4:0']);
+ assert.equal(pending.byKey('1:0'),null);assert.equal(pending.byKey('3:0'),null);
+ assert.equal(pending.byKey('4:0').from,pending.lineOffset(4));
+ assert.equal(pending.atOffset(pending.lineOffset(3)),null);
+ assert.deepEqual(pending.ranges.map(p=>pending.text.slice(p.from,p.to)),['$y$']);
+ assert.equal(JSON.stringify(rows),before);
+ assert.equal(createReadingDocument({rows:rows.map(r=>({...r,translatable:false}))},{pending:true}).sentences.length,0);
+});
