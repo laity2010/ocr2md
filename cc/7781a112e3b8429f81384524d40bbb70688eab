@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"b6495f4eb61249abbe679a34a79db6d1","branch":"refs/heads/experiment/lab-sentence","baseline":"cc7781a112e3b8429f81384524d40bbb70688eab","event":"START","utc":"2026-11-27T04:03:28.778359+00:00","wp":"WP04F6-READONLY-SNAPSHOT","goal":"仅增加授权只读已保存句表快照公开接口，mode=ro，不自动初始化或迁移，不改UI、数据或其他操作；独立验证发布。","retrospective":false}
