@@ -99,7 +99,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     group.append(new Option('settings.json','settings'));
     select.append(group);
     select.value='';
-    select.addEventListener('change',()=>{if(['settings','sql-init','translation'].includes(select.value))onModuleChange?.(select.value);});
+    select.addEventListener('change',()=>{if(['settings','translation'].includes(select.value))onModuleChange?.(select.value);});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id='undo';

@@ -5,8 +5,9 @@ import json
 import os
 import sqlite3
 import stat
-from urllib.parse import urlencode
-from .protection import build_rows,canonical,DIGEST,require
+from urllib.parse import urlencode,parse_qs
+from .protection import build_rows,canonical,DIGEST,require,validate_snapshot,POLICY
+from .refill import check_row
 
 DB_NAME='ocr2md.v2.sqlite'
 MAX_SNAPSHOT=32*1024*1024
@@ -124,10 +125,79 @@ def initialize(folder,expected_source,expected_sentences,reader):
             db.rollback();raise
     return {'schema':'ocr2md-translation-preparation/v2','state':state,'source_document_hash':expected_source,'sentence_sha256':expected_sentences,'rows':rows}
 
+
+def read_saved(folder,reader):
+    """Read only the owned table and validate against the public upstream snapshot.
+    Never run the protection scanner, acquire a reserved write lock or migrate.
+    """
+    path=folder/DB_NAME
+    original_identity=identity(path)
+    def authorize(action,a,b,db,source):
+        if source is not None:return sqlite3.SQLITE_DENY
+        if action==sqlite3.SQLITE_SELECT:return sqlite3.SQLITE_OK
+        if action==sqlite3.SQLITE_READ and db=='main' and a in ('translation','sqlite_master','sqlite_schema'):return sqlite3.SQLITE_OK
+        return sqlite3.SQLITE_DENY
+    with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=10)) as db:
+        # An ordinary read transaction gives the catalogue and rows one snapshot.
+        db.execute('BEGIN')
+        db.set_authorizer(authorize)
+        catalog=db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master").fetchall()
+        owned=[r for r in catalog if r[1].casefold()=='translation']
+        if any(r[0]=='trigger' and r[2].casefold()=='translation' for r in catalog):
+            raise TranslationError(409,'译句表含未知触发器，保留原表')
+        if not owned:
+            state='missing';stored=[]
+        elif owned==[('table','translation','translation',LEGACY_DDL)]:
+            state='legacy'
+            stored=db.execute('SELECT '+','.join(LEGACY_FIELDS)+' FROM translation ORDER BY source_line,sentence_index').fetchall()
+        elif owned==[('table','translation','translation',DDL)]:
+            state='ready'
+            stored=db.execute('SELECT '+','.join(FIELDS)+' FROM translation ORDER BY source_line,sentence_index').fetchall()
+        else:
+            raise TranslationError(409,'译句表结构不兼容，保留原表')
+        snapshot=reader()
+        source=validate_snapshot(snapshot)
+        if identity(path)!=original_identity:raise TranslationError(409,'SQLite 文件已切换')
+        if state=='missing':
+            return {'schema':'ocr2md-translation-preparation/v2','state':'missing'}
+        if len(stored)!=len(source):raise TranslationError(409,'译句表来源已变化，保留原表')
+        rows=[]
+        for values,original in zip(stored,source):
+            r=dict(zip(FIELDS if state=='ready' else LEGACY_FIELDS,values))
+            if any(r[k]!=original[k] for k in ('source_document_hash','source_line_hash','source_line','sentence_index','raw','type','level')) or r['sentence_sha256']!=snapshot['sentence_sha256'] or r['policy']!=POLICY:
+                raise TranslationError(409,'译句表来源或保护版本已变化，保留原表')
+            require(r['translatable'] in (0,1),'可译状态错误')
+            r['translatable']=bool(r['translatable'])
+            protected=json.loads(r['protected'])
+            require(isinstance(protected,list),'保护范围错误')
+            for p in protected:
+                require(isinstance(p,dict) and set(p)=={'from','to','kind','text'} and type(p['from']) is int and type(p['to']) is int and isinstance(p['kind'],str) and bool(p['kind']) and isinstance(p['text'],str),'保护范围字段错误')
+            r['protected']=protected
+            if state=='ready':
+                check_row(r)
+                data=r['raw'].encode('utf-16-le');end=0;remaining=[]
+                for p in protected:
+                    remaining.append(data[end:p['from']*2].decode('utf-16-le'));end=p['to']*2
+                remaining.append(data[end:].decode('utf-16-le'))
+                rest=''.join(remaining)
+                require(any(c.isalpha() for c in rest) if r['translatable'] else not rest,'可译状态与保护范围不一致')
+            rows.append(r)
+        if state=='legacy':
+            return {'schema':'ocr2md-translation-preparation/v2','state':'legacy'}
+        return {'schema':'ocr2md-translation-preparation/v2','state':'ready','source_document_hash':snapshot['source_document_hash'],'sentence_sha256':snapshot['sentence_sha256'],'rows':rows}
+
 def handle(handler,operation,parsed,common):
     def respond(code,obj):handler.respond(code,json.dumps(obj,ensure_ascii=False),'application/json; charset=utf-8')
     try:
         if common is None:raise TranslationError(503,'Frame 授权服务不可用')
+        if operation=='translation/load':
+            if handler.command!='GET':raise TranslationError(405,'译句加载仅允许 GET')
+            args=parse_qs(parsed.query,keep_blank_values=True)
+            if set(args)!={'workspace'} or len(args['workspace'])!=1:raise TranslationError(422,'译句加载参数错误')
+            cookie=handler.headers.get('Cookie','')
+            folder=common.checked_workspace(args['workspace'][0],common.authorized_roots(cookie))
+            respond(200,read_saved(folder,lambda:public_snapshot(folder,cookie)))
+            return
         if operation!='translation/initialize':raise TranslationError(404,'未知校译接口')
         if handler.command!='POST':raise TranslationError(405,'译句初始化仅允许 POST')
         if handler.headers.get('Origin') not in common.ALLOWED_ORIGINS:raise TranslationError(403,'拒绝未授权来源')

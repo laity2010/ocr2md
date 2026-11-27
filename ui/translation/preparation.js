@@ -1,5 +1,5 @@
 import {template,refill} from './refill.js';
-import {readOriginalSnapshot} from './original-sentences.js';
+import {readOriginalSnapshot,sha256} from './original-sentences.js';
 /** Public, source-bound translation preparation client; backend owns protection. */
 const fields=['source_document_hash','sentence_sha256','source_line_hash','source_line','sentence_index','raw','type','level','policy','protected','translatable','text'].sort();
 const sourceFields=['source_document_hash','source_line_hash','source_line','sentence_index','raw','type','level'];
@@ -35,4 +35,19 @@ export async function initializeTable(workspace,{fetcher=fetch,signal}={}){
   const original=await readOriginalSnapshot(workspace,{fetcher,signal});
   if(signal?.aborted)throw Error('初始化已取消');
   return initializePreparation(workspace,original,{fetcher,signal});
+}
+
+
+/** Ordinary discovery/load: no POST, scan, initialization or migration. The
+ * server validates persisted rows against the current public Sentence snapshot. */
+export async function loadTable(workspace,{fetcher=fetch,signal}={}){
+  const response=await fetcher('/labs/lab-translation/api/translation/load?'+new URLSearchParams({workspace}),{method:'GET',cache:'no-store',credentials:'same-origin',signal});
+  const value=await response.json().catch(()=>null);
+  if(!response.ok)throw Error(typeof value?.error==='string'?value.error:'HTTP '+response.status);
+  check(value?.schema==='ocr2md-translation-preparation/v2'&&['missing','legacy','ready'].includes(value.state),'译句表加载状态无效');
+  if(value.state!=='ready')return Object.freeze({state:value.state});
+  check(/^[0-9a-f]{64}$/.test(value.source_document_hash)&&/^[0-9a-f]{64}$/.test(value.sentence_sha256)&&Array.isArray(value.rows),'译句表摘要或数据无效');
+  const result=validatePreparation(value,{source_document_hash:value.source_document_hash,sentence_sha256:value.sentence_sha256,rows:value.rows});
+  check(await sha256(result.rows.map(r=>r.raw).join(''))===result.source_document_hash,'译句表原文摘要不一致');
+  return result;
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
-import {validatePreparation,initializePreparation,initializeTable} from '../ui/translation/preparation.js';
+import {validatePreparation,initializePreparation,initializeTable,loadTable} from '../ui/translation/preparation.js';
 test('actual Python preparation projected without losing source; rejects bad ranges, identity and flags',async()=>{
   const original=await sampleSnapshot('',true),result=preparedFixture(original),value=validatePreparation(result,original);
   assert.equal(value.rows.length,5);
@@ -33,4 +33,20 @@ test('single logical init: transient GET then POST; cancellation or failure neve
  const controller=new AbortController();
  await assert.rejects(initializeTable('/book',{signal:controller.signal,fetcher:async()=>{controller.abort();return {ok:true,json:async()=>original};}}),/取消/);
  await assert.rejects(initializeTable('/book',{fetcher:async(url,opt)=>opt.method==='GET'?{ok:true,json:async()=>original}:{ok:false,json:async()=>({error:'拒绝覆盖'})}}),/拒绝覆盖/);
+});
+
+
+test('saved table GET only; missing/legacy distinct; ready digest and refill verified',async()=>{
+  const original=await sampleSnapshot('',true),ready=preparedFixture(original,'ready');
+  const fetchValue=value=>async(url,opt)=>{
+    assert.equal(url,'/labs/lab-translation/api/translation/load?workspace=%2Fbook');
+    assert.equal(opt.method,'GET');assert.equal(opt.credentials,'same-origin');assert.equal(opt.body,undefined);
+    return {ok:true,json:async()=>value};
+  };
+  assert.deepEqual(await loadTable('/book',{fetcher:fetchValue(ready)}),ready);
+  for(const state of ['missing','legacy'])assert.deepEqual(await loadTable('/book',{fetcher:fetchValue({schema:ready.schema,state})}),{state});
+  const wrong=structuredClone(ready);wrong.source_document_hash='0'.repeat(64);
+  for(const r of wrong.rows)r.source_document_hash=wrong.source_document_hash;
+  await assert.rejects(loadTable('/book',{fetcher:fetchValue(wrong)}),/摘要/);
+  await assert.rejects(loadTable('/book',{fetcher:async()=>({ok:false,json:async()=>({error:'来源已变化'})})}),/来源已变化/);
 });

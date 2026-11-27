@@ -16,44 +16,64 @@ try{
   const browser=await engine.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1180,height:860},hasTouch:true});
-   const errors=[],reads=[],probes=[];let failed=false,version=0,preparationFailed=false;const prepCalls=[];
+   const errors=[],reads=[],probes=[],loads=[],prepCalls=[];let failed=false,version=0,preparationFailed=false,denied=false,late=null;const persisted=new Map();
    const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true,true),longSnapshot=await sampleSnapshot(' scroll',true,true,72);
    const prepared=preparedFixture(withFormula),oldPrepared=preparedFixture(old),freshPrepared=preparedFixture(fresh),longPrepared=preparedFixture(longSnapshot);
+   persisted.set('/demo/books/d',longPrepared);
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/labs/lab-frame/api/workspace-io/session',r=>r.fulfill({json:{authorized:true}}));
    await page.route('**/labs/lab-frame/api/workspace-io/roots',r=>r.fulfill({json:{allowedRoots:['/demo/books']}}));
-   await page.route('**/labs/lab-frame/api/workspace-io/browse?*',r=>{const path=new URL(r.request().url()).searchParams.get('path');return r.fulfill({json:{path,children:path==='/demo/books'?[{path:'/demo/books/a',name:'a'},{path:'/demo/books/b',name:'b'}]:[]}});});
-   await page.route('**/labs/lab-frame/api/workspace-io/probe',r=>{probes.push(r.request().postDataJSON().workspace);return r.fulfill({json:{verified:true,readable:true,writable:true}});});
+   await page.route('**/labs/lab-frame/api/workspace-io/browse?*',r=>{const path=new URL(r.request().url()).searchParams.get('path');return r.fulfill({json:{path,children:path==='/demo/books'?[{path:'/demo/books/a',name:'a'},{path:'/demo/books/b',name:'b'},{path:'/demo/books/c',name:'c'},{path:'/demo/books/d',name:'d'}]:[]}});});
+   await page.route('**/labs/lab-frame/api/workspace-io/probe',r=>{probes.push(r.request().postDataJSON().workspace);return denied?r.fulfill({status:403,json:{error:'denied'}}):r.fulfill({json:{verified:true,readable:true,writable:true}});});
    await page.route('**/labs/lab-sentence/api/**',r=>{assert.equal(r.request().method(),'GET');const u=new URL(r.request().url());assert(u.pathname.endsWith('/sentence/snapshot'));reads.push(u.searchParams.get('workspace'));return failed?r.fulfill({status:409,json:{error:'句表已过期'}}):r.fulfill({json:version===3?longSnapshot:version===2?withFormula:version?fresh:old});});
+   await page.route('**/labs/lab-translation/api/translation/load?*',async r=>{
+    assert.equal(r.request().method(),'GET');
+    const path=new URL(r.request().url()).searchParams.get('workspace');loads.push(path);
+    const result=persisted.get(path);
+    const reply=failed?{status:409,json:{error:'句表已过期，保留原表'}}:{json:result?{...result,state:'ready'}:{schema:'ocr2md-translation-preparation/v2',state:'missing'}};
+    if(late&&path===late.path){const gate=late;gate.started();await gate.promise;try{await r.fulfill(reply);}catch{}return;}
+    return r.fulfill(reply);
+   });
    await page.route('**/labs/lab-translation/api/translation/initialize',r=>{
     assert.equal(r.request().method(),'POST');
     const input=r.request().postDataJSON();
     const source=version===3?longSnapshot:version===2?withFormula:version?fresh:old;
     assert.deepEqual(input,{workspace:reads.at(-1),source_document_hash:source.source_document_hash,sentence_sha256:source.sentence_sha256});
     prepCalls.push(input);
-    return preparationFailed?r.fulfill({status:409,json:{error:'已有译句表不一致，拒绝覆盖'}}):r.fulfill({json:version===3?longPrepared:version===2?prepared:version?freshPrepared:oldPrepared});
+    if(preparationFailed)return r.fulfill({status:409,json:{error:'已有译句表不一致，拒绝覆盖'}});
+    const result=version===3?longPrepared:version===2?prepared:version?freshPrepared:oldPrepared;
+    persisted.set(input.workspace,result);return r.fulfill({json:result});
    });
    await page.goto(HOST,{waitUntil:'domcontentloaded'});
    const settings=page.locator('#settings-workspace'),workspace=page.locator('#workspace'),grid=workspace.locator('.ocr-outline-grid');
    const nav=scope=>scope.locator('.ocr-source-file-select');
-   const chooseNav=async(scope,value)=>{const wrapper=scope.locator('.ocr-navigation-files.ts-wrapper');await wrapper.locator('.ts-control').click();await page.locator('.ocr-navigation-popup-files:visible [data-value="'+value+'"]').click();};
+   const chooseNav=async(scope,value)=>{const wrapper=scope.locator('.ocr-navigation-files.ts-wrapper');if(!(await wrapper.evaluate(el=>el.classList.contains('dropdown-active'))))await wrapper.locator('.ts-control').click();else console.log('SQL_NAV_RESTORED_FOCUS',name);await page.locator('.ocr-navigation-popup-files:visible [data-value="'+value+'"]').click();};
    const tableOption=scope=>nav(scope).locator('option[value="translation"]');
    const count=n=>page.waitForFunction(n=>document.querySelectorAll('#workspace .ocr-outline-grid .ag-row').length===n,n,{timeout:10000});
    await settings.locator('.ag-row').first().waitFor();
    assert.equal(await nav(settings).locator('optgroup[label="SQL"]').count(),0);assert.equal(reads.length,0);
-   async function bind(path){
+   const dialog=page.locator('#translation-sql-actions-dialog');
+   const openSQL=async(scope,keyboard=false)=>{const wrapper=scope.locator('.ocr-navigation-files.ts-wrapper');if(!(await wrapper.evaluate(el=>el.classList.contains('dropdown-active'))))await wrapper.locator('.ts-control').click();else console.log('SQL_NAV_RESTORED_FOCUS',name);const h=page.locator('.ocr-navigation-popup-files:visible .optgroup-header').filter({hasText:/^SQL$/});await h.waitFor();if(keyboard)await page.keyboard.press('Alt+Enter');else if(name==='iPad-WebKit')await h.tap();else await h.click();await dialog.waitFor();};
+   const init=async()=>{await openSQL(settings);await dialog.getByRole('button',{name:'初始化译句表',exact:true}).click();};
+   const waitStatus=text=>page.waitForFunction(text=>document.querySelector('#status')?.textContent.includes(text),text);
+   async function adopt(path){
     await settings.locator('.ag-row',{hasText:'dataDirectory'}).click();await page.getByRole('button',{name:'打开目录树'}).click();
     const root=page.locator('wa-tree-item[data-path="/demo/books"]');await root.waitFor();
     if(!(await root.evaluate(el=>el.expanded)))await root.locator('[part="expand-button"]').first().click();
     const child=page.locator('wa-tree-item[data-path="'+path+'"]');await child.waitFor();await child.locator('[part="item"]').first().click();await page.getByRole('button',{name:'采用选中目录'}).click();
     await page.waitForFunction(path=>document.querySelector('[aria-label="当前资料目录"]')?.value===path,path);
-    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可 SQL 初始化')&&document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql-init"]'));
-    assert.equal(probes.at(-1),path);
    }
-   await bind('/demo/books/a');assert.equal(reads.length,0);assert.equal(await tableOption(settings).count(),0);
-   await page.locator('#global-save').click();await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')?.includes('/demo/books/a')&&document.querySelector('#status')?.textContent.includes('可 SQL 初始化'));
-   await chooseNav(settings,'sql-init');await workspace.waitFor({state:'visible'});await count(4);
-   assert.deepEqual(reads,['/demo/books/a']);assert.equal(await tableOption(workspace).count(),1);assert.deepEqual(await nav(workspace).locator('optgroup[label="SQL"] option').evaluateAll(xs=>xs.map(x=>x.value)),['sql-init','translation']);assert.equal(await workspace.locator('.dv-content-container').count(),3);
+   async function bind(path,status='尚无译句表'){await adopt(path);await waitStatus(status);assert.equal(probes.at(-1),path);}
+   await bind('/demo/books/a');assert.equal(reads.length,0);assert.equal(prepCalls.length,0);assert.equal(await tableOption(settings).count(),0);
+   assert.equal(await nav(settings).locator('optgroup[label="SQL"] option:enabled').count(),0);
+   await page.locator('#global-save').click();await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')?.includes('/demo/books/a'));await waitStatus('尚无译句表');
+   // Startup with no table stays in settings and performs no initialization.
+   await page.reload({waitUntil:'domcontentloaded'});await settings.locator('.ag-row').first().waitFor();await waitStatus('尚无译句表');assert.equal(prepCalls.length,0);
+   const beforeCancel=loads.length;
+   await openSQL(settings,true);await dialog.getByRole('button',{name:'取消'}).click();assert.equal(await nav(settings).inputValue(),'settings');assert.equal(prepCalls.length,0);assert.equal(loads.length,beforeCancel);
+   await init();await workspace.waitFor({state:'visible'});await count(4);
+   assert.deepEqual(reads,['/demo/books/a']);assert.equal(prepCalls.length,1);assert.equal(await tableOption(workspace).count(),1);assert.deepEqual(await nav(workspace).locator('optgroup[label="SQL"] option').evaluateAll(xs=>xs.map(x=>x.value)),['translation']);assert.equal(await workspace.locator('.dv-content-container').count(),3);
+   await openSQL(workspace);assert.equal(await dialog.getByRole('button',{name:'初始化译句表',exact:true}).isDisabled(),true);await dialog.getByRole('button',{name:'取消'}).click();assert.equal(await nav(workspace).inputValue(),'translation');assert.equal(prepCalls.length,1);
    assert.equal((await workspace.locator('#editor .cm-content .cm-line').first().textContent()),'# Heading');
    assert.equal(await workspace.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
    assert.equal(await workspace.locator('.ocr-preview-md-scroll h1').textContent(),'Heading');assert.equal(await workspace.locator('#undo').isDisabled(),true);assert.equal(await workspace.locator('#redo').isDisabled(),true);
@@ -63,15 +83,17 @@ try{
    const openFilter=async()=>{await grid.locator('.ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=320);const button=grid.locator('.ag-header-cell[col-id="type"] .ag-header-cell-filter-button');await button.waitFor();if(name==='iPad-WebKit')await button.tap();else await button.click();const pop=page.locator('.ocr-enum-filter[aria-label="type 筛选"]:visible');await pop.waitFor();return pop;};
    let popup=await openFilter();let cb=v=>popup.locator(`[data-filter-value="${v}"] input`);
    assert.equal(await cb('all').isChecked(),true);await cb('all').uncheck();await count(0);await cb('title').check();await count(1);await cb('text').check();await count(3);
-   await page.keyboard.press('Escape');await chooseNav(workspace,'sql-init');await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('译句表 ·'));await count(3);
+   await page.keyboard.press('Escape');await chooseNav(workspace,'settings');await waitStatus('已有译句表');assert.equal(await settings.isVisible(),true);const beforeLoad=loads.length;await chooseNav(settings,'translation');await workspace.waitFor({state:'visible'});await count(3);assert.equal(loads.length,beforeLoad+1);assert.equal(prepCalls.length,1);
    popup=await openFilter();assert.equal(await cb('title').isChecked(),true);assert.equal(await cb('text').isChecked(),true);assert.equal(await cb('table_body').isChecked(),false);await cb('all').check();await count(4);await page.keyboard.press('Escape');
-   await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/b');assert.equal(await tableOption(settings).count(),0);await count(0);
-   failed=true;await chooseNav(settings,'sql-init');await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('SQL 初始化失败'));assert.equal(await tableOption(settings).count(),0);assert.equal(await workspace.isVisible(),false);
-   failed=false;version=2;preparationFailed=true;await chooseNav(settings,'sql-init');
-   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('SQL 初始化失败'));
-   assert.equal(await tableOption(settings).count(),0);await count(0);
-   assert.equal(await workspace.isVisible(),false);
-   preparationFailed=false;await chooseNav(settings,'sql-init');
+   await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await waitStatus('已有译句表');
+   failed=true;await bind('/demo/books/b','译句表加载失败');assert.equal(await tableOption(settings).count(),0);await count(0);assert.equal(await workspace.isVisible(),false);
+   await openSQL(settings);assert.equal(await dialog.getByRole('button',{name:'初始化译句表',exact:true}).isDisabled(),true);assert.equal(prepCalls.length,1);
+   failed=false;await dialog.getByRole('button',{name:'重新检查'}).click();await waitStatus('尚无译句表');
+   version=2;preparationFailed=true;await init();await waitStatus('SQL 初始化失败');assert.equal(await tableOption(settings).count(),0);await count(0);assert.equal(await workspace.isVisible(),false);
+   preparationFailed=false;await openSQL(settings);await dialog.getByRole('button',{name:'重新检查'}).click();await waitStatus('尚无译句表');
+   // Save the selected book before creating; saving is read-only discovery.
+   await page.locator('#global-save').click();await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')?.includes('/demo/books/b'));await waitStatus('尚无译句表');
+   await init();
    await workspace.waitFor({state:'visible'});await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可翻译 4 句'));
    await count(5);assert.equal(await tableOption(workspace).count(),1);
    assert.equal(reads.at(-1),'/demo/books/b');
@@ -253,31 +275,29 @@ try{
    await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ag-row [col-id="protected"]')].some(el=>el.textContent.includes('latex')&&el.textContent.includes('$$x=1$$')));
    await revealColumn('text');
    await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ag-row [col-id="text"]')].some(el=>el.textContent.includes('⟦P0⟧')));
-   await chooseNav(workspace,'translation');await count(1);
+   await chooseNav(workspace,'settings');await waitStatus('已有译句表');await chooseNav(settings,'translation');await workspace.waitFor({state:'visible'});await count(1);
    // AG filtering never changes the export.
    await mode.selectOption('json');
    const filteredDownload=page.waitForEvent('download');await exportButton.click();
    assert.equal(await readFile(await (await filteredDownload).path(),'utf8'),expectedJSON.text);
 
-   await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/a');
+   await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await waitStatus('已有译句表');await bind('/demo/books/c');
    assert.equal(await nav(settings).locator('option[value="translation"]').count(),0);await count(0);
    assert.equal((await source.locator('.cm-content').textContent()).trim(),'');assert.equal(await preview.locator('h1').count(),0);
    assert.equal((await jsonHost.locator('.cm-content').textContent()).trim(),'');
    assert.equal(await workspace.locator('.translation-json-actions button').isDisabled(),true);
 
-   assert.equal(prepCalls.length,4);
+   assert.equal(prepCalls.length,3);
    // Reload: only the explicitly saved Prompt survives; history is session-local.
    await page.reload({waitUntil:'domcontentloaded'});
-   await settings.locator('.ag-row').first().waitFor();
-   await page.waitForFunction(()=>document.querySelector('#settings-workspace .ocr-source-file-select option[value="sql-init"]'));
-   await chooseNav(settings,'sql-init');await workspace.waitFor({state:'visible'});await count(5);
+   await workspace.waitFor({state:'visible'});await count(5);assert.equal(prepCalls.length,3);assert.equal(loads.at(-1),'/demo/books/b');
    await workspace.locator('.ocr-preview-mode').selectOption('prompt');
    assert.match(await workspace.locator('.translation-prompt-editor .cm-line').first().textContent(),/WP04draft/);
    assert.equal(await workspace.locator('#prompt-undo').isDisabled(),true);
    assert.equal(await workspace.locator('#prompt-redo').isDisabled(),true);
    // Long document: the one full source retains stable navigation.
    await workspace.locator('.ocr-preview-mode').selectOption('md');
-   version=3;await chooseNav(workspace,'sql-init');
+   version=3;await chooseNav(workspace,'settings');await waitStatus('已有译句表');await bind('/demo/books/d','已有译句表');assert.equal(await settings.isVisible(),true);await chooseNav(settings,'translation');
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可翻译 76 句'));
    assert.equal(await workspace.locator('#prepared-editor').count(),0);
    assert.equal(await workspace.locator('.ocr-ag-module-select option').count(),1);
@@ -287,7 +307,15 @@ try{
    await visible.click();
    await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].some(el=>/ROW_0[4-6]\d/.test(el.textContent)));
    assert((await grid.locator('.ag-row-selected').count())>0);
-   console.log('TRANSLATION_WP04_BROWSER_PASS',name,'three panes, independent Prompt, undo/redo, save/reload, reading preserved');
+   // Late response for another authorized book cannot repopulate the new empty book.
+   await chooseNav(workspace,'settings');await waitStatus('已有译句表');
+   let release,started;const promise=new Promise(r=>release=r),seen=new Promise(r=>started=r);late={path:'/demo/books/b',promise,started};
+   await adopt('/demo/books/b');await seen;await bind('/demo/books/c');release();late=null;await sleep(200);
+   assert.equal(await tableOption(settings).count(),0);await count(0);assert.equal((await source.locator('.cm-content').textContent()).trim(),'');
+   denied=true;await bind('/demo/books/d','工作区文件读写验证失败');assert.equal(await nav(settings).locator('optgroup[label="SQL"]').count(),0);
+   denied=false;await bind('/demo/books/d','已有译句表');await chooseNav(settings,'translation');await workspace.waitFor({state:'visible'});assert.equal(prepCalls.length,3);
+   console.log('TRANSLATION_WP05A1_BROWSER_PASS',name,'SQL group modal, cancel/keyboard/touch, no fake table, GET-only restore and switching, no automatic POST, stale/denied/late cleared',JSON.stringify({loads,prepCalls:prepCalls.length}));
+   console.log('TRANSLATION_WP04_BROWSER_PASS' ,name,'three panes, independent Prompt, undo/redo, save/reload, reading preserved');
    console.log('TRANSLATION_WP04F1_BROWSER_PASS',name,'one init, one table, raw/text/refill, filter, stale refusal, source/preview and Prompt preserved');
    assert.deepEqual(errors,[]);console.log('TRANSLATION_WP01_BROWSER_PASS',name,'bind/init/raw/readonly/native all/multi/refresh/change/failure/retry',JSON.stringify({reads,probes}));
   }finally{await browser.close();}

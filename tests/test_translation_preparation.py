@@ -168,6 +168,69 @@ class PreparationTests(unittest.TestCase):
                 digest=path.read_bytes()
                 self.assertEqual(runtime.initialize(folder,s['source_document_hash'],s['sentence_sha256'],lambda:s)['state'],'ready')
                 self.assertEqual(path.read_bytes(),digest)
+
+    def test_read_saved_without_scanning_writing_or_migrating(self):
+        s=snapshot('One $x$.\n\nTwo.\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp);path=folder/runtime.DB_NAME
+            with self.assertRaises(runtime.TranslationError):runtime.read_saved(folder,lambda:s)
+            self.assertFalse(path.exists())
+            with closing(sqlite3.connect(path)) as db:
+                db.executescript("CREATE TABLE sentence(id,raw);INSERT INTO sentence VALUES(1,'keep');")
+            before=path.read_bytes()
+            with patch.object(runtime,'build_rows',side_effect=AssertionError('scanner forbidden')):
+                self.assertEqual(runtime.read_saved(folder,lambda:s)['state'],'missing')
+            self.assertEqual(path.read_bytes(),before)
+            expected=runtime.initialize(folder,s['source_document_hash'],s['sentence_sha256'],lambda:s)
+            before=path.read_bytes()
+            with patch.object(runtime,'build_rows',side_effect=AssertionError('scanner forbidden')), closing(sqlite3.connect(path)) as writer:
+                # A concurrent RESERVED writer would reject BEGIN IMMEDIATE.
+                writer.execute('BEGIN IMMEDIATE')
+                ready=runtime.read_saved(folder,lambda:s)
+                self.assertEqual(ready,{**expected,'state':'ready'})
+                writer.rollback()
+                stale=snapshot('Different.\n')
+                with self.assertRaises(runtime.TranslationError):runtime.read_saved(folder,lambda:stale)
+            self.assertEqual(path.read_bytes(),before)
+            with closing(sqlite3.connect(path)) as db:
+                self.assertEqual(db.execute('SELECT * FROM sentence').fetchall(),[(1,'keep')])
+                db.execute("UPDATE translation SET text='tampered' WHERE source_line=1");db.commit()
+            before=path.read_bytes()
+            with self.assertRaises(ValueError):runtime.read_saved(folder,lambda:s)
+            self.assertEqual(path.read_bytes(),before)
+    def test_read_legacy_requires_explicit_migration_and_empty_is_not_missing(self):
+        s=snapshot('One $x$.\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp);path=folder/runtime.DB_NAME
+            with closing(sqlite3.connect(path)) as db:
+                db.execute(runtime.LEGACY_DDL)
+                db.executemany('INSERT INTO translation VALUES ('+','.join('?' for _ in runtime.LEGACY_FIELDS)+')',[r[:-1] for r in runtime.sql_rows(build_rows(s))])
+                db.commit()
+            before=path.read_bytes()
+            with patch.object(runtime,'build_rows',side_effect=AssertionError('scanner forbidden')):
+                self.assertEqual(runtime.read_saved(folder,lambda:s)['state'],'legacy')
+            self.assertEqual(path.read_bytes(),before)
+            with closing(sqlite3.connect(path)) as db:
+                db.execute('DELETE FROM translation');db.commit()
+            before=path.read_bytes()
+            with self.assertRaises(runtime.TranslationError):runtime.read_saved(folder,lambda:s)
+            self.assertEqual(path.read_bytes(),before)
+    def test_read_http_contract(self):
+        def call(method='GET',cookie='valid',query='workspace=%2Ffixture'):
+            out=[]
+            h=types.SimpleNamespace(command=method,headers={'Cookie':cookie},respond=lambda code,body,*_:out.append((code,json.loads(body))))
+            def roots(value):
+                if value!='valid':raise runtime.TranslationError(403,'denied')
+                return []
+            common=types.SimpleNamespace(authorized_roots=roots,checked_workspace=lambda p,r:Path(p))
+            with patch.object(runtime,'read_saved',return_value={'state':'missing'}) as read,patch.object(runtime,'initialize',side_effect=AssertionError('write forbidden')):
+                runtime.handle(h,'translation/load',urlsplit('/?'+query),common)
+                return out[0][0],read.call_count
+        self.assertEqual(call(),(200,1))
+        self.assertEqual(call(method='POST'),(405,0))
+        self.assertEqual(call(cookie='bad'),(403,0))
+        self.assertEqual(call(query='workspace=a&workspace=b'),(422,0))
+        self.assertEqual(call(query='workspace=a&other=b'),(422,0))
     def test_http_contract(self):
         s=snapshot('Hello.\n')
         p={'workspace':'/fixture','source_document_hash':s['source_document_hash'],'sentence_sha256':s['sentence_sha256']}

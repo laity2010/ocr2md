@@ -1,14 +1,14 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP05A，继承 WP00–04F6）
+## 当前可运行基线（WP05A1，继承 WP00–05A）
 
-独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt / JSON（WP05A）。
+独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。已保存且授权的目录有合法译句表时启动自动进入；否则打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt / JSON（WP05A）。
 
-唯一正式入口 `/labs/lab-translation/`，通过统一 `release/` manifest 与门户登记；使用现有网关和 `/labs/lab-frame/api/workspace-io/` 公共 F02，不增加端口或 Tunnel。浏览器设置键 `ocr2md.lab-translation.settings.json.v1`，不读取 Frame、V2 或 Sentence 的设置。F02 授权仍由 Frame 的独立签名会话及目录白名单负责；用户主动选择目录时才按 Frame 约定探针，WP01 不自动读取 SQL。
+唯一正式入口 `/labs/lab-translation/`，通过统一 `release/` manifest 与门户登记；使用现有网关和 `/labs/lab-frame/api/workspace-io/` 公共 F02，不增加端口或 Tunnel。浏览器设置键 `ocr2md.lab-translation.settings.json.v1`，不读取 Frame、V2 或 Sentence 的设置。F02 授权仍由 Frame 的独立签名会话及目录白名单负责；启动及选择目录按 Frame 约定探针，通过后只读发现 SQL；不自动初始化。
 
 ## WP04F1 · 单一译句表、统一 SQL 初始化及回填
 
-本州唯一业务表为 `translation`（位于授权书籍的 `ocr2md.v2.sqlite`）；上游 Sentence 州仅为只读输入，不提供独立原句表界面或缓存会话。目录验证后 SQL 组仅显示「SQL 初始化」；一次操作完成上游快照只读获取、保护识别、生成/校验本州译句表、阅读模型装载；成功后 SQL 组增加唯一「译句表」并自动进入。原 AG、源码、MD 预览、Prompt 位置不变。未绑定不显示 SQL 组；失败或换目录清空旧数据和导航，迟到响应不能覆盖新目录。原句 GET 是初始化内部的短暂校验输入，不持有第二份业务快照。CM6/MD 阅读直接从译句表 raw 拼接、protected 淡化。
+本州唯一业务表为 `translation`（位于授权书籍的 `ocr2md.v2.sqlite`）；上游 Sentence 州仅为只读输入，不提供独立原句表界面或缓存会话。目录验证后 SQL 组标题打开「SQL · 数据操作」；仅在缺表或可补全旧表时允许用户显式初始化，成功后 SQL 组增加唯一「译句表」并自动进入。已有表通过独立 GET 只读加载，不重新识别。原 AG、源码、MD 预览、Prompt 位置不变。未绑定不显示 SQL 组；失败或换目录清空旧数据和导航，迟到响应不能覆盖新目录。原句 GET 是初始化与只读加载内部的短暂校验输入，不持有第二份业务快照。CM6/MD 阅读直接从译句表 raw 拼接、protected 淡化。
 
 字段：source_line（MDLine）、sentence_index（联合主键）、raw（完整原句）、type、level（继承上游）、text（待校译文本）、protected（唯一回填清单，JSON 有序非重叠半开 UTF-16 区间 `{from,to,kind,text}`）、translatable（0/1），policy/source_line_hash/source_document_hash/sentence_sha256（来源及识别身份）。不重复保存 fill_list。占位符按本句 protected 的序号生成 ⟦P0⟧、⟦P1⟧…；若 RAW 含该前缀，逐次在 P 后加下划线直到无碰撞。每句作用域独立。全文保留所有句，包括整句不可翻译、空行、末尾 LF；整句不可译的 text 仍为完整保护占位符序列。回填一次扫描，拒绝未知、重复、缺失、畸形占位符。初始化强制校验每条 text 为规范模板、回填与 raw 逐字符一致、全书回填 SHA 等于上游 source_document_hash；浏览器独立重算模板和回填，并逐行核对上游瞬时快照，未通过则不进入界面。
 
@@ -24,6 +24,14 @@
 | initializeTable / initializePreparation / validatePreparation | 单次逻辑初始化、双摘要和逐行回填验证、取消和失败不返回中间表；tests/translation-preparation.test.mjs |
 | createFrameWorkspace.setTranslationRows / createReadingDocument(table) | 单表 AG 与 RAW 阅读坐标；tests/translation-reading.test.mjs、双浏览器门禁 |
 
+## WP05A1 · 联邦 SQL 导航与自动恢复
+
+遵守 COMM.md 第 5 节，复用 V2 Tom Select SQL 组标题/原生 dialog 交互及同款配色。未授权不出现 SQL 组；授权后即使无表也以不可选提示保留组标题，绝无「SQL 初始化」伪表项。点击标题或导航 Alt+Enter 打开弹窗；取消不执行操作。仅已有合法表作为唯一可选「译句表」。首次建表按钮仅在上游已保存原句且无表时可用；旧同源 WP02 表显示显式补全字段（不覆盖原有数据）；合法表不需初始化，来源不匹配、未知结构或权限/读取失败不自动重建，弹窗提供只读重新检查。没有危险重建操作。
+
+GET translation/load?workspace=... 使用 F02 授权、SQLite mode=ro、普通读事务、仅本州 translation 与 SQLite 元数据 authorizer；只读公共 Sentence 快照确认来源、句序、RAW、类型和摘要，不调用 build_rows/scan、不写事务、不建表或迁移。状态 missing/legacy/ready；错误保留原表。ready 从数据库读取保护及 text，校验字段、占位与回填，并由客户端复核 RAW 摘要和现有派生视图。启动/刷新自动进入已有合法译句表；进入设置、切换目录、保存设置只读发现，留在设置直至用户选择已有表；用户主动选择表项执行 GET 只读加载。路径变化和授权失败清空旧 AG、源码、Markdown 与 JSON，旧响应不能覆盖新目录。Prompt 草稿与历史仍独立、不会被目录切换重建。
+
+直接测试：tests/test_translation_preparation.py（真实 SQLite、禁止扫描、并发 RESERVED 写锁下只读、库字节不变、缺表/旧表/过期及 HTTP 权限）；tests/translation-preparation.test.mjs（GET、摘要和回填）；tests/cross-version-ag-filter.browser.test.mjs（Chromium/iPad-WebKit SQL 组弹窗、取消/键盘/触控、无表不自动初始化、GET 恢复、过期和授权及切换竞态、既有视图回归）。本州正式发布器执行上述直接测试及现有跨版本浏览器门禁；联邦通用专项检查器仍不在本航点范围。
+
 ## WP04F6 · 单原句视图与三窗高亮
 
 原句表为 AG 唯一业务视图，完整显示所有句记录（raw 为主列，text、protected、translatable 等原字段仍可核对）。移除 WP04F2–F4 的待译独立视图、第二源码窗、分隔线、句级双窗滚动及过滤正文投影；不保留隐藏编辑器或平行数据状态。原生列值筛选仍只影响 AG 行，不能改变原文和 MD 预览；全部 RAW 及其物理行号和最终保存句界保留。源码、MD 预览使用同一完整阅读模型；AG、源码、MD 预览按原句身份同步定位，包括整句不可译记录。AG 原生选中行与源码焦点、预览焦点统一橙色底 rgba(235,163,82,.18)，保留各窗口原有结构、字体和原生控件。WP04F5 的保护色 #505e55、暗底 #25302c、细下边线及 V2 引用原色不变。Prompt 编辑仍独立。text 与回填清单不删除，留待 WP05 导出；SQL、上游及其他州不变。
@@ -32,7 +40,7 @@
 
 ## WP03 · 无损 MDLine 阅读与保护淡化
 
-统一 SQL 初始化成功后，AG 与两阅读窗共享译句表。原句 RAW 按上游顺序直接拼接，无插入、删除、规范化或重新分句；物理行号及 UTF-16 半开区间校验，末尾 LF 与空行保留。CM6 唯一只读正文，禁编辑及非装载文本事务，不增加历史或写入接口。已验证的 protected 逐句范围转换为全文坐标，源码采用 CM6 Decoration 淡化；导航切换不重复建表或写 SQL。来源变化或失败清空过期阅读/保护状态。WP03 当时保留 Frame、导航、字号、PDF 空白占位及 Prompt 边界；WP04 仅替换预览模式。
+译句表只读加载或首次初始化成功后，AG 与两阅读窗共享译句表。原句 RAW 按上游顺序直接拼接，无插入、删除、规范化或重新分句；物理行号及 UTF-16 半开区间校验，末尾 LF 与空行保留。CM6 唯一只读正文，禁编辑及非装载文本事务，不增加历史或写入接口。已验证的 protected 逐句范围转换为全文坐标，源码采用 CM6 Decoration 淡化；导航切换不重复建表或写 SQL。来源变化或失败清空过期阅读/保护状态。WP03 当时保留 Frame、导航、字号、PDF 空白占位及 Prompt 边界；WP04 仅替换预览模式。
 
 预览复用 V2 已验收的 markdown-preview、latex-inline-preview、裸媒体识别、CSS 与公共脚注卡片、局部授权媒体 URL；不调用 V2 可编辑会话。唯一校译阅读适配为可选 completeTableBoundary 解析规则，解决闭合 HTML 表格紧接独立公式时被 Markdown-it 吞入同一 HTML 块的问题，保留原物理行号。以 CM6 当前文本渲染，经既有 DOMPurify 消毒。已渲染的数学、代码、媒体、注号等不翻译元素以原保护范围和渲染物理行映射匹配，普通文本精确匹配后仅淡化对应部分；隐藏语法不强制显示。不对无法精确匹配的渲染归一化文本猜测字符映射。预览多句同一段落定位允许回退至映射块首行；源与 AG 按精确原句身份定位。未使用远端媒体下载/采用接口。
 
@@ -58,7 +66,7 @@ WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。
 
 ## WP05A · 待译句 JSON 预览与下载
 
-SQL 初始化验证后，同一份冻结译句表生成唯一派生的 JSON 文本；现有预览下拉增加 JSON，只读 CM6（行号、JSON 语法着色），不改源码、AG 或 Prompt。工具栏「导出 JSON」手动下载 sentences.json，UTF-8，无 BOM，预览与下载同一字符串（含末尾 LF）。未初始化禁用下载，目录变化/失败清除 JSON；切换及下载不读写 SQL，AG 筛选不影响内容。此航点不写书籍目录、不创建 trans、不导出 prompt.md。
+译句表加载或初始化验证后，同一份冻结译句表生成唯一派生的 JSON 文本；现有预览下拉增加 JSON，只读 CM6（行号、JSON 语法着色），不改源码、AG 或 Prompt。工具栏「导出 JSON」手动下载 sentences.json，UTF-8，无 BOM，预览与下载同一字符串（含末尾 LF）。未初始化禁用下载，目录变化/失败清除 JSON；切换及下载不读写 SQL，AG 筛选不影响内容。此航点不写书籍目录、不创建 trans、不导出 prompt.md。
 
 输入结构 ocr2md-trans/v1：schema、task_id（去除 task_id 的规范字段顺序 JSON.stringify 的 SHA-256）、source_sha256（原文摘要）、sentence_sha256（已保存分句摘要）、target_language（暂为 zh-CN）、mdlines（按原 source_line 分组，继承 type/level；每组 sentences 保留原 sentence_index 与 text）。仅 translatable=true；整句不可译省略、不重新编号，保留占位符原样，不输出 raw、protected 原值、绝对路径及内部 SQL 字段。回填原值仅留本地。生成器复验每句 text 与回填及全文 RAW SHA，任务 ID 随输入/目标语言变化；尚不绑定 Prompt 摘要，正式工作目录任务协议在下一航点确定。createTranslationJSON(table,options) 为唯一生成器，tests/translation-export-json.test.mjs 验证字段、身份、无损和确定性；mountJSONPreview 由双浏览器验收实际只读预览与下载字节、切换及清理。
 

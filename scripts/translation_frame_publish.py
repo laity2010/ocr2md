@@ -10,6 +10,8 @@ base.CARD='''      <article id="lab-translation"><div class="kind">Translation L
 '''
 if __name__=='__main__':
     root=base.ROOT.parent.parent
+    subprocess.run([sys.executable,'-m','unittest','discover','-s','tests','-p','test_translation_preparation.py','-v'],cwd=base.ROOT,check=True)
+    subprocess.run(['node','--test','tests/translation-preparation.test.mjs'],cwd=base.ROOT,check=True)
     subprocess.run([sys.executable,str(root/'main/scripts/verify_cross_version_components.py'),'--target',base.NAME,'--browser'],check=True)
     base.require_workspace_io_runtime()
     base.publish(root/'release')

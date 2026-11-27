@@ -1,0 +1,19 @@
+#translation-sql-actions-dialog{
+  padding:20px 22px 18px;width:min(410px,calc(100vw - 32px));max-width:100%;
+  box-sizing:border-box;border:1px solid #72816e;border-radius:10px;
+  background:#293b3c;color:#d3c6aa;
+  font:var(--ocr-navigation-font-size,10pt)/1.5 'OCR2MD Sarasa',monospace}
+#translation-sql-actions-dialog::backdrop{background:rgba(0,0,0,.62)}
+#translation-sql-actions-dialog h2{font:inherit;font-size:1.22em;font-weight:700;
+  margin:0 0 12px;color:#a7c080}
+#translation-sql-actions-dialog p{margin:10px 0;overflow-wrap:anywhere}
+#translation-sql-actions-dialog .translation-sql-actions-info{opacity:.92}
+#translation-sql-actions-dialog .translation-sql-actions-warning{color:#e5bd80}
+#translation-sql-actions-dialog .translation-sql-actions-buttons{display:flex;gap:9px;flex-wrap:wrap;margin:16px 0}
+#translation-sql-actions-dialog button{min-height:38px;padding:7px 13px;border-radius:6px;
+  border:1px solid #60766b;background:#344349;color:#d3c6aa;font:inherit;cursor:pointer}
+#translation-sql-actions-dialog button:disabled{opacity:.42;cursor:default}
+#translation-sql-actions-dialog .translation-sql-action-rebuild{border-color:#bc9e6c}
+#translation-sql-actions-dialog .translation-sql-action-close{display:block;margin-left:auto;min-height:34px}
+.ocr-navigation-popup-files .optgroup-header[role="button"]{cursor:pointer}
+.ocr-navigation-popup-files .optgroup-header[role="button"]:focus-visible{outline:1px solid #a7c080;outline-offset:-1px}

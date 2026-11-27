@@ -3,7 +3,8 @@ import '../styles.css';
 import '../obsidian-everforest.css';
 import './frame.css';
 import {createFrameWorkspace} from './layout.js';
-import {initializeTable} from '../translation/preparation.js';
+import {initializeTable,loadTable} from '../translation/preparation.js';
+import {wireSQLGroup,createSQLActions} from '../translation/sql-actions.js';
 import {createReadingDocument} from '../translation/document.js';
 import {createTranslationJSON} from '../translation/export-json.js';
 import {startFrameAutoUpdate} from './refresh.js';
@@ -33,9 +34,13 @@ let settings=null,loadingSettings=null,currentModule='frame';
 // Only one I/O probe may publish status; switching Settings cancels older
 // announcements without touching the shared status or Save component.
 let probeGeneration=0,verifiedPath='',selectedPath='';
-let preparation=null,preparationRequest=null;
+let preparation=null,preparationRequest=null,sqlState='unknown',sqlMessage='';
+let startup=true;
+const sqlActions=createSQLActions(()=>void loadSQL({initialize:true,open:true}),()=>void loadSQL());
+function openSQLActions(){if(verifiedPath)sqlActions.open(sqlState,sqlMessage,Boolean(preparationRequest));}
+wireSQLGroup(frameFileSelect,openSQLActions);
 function clearPreparation(){
-  preparationRequest?.abort();preparationRequest=null;preparation=null;
+  preparationRequest?.abort();preparationRequest=null;preparation=null;sqlState='unknown';sqlMessage='';sqlActions.close();
   frame.setTranslationRows(null);frame.setReadingDocument(null);frame.setJSONArtifact(null);syncNavigation();
 }
 function settingsNav(){return $('settings-workspace').querySelector('.ocr-source-file-select');}
@@ -45,37 +50,58 @@ function syncNavigation(){
     select.querySelector('optgroup[label="SQL"]')?.remove();
     if(verifiedPath){
       const group=document.createElement('optgroup');group.label='SQL';
-      group.append(new Option('SQL 初始化','sql-init'));
-      if(preparation)group.append(new Option('译句表','translation'));
+      if(preparation&&sqlState==='ready')group.append(new Option('译句表','translation'));
+      else{const hint=new Option('尚无可加载表','sql-empty');hint.disabled=true;group.append(hint);}
       select.prepend(group);
     }
     select.value=select===frameFileSelect?(preparation?'translation':''):'settings';
     select.ocrNavigationSelect?.refresh();
   }
 }
-async function initializeSQL(){
+async function loadSQL({initialize=false,open=false}={}){
   const path=verifiedPath;
-  if(!path||path!==selectedPath||preparationRequest)return;
+  if(!path||path!==selectedPath)return;
+  if(initialize&&(!['missing','legacy'].includes(sqlState)||preparationRequest))return;
+  preparationRequest?.abort();sqlActions.close();
   const controller=new AbortController();preparationRequest=controller;
-  topStatus('正在初始化译句表及无损回填校验…');
+  const current=()=>preparationRequest===controller&&verifiedPath===path&&selectedPath===path;
+  topStatus(initialize?'正在初始化译句表及无损回填校验…':'正在只读检查译句表…');
   try{
-    const result=await initializeTable(path,{signal:controller.signal});
-    if(preparationRequest!==controller||verifiedPath!==path||selectedPath!==path)return;
+    const result=await (initialize?initializeTable:loadTable)(path,{signal:controller.signal});
+    if(!current())return;
+    if(!initialize&&result.state!=='ready'){
+      clearPreparation();sqlState=result.state;
+      if(currentModule==='translation'){currentModule='settings';$('workspace').hidden=true;$('settings-workspace').hidden=false;settings?.activate();}
+      syncNavigation();
+      topStatus(result.state==='legacy'?'旧译句表需要补全字段 · 请打开 SQL 组':'尚无译句表 · 请打开 SQL 组初始化','warning');
+      return;
+    }
     const model=createReadingDocument(result);
     const artifact=await createTranslationJSON(result);
-    if(preparationRequest!==controller||verifiedPath!==path||selectedPath!==path)return;
-    preparation=result;frame.setTranslationRows(result.rows);frame.setReadingDocument(model,path);frame.setJSONArtifact(artifact);
-    await showModule('translation');
+    if(!current())return;
+    preparation=result;sqlState='ready';sqlMessage='';
+    frame.setTranslationRows(result.rows);frame.setReadingDocument(model,path);frame.setJSONArtifact(artifact);
+    syncNavigation();
+    if((open&&currentModule==='settings')||currentModule==='translation')enterTranslation();
+    else topStatus('✓ 已有译句表 · '+result.rows.length+' 句 · 可直接加载','ok');
   }catch(error){
-    if(preparationRequest!==controller)return;
-    clearPreparation();currentModule='settings';$('workspace').hidden=true;$('settings-workspace').hidden=false;settings?.activate();
-    syncNavigation();topStatus('SQL 初始化失败：'+error.message,'error');
+    if(!current())return;
+    clearPreparation();sqlState='error';sqlMessage=error.message;
+    currentModule='settings';$('workspace').hidden=true;$('settings-workspace').hidden=false;settings?.activate();
+    syncNavigation();topStatus((initialize?'SQL 初始化失败：':'译句表加载失败：')+error.message,'error');
   }finally{
     if(preparationRequest===controller){preparationRequest=null;syncNavigation();}
   }
 }
-async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}){
+function enterTranslation(){
+  if(!preparation||sqlState!=='ready')return;
+  currentModule='translation';$('workspace').hidden=false;$('settings-workspace').hidden=true;$('global-save').disabled=false;
+  topStatus('✓ 译句表 · '+preparation.rows.length+' 句 · 可翻译 '+preparation.rows.filter(r=>r.translatable).length+' 句','ok');
+  syncNavigation();frame.activate();
+}
+async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false,autoOpen=false}={}){
   const generation=++probeGeneration;
+  preparationRequest?.abort();preparationRequest=null;sqlActions.close();
   if(selected!==selectedPath){selectedPath=selected;verifiedPath='';clearPreparation();}
   if(!selected){verifiedPath='';clearPreparation();
     topStatus(afterSave?'✓ 全局设置已保存 · 尚未绑定工作目录':'尚未绑定工作区资料目录','warning');return;
@@ -85,7 +111,7 @@ async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}
     await frameWorkspaceIO.probe(selected);
     if(generation!==probeGeneration)return;
     verifiedPath=selected;syncNavigation();
-    topStatus((afterSave?'✓ 全局设置已保存 · ':'✓ ')+'工作区文件可读写'+(uncommitted?' · 目录设置尚未保存':'')+' · 可 SQL 初始化','ok');
+    await loadSQL({open:autoOpen});
   }catch(error){
     if(generation!==probeGeneration)return;
     verifiedPath='';clearPreparation();
@@ -171,7 +197,7 @@ function mountSettingsNavigation(){
   // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
   select.append(...[...frameFileSelect.children].map(child=>child.cloneNode(true)));
   select.value='settings';
-  select.addEventListener('change',()=>{if(['settings','sql-init','translation'].includes(select.value))void showModule(select.value);});
+  select.addEventListener('change',()=>{if(['settings','translation'].includes(select.value))void showModule(select.value);});
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
   for(const [name,action,label] of [['undo',()=>settings?.undo(),'撤销'],
@@ -184,31 +210,23 @@ function mountSettingsNavigation(){
   }
   bar.append(select,actions);source.prepend(bar);
   enhanceNavigationSelect(select,{search:true,kind:'files'});
+  wireSQLGroup(select,openSQLActions);
   syncNavigation();refreshSettingsHistory();
 }
 async function showModule(name){
-  if(name==='sql-init'){syncNavigation();return initializeSQL();}
-  if(name==='translation'&&!preparation)return;
-  currentModule=name==='translation'?'translation':'settings';
-  const inSettings=currentModule==='settings';
-  $('workspace').hidden=inSettings;
-  $('settings-workspace').hidden=!inSettings;
-  $('global-save').disabled=false;
-  if(inSettings){
-    ++probeGeneration;
-    topStatus('正在打开全局设置…');
-    try{const module=await getSettings();
-      if(currentModule==='settings'){
-        module.activate();
-        topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');
-        // Initial entry and any reentry check the already-saved directory.
-        void verifyWorkspaceIO(module.get('workspace.dataDirectory'));
-      }}
-    catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
-  }else{
-    topStatus('✓ 译句表 · '+preparation.rows.length+' 句 · 可翻译 '+preparation.rows.filter(r=>r.translatable).length+' 句','ok');
-    syncNavigation();frame.activate();
-  }
+  if(name==='translation'){if(preparation&&sqlState==='ready')return loadSQL({open:true});return;}
+  currentModule='settings';$('workspace').hidden=true;$('settings-workspace').hidden=false;$('global-save').disabled=false;
+  ++probeGeneration;
+  topStatus('正在打开全局设置…');
+  try{
+    const module=await getSettings();
+    if(currentModule==='settings'){
+      module.activate();
+      topStatus('全局设置已就绪 · 字体 Sarasa · 字号 '+module.get('globalUi.font.size')+' px');
+      const autoOpen=startup;startup=false;
+      void verifyWorkspaceIO(module.get('workspace.dataDirectory'),{autoOpen});
+    }
+  }catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
 }
 $('global-save').addEventListener('click',async()=>{
   if(currentModule!=='settings'&&frame.isPromptActive()){
