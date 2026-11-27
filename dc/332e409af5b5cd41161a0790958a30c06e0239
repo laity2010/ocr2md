@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"5b093afb44554d6db812ca285f482aa1","branch":"refs/heads/experiment/lab-translation","baseline":"dc332e409af5b5cd41161a0790958a30c06e0239","event":"START","utc":"2026-11-27T07:44:30.935035+00:00","wp":"WP04F6","goal":"撤下独立待译AG入口及源码右窗、清理专用派生投影和滚动分隔代码；保留单表全部字段、完整RAW/句界/保护、MD预览/Prompt及原生筛选；三窗选中统一橙色。","retrospective":false}
