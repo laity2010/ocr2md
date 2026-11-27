@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"985e7427c0da4e2fb5b567844d9a5a0d","branch":"refs/heads/experiment/lab-translation","baseline":"fd91b2becce6f78fb5715faa776c9d1cfd051485","event":"START","utc":"2026-11-27T07:25:09.511366+00:00","wp":"WP04F5","goal":"仅调整源码两窗保护态CSS：V2正文与引用原色不变、左RAW保护内容明显更暗并独立底色、右占位符弱强调；不改保护识别、SQL、布局、句界、定位、预览和Prompt。","retrospective":false}
