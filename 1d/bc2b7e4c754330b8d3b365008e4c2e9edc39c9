@@ -21,3 +21,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"fecdf1bc53734ff3ac88c982837ad4b8","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/heads/experiment/lab-translation","baseline":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","event":"START","utc":"2026-11-27T03:48:09.368104+00:00","wp":"WP00","goal":"独立校译州空白 Frame：仅州宪法、README、独立发布及设置身份；保留公共组件和现有空窗、不读取SQL或用户正文、不修改其他州与联邦。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/heads/experiment/lab-translation","baseline":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","event":"RUN_START","utc":"2026-11-27T03:49:34.093245+00:00","phase":"wp00-build","step":"14aad5cb801b48558880942de15d9c76"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/heads/experiment/lab-translation","baseline":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","event":"RUN_EXIT","utc":"2026-11-27T03:50:07.573932+00:00","phase":"wp00-build","step":"14aad5cb801b48558880942de15d9c76","exit_code":0}
