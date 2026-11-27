@@ -4,6 +4,7 @@
  * rendered by KaTeX. Other extensions can be added independently.
  */
 import MarkdownIt from 'markdown-it';
+import {parseBareMediaLine} from './v2-bare-media.js';
 import footnote from 'markdown-it-footnote';
 import taskLists from 'markdown-it-task-lists';
 import DOMPurify from 'dompurify';
@@ -45,6 +46,47 @@ const sourceAttrs = token => token.map
 
 installObsidianImages(md);
 installObsidianCallouts(md);
+// Translation reading: a complete HTML table may be immediately followed
+// by a separate MinerU MDLine (including display math). End only the
+// complete, non-nested table token at its real closing line, without
+// inserting LF or altering any other V2 parsing behavior.
+md.block.ruler.before('html_block','translation_complete_table',(state,startLine,endLine,silent)=>{
+  if(!state.env.completeTableBoundary||state.sCount[startLine]>3)return false;
+  const line=n=>state.src.slice(state.bMarks[n]+state.tShift[n],state.eMarks[n]);
+  if(!/^<table(?:[\s>])/i.test(line(startLine)))return false;
+  let depth=0,close=-1;
+  for(let n=startLine;n<endLine;n++){
+    const value=line(n);
+    for(const match of value.matchAll(/<\/?table(?=[\s>])[^>]*>/gi))depth+=match[0][1]==='/'?-1:1;
+    if(depth<0)return false;
+    if(depth===0){if(/<\/table>[ \t]*$/i.test(value))close=n;break;}
+  }
+  if(close<0)return false;
+  if(silent)return true;
+  const token=state.push('html_block','',0);
+  token.block=true;token.map=[startLine,close+1];
+  token.content=state.getLines(startLine,close+1,state.blkIndent,false)+'\n';
+  state.line=close+1;return true;
+},{alt:['paragraph','reference','blockquote']});
+
+// V2 chart_body lines are stand-alone images even without Markdown wrappers.
+// The native block token interrupts a caption paragraph and keeps its own
+// exact one-line source map; other renderer callers retain standard Markdown.
+md.block.ruler.before('paragraph','v2_bare_media',(state,startLine,endLine,silent)=>{
+  if(!state.env.bareMedia||state.sCount[startLine]>3)return false;
+  const line=state.src.slice(state.bMarks[startLine],state.eMarks[startLine]);
+  const standard=/^ {0,3}!\[\]\(<([^<>\n]+)>\)[ \t]*$/.exec(line);
+  const match=parseBareMediaLine(standard?standard[1]:line);
+  if(!match)return false;
+  if(silent)return true;
+  const token=state.push('v2_bare_media','p',0);
+  token.block=true;token.map=[startLine,startLine+1];token.content=match.url;
+  state.line=startLine+1;return true;
+},{alt:['paragraph']});
+md.renderer.rules.v2_bare_media=(tokens,idx)=>{
+  const token=tokens[idx];
+  return '<p'+sourceAttrs(token)+'><img src="'+md.utils.escapeHtml(token.content)+'" alt=""></p>\n';
+};
 // Obsidian-native display math uses its own $$ lines, not a code fence.
 // Keep source-line maps so AG/CM6/PDF navigation remains unchanged.
 md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent)=>{
@@ -68,7 +110,10 @@ md.block.ruler.before('fence','ocr_display_math',(state,startLine,endLine,silent
   token.content=state.getLines(startLine+1,end,0,false).replace(/\n$/,'');
   state.line=end+1;
   return true;
-});
+}, {alt:['paragraph']});
+// Without paragraph termination, 'text\n$$\n...\n$$' would be swallowed
+// by one paragraph. Logical siblings intentionally have no blank separator,
+// so a $$ display formula must be allowed to start immediately after text.
 md.renderer.rules.ocr_display_math=(tokens,idx)=>{
   const token=tokens[idx];
   return '<div class="ocr-math ocr-source-block"'+sourceAttrs(token)+'>'+
@@ -110,12 +155,12 @@ md.renderer.rules.html_block = (tokens,idx,options,env,self) => {
 
 // Obsidian-reading projection. MinerU preservation comments are deliberately
 // present in the source but invisible here; the sanitizer strips comments.
-export function renderMarkdown(source) {
-  // Review annotations are CMD-owned source metadata. Only confirmed inline
-  // latex is rendered as math; ignored/unreviewed fragments stay plain text.
+export function renderMarkdown(source,{nativeInlineMath=false,bareMedia=false,completeTableBoundary=false}={}) {
+  // Main remains review-gated; Lab-OCR opts in to native $...$ math.
+  // Explicitly ignored formulas remain plain text in every mode.
   // The projection never inserts or removes source line breaks.
-  const {projected,fragments}=projectReviewedInlineLatex(source);
-  const env={};
+  const {projected,fragments}=projectReviewedInlineLatex(source,{nativeInlineMath});
+  const env={bareMedia,completeTableBoundary};
   const tokens=md.parse(projected,env);
   for(let idx=0;idx<tokens.length;idx++){
     const token=tokens[idx];

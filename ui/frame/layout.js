@@ -1,7 +1,6 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
-import {EditorState} from '@codemirror/state';
-import {EditorView,lineNumbers} from '@codemirror/view';
+import {mountReadingSource,mountReadingPreview} from '../translation/reading.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -15,12 +14,6 @@ const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
-function mountEmptySource(host){
-  const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
-    EditorState.readOnly.of(true),EditorView.editable.of(false),lineNumbers(),EditorView.lineWrapping,
-  ]}),parent:host});
-  return {dispose:()=>editor.destroy(),layout:()=>editor.requestMeasure()};
-}
 const emptyColumns=[
   {field:'pbs',headerName:'PBS',width:115},
   {field:'usable',headerName:'可用',width:72},
@@ -50,12 +43,12 @@ const translatedColumns=[
   {field:'source_document_hash',headerName:'文档哈希',width:165},
   {field:'sentence_sha256',headerName:'分句哈希',width:165},
 ];
-function mountEmptyGrid(host,picker){
+function mountEmptyGrid(host,picker,onLocate){
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{editable:false,resizable:true,sortable:false,suppressMovable:true},
     getRowId:({data})=>data.source_line+':'+data.sentence_index,
-    columnDefs:emptyColumns,rowData:[]});
+    columnDefs:emptyColumns,rowData:[],rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},onRowClicked:({data})=>{if(data)onLocate(data.source_line+':'+data.sentence_index,'ag');}});
   let active='empty';
   const filters=new Map();
   function showRows(mode,rows){
@@ -69,9 +62,15 @@ function mountEmptyGrid(host,picker){
     }else grid.setGridOption('rowData',rows??[]);
     picker.options[0].textContent=next==='original'?'原句表（只读）':next==='translation'?'译句表':'空白框架';
   }
-  return {dispose(){grid.destroy();},layout:()=>{},setOriginalRows:rows=>showRows('original',rows),setTranslationRows:rows=>showRows('translation',rows)};
+  return {dispose(){grid.destroy();},layout:()=>{},setOriginalRows:rows=>showRows('original',rows),setTranslationRows:rows=>showRows('translation',rows),
+    locate(row,{scroll=true}={}){
+      const node=row&&grid.getRowNode(row.key);
+      if(!node||node.rowIndex==null){grid.deselectAll();return;}
+      node.setSelected(true,true);
+      if(scroll)grid.ensureIndexVisible(node.rowIndex,'middle');
+    }};
 }
-function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
+function blankPane(name,onSplit,onModuleChange,register,onLocate){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -91,7 +90,7 @@ function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
     bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
-    owned=()=>mountEmptyGrid(grid,picker);
+    owned=()=>mountEmptyGrid(grid,picker,onLocate);
   }else if(name==='source'){
     element.className='ocr-source-pane ocr-source-file-source';
     const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
@@ -114,7 +113,7 @@ function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
     bar.append(select,actions);element.append(bar);
     const body=document.createElement('div');body.className='ocr-cm-source frame-editor';
     body.id='editor';
-    element.append(body);owned=()=>mountEmptySource(body);
+    element.append(body);owned=()=>mountReadingSource(body,onLocate);
   }else if(name==='preview'){
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
@@ -128,7 +127,7 @@ function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
     bar.append(mode,split);element.append(bar);
     const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';
     element.append(area);
-    element.setAttribute('aria-label','Markdown 预览（空白）');
+    element.setAttribute('aria-label','Markdown 预览');owned=()=>mountReadingPreview(area,onLocate);
   }else if(name==='pdf'){
     element.className='ocr-detached-pdf-pane';
     const bar=document.createElement('div');bar.className='ocr-detached-pdf-toolbar';
@@ -140,7 +139,7 @@ function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
     const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
     host.append(surface);element.append(host);
   }else throw Error('Unknown Frame pane '+name);
-  return {element,init(){if(owned)this.resource=owned();if(name==='outline')onOriginalGrid(this.resource);},layout(){this.resource?.layout();},
+  return {element,init(){if(owned)this.resource=owned();if(this.resource)register(name,this.resource);},layout(){this.resource?.layout();},
     dispose(){this.resource?.dispose();}};
 }
 
@@ -150,9 +149,22 @@ function addPanel(dockview,id,component,title,position){
 }
 /** Public F01: exactly Main's default three groups + detached PDF split. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
-  let split=false,originalGrid=null;
+  let split=false,originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,readingPath='',focused=null;
+  function locate(value,origin){
+    if(!readingModel)return;
+    const row=typeof value==='string'?readingModel.byKey(value):value;
+    if(!row)return;focused=row;
+    originalGrid?.locate(row,{scroll:origin!=='ag'});
+    sourceReader?.locate(row,{scroll:origin!=='source'});
+    previewReader?.locate(row,{scroll:origin!=='preview'});
+  }
+  function register(name,port){
+    if(name==='outline')originalGrid=port;
+    if(name==='source')sourceReader=port;
+    if(name==='preview')previewReader=port;
+  }
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,grid=>{originalGrid=grid;})});
+    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,register,locate)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
@@ -165,7 +177,15 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     onStatus(split?'四窗布局已启用':'三窗布局已启用');
   }
   setSplit(true);
-  return Object.freeze({setSplit,setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},activate(){if(container.clientWidth&&container.clientHeight)
+  return Object.freeze({setSplit,setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
+    setReadingDocument(model,path=''){
+      const keep=model&&readingModel?.text===model.text&&readingPath===path&&focused;
+      readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
+      sourceReader?.setDocument(model);
+      previewReader?.setDocument(model,sourceReader?.getMarkdown()??'',path);
+      if(focused){originalGrid?.locate(focused,{scroll:false});sourceReader?.locate(focused,{scroll:false});previewReader?.locate(focused,{scroll:false});}
+      else{originalGrid?.locate(null);sourceReader?.locate(null);previewReader?.locate(null);}
+    },activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
     dispose(){dockview.dispose();},get split(){return split;}});
 }

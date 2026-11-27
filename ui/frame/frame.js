@@ -5,6 +5,7 @@ import './frame.css';
 import {createFrameWorkspace} from './layout.js';
 import {createOriginalSession} from '../translation/original-sentences.js';
 import {initializePreparation} from '../translation/preparation.js';
+import {createReadingDocument} from '../translation/document.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
@@ -33,12 +34,21 @@ let settings=null,loadingSettings=null,currentModule='frame';
 // announcements without touching the shared status or Save component.
 let probeGeneration=0,verifiedPath='',selectedPath='',initializing=false;
 let preparation=null,preparationRequest=null;
+let readingOriginal=null,readingPreparation=null,readingWorkspace='';
+function refreshReading(){
+  const current=original.current;
+  const snapshot=current?.snapshot??null,path=current?.workspace??'';
+  if(snapshot===readingOriginal&&preparation===readingPreparation&&path===readingWorkspace)return;
+  const model=createReadingDocument(snapshot,preparation);
+  frame.setReadingDocument(model,path);
+  readingOriginal=snapshot;readingPreparation=preparation;readingWorkspace=path;
+}
 function clearPreparation(){preparationRequest?.abort();preparationRequest=null;preparation=null;}
 const original=createOriginalSession({onChange:current=>{
   if(!current||preparation?.sentence_sha256!==current.snapshot.sentence_sha256)clearPreparation();
   if(currentModule==='translation'&&preparation)frame.setTranslationRows(preparation.rows);
   else frame.setOriginalRows(current?.snapshot.rows??null);
-  syncNavigation();
+  refreshReading();syncNavigation();
 }});
 function settingsNav(){return $('settings-workspace').querySelector('.ocr-source-file-select');}
 function syncNavigation(){
@@ -231,7 +241,7 @@ async function showModule(name){
       frame.setOriginalRows(original.current.snapshot.rows);
       topStatus('✓ 原句表（只读） · '+original.current.snapshot.rows.length+' 句 · 已保存分句快照','ok');
     }
-    syncNavigation();frame.activate();
+    refreshReading();syncNavigation();frame.activate();
   }
 }
 $('global-save').addEventListener('click',async()=>{

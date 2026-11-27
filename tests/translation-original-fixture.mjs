@@ -1,6 +1,7 @@
 import {sha256,canonicalRows} from '../ui/translation/original-sentences.js';
-export async function sampleSnapshot(suffix='',includeFormula=false){
+export async function sampleSnapshot(suffix='',includeFormula=false,reading=false){
  const lines=[['# Heading\n\n','title',''],['> A. B. 😀'+suffix+'\n','text','>'],['<table><tr><td>Text</td></tr></table>\n','table_body','']];
+ if(reading){lines[1][0]='> A. B. 😀'+suffix+' with $r_t$ and `code`.\n';lines[2][0]='<table><tr><td>Text</td><td><eq>x</eq></td></tr></table>\n';}
  if(includeFormula)lines.push(['$$x=1$$\n','interline_equation','']);
  const hash=await sha256(lines.map(x=>x[0]).join(''));
  const rows=[];let number=1;

@@ -1,0 +1,16 @@
+/* Reuse V2 source colors; dim only presentation, never modify RAW. */
+#workspace .ocr-cm-source.translation-reading-source .cm-editor,
+#workspace .ocr-cm-source.translation-reading-source .cm-scroller{
+  background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);line-height:1.5;
+}
+#workspace .translation-reading-source .translation-protected-source,
+#workspace .translation-reading-source .translation-protected-source *{
+  color:#84918a!important;
+}
+#workspace .translation-reading-source .translation-focus-source{background:rgba(235,163,82,.18);box-decoration-break:clone}
+#workspace .ocr-markdown .translation-protected-preview{opacity:.55}
+#workspace .ocr-markdown .translation-protected-preview .translation-protected-preview{opacity:1}
+#workspace .ocr-markdown .translation-focus-preview{
+  background:rgba(235,163,82,.12);outline:1px solid rgba(235,163,82,.30);outline-offset:1px;
+}
+#workspace .ocr-preview-md-scroll>.ocr-markdown{min-height:100%;box-sizing:border-box;font-size:var(--ocr-frame-font-size,16px)}

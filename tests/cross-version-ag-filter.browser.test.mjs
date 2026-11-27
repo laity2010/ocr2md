@@ -15,7 +15,7 @@ try{
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1180,height:860},hasTouch:true});
    const errors=[],reads=[],probes=[];let failed=false,version=0,preparationFailed=false;const prepCalls=[];
-   const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true);
+   const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true,true);
    const prepared=preparedFixture(withFormula);
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/labs/lab-frame/api/workspace-io/session',r=>r.fulfill({json:{authorized:true}}));
@@ -51,7 +51,9 @@ try{
    await page.locator('#global-save').click();await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')?.includes('/demo/books/a')&&document.querySelector('#status')?.textContent.includes('可初始化原句表'));
    await chooseNav(settings,'sql-init');await workspace.waitFor({state:'visible'});await count(4);
    assert.deepEqual(reads,['/demo/books/a']);assert.equal(await tableOption(workspace).count(),1);assert.equal(await workspace.locator('.dv-content-container').count(),4);
-   assert.equal((await workspace.locator('#editor .cm-content').innerText()).trim(),'');assert.equal(await workspace.locator('#undo').isDisabled(),true);assert.equal(await workspace.locator('#redo').isDisabled(),true);
+   assert.equal((await workspace.locator('#editor .cm-content .cm-line').first().textContent()),'# Heading');
+   assert.equal(await workspace.locator('#editor .cm-content').getAttribute('contenteditable'),'false');
+   assert.equal(await workspace.locator('.ocr-preview-md-scroll h1').textContent(),'Heading');assert.equal(await workspace.locator('#undo').isDisabled(),true);assert.equal(await workspace.locator('#redo').isDisabled(),true);
    assert.equal(await grid.locator('.ag-row [col-id="raw"]').count(),4);
    assert.equal(await grid.locator('.ag-row [col-id="raw"]').first().textContent(),'# Heading\n\n');
    assert.equal(await grid.locator('table').count(),0,'raw HTML is text, not rendered HTML');
@@ -73,6 +75,26 @@ try{
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可翻译 4 句'));
    await count(5);assert.equal(await nav(workspace).locator('option[value="translation"]').count(),1);
    assert.equal(await workspace.locator('.dv-content-container').count(),4);
+   const source=workspace.locator('#editor'),preview=workspace.locator('.ocr-preview-md-scroll');
+   const sourceLines=await source.locator('.cm-line').allTextContents();
+   assert.equal(sourceLines.join('\n'),withFormula.rows.map(r=>r.raw).join(''));
+   assert.equal(await source.locator('.cm-content').getAttribute('contenteditable'),'false');
+   assert.equal(await preview.locator('h1').textContent(),'Heading');
+   assert.equal(await preview.locator('table td').first().textContent(),'Text');
+   assert.equal(await preview.locator('.ocr-reviewed-inline-latex.translation-protected-preview').count(),1);
+   assert.equal(await preview.locator('code.translation-protected-preview').count(),1);
+   assert.equal(await preview.locator('.ocr-math.translation-protected-preview').count(),1);
+   assert.equal(await preview.locator('h1.translation-protected-preview').count(),0);
+   assert((await source.locator('.translation-protected-source').allTextContents()).join('').includes('$r_t$'));
+   // AG -> source/preview, source -> AG, preview -> source/AG.
+   await grid.locator('.ag-row [col-id="source_line"]').last().click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('$$x=1$$'));
+   assert.equal(await preview.locator('.ocr-math.translation-focus-preview').count(),1);
+   await source.locator('.cm-line').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected [col-id="source_line"]')?.textContent==='1');
+   await preview.locator('table td').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected [col-id="source_line"]')?.textContent==='4');
+   assert((await source.locator('.translation-focus-source').allTextContents()).join('').includes('<table>'));
    const scroll=grid.locator('.ag-body-horizontal-scroll-viewport');
    await scroll.evaluate(el=>el.scrollLeft=530);
    const transButton=grid.locator('.ag-header-cell[col-id="translatable"] .ag-header-cell-filter-button');
@@ -91,6 +113,7 @@ try{
    await chooseNav(workspace,'translation');await count(1);
    await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/a');
    assert.equal(await nav(settings).locator('option[value="translation"]').count(),0);await count(0);
+   assert.equal((await source.locator('.cm-content').textContent()).trim(),'');assert.equal(await preview.locator('h1').count(),0);
    assert.equal(prepCalls.length,2);
    console.log('TRANSLATION_WP02_BROWSER_PASS',name,'protected ranges / untranslated retained / native filter / switch / stale refusal');
    assert.deepEqual(errors,[]);console.log('TRANSLATION_WP01_BROWSER_PASS',name,'bind/init/raw/readonly/native all/multi/refresh/change/failure/retry',JSON.stringify({reads,probes}));

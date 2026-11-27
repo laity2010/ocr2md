@@ -1,6 +1,6 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP02，继承 WP00/01）
+## 当前可运行基线（WP03，继承 WP00/01/02）
 
 独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。原 Frame PDF 空白占位在 WP04 才按已约定功能替换。
 
@@ -20,7 +20,7 @@
 
 ## WP02 · 译句表与不可翻译元素识别
 
-仅在已初始化原句表后，SQL 导航出现「初始化译句表」。成功后切到「译句表 · translation」，原句表仍独立可选；未绑定、换目录、源快照变更或读取失败时清除旧内存引用及相应导航。校译表和原句表共享原 AG 窗、导航、布局；筛选独立，type/level/可翻译列沿用 V1 EnumCheckboxFilter，不改变数据。CM6 源码、MD 预览及 PDF 仍保持 WP01 的空白状态，不提前实现 WP03/04。
+仅在已初始化原句表后，SQL 导航出现「初始化译句表」。成功后切到「译句表 · translation」，原句表仍独立可选；未绑定、换目录、源快照变更或读取失败时清除旧内存引用及相应导航。校译表和原句表共享原 AG 窗、导航、布局；筛选独立，type/level/可翻译列沿用 V1 EnumCheckboxFilter，不改变数据。WP02 当时 CM6 源码、MD 预览及 PDF 仍为空白；现行阅读能力见 WP03，PDF 占位保留。
 
 唯一新增本州实体表为已授权书籍的 `ocr2md.v2.sqlite` 内 `translation`。原句表仍然只读，不新建副本物理表。唯一写入口为显式初始化，不自动生成、迁移或更新；表主键 `(source_line,sentence_index)`，保留 `raw,type,level,source_line_hash,source_document_hash,sentence_sha256,policy,protected,translatable`。全部原句（含不可译）按原顺序保留。protected 是 JSON 数组，每项 `{from,to,kind,text}`，from/to 为相对于本句 RAW 的半开 UTF-16 区间（包括末尾空行），有序、非重叠，text 必须与原始切片完全一致。API 返回数组和布尔可译状态，SQL 中保存确定性 JSON 与 0/1。
 
@@ -35,9 +35,22 @@
 | `initializePreparation(workspace,original,{fetcher,signal})` / `validatePreparation(result,original)` | 只向本州提交来源身份，验证每行与原句完全相符、保护范围及可译状态；冻结返回对象。tests/translation-preparation.test.mjs。 |
 | `createFrameWorkspace.setTranslationRows(rows|null)` | 同一 AG 显示译句，原表及译句筛选独立；目录切换清除；真实双浏览器门禁。 |
 
+## WP03 · 无损 MDLine 阅读与保护淡化
+
+初始化原句表后，AG 与两阅读窗共享该快照。原句 RAW 按上游顺序直接拼接，无插入、删除、规范化或重新分句；物理行号及 UTF-16 半开区间校验，末尾 LF 与空行保留。CM6 唯一只读正文，禁编辑及非装载文本事务，不增加历史或写入接口。初始化译句表后，已验证同源 protected 逐句范围转换为全文坐标，源码采用 CM6 Decoration 淡化；两表之间切换保留同源保护及正文，不重复建表或写 SQL。来源变化或失败清空过期阅读/保护状态。现行 Frame、导航、字号、PDF 空白占位及 Prompt 边界不变。
+
+预览复用 V2 已验收的 markdown-preview、latex-inline-preview、裸媒体识别、CSS 与公共脚注卡片、局部授权媒体 URL；不调用 V2 可编辑会话。唯一校译阅读适配为可选 completeTableBoundary 解析规则，解决闭合 HTML 表格紧接独立公式时被 Markdown-it 吞入同一 HTML 块的问题，保留原物理行号。以 CM6 当前文本渲染，经既有 DOMPurify 消毒。已渲染的数学、代码、媒体、注号等不翻译元素以原保护范围和渲染物理行映射匹配，普通文本精确匹配后仅淡化对应部分；隐藏语法不强制显示。不对无法精确匹配的渲染归一化文本猜测字符映射。预览多句同一段落定位允许回退至映射块首行；源与 AG 按精确原句身份定位。未使用远端媒体下载/采用接口。
+
+| 接口 | 契约与验收 |
+|---|---|
+| createReadingDocument(original,preparation) | 精确拼接、行首和句区间索引、保护区间投影；tests/translation-reading.test.mjs |
+| mountReadingSource / mountReadingPreview | 独立只读显示端口 setDocument/locate/dispose；预览读取 CM6 正文；双浏览器实际阅读和三窗定位验收 |
+| createFrameWorkspace.setReadingDocument(model,path) | 同源更新、清空、AG/源码/预览协调，不改变持久层；tests/cross-version-ag-filter.browser.test.mjs |
+
+WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。复杂 Markdown 归一化、未知 HTML 与精确行内点击仍需实书人工验收。未改动上游、WP02 识别策略或持久化结构。
+
 ## 已确定的后续执行边界（尚未实现）
 
-- WP03：源码 CM6 只读显示由原句无损重构的 MDLine；MD 预览按此渲染，两窗淡化不翻译内容，不删除或改写字符；AG、源码与预览共享位置映射。未校译 RAW 重构需逐字符往返一致。
 - WP04：预览下拉移除 PDF 与相关拆分控制，保留 MD 预览并增加翻译 Prompt，切换显示可编辑 CM6；其编辑历史独立，默认统一校译任务书。保留已验收公共布局及导航位置，不自行改变其他界面。
 - WP05：指定目标语言；在书籍工作目录 trans/ 导出 sentences.json 与 prompt.md。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
 - 后续独立航点：验证导入多 AI 结果、保留所有译文、仅对校正分歧仲裁；未校正/未翻译如实标记，基于未采用校正的译文标明来源差异。最终按原句身份生成一份校正原文、多份译文的句级交叉互译文档，原句与上游始终不变。尚未确定最终校译存储 schema，不提前建额外表。
