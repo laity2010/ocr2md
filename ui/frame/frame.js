@@ -245,6 +245,9 @@ async function showModule(name){
   }
 }
 $('global-save').addEventListener('click',async()=>{
+  if(currentModule!=='settings'&&frame.isPromptActive()){
+    try{frame.savePrompt();}catch(error){topStatus('Prompt 保存失败：'+error.message,'error');}return;
+  }
   if(!settings){topStatus('当前无文档可保存；请打开 settings.json 修改设置');return;}
   if(!settings.hasUnsaved()){topStatus('当前没有待保存的全局设置');return;}
   try{const saved=await settings.save();

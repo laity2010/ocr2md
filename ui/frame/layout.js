@@ -1,6 +1,7 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
 import {mountReadingSource,mountReadingPreview} from '../translation/reading.js';
+import {mountPromptEditor} from '../translation/prompt-editor.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -8,7 +9,6 @@ import '../outline-grid.css';
 import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
 import '../ag-enum-filter-shared.css';
 import '../settings-module.css';
-import '../pdf-preview.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
 const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
@@ -70,7 +70,7 @@ function mountEmptyGrid(host,picker,onLocate){
       if(scroll)grid.ensureIndexVisible(node.rowIndex,'middle');
     }};
 }
-function blankPane(name,onSplit,onModuleChange,register,onLocate){
+function blankPane(name,onModuleChange,register,onLocate,onStatus){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -118,26 +118,42 @@ function blankPane(name,onSplit,onModuleChange,register,onLocate){
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
     const mode=document.createElement('select');mode.className='ocr-preview-mode';
-    mode.setAttribute('aria-label','预览类型');mode.innerHTML='<option value="md">Markdown 预览</option><option value="pdf" disabled>PDF 原文</option>';
-    const split=document.createElement('label');split.className='ocr-preview-split-toggle';
-    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=true;
-    checkbox.setAttribute('aria-label','切分 Markdown PDF 预览');
-    checkbox.addEventListener('change',()=>onSplit?.(checkbox.checked));
-    split.append(checkbox,document.createTextNode('切分'));
-    bar.append(mode,split);element.append(bar);
-    const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';
-    element.append(area);
-    element.setAttribute('aria-label','Markdown 预览');owned=()=>mountReadingPreview(area,onLocate);
-  }else if(name==='pdf'){
-    element.className='ocr-detached-pdf-pane';
-    const bar=document.createElement('div');bar.className='ocr-detached-pdf-toolbar';
-    const title=document.createElement('span');title.className='ocr-detached-pdf-title';title.textContent='PDF 原文';
-    const actions=document.createElement('div');actions.className='ocr-detached-pdf-tools';
-    actions.innerHTML='<div class="ocr-pdf-tools"><button type="button" disabled>−</button><button type="button" disabled>适宽</button><button type="button" disabled>+</button><span class="ocr-pdf-zoom">—</span><button type="button" disabled>提取文本</button><label>页 <input type="number" disabled value="1" class="ocr-pdf-page" aria-label="PDF 页码"/></label><span class="ocr-pdf-count">/ —</span></div>';
-    bar.append(title,actions);element.append(bar);
-    const host=document.createElement('div');host.className='ocr-detached-pdf-host';
-    const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
-    host.append(surface);element.append(host);
+    mode.setAttribute('aria-label','预览类型');mode.innerHTML='<option value="md">Markdown 预览</option><option value="prompt">翻译 Prompt</option>';
+    const actions=document.createElement('div');actions.className='ocr-source-undo-redo translation-prompt-actions';
+    actions.setAttribute('role','group');actions.setAttribute('aria-label','Prompt 撤销与重做');actions.hidden=true;
+    const undo=document.createElement('button'),redo=document.createElement('button');
+    for(const [button,id,label,glyph] of [[undo,'prompt-undo','撤销 Prompt','↶'],[redo,'prompt-redo','重做 Prompt','↷']]){
+      button.type='button';button.id=id;button.setAttribute('aria-label',label);button.title=label;button.textContent=glyph;button.disabled=true;actions.append(button);
+    }
+    bar.append(mode,actions);element.append(bar);
+    const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';element.append(area);
+    const promptHost=document.createElement('div');promptHost.className='translation-prompt-editor frame-editor';promptHost.hidden=true;element.append(promptHost);
+    element.setAttribute('aria-label','Markdown 预览与翻译 Prompt');
+    owned=()=>{
+      const reader=mountReadingPreview(area,onLocate);
+      let prompt=null,lastFocus=null;
+      const refresh=state=>{
+        undo.disabled=!state.undo;redo.disabled=!state.redo;
+        if(mode.value==='prompt')onStatus(state.dirty?'● 翻译 Prompt 未保存':'翻译 Prompt · 已保存或默认任务书',state.dirty?'warning':'info');
+      };
+      function switchMode(){
+        const editing=mode.value==='prompt';
+        if(editing&&!prompt)prompt=mountPromptEditor(promptHost,{onChange:refresh,onStatus});
+        element.dataset.previewMode=mode.value;area.hidden=editing;promptHost.hidden=!editing;actions.hidden=!editing;
+        if(editing)prompt.activate();else{reader.locate(lastFocus,{scroll:true});onStatus('Markdown 阅读预览');}
+      }
+      mode.addEventListener('change',switchMode);
+      undo.addEventListener('click',()=>prompt?.undo());redo.addEventListener('click',()=>prompt?.redo());
+      return Object.freeze({
+        setDocument(...args){reader.setDocument(...args);},
+        locate(row,options){lastFocus=row;if(mode.value==='md')reader.locate(row,options);},
+        layout(){reader.layout();if(mode.value==='prompt')prompt?.layout();},
+        isPromptActive:()=>mode.value==='prompt',
+        getPromptText:()=>prompt?.getText()??null,
+        savePrompt:()=>prompt?.save(),
+        dispose(){reader.dispose();prompt?.dispose();mode.removeEventListener('change',switchMode);}
+      });
+    };
   }else throw Error('Unknown Frame pane '+name);
   return {element,init(){if(owned)this.resource=owned();if(this.resource)register(name,this.resource);},layout(){this.resource?.layout();},
     dispose(){this.resource?.dispose();}};
@@ -147,9 +163,9 @@ function addPanel(dockview,id,component,title,position){
   const panel=dockview.addPanel({id,component,title,...(position?{position}:{})});
   panel.group.header.hidden=true;panel.group.relayout();return panel;
 }
-/** Public F01: exactly Main's default three groups + detached PDF split. */
+/** Public F01: three original groups; WP04 replaces PDF with Prompt mode. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
-  let split=false,originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,readingPath='',focused=null;
+  let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,readingPath='',focused=null;
   function locate(value,origin){
     if(!readingModel)return;
     const row=typeof value==='string'?readingModel.byKey(value):value;
@@ -164,20 +180,13 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     if(name==='preview')previewReader=port;
   }
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,register,locate)});
+    createComponent:({name})=>blankPane(name,onModuleChange,register,locate,onStatus)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
-  function setSplit(enabled){
-    if(Boolean(enabled)===split)return;
-    if(enabled){addPanel(dockview,'pdf','pdf','PDF 原文',{referencePanel:'preview',direction:'right'});split=true;}
-    else{const panel=dockview.getPanel('pdf');if(panel)dockview.removePanel(panel);split=false;}
-    const checkbox=container.querySelector('.ocr-preview-split-toggle input');
-    if(checkbox)checkbox.checked=split;
-    onStatus(split?'四窗布局已启用':'三窗布局已启用');
-  }
-  setSplit(true);
-  return Object.freeze({setSplit,setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
+  return Object.freeze({isPromptActive:()=>previewReader?.isPromptActive()??false,
+    getPromptText:()=>previewReader?.getPromptText()??null,
+    savePrompt:()=>previewReader?.savePrompt(),setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
     setReadingDocument(model,path=''){
       const keep=model&&readingModel?.text===model.text&&readingPath===path&&focused;
       readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
@@ -186,6 +195,6 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
       if(focused){originalGrid?.locate(focused,{scroll:false});sourceReader?.locate(focused,{scroll:false});previewReader?.locate(focused,{scroll:false});}
       else{originalGrid?.locate(null);sourceReader?.locate(null);previewReader?.locate(null);}
     },activate(){if(container.clientWidth&&container.clientHeight)
-    dockview.layout(container.clientWidth,container.clientHeight);},
-    dispose(){dockview.dispose();},get split(){return split;}});
+    dockview.layout(container.clientWidth,container.clientHeight);previewReader?.layout();},
+    dispose(){dockview.dispose();}});
 }

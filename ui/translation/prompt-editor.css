@@ -1,0 +1,9 @@
+#workspace .ocr-preview-pane>.translation-prompt-editor{
+  grid-column:1;grid-row:2;width:100%;height:100%;min-height:0;min-width:0;
+}
+#workspace .ocr-preview-pane>[hidden],#workspace .ocr-preview-switchbar>[hidden]{display:none!important}
+#workspace .translation-prompt-editor .cm-editor,
+#workspace .translation-prompt-editor .cm-scroller{
+  background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);line-height:1.5;
+}
+#workspace .translation-prompt-actions{margin-left:auto}

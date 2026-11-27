@@ -36,8 +36,11 @@ try{
       assert.equal(release.name,'lab-translation');
       assert.match(release.version,/^lab-translation-\d{8}-\d{6}$/);
       assert.equal(await page.locator('#build-version').innerText(),release.version.match(/(\d{8}-\d{4})\d{2}$/)[1]);
-      assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
+      assert.equal(await page.locator('#workspace .dv-content-container').count(),3);
       assert.equal(await page.locator('#workspace').isVisible(),false);
+      assert.equal(await page.locator('#workspace .ocr-detached-pdf-pane,#workspace .ocr-preview-split-toggle').count(),0);
+      assert.deepEqual(await page.locator('#workspace .ocr-preview-mode option').evaluateAll(xs=>xs.map(x=>x.value)),['md','prompt']);
+
       assert.equal(await page.locator('#settings-workspace').isVisible(),true);
       assert.equal(await page.locator('#workspace .ocr-ag-module-select').isDisabled(),true);
       assert.equal(await page.locator('.ocr-frame-back').count(),0);
@@ -124,7 +127,7 @@ try{
       assert.equal(await settingsNav.evaluate(node=>node.querySelectorAll('optgroup').length),1);
       assert.equal(await settingsNav.evaluate(node=>node.querySelectorAll('optgroup option').length),1);
       assert.equal(await page.locator('.ocr-frame-back').count(),0);
-      assert.equal(await page.locator('#workspace .dv-content-container').count(),4);
+      assert.equal(await page.locator('#workspace .dv-content-container').count(),3);
       assert.equal(await page.locator('#workspace').isVisible(),false);
       assert.equal(await page.locator('#workspace #editor .cm-content').evaluate(el=>getComputedStyle(el).fontSize),'20px');
       assert.deepEqual(apis,[],
