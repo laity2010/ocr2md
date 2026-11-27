@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"06368dd39a534dedb5864f6c3789e882","branch":"refs/heads/experiment/lab-translation","baseline":"680c1c8513725e0049695944567c2a7a37eeaab7","event":"START","utc":"2026-11-27T08:26:41.556207+00:00","wp":"WP05A1","goal":"遵循COMM第5节：SQL组标题弹窗及显式初始化；只读发现和加载已有译句表、启动恢复、过期/换目录保护；保留AG/CM6/MD/Prompt/JSON和既有SQL结构，不写上游；直接和双浏览器发布门禁。","retrospective":false}
