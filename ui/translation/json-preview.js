@@ -4,7 +4,7 @@ import {EditorView,Decoration,lineNumbers} from '@codemirror/view';
 import {json} from '@codemirror/lang-json';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
-import {TRANSLATION_JSON_FILENAME,indexJSONSentences} from './export-json.js';
+import {indexJSONSentences} from './export-json.js';
 import './json-preview.css';
 
 export function mountJSONPreview(host){
@@ -37,12 +37,9 @@ export function mountJSONPreview(host){
     editor.dispatch({effects:[focus.of(line),...(pos!==null&&scroll?[EditorView.scrollIntoView(pos,{y:'center'})]:[])],
       ...(pos!==null&&scroll?{selection:{anchor:pos}}:{})});
   }
-  function download(){
+  function getExportText(){
     if(!artifact||editor.state.doc.toString()!==artifact.text)throw Error('没有可导出的待译句 JSON');
-    const url=URL.createObjectURL(new Blob([artifact.text],{type:'application/json;charset=utf-8'}));
-    const a=document.createElement('a');a.href=url;a.download=TRANSLATION_JSON_FILENAME;
-    document.body.append(a);
-    try{a.click();}finally{a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    return artifact.text;
   }
-  return Object.freeze({setArtifact,locate,download,layout:()=>editor.requestMeasure(),dispose:()=>editor.destroy()});
+  return Object.freeze({setArtifact,locate,getExportText,layout:()=>editor.requestMeasure(),dispose:()=>editor.destroy()});
 }

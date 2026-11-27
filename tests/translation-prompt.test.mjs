@@ -29,7 +29,7 @@ test('runtime parameter values follow the current export; no claim of filesystem
  const first=createPromptParameters(a,'/books/中文 A/');
  assert(first.includes('input_json: "/books/中文 A/trans/sentences.json"'));
  assert(first.includes('result_json: "/books/中文 A/trans/AI_ID.json"'));
- assert(first.includes('target_language: "zh-CN"'));assert(first.includes('task_id: "T1"'));assert(first.includes('sentence_count: 7'));assert(first.includes('尚未写入'));
+ assert(first.includes('target_language: "zh-CN"'));assert(first.includes('task_id: "T1"'));assert(first.includes('sentence_count: 7'));assert(first.includes('尚未核验'));assert(createPromptParameters(a,'/books/中文 A/',true).includes('回读验证一致'));
  const next=createPromptParameters(b,'/books/B');
  assert(next.includes('target_language: "ja"'));assert(next.includes('task_id: "T2"'));assert(!next.includes('T1'));assert(!next.includes('中文 A'));
  const empty=createPromptParameters(null,'');assert(empty.includes('尚无有效译句表'));assert(!empty.includes('input_json:'));

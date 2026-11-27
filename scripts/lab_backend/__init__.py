@@ -1,6 +1,8 @@
 """Translation state public API, mounted by existing shared Gateway."""
 from contextlib import closing
 import http.client
+import hashlib
+import base64
 import json
 import os
 import sqlite3
@@ -186,6 +188,46 @@ def read_saved(folder,reader):
             return {'schema':'ocr2md-translation-preparation/v2','state':'legacy'}
         return {'schema':'ocr2md-translation-preparation/v2','state':'ready','source_document_hash':snapshot['source_document_hash'],'sentence_sha256':snapshot['sentence_sha256'],'rows':rows}
 
+
+# The browser owns the preview; independently reproduce its current deterministic
+# bytes from the saved table, and refuse any mismatch before filesystem creation.
+def input_bytes(table):
+    if table.get('state')!='ready':raise TranslationError(409,'译句表尚不可用')
+    lines=[]
+    for r in table['rows']:
+        if not r['translatable']:continue
+        if not lines or lines[-1]['source_line']!=r['source_line']:
+            lines.append({'source_line':r['source_line'],'type':r['type'],'level':r['level'],'sentences':[]})
+        lines[-1]['sentences'].append({'sentence_index':r['sentence_index'],'text':r['text']})
+    data={'schema':'ocr2md-trans/v1','source_sha256':table['source_document_hash'],'sentence_sha256':table['sentence_sha256'],'target_language':'zh-CN','mdlines':lines}
+    task_id=hashlib.sha256(json.dumps(data,ensure_ascii=False,separators=(',',':')).encode('utf-8')).hexdigest()
+    return (json.dumps({'schema':data['schema'],'task_id':task_id,**{k:v for k,v in data.items() if k!='schema'}},ensure_ascii=False,indent=2)+'\n').encode('utf-8')
+
+def export_input(folder,expected_sha,reader,common):
+    data=input_bytes(read_saved(folder,reader))
+    digest=common.sha(data)
+    if digest!=expected_sha:raise TranslationError(409,'当前译句或 JSON 已变化，请重新加载；未写入文件')
+    if len(data)>common.MAX_FILE:raise TranslationError(413,'JSON 超过公共文件服务 8 MiB 限额')
+    relative='trans/sentences.json'
+    # Fixed one-level directory; never take a client-provided write path.
+    # Shared F02 no-follow directory traversal and exclusive creation.
+    with common.directory_fd(folder,()) as root:
+        try:os.mkdir('trans',mode=0o700,dir_fd=root)
+        except FileExistsError:pass
+    created=False
+    try:
+        stored=common.read_file(folder,relative)
+    except FileNotFoundError:
+        try:
+            common.create_file(folder,relative,data)
+            created=True
+        except FileExistsError:
+            pass
+        stored=common.read_file(folder,relative)
+    if stored['sha256']!=digest or base64.b64decode(stored['contentBase64'],validate=True)!=data:
+        raise TranslationError(409,'input_json 已存在且内容不同，保留原文件；请先处理旧任务')
+    return {'path':str(folder/'trans'/'sentences.json'),'sha256':digest,'size':len(data),'state':'created' if created else 'unchanged'}
+
 def handle(handler,operation,parsed,common):
     def respond(code,obj):handler.respond(code,json.dumps(obj,ensure_ascii=False),'application/json; charset=utf-8')
     try:
@@ -197,6 +239,22 @@ def handle(handler,operation,parsed,common):
             cookie=handler.headers.get('Cookie','')
             folder=common.checked_workspace(args['workspace'][0],common.authorized_roots(cookie))
             respond(200,read_saved(folder,lambda:public_snapshot(folder,cookie)))
+            return
+        if operation=='translation/export':
+            if handler.command!='POST':raise TranslationError(405,'JSON 导出仅允许 POST')
+            if handler.headers.get('Origin') not in common.ALLOWED_ORIGINS:raise TranslationError(403,'拒绝未授权来源')
+            if handler.headers.get('Transfer-Encoding'):raise TranslationError(400,'不支持 chunked')
+            try:size=int(handler.headers.get('Content-Length','-1'))
+            except ValueError:size=-1
+            if not 2<=size<=8192:raise TranslationError(413,'请求体超限')
+            raw=handler.rfile.read(size)
+            if len(raw)!=size:raise TranslationError(400,'请求体不完整')
+            p=json.loads(raw)
+            if not isinstance(p,dict) or set(p)!={'workspace','sha256'} or not isinstance(p['sha256'],str) or not DIGEST.fullmatch(p['sha256']):
+                raise TranslationError(422,'JSON 导出请求字段错误')
+            cookie=handler.headers.get('Cookie','')
+            folder=common.checked_workspace(p['workspace'],common.authorized_roots(cookie))
+            respond(200,export_input(folder,p['sha256'],lambda:public_snapshot(folder,cookie),common))
             return
         if operation!='translation/initialize':raise TranslationError(404,'未知校译接口')
         if handler.command!='POST':raise TranslationError(405,'译句初始化仅允许 POST')

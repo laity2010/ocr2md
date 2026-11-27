@@ -231,6 +231,53 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(call(cookie='bad'),(403,0))
         self.assertEqual(call(query='workspace=a&workspace=b'),(422,0))
         self.assertEqual(call(query='workspace=a&other=b'),(422,0))
+    def test_export_input_fixed_path_and_conflict(self):
+        sys.path.insert(0,str(ROOT.parent/'lab-frame/scripts'))
+        import frame_workspace_io as common
+        s=snapshot('Hello 😀 $x$.\n')
+        with tempfile.TemporaryDirectory() as tmp:
+            folder=Path(tmp);dbpath=folder/runtime.DB_NAME
+            with closing(sqlite3.connect(dbpath)) as db:
+                db.execute('CREATE TABLE sentence(id)');db.commit()
+            table=runtime.initialize(folder,s['source_document_hash'],s['sentence_sha256'],lambda:s)
+            expected=runtime.input_bytes({**table,'state':'ready'})
+            digest=common.sha(expected);before=dbpath.read_bytes()
+            with self.assertRaises(runtime.TranslationError):runtime.export_input(folder,'0'*64,lambda:s,common)
+            self.assertFalse((folder/'trans').exists())
+            result=runtime.export_input(folder,digest,lambda:s,common)
+            dest=folder/'trans/sentences.json'
+            self.assertEqual(result,{'path':str(dest),'sha256':digest,'size':len(expected),'state':'created'})
+            self.assertEqual(dest.read_bytes(),expected)
+            other=folder/'trans/gpt.json';other.write_text('keep')
+            self.assertEqual(runtime.export_input(folder,digest,lambda:s,common)['state'],'unchanged')
+            dest.write_bytes(b'old task')
+            with self.assertRaises(runtime.TranslationError):runtime.export_input(folder,digest,lambda:s,common)
+            self.assertEqual(dest.read_bytes(),b'old task');self.assertEqual(other.read_text(),'keep')
+            self.assertEqual(dbpath.read_bytes(),before)
+            dest.unlink();dest.symlink_to(other)
+            with self.assertRaises(OSError):runtime.export_input(folder,digest,lambda:s,common)
+            self.assertEqual(other.read_text(),'keep')
+            dest.unlink();other.unlink();(folder/'trans').rmdir()
+            outside=folder/'outside';outside.mkdir();(folder/'trans').symlink_to(outside,target_is_directory=True)
+            with self.assertRaises(OSError):runtime.export_input(folder,digest,lambda:s,common)
+            self.assertEqual(list(outside.iterdir()),[])
+    def test_export_http_contract(self):
+        def call(method='POST',origin='https://ok',cookie='valid',payload=None):
+            p=payload if payload is not None else {'workspace':'/fixture','sha256':'a'*64}
+            body=json.dumps(p).encode();out=[]
+            h=types.SimpleNamespace(command=method,headers={'Origin':origin,'Cookie':cookie,'Content-Length':str(len(body))},rfile=io.BytesIO(body),respond=lambda code,body,*_:out.append((code,json.loads(body))))
+            def roots(value):
+                if value!='valid':raise runtime.TranslationError(403,'denied')
+                return []
+            common=types.SimpleNamespace(ALLOWED_ORIGINS={'https://ok'},authorized_roots=roots,checked_workspace=lambda p,r:Path(p))
+            with patch.object(runtime,'export_input',return_value={'state':'created'}) as export:
+                runtime.handle(h,'translation/export',urlsplit('/'),common)
+                return out[0][0],export.call_count
+        self.assertEqual(call(),(200,1))
+        self.assertEqual(call(method='GET'),(405,0))
+        self.assertEqual(call(origin='bad'),(403,0))
+        self.assertEqual(call(cookie='bad'),(403,0))
+        self.assertEqual(call(payload={'workspace':'/fixture','sha256':'a'*64,'path':'../../x'}),(422,0))
     def test_http_contract(self):
         s=snapshot('Hello.\n')
         p={'workspace':'/fixture','source_document_hash':s['source_document_hash'],'sentence_sha256':s['sentence_sha256']}

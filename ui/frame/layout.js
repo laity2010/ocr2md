@@ -4,6 +4,7 @@ import {mountReadingPreview,mountReadingSource} from '../translation/reading.js'
 import {placeholder} from '../translation/refill.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
 import {mountJSONPreview} from '../translation/json-preview.js';
+import {exportTranslationJSON} from '../translation/export-json.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -131,14 +132,14 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     element.setAttribute('aria-label','Markdown 预览、翻译 Prompt 与 JSON');
     owned=()=>{
       const reader=mountReadingPreview(area,onLocate);
-      let prompt=null,jsonReader=null,jsonArtifact=null,lastFocus=null,promptWorkspace='';
+      let prompt=null,jsonReader=null,jsonArtifact=null,lastFocus=null,promptWorkspace='',exportVerified=false,exportRequest=null;
       const refresh=state=>{
         undo.disabled=!state.undo;redo.disabled=!state.redo;
         if(mode.value==='prompt')onStatus(state.dirty?'● 翻译 Prompt 未保存':'翻译 Prompt · 已保存或默认任务书',state.dirty?'warning':'info');
       };
       function switchMode(){
         const editing=mode.value==='prompt',showJSON=mode.value==='json';
-        if(editing&&!prompt)prompt=mountPromptEditor(promptHost,{onChange:refresh,onStatus,artifact:jsonArtifact,workspace:promptWorkspace});
+        if(editing&&!prompt)prompt=mountPromptEditor(promptHost,{onChange:refresh,onStatus,artifact:jsonArtifact,workspace:promptWorkspace,exportVerified});
         if(showJSON&&!jsonReader){jsonReader=mountJSONPreview(jsonHost);jsonReader.setArtifact(jsonArtifact);}
         element.dataset.previewMode=mode.value;
         area.hidden=editing||showJSON;promptHost.hidden=!editing;actions.hidden=!editing;
@@ -147,16 +148,29 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
         else if(showJSON){jsonReader.layout();jsonReader.locate(lastFocus,{scroll:true});onStatus(jsonArtifact?'待译句 JSON · '+jsonArtifact.count+' 句':'请先 SQL 初始化',jsonArtifact?'info':'warning');}
         else{reader.locate(lastFocus,{scroll:true});onStatus('Markdown 阅读预览');}
       }
-      function downloadJSON(){
-        try{jsonReader.download();}
-        catch(error){onStatus('JSON 导出失败：'+error.message,'error');}
+      async function downloadJSON(){
+        if(exportRequest||!jsonArtifact||!promptWorkspace)return;
+        const artifact=jsonArtifact,path=promptWorkspace,request={};exportRequest=request;download.disabled=true;
+        const current=()=>exportRequest===request&&jsonArtifact===artifact&&promptWorkspace===path;
+        try{
+          exportVerified=false;prompt?.setTask(artifact,path,false);
+          onStatus('正在导出 JSON 至本机任务目录…');
+          const result=await exportTranslationJSON(path,jsonReader.getExportText());
+          if(!current())return;
+          exportVerified=true;prompt?.setTask(artifact,path,true);
+          onStatus('✓ JSON 已'+(result.state==='created'?'导出':'存在且一致')+' · '+result.path,'ok');
+        }catch(error){
+          if(current())onStatus('JSON 导出失败：'+error.message,'error');
+        }finally{
+          if(current()){exportRequest=null;download.disabled=false;}
+        }
       }
       download.addEventListener('click',downloadJSON);
       mode.addEventListener('change',switchMode);
       undo.addEventListener('click',()=>prompt?.undo());redo.addEventListener('click',()=>prompt?.redo());
       return Object.freeze({
-        setDocument(model,markdown,path){promptWorkspace=model?path:'';reader.setDocument(model,markdown,path);if(!model)prompt?.setTask(null,'');},
-        setJSONArtifact(artifact){jsonArtifact=artifact;prompt?.setTask(artifact,promptWorkspace);download.disabled=!artifact;jsonReader?.setArtifact(artifact);if(mode.value==='json')jsonReader?.locate(lastFocus,{scroll:true});},
+        setDocument(model,markdown,path){const next=model?path:'';if(next!==promptWorkspace){exportVerified=false;exportRequest=null;}promptWorkspace=next;reader.setDocument(model,markdown,path);if(!model)prompt?.setTask(null,'');},
+        setJSONArtifact(artifact){if(jsonArtifact?.text!==artifact?.text||exportRequest){exportVerified=false;exportRequest=null;}jsonArtifact=artifact;prompt?.setTask(artifact,promptWorkspace,exportVerified);download.disabled=!artifact||!promptWorkspace;jsonReader?.setArtifact(artifact);if(mode.value==='json')jsonReader?.locate(lastFocus,{scroll:true});},
         locate(row,options){lastFocus=row;if(mode.value==='md')reader.locate(row,options);else if(mode.value==='json')jsonReader?.locate(row,{scroll:true});},
         layout(){reader.layout();if(mode.value==='prompt')prompt?.layout();if(mode.value==='json')jsonReader?.layout();},
         isPromptActive:()=>mode.value==='prompt',

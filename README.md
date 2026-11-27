@@ -66,7 +66,7 @@ WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。
 
 ## WP05A · 待译句 JSON 预览与下载
 
-译句表加载或初始化验证后，同一份冻结译句表生成唯一派生的 JSON 文本；现有预览下拉增加 JSON，只读 CM6（行号、JSON 语法着色），不改源码、AG 或 Prompt。工具栏「导出 JSON」手动下载 sentences.json，UTF-8，无 BOM，预览与下载同一字符串（含末尾 LF）。未初始化禁用下载，目录变化/失败清除 JSON；切换及下载不读写 SQL，AG 筛选不影响内容。此航点不写书籍目录、不创建 trans、不导出 prompt.md。
+译句表加载或初始化验证后，同一份冻结译句表生成唯一派生的 JSON 文本；现有预览下拉增加 JSON，只读 CM6（行号、JSON 语法着色），不改源码、AG 或 Prompt。工具栏「导出 JSON」最初手动下载 sentences.json（WP05A4 改为 input_json 直接落盘），UTF-8，无 BOM，预览与下载同一字符串（含末尾 LF）。未初始化禁用下载，目录变化/失败清除 JSON；切换及下载不读写 SQL，AG 筛选不影响内容。此航点不写书籍目录、不创建 trans、不导出 prompt.md。
 
 输入结构 ocr2md-trans/v1：schema、task_id（去除 task_id 的规范字段顺序 JSON.stringify 的 SHA-256）、source_sha256（原文摘要）、sentence_sha256（已保存分句摘要）、target_language（暂为 zh-CN）、mdlines（按原 source_line 分组，继承 type/level；每组 sentences 保留原 sentence_index 与 text）。仅 translatable=true；整句不可译省略、不重新编号，保留占位符原样，不输出 raw、protected 原值、绝对路径及内部 SQL 字段。回填原值仅留本地。生成器复验每句 text 与回填及全文 RAW SHA，任务 ID 随输入/目标语言变化；尚不绑定 Prompt 摘要，正式工作目录任务协议在下一航点确定。createTranslationJSON(table,options) 为唯一生成器，tests/translation-export-json.test.mjs 验证字段、身份、无损和确定性；mountJSONPreview 由双浏览器验收实际只读预览与下载字节、切换及清理。
 
@@ -76,11 +76,15 @@ JSON 只读 CM6 复用源码窗 ocr-cm-source 行号、字体及 Everforest 配�
 
 ## WP05A3 · Prompt 样式及本次任务参数
 
-Prompt CM6 与只读源码窗复用 ocr-cm-source、Everforest、Markdown 源码着色及标题标记，独立编辑与 Undo/Redo 保留。既有本浏览器 Prompt 用户草稿原样加载，不强行替换旧文本；新增默认任务书引用文末自动参数。createPromptParameters(artifact,workspace) 以唯一当前 JSON 导出及授权资料目录派生 input_json（资料目录/trans/sentences.json，明确待手动交接）、input_status、target_language、task_id、source_sha256、sentence_sha256、schema、sentence_count、AI_ID、result_json（资料目录/trans/AI_ID.json）。参数来自当前 JSON，不另设目标语言权威；目标语言当前仍为 zh-CN，正式配置及落盘留 WP05B。不得声称路径已有文件或自动写入。参数区在同一 CM6 文档末尾只读，复制/getPromptText 得到完整任务书，显式保存只存用户正文，参数切换不进入历史或修改草稿 dirty 状态。无有效表/换目录/授权失败立即清除旧参数。直接测试及双浏览器覆盖样式、当前路径、参数区拒绝编辑、草稿保存、切换更新及既有 Prompt/JSON 回归。
+Prompt CM6 与只读源码窗复用 ocr-cm-source、Everforest、Markdown 源码着色及标题标记，独立编辑与 Undo/Redo 保留。既有本浏览器 Prompt 用户草稿原样加载，不强行替换旧文本；新增默认任务书引用文末自动参数。createPromptParameters(artifact,workspace) 以唯一当前 JSON 导出及授权资料目录派生 input_json（资料目录/trans/sentences.json；WP05A4 直接导出并回读核验）、input_status、target_language、task_id、source_sha256、sentence_sha256、schema、sentence_count、AI_ID、result_json（资料目录/trans/AI_ID.json）。参数来自当前 JSON，不另设目标语言权威；目标语言当前仍为 zh-CN，正式配置及落盘留 WP05B。不得声称路径已有文件或自动写入。参数区在同一 CM6 文档末尾只读，复制/getPromptText 得到完整任务书，显式保存只存用户正文，参数切换不进入历史或修改草稿 dirty 状态。无有效表/换目录/授权失败立即清除旧参数。直接测试及双浏览器覆盖样式、当前路径、参数区拒绝编辑、草稿保存、切换更新及既有 Prompt/JSON 回归。
+
+## WP05A4 · JSON 直接导出至 input_json
+
+现有「导出 JSON」按钮不再触发浏览器下载，而是 POST translation/export（仅工作目录与当前预览 UTF-8 SHA-256）。后端复用 F02 授权及固定目录/普通文件安全端口，只读重新核验已保存译句和上游句表，按同一 ocr2md-trans/v1 字节协议校验 SHA-256；匹配后只允许创建当前资料目录 trans/sentences.json（必要时创建固定 trans 目录），回读验证完整内容及摘要。已存在相同文件幂等复用；不同内容拒绝覆盖、保留旧任务与其他 AI 文件，不提供重建或删除操作。拒绝符号/硬链接及任意客户端输出路径，沿用公共文件服务 8 MiB 上限。Prompt 的 input_json 与前端验收路径共享同一函数，input_status 仅在本会话当前任务收到匹配回读凭证后标记已验证；刷新后再次点击可重新核验，不冒称文件已写入。目录切换/任务变化时清除状态，迟到结果不污染新目录。用户正文、JSON 预览/格式/定位、SQL、AG 与其他州数据不变。直接测试包含跨语言字节一致、真实隔离文件、冲突和权限；双浏览器验证固定路径、回读状态、无浏览器下载、筛选不影响导出。目标语言设置及 prompt.md 落盘留 WP05B。
 
 ## 已确定的后续执行边界（尚未实现）
 
-- WP05 后续：指定目标语言；在书籍工作目录 trans/ 导出 sentences.json 与 prompt.md。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
+- WP05 后续：指定目标语言；在书籍工作目录 trans/ 导出 prompt.md（sentences.json 已由 WP05A4 实现）。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
 - 后续独立航点：验证导入多 AI 结果、保留所有译文、仅对校正分歧仲裁；未校正/未翻译如实标记，基于未采用校正的译文标明来源差异。最终按原句身份生成一份校正原文、多份译文的句级交叉互译文档，原句与上游始终不变。尚未确定最终校译存储 schema，不提前建额外表。
 
 ## 构建与验收

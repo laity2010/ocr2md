@@ -1,8 +1,11 @@
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
-import {createTranslationJSON,indexJSONSentences} from '../ui/translation/export-json.js';
+import {createTranslationJSON,indexJSONSentences,exportTranslationJSON} from '../ui/translation/export-json.js';
 import {sha256} from '../ui/translation/original-sentences.js';
 
 test('export exact prepared text, grouped MDLine, stable identity, no protected values or raw',async()=>{
@@ -45,4 +48,23 @@ test('JSON display index uses exact compound identity, not text or original line
  }
  assert.equal(indexJSONSentences('').size,0);
  assert.deepEqual([...indexJSONSentences(artifact.text)], [...index]);
+});
+
+
+test('server byte parity with preview and verified export response',async()=>{
+ const table=preparedFixture(await sampleSnapshot(' 😀 中文 \"quote\" \\',true,true),'ready');
+ const artifact=await createTranslationJSON(table);
+ const scripts=fileURLToPath(new URL('../scripts',import.meta.url));
+ const backend=execFileSync('python3',['-c','import json,sys; from lab_backend import input_bytes; sys.stdout.buffer.write(input_bytes(json.load(sys.stdin)))'],{env:{...process.env,PYTHONPATH:scripts},input:JSON.stringify(table)});
+ assert.equal(backend.toString('utf8'),artifact.text);
+ const digest=createHash('sha256').update(artifact.text).digest('hex');
+ const receipt={path:'/books/中文/trans/sentences.json',sha256:digest,size:backend.length,state:'created'};
+ const result=await exportTranslationJSON('/books/中文',artifact.text,{fetcher:async(url,opts)=>{
+   assert.equal(url,'/labs/lab-translation/api/translation/export');assert.equal(opts.method,'POST');
+   assert.deepEqual(JSON.parse(opts.body),{workspace:'/books/中文',sha256:digest});
+   return {ok:true,json:async()=>receipt};
+ }});
+ assert.deepEqual(result,receipt);
+ await assert.rejects(exportTranslationJSON('/books/中文',artifact.text,{fetcher:async()=>({ok:true,json:async()=>({...receipt,path:'/wrong'})})}),/身份/);
+ await assert.rejects(exportTranslationJSON('/books/中文',artifact.text,{fetcher:async()=>({ok:false,json:async()=>({error:'旧任务'})})}),/旧任务/);
 });

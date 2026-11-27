@@ -1,4 +1,5 @@
 /** WP04 browser-local draft only. WP05 owns trans export. */
+import {inputJSONPath} from './export-json.js';
 export const PROMPT_KEY='ocr2md.lab-translation.prompt.md.v1';
 export const DEFAULT_PROMPT=`# OCR2MD · 独立校译任务书 V1
 
@@ -39,14 +40,14 @@ export function createPromptStorage(storage){
 
 /** Runtime parameters are derived from the verified export, never a second
  * language/task authority. No filesystem existence or write is implied. */
-export function createPromptParameters(artifact,workspace){
+export function createPromptParameters(artifact,workspace,exportVerified=false){
   const head='\n\n## 本次任务参数（自动生成）\n\n';
   if(!artifact||!workspace)return head+'- 状态：尚无有效译句表，不能执行校译任务。\n';
   const task=JSON.parse(artifact.text);
   const directory=workspace.replace(/\/+$/,'')+'/trans';
   const fields={
-    input_json:directory+'/sentences.json',
-    input_status:'待交接：本工作台仅提供浏览器下载，尚未写入或验证上述路径；请先将导出的 sentences.json 保存至该路径，再读取校译。',
+    input_json:inputJSONPath(workspace),
+    input_status:exportVerified?'本次导出已写入或复用，并回读验证一致；执行前仍核对 task_id。':'尚未核验当前文件；请先在 JSON 窗点击「导出 JSON」，直接保存至 input_json。',
     target_language:task.target_language,
     task_id:task.task_id,
     source_sha256:task.source_sha256,

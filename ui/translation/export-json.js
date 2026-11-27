@@ -53,3 +53,19 @@ export function indexJSONSentences(text){
   }
   return result;
 }
+
+
+/** One destination shared by Prompt and the verified server response. */
+export const inputJSONPath=workspace=>workspace.replace(/\/+$/,'')+'/trans/'+TRANSLATION_JSON_FILENAME;
+export async function exportTranslationJSON(workspace,text,{fetcher=fetch}={}){
+  if(!workspace?.startsWith('/')||typeof text!=='string'||!text)throw Error('没有可导出的待译句 JSON');
+  const digest=await sha256(text);
+  const response=await fetcher('/labs/lab-translation/api/translation/export',{
+    method:'POST',cache:'no-store',credentials:'same-origin',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({workspace,sha256:digest})
+  });
+  const value=await response.json().catch(()=>null);
+  if(!response.ok)throw Error(value?.error||'HTTP '+response.status);
+  if(value?.path!==inputJSONPath(workspace)||value.sha256!==digest||value.size!==new TextEncoder().encode(text).length||!['created','unchanged'].includes(value.state))throw Error('JSON 导出回读身份不一致');
+  return value;
+}

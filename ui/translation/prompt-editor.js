@@ -11,12 +11,12 @@ import {obsidianMarkdown} from '../obsidian-markdown.js';
 import {createPromptStorage,DEFAULT_PROMPT,createPromptParameters} from './prompt-document.js';
 import './prompt-editor.css';
 
-export function mountPromptEditor(host,{onChange=()=>{},onStatus=()=>{},storage,artifact=null,workspace=''}={}){
+export function mountPromptEditor(host,{onChange=()=>{},onStatus=()=>{},storage,artifact=null,workspace='',exportVerified=false}={}){
   let port,baseline,loadError=null;
   try{port=createPromptStorage(storage??localStorage);baseline=port.read();}
   catch(error){loadError=error;baseline={stored:null,text:DEFAULT_PROMPT};}
   const generated=Annotation.define();
-  let suffix=createPromptParameters(artifact,workspace),editor;
+  let suffix=createPromptParameters(artifact,workspace,exportVerified),editor;
   const fullText=()=>editor.state.doc.toString();
   const text=()=>fullText().slice(0,editor.state.doc.length-suffix.length);
   const state=()=>({dirty:text()!==baseline.text,undo:undoDepth(editor.state),redo:redoDepth(editor.state)});
@@ -33,8 +33,8 @@ export function mountPromptEditor(host,{onChange=()=>{},onStatus=()=>{},storage,
     EditorView.contentAttributes.of({'aria-label':'翻译 Prompt（可编辑）',spellcheck:'false'}),
     EditorView.updateListener.of(update=>{if(update.docChanged||update.transactions.length)notify();})
   ]})});
-  function setTask(next,path){
-    const value=createPromptParameters(next,path);
+  function setTask(next,path,verified=false){
+    const value=createPromptParameters(next,path,verified);
     if(value===suffix)return;
     const from=editor.state.doc.length-suffix.length,to=editor.state.doc.length;
     suffix=value;

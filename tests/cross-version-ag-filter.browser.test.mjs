@@ -6,7 +6,7 @@ import {chromium,webkit} from 'playwright';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
 import {createTranslationJSON} from '../ui/translation/export-json.js';
-import {readFile} from 'node:fs/promises';
+import {createHash} from 'node:crypto';
 const HOST='http://127.0.0.1:5404/labs/lab-translation/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','preview','--config','labs/lab-translation/vite.config.mjs','--host','127.0.0.1','--port','5404','--strictPort'],{stdio:['ignore','pipe','pipe']});
 let log='';server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);
@@ -16,7 +16,7 @@ try{
   const browser=await engine.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1180,height:860},hasTouch:true});
-   const errors=[],reads=[],probes=[],loads=[],prepCalls=[];let failed=false,version=0,preparationFailed=false,denied=false,late=null;const persisted=new Map();
+   const errors=[],reads=[],probes=[],loads=[],prepCalls=[];let failed=false,version=0,preparationFailed=false,denied=false,late=null;const persisted=new Map(),exported=new Map(),exports=[];let exportConflict=false;let browserDownloads=0;page.on('download',()=>browserDownloads++);
    const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true,true),longSnapshot=await sampleSnapshot(' scroll',true,true,72);
    const prepared=preparedFixture(withFormula),oldPrepared=preparedFixture(old),freshPrepared=preparedFixture(fresh),longPrepared=preparedFixture(longSnapshot);
    persisted.set('/demo/books/d',longPrepared);
@@ -33,6 +33,14 @@ try{
     const reply=failed?{status:409,json:{error:'句表已过期，保留原表'}}:{json:result?{...result,state:'ready'}:{schema:'ocr2md-translation-preparation/v2',state:'missing'}};
     if(late&&path===late.path){const gate=late;gate.started();await gate.promise;try{await r.fulfill(reply);}catch{}return;}
     return r.fulfill(reply);
+   });
+   await page.route('**/labs/lab-translation/api/translation/export',async r=>{
+    assert.equal(r.request().method(),'POST');const {workspace,sha256}=r.request().postDataJSON();
+    const artifact=await createTranslationJSON(persisted.get(workspace));const digest=createHash('sha256').update(artifact.text).digest('hex');
+    assert.equal(sha256,digest);exports.push({workspace,sha256});
+    if(exportConflict)return r.fulfill({status:409,json:{error:'已有不同任务，保留原文件'}});
+    const state=exported.has(workspace)?'unchanged':'created';exported.set(workspace,artifact.text);
+    return r.fulfill({json:{path:workspace+'/trans/sentences.json',sha256:digest,size:Buffer.byteLength(artifact.text),state}});
    });
    await page.route('**/labs/lab-translation/api/translation/initialize',r=>{
     assert.equal(r.request().method(),'POST');
@@ -184,10 +192,19 @@ try{
    // and use the download event to verify every exported byte.
    assert.equal(await jsonHost.locator('.cm-line').first().textContent(),'{');
    assert.match((await jsonHost.locator('.cm-line').allTextContents()).join('\n'),/ocr2md-trans\/v1/);
-   const downloadPromise=page.waitForEvent('download');
-   await exportButton.click();const downloaded=await downloadPromise;
-   assert.equal(downloaded.suggestedFilename(),'sentences.json');
-   assert.equal(await readFile(await downloaded.path(),'utf8'),expectedJSON.text);
+   await exportButton.click();await waitStatus('JSON 已导出');
+   assert.equal(exported.get('/demo/books/b'),expectedJSON.text);
+   assert.equal(exports.at(-1).workspace,'/demo/books/b');assert.equal(browserDownloads,0);
+   await mode.selectOption('prompt');await showPromptParams('/demo/books/b/trans/sentences.json');
+   assert.match(await prompt.locator('.cm-line').filter({hasText:'input_status:'}).textContent(),/回读验证一致/);
+   await mode.selectOption('json');
+   exportConflict=true;await exportButton.click();await waitStatus('JSON 导出失败');
+   assert.equal(exported.get('/demo/books/b'),expectedJSON.text);
+   exportConflict=false;
+   await mode.selectOption('prompt');await showPromptParams('/demo/books/b/trans/sentences.json');
+   assert.match(await prompt.locator('.cm-line').filter({hasText:'input_status:'}).textContent(),/尚未核验/);
+   await prompt.locator('.cm-scroller').evaluate(el=>el.scrollTop=0);
+   await mode.selectOption('json');
    // WP05A2: reuse exact source gutter styles, and sync by compound identity.
    const gutterStyle=scope=>scope.locator('.cm-gutters').evaluate(el=>{
      const c=getComputedStyle(el);return [c.backgroundColor,c.color,c.borderRightColor,c.borderRightWidth,c.fontFamily,c.fontSize];
@@ -208,10 +225,11 @@ try{
    console.log('TRANSLATION_WP05A2_BROWSER_PASS',name,'shared gutter, AG/source identity, hidden focus restore, non-exported clear');
 
    await mode.selectOption('prompt');
-   assert.match(await prompt.locator('.cm-line').first().textContent(),/WP04draft/);
+   await prompt.locator('.cm-scroller').evaluate(el=>el.scrollTop=0);
+   await page.waitForFunction(()=>document.querySelector('.translation-prompt-editor .cm-line')?.textContent.includes('WP04draft'));
    assert.equal(await workspace.locator('#prompt-undo').isEnabled(),true);
    await mode.selectOption('md');
-   console.log('TRANSLATION_WP05A_BROWSER_PASS',name,'JSON preview readonly, exact download, Prompt preserved');
+   console.log('TRANSLATION_WP05A_BROWSER_PASS',name,'JSON preview readonly, exact export, Prompt preserved');
    // WP04F6: only one AG view and one full RAW source, no hidden comparison editor.
    const agPicker=workspace.locator('.ocr-ag-module-select');
    assert.deepEqual(await agPicker.locator('option').allTextContents(),['原句表']);
@@ -313,8 +331,9 @@ try{
    await chooseNav(workspace,'settings');await waitStatus('已有译句表');await chooseNav(settings,'translation');await workspace.waitFor({state:'visible'});await count(1);
    // AG filtering never changes the export.
    await mode.selectOption('json');
-   const filteredDownload=page.waitForEvent('download');await exportButton.click();
-   assert.equal(await readFile(await (await filteredDownload).path(),'utf8'),expectedJSON.text);
+   await exportButton.click();await waitStatus('JSON 已存在且一致');
+   assert.equal(exported.get('/demo/books/b'),expectedJSON.text);assert.equal(browserDownloads,0);
+   console.log('TRANSLATION_WP05A4_BROWSER_PASS',name,'direct export fixed input_json, byte identity, conflict and repeat, no download');
 
    await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await waitStatus('已有译句表');await bind('/demo/books/c');
    assert.equal(await nav(settings).locator('option[value="translation"]').count(),0);await count(0);
