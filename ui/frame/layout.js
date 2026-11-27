@@ -3,6 +3,7 @@ import {createDockview,themeAbyss} from 'dockview';
 import {mountReadingPreview,mountReadingSource} from '../translation/reading.js';
 import {placeholder} from '../translation/refill.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
+import {mountJSONPreview} from '../translation/json-preview.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
@@ -113,40 +114,55 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
     const mode=document.createElement('select');mode.className='ocr-preview-mode';
-    mode.setAttribute('aria-label','预览类型');mode.innerHTML='<option value="md">Markdown 预览</option><option value="prompt">翻译 Prompt</option>';
+    mode.setAttribute('aria-label','预览类型');mode.innerHTML='<option value="md">Markdown 预览</option><option value="prompt">翻译 Prompt</option><option value="json">JSON</option>';
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo translation-prompt-actions';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','Prompt 撤销与重做');actions.hidden=true;
     const undo=document.createElement('button'),redo=document.createElement('button');
     for(const [button,id,label,glyph] of [[undo,'prompt-undo','撤销 Prompt','↶'],[redo,'prompt-redo','重做 Prompt','↷']]){
       button.type='button';button.id=id;button.setAttribute('aria-label',label);button.title=label;button.textContent=glyph;button.disabled=true;actions.append(button);
     }
-    bar.append(mode,actions);element.append(bar);
+    const jsonActions=document.createElement('div');jsonActions.className='ocr-preview-mode-tools translation-json-actions';jsonActions.hidden=true;
+    const download=document.createElement('button');download.type='button';download.textContent='导出 JSON';download.disabled=true;
+    jsonActions.append(download);
+    bar.append(mode,actions,jsonActions);element.append(bar);
     const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';element.append(area);
     const promptHost=document.createElement('div');promptHost.className='translation-prompt-editor frame-editor';promptHost.hidden=true;element.append(promptHost);
-    element.setAttribute('aria-label','Markdown 预览与翻译 Prompt');
+    const jsonHost=document.createElement('div');jsonHost.className='translation-json-preview frame-editor';jsonHost.hidden=true;element.append(jsonHost);
+    element.setAttribute('aria-label','Markdown 预览、翻译 Prompt 与 JSON');
     owned=()=>{
       const reader=mountReadingPreview(area,onLocate);
-      let prompt=null,lastFocus=null;
+      let prompt=null,jsonReader=null,jsonArtifact=null,lastFocus=null;
       const refresh=state=>{
         undo.disabled=!state.undo;redo.disabled=!state.redo;
         if(mode.value==='prompt')onStatus(state.dirty?'● 翻译 Prompt 未保存':'翻译 Prompt · 已保存或默认任务书',state.dirty?'warning':'info');
       };
       function switchMode(){
-        const editing=mode.value==='prompt';
+        const editing=mode.value==='prompt',showJSON=mode.value==='json';
         if(editing&&!prompt)prompt=mountPromptEditor(promptHost,{onChange:refresh,onStatus});
-        element.dataset.previewMode=mode.value;area.hidden=editing;promptHost.hidden=!editing;actions.hidden=!editing;
-        if(editing)prompt.activate();else{reader.locate(lastFocus,{scroll:true});onStatus('Markdown 阅读预览');}
+        if(showJSON&&!jsonReader){jsonReader=mountJSONPreview(jsonHost);jsonReader.setArtifact(jsonArtifact);}
+        element.dataset.previewMode=mode.value;
+        area.hidden=editing||showJSON;promptHost.hidden=!editing;actions.hidden=!editing;
+        jsonHost.hidden=!showJSON;jsonActions.hidden=!showJSON;
+        if(editing)prompt.activate();
+        else if(showJSON){jsonReader.layout();onStatus(jsonArtifact?'待译句 JSON · '+jsonArtifact.count+' 句':'请先 SQL 初始化',jsonArtifact?'info':'warning');}
+        else{reader.locate(lastFocus,{scroll:true});onStatus('Markdown 阅读预览');}
       }
+      function downloadJSON(){
+        try{jsonReader.download();}
+        catch(error){onStatus('JSON 导出失败：'+error.message,'error');}
+      }
+      download.addEventListener('click',downloadJSON);
       mode.addEventListener('change',switchMode);
       undo.addEventListener('click',()=>prompt?.undo());redo.addEventListener('click',()=>prompt?.redo());
       return Object.freeze({
         setDocument(...args){reader.setDocument(...args);},
+        setJSONArtifact(artifact){jsonArtifact=artifact;download.disabled=!artifact;jsonReader?.setArtifact(artifact);},
         locate(row,options){lastFocus=row;if(mode.value==='md')reader.locate(row,options);},
-        layout(){reader.layout();if(mode.value==='prompt')prompt?.layout();},
+        layout(){reader.layout();if(mode.value==='prompt')prompt?.layout();if(mode.value==='json')jsonReader?.layout();},
         isPromptActive:()=>mode.value==='prompt',
         getPromptText:()=>prompt?.getText()??null,
         savePrompt:()=>prompt?.save(),
-        dispose(){reader.dispose();prompt?.dispose();mode.removeEventListener('change',switchMode);}
+        dispose(){reader.dispose();prompt?.dispose();jsonReader?.dispose();download.removeEventListener('click',downloadJSON);mode.removeEventListener('change',switchMode);}
       });
     };
   }else throw Error('Unknown Frame pane '+name);
@@ -193,6 +209,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     getPromptText:()=>previewReader?.getPromptText()??null,
     savePrompt:()=>previewReader?.savePrompt(),
     setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
+    setJSONArtifact(artifact){previewReader?.setJSONArtifact(artifact);},
     setReadingDocument:applyReading,activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);previewReader?.layout();},
     dispose(){dockview.dispose();}});

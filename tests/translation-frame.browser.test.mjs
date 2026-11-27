@@ -39,7 +39,7 @@ try{
       assert.equal(await page.locator('#workspace .dv-content-container').count(),3);
       assert.equal(await page.locator('#workspace').isVisible(),false);
       assert.equal(await page.locator('#workspace .ocr-detached-pdf-pane,#workspace .ocr-preview-split-toggle').count(),0);
-      assert.deepEqual(await page.locator('#workspace .ocr-preview-mode option').evaluateAll(xs=>xs.map(x=>x.value)),['md','prompt']);
+      assert.deepEqual(await page.locator('#workspace .ocr-preview-mode option').evaluateAll(xs=>xs.map(x=>x.value)),['md','prompt','json']);
 
       assert.equal(await page.locator('#settings-workspace').isVisible(),true);
       assert.equal(await page.locator('#workspace .ocr-ag-module-select').isDisabled(),true);

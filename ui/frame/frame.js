@@ -5,6 +5,7 @@ import './frame.css';
 import {createFrameWorkspace} from './layout.js';
 import {initializeTable} from '../translation/preparation.js';
 import {createReadingDocument} from '../translation/document.js';
+import {createTranslationJSON} from '../translation/export-json.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
@@ -35,7 +36,7 @@ let probeGeneration=0,verifiedPath='',selectedPath='';
 let preparation=null,preparationRequest=null;
 function clearPreparation(){
   preparationRequest?.abort();preparationRequest=null;preparation=null;
-  frame.setTranslationRows(null);frame.setReadingDocument(null);syncNavigation();
+  frame.setTranslationRows(null);frame.setReadingDocument(null);frame.setJSONArtifact(null);syncNavigation();
 }
 function settingsNav(){return $('settings-workspace').querySelector('.ocr-source-file-select');}
 function syncNavigation(){
@@ -61,7 +62,9 @@ async function initializeSQL(){
     const result=await initializeTable(path,{signal:controller.signal});
     if(preparationRequest!==controller||verifiedPath!==path||selectedPath!==path)return;
     const model=createReadingDocument(result);
-    preparation=result;frame.setTranslationRows(result.rows);frame.setReadingDocument(model,path);
+    const artifact=await createTranslationJSON(result);
+    if(preparationRequest!==controller||verifiedPath!==path||selectedPath!==path)return;
+    preparation=result;frame.setTranslationRows(result.rows);frame.setReadingDocument(model,path);frame.setJSONArtifact(artifact);
     await showModule('translation');
   }catch(error){
     if(preparationRequest!==controller)return;

@@ -5,6 +5,8 @@ import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
+import {createTranslationJSON} from '../ui/translation/export-json.js';
+import {readFile} from 'node:fs/promises';
 const HOST='http://127.0.0.1:5404/labs/lab-translation/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','preview','--config','labs/lab-translation/vite.config.mjs','--host','127.0.0.1','--port','5404','--strictPort'],{stdio:['ignore','pipe','pipe']});
 let log='';server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);
@@ -96,7 +98,7 @@ try{
    assert((await source.locator('.translation-focus-source').allTextContents()).join('').includes('<table>'));
    // WP04: same preview pane, independent CM6 Prompt state and history.
    const mode=workspace.locator('.ocr-preview-mode');
-   assert.deepEqual(await mode.locator('option').evaluateAll(xs=>xs.map(x=>x.value)),['md','prompt']);
+   assert.deepEqual(await mode.locator('option').evaluateAll(xs=>xs.map(x=>x.value)),['md','prompt','json']);
    assert.equal(await workspace.locator('.ocr-detached-pdf-pane,.ocr-preview-split-toggle').count(),0);
    const settingsBefore=await page.evaluate(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1'));
    const promptKey='ocr2md.lab-translation.prompt.md.v1';
@@ -132,7 +134,27 @@ try{
    await page.waitForFunction(key=>localStorage.getItem(key)?.includes('WP04draft'),promptKey);
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')),settingsBefore);
    assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
+   await mode.selectOption('json');
+   const jsonHost=workspace.locator('.translation-json-preview'),exportButton=workspace.getByRole('button',{name:'导出 JSON',exact:true});
+   await jsonHost.waitFor({state:'visible'});
+   assert.equal(await preview.isVisible(),false);assert.equal(await prompt.isVisible(),false);
+   assert.equal(await jsonHost.locator('.cm-content').getAttribute('contenteditable'),'false');
+   assert.equal(await workspace.locator('#prompt-undo').isVisible(),false);
+   assert.equal(await exportButton.isEnabled(),true);
+   const expectedJSON=await createTranslationJSON(prepared);
+   // CM6 may virtualize long documents; inspect the real visible start
+   // and use the download event to verify every exported byte.
+   assert.equal(await jsonHost.locator('.cm-line').first().textContent(),'{');
+   assert.match((await jsonHost.locator('.cm-line').allTextContents()).join('\n'),/ocr2md-trans\/v1/);
+   const downloadPromise=page.waitForEvent('download');
+   await exportButton.click();const downloaded=await downloadPromise;
+   assert.equal(downloaded.suggestedFilename(),'sentences.json');
+   assert.equal(await readFile(await downloaded.path(),'utf8'),expectedJSON.text);
+   await mode.selectOption('prompt');
+   assert.match(await prompt.locator('.cm-line').first().textContent(),/WP04draft/);
+   assert.equal(await workspace.locator('#prompt-undo').isEnabled(),true);
    await mode.selectOption('md');
+   console.log('TRANSLATION_WP05A_BROWSER_PASS',name,'JSON preview readonly, exact download, Prompt preserved');
    // WP04F6: only one AG view and one full RAW source, no hidden comparison editor.
    const agPicker=workspace.locator('.ocr-ag-module-select');
    assert.deepEqual(await agPicker.locator('option').allTextContents(),['原句表']);
@@ -232,9 +254,17 @@ try{
    await revealColumn('text');
    await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ag-row [col-id="text"]')].some(el=>el.textContent.includes('⟦P0⟧')));
    await chooseNav(workspace,'translation');await count(1);
+   // AG filtering never changes the export.
+   await mode.selectOption('json');
+   const filteredDownload=page.waitForEvent('download');await exportButton.click();
+   assert.equal(await readFile(await (await filteredDownload).path(),'utf8'),expectedJSON.text);
+
    await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/a');
    assert.equal(await nav(settings).locator('option[value="translation"]').count(),0);await count(0);
    assert.equal((await source.locator('.cm-content').textContent()).trim(),'');assert.equal(await preview.locator('h1').count(),0);
+   assert.equal((await jsonHost.locator('.cm-content').textContent()).trim(),'');
+   assert.equal(await workspace.locator('.translation-json-actions button').isDisabled(),true);
+
    assert.equal(prepCalls.length,4);
    // Reload: only the explicitly saved Prompt survives; history is session-local.
    await page.reload({waitUntil:'domcontentloaded'});

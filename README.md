@@ -1,8 +1,8 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP04F6，继承 WP00–04F5）
+## 当前可运行基线（WP05A，继承 WP00–04F6）
 
-独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt。
+独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt / JSON（WP05A）。
 
 唯一正式入口 `/labs/lab-translation/`，通过统一 `release/` manifest 与门户登记；使用现有网关和 `/labs/lab-frame/api/workspace-io/` 公共 F02，不增加端口或 Tunnel。浏览器设置键 `ocr2md.lab-translation.settings.json.v1`，不读取 Frame、V2 或 Sentence 的设置。F02 授权仍由 Frame 的独立签名会话及目录白名单负责；用户主动选择目录时才按 Frame 约定探针，WP01 不自动读取 SQL。
 
@@ -46,7 +46,7 @@ WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。
 
 ## WP04 · 翻译 Prompt 编辑
 
-保留原 AG 左窗、CM6 源码右上窗、预览右下窗及各自工具栏；撤下独立 PDF 占位和切分 checkbox。原预览下拉仅两个选项：Markdown 预览（默认）和翻译 Prompt。切换仅隐藏/显示同一窗中的阅读器和独立 Prompt CM6，不销毁编辑器、阅读器或其会话，不自动改 AG、原句、保护范围或 SQL。Prompt 模式工具栏自有撤销/重做，源码撤销/重做保持禁用。AG/源码定位继续联动，返回 MD 时恢复最后的阅读定位。
+保留原 AG 左窗、CM6 源码右上窗、预览右下窗及各自工具栏；撤下独立 PDF 占位和切分 checkbox。原预览下拉选项：Markdown 预览（默认）、翻译 Prompt、JSON（WP05A）。切换仅隐藏/显示同一窗中的阅读器和独立 Prompt CM6，不销毁编辑器、阅读器或其会话，不自动改 AG、原句、保护范围或 SQL。Prompt 模式工具栏自有撤销/重做，源码撤销/重做保持禁用。AG/源码定位继续联动，返回 MD 时恢复最后的阅读定位。
 
 默认任务书沿用已讨论的统一校译要求：完整 MDLine 上下文、逐句 corrected/translated、目标语言、保护占位符、身份字段及独立 AI_ID.json；最终导出 schema 示例和目录路径留 WP05。WP04 的任务书为本州通用草稿，非按书籍存储：CM6 为唯一编辑权威，历史仅内存，显式点击顶栏全局保存（Prompt 模式）才将当前草稿写入本浏览器独立 localStorage 键 `ocr2md.lab-translation.prompt.md.v1`；切换和 Undo/Redo 不写盘。刷新加载已保存稿、历史重新开始。其他页面已改同一草稿时拒绝覆盖；保存失败保留编辑内容。设置模式仍保存 settings.json；原 Markdown 不可编辑。未生成 trans、未写用户文件或数据库、无跨设备同步。
 
@@ -56,9 +56,15 @@ WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。
 | mountPromptEditor(host,options) | getText/getState/save/undo/redo/activate/layout/dispose；独立 CM6，由真实双浏览器验收 |
 | createFrameWorkspace.isPromptActive/getPromptText/savePrompt | 原预览组合端口及全局保存分流；tests/cross-version-ag-filter.browser.test.mjs |
 
+## WP05A · 待译句 JSON 预览与下载
+
+SQL 初始化验证后，同一份冻结译句表生成唯一派生的 JSON 文本；现有预览下拉增加 JSON，只读 CM6（行号、JSON 语法着色），不改源码、AG 或 Prompt。工具栏「导出 JSON」手动下载 sentences.json，UTF-8，无 BOM，预览与下载同一字符串（含末尾 LF）。未初始化禁用下载，目录变化/失败清除 JSON；切换及下载不读写 SQL，AG 筛选不影响内容。此航点不写书籍目录、不创建 trans、不导出 prompt.md。
+
+输入结构 ocr2md-trans/v1：schema、task_id（去除 task_id 的规范字段顺序 JSON.stringify 的 SHA-256）、source_sha256（原文摘要）、sentence_sha256（已保存分句摘要）、target_language（暂为 zh-CN）、mdlines（按原 source_line 分组，继承 type/level；每组 sentences 保留原 sentence_index 与 text）。仅 translatable=true；整句不可译省略、不重新编号，保留占位符原样，不输出 raw、protected 原值、绝对路径及内部 SQL 字段。回填原值仅留本地。生成器复验每句 text 与回填及全文 RAW SHA，任务 ID 随输入/目标语言变化；尚不绑定 Prompt 摘要，正式工作目录任务协议在下一航点确定。createTranslationJSON(table,options) 为唯一生成器，tests/translation-export-json.test.mjs 验证字段、身份、无损和确定性；mountJSONPreview 由双浏览器验收实际只读预览与下载字节、切换及清理。
+
 ## 已确定的后续执行边界（尚未实现）
 
-- WP05：指定目标语言；在书籍工作目录 trans/ 导出 sentences.json 与 prompt.md。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
+- WP05 后续：指定目标语言；在书籍工作目录 trans/ 导出 sentences.json 与 prompt.md。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
 - 后续独立航点：验证导入多 AI 结果、保留所有译文、仅对校正分歧仲裁；未校正/未翻译如实标记，基于未采用校正的译文标明来源差异。最终按原句身份生成一份校正原文、多份译文的句级交叉互译文档，原句与上游始终不变。尚未确定最终校译存储 schema，不提前建额外表。
 
 ## 构建与验收
