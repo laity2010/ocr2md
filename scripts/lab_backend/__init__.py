@@ -8,7 +8,7 @@ import re
 import sqlite3
 import stat
 import subprocess
-from urllib.parse import urlencode
+from urllib.parse import urlencode, parse_qs
 
 from .sentence_store import SentenceStore
 from .sentence_initialize import prepare_sentence_rows
@@ -165,12 +165,54 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
     return response('ready', rows)
 
 
+def read_saved_sentences(folder, reader):
+    """Public downstream snapshot. Never initialize, migrate, probe or save."""
+    path=folder / DB_NAME
+    identity=file_identity(path)
+    snapshot=reader()
+    digest=snapshot_hash(snapshot)
+    kinds=public_line_types(snapshot)
+    def verify():
+        if file_identity(path)!=identity:
+            raise SentenceError(409,'SQLite 文件已切换')
+        current=reader()
+        if snapshot_hash(current)!=digest or public_line_types(current)!=kinds:
+            raise SentenceError(409,'上游已保存 MDLine 已变化，请重新读取')
+        if file_identity(path)!=identity:
+            raise SentenceError(409,'SQLite 文件已切换')
+    with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=10)) as db:
+        db.execute('PRAGMA query_only=ON')
+        state,rows=SentenceStore(db).inspect(snapshot['markdown'],verify_source=verify)
+        if state!='ready' or any(r['type']!=kinds[r['source_line']-1] for r in rows):
+            raise SentenceError(409,'句表未初始化、已过期或需要在 Sentence 州迁移；只读读取不会修改它')
+        verify()
+    # Full record digest detects changed arbitration even with unchanged Markdown.
+    payload=json.dumps(rows,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')
+    if len(payload)>MAX_SNAPSHOT:
+        raise SentenceError(413,'句表快照超限')
+    return {'schema':'ocr2md-sentence-snapshot/v1','source_document_hash':digest,
+            'sentence_sha256':hashlib.sha256(payload).hexdigest(),'rows':rows}
+
+
 def handle(handler, operation, parsed, common):
     def respond(code, obj):
         handler.respond(code, json.dumps(obj, ensure_ascii=False), 'application/json; charset=utf-8')
     try:
         if common is None:
             raise SentenceError(503, 'Frame 授权服务不可用')
+        if operation=='sentence/snapshot':
+            if handler.command!='GET':
+                raise SentenceError(405,'句表快照只允许 GET')
+            origin=handler.headers.get('Origin')
+            if origin and origin not in common.ALLOWED_ORIGINS:
+                raise SentenceError(403,'拒绝未授权来源')
+            query=parse_qs(parsed.query,keep_blank_values=True)
+            if set(query)!={'workspace'} or len(query['workspace'])!=1:
+                raise SentenceError(422,'只读快照请求字段不合法')
+            cookie=handler.headers.get('Cookie','')
+            folder=common.checked_workspace(query['workspace'][0],common.authorized_roots(cookie))
+            respond(200,read_saved_sentences(folder,lambda:read_public_snapshot(folder,cookie)))
+            return
         if operation not in ('sentence/open','sentence/reinitialize','sentence/save'):
             raise SentenceError(404, '未知分句接口')
         if handler.command != 'POST':

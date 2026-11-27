@@ -186,3 +186,7 @@ Python 8/8、Node 14/14 PASS：真实 V2 夹具 497 MDLine 初始化为 677 句�
 ## 构建和验收
 
 使用联邦 .ops/git-gate.py；正式构建使用 labs/lab-sentence/vite.config.mjs，发布使用 scripts/sentence_publish.py。无用户资料测试。F02 使用原 Frame 公共授权 API。
+
+## WP04F6 · 下游只读已保存句表快照
+
+`GET /labs/lab-sentence/api/sentence/snapshot?workspace=授权目录` 是唯一新增的下游运行公开接口，复用 Frame F02 Cookie、目录白名单及来源校验（无 Origin 的同源 GET 可用）。只读 V2 已保存 MDLine，并用 SQLite `mode=ro` + `query_only` 和 SentenceStore 自有表事务检查读取已保存句记录；不调用 probe、分句引擎、初始化、迁移或保存。缺表、旧 schema、原文或 type 不一致返回 409 且不返回旧行；非法目录/未授权拒绝，失败不产生数据变更。返回 `schema=ocr2md-sentence-snapshot/v1`、`source_document_hash`、`sentence_sha256`（按 UTF-8、ensure_ascii=False、sort_keys=True、紧凑分隔符序列化完整有序 rows 后 SHA-256）、`rows`（当前正式完整列，顺序 source_line/sentence_index），用于下游引用及仲裁版本溯源。只读取已提交的仲裁，不读取浏览器未落盘内存。旧 open/save/reinitialize 及 UI、DDL 不变。直接测试 `python3 -m unittest discover -s tests -p test_sentence_readonly.py -v`。
