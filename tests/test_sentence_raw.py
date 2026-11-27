@@ -7,7 +7,7 @@ from contextlib import closing
 from pathlib import Path
 from test_sentence_store import plan, whole_plans, prepare_owned_book, upstream_evidence, base, FailConnection
 from sentence_store import SentenceStore, build_sentence_rows, rebuild_markdown
-from lab_backend.sentence_store import LEGACY_DDL, LEGACY_COLUMNS, _build_legacy_rows
+from lab_backend.sentence_store import LEGACY_DDL, LEGACY_COLUMNS, _build_legacy_rows, RAW_V1_DDL, COLUMNS, INSERT
 from lab_backend.sentence_initialize import classify_markdown
 import lab_backend as runtime
 
@@ -90,3 +90,56 @@ class RawTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'external SQL dependency'):
                 store.upgrade(md,classify_markdown(md))
             self.assertTrue(store.is_legacy())
+
+class OriginalTypeTests(unittest.TestCase):
+    def test_raw_v1_same_source_upgrade_keeps_all_other_fields(self):
+        with tempfile.TemporaryDirectory(prefix='sentence-wp04f5-') as tmp:
+            folder=Path(tmp); snap=prepare_owned_book(folder); md=snap['markdown']; path=folder/base.DB_NAME
+            plans=whole_plans(md)
+            number=next(i for i,t in enumerate(md.split('\n'),1) if len(t)>5 and t.isascii() and t.strip())
+            plans[number-1]=plan([2],'adopted',[[2],[],[2]],'intl')
+            old=build_sentence_rows(md,plans,classify_markdown(md))
+            with closing(sqlite3.connect(path)) as db:
+                before=upstream_evidence(db)
+                db.executescript("CREATE TABLE translation(id,body);INSERT INTO translation VALUES(1,'keep');")
+                db.execute(RAW_V1_DDL)
+                db.executemany(INSERT,(tuple(r[k] for k in COLUMNS) for r in old));db.commit()
+            def no_engines(_):raise AssertionError('same-source upgrade must not run engines')
+            types=runtime.public_line_types(snap)
+            self.assertTrue({'title','table_caption','table_body','table_footnote','image_body'}.issubset(set(types)),set(types))
+            expected=[{**r,'type':types[r['source_line']-1]} for r in old]
+            result=runtime.dispatch(folder,'open',snap['sha256'],lambda:base.existing_markdown(folder),prepare=no_engines)
+            self.assertEqual(result['rows'],expected)
+            self.assertEqual(rebuild_markdown(result['rows']),md)
+            self.assertEqual(runtime.dispatch(folder,'open',snap['sha256'],lambda:base.existing_markdown(folder),prepare=no_engines),result)
+            with closing(sqlite3.connect(path)) as db:
+                self.assertEqual(upstream_evidence(db),before)
+                self.assertEqual(db.execute('SELECT * FROM translation').fetchall(),[(1,'keep')])
+                self.assertFalse(SentenceStore(db).is_raw_v1())
+            print('WP04F5_RAW_UPGRADE',len(old),sorted(set(r['type'] for r in expected)))
+    def test_raw_v1_failure_rolls_back_and_stale_keeps_legacy_schema(self):
+        md='A. B.\n\n'; old=build_sentence_rows(md,[plan([2],'adopted',[[2],[],[2]],'intl'),plan()])
+        with closing(sqlite3.connect(':memory:',factory=FailConnection)) as db:
+            db.execute(RAW_V1_DDL)
+            db.executemany(INSERT,(tuple(r[k] for k in COLUMNS) for r in old));db.commit()
+            store=SentenceStore(db)
+            self.assertEqual(store.inspect(md+'changed'),('stale',[]))
+            db.fail_insert=True
+            with self.assertRaises(sqlite3.OperationalError): store.upgrade(md,['table_caption','table_caption'])
+            self.assertTrue(store.is_raw_v1())
+            self.assertEqual(store.inspect(md),('legacy',[]))
+            db.fail_insert=False
+            store.upgrade(md,['table_caption','table_caption'])
+            self.assertEqual(store.read(md),[{**r,'type':'table_caption'} for r in old])
+            store.upgrade(md,['table_body','table_body'])
+            self.assertEqual(store.read(md),[{**r,'type':'table_body'} for r in old])
+    def test_reject_bad_public_type_metadata(self):
+        from copy import deepcopy
+        with tempfile.TemporaryDirectory(prefix='sentence-wp04f5-invalid-') as tmp:
+            folder=Path(tmp); snap=prepare_owned_book(folder)
+            for field,value in [('type','not-original'),('from',-1),('source_line',0),('logical_id',-1)]:
+                bad=deepcopy(snap);bad['mdLines'][0][field]=value
+                with self.assertRaises(runtime.SentenceError):
+                    runtime.dispatch(folder,'open',snap['sha256'],lambda:bad)
+            with closing(sqlite3.connect(folder/base.DB_NAME)) as db:
+                self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},{'mineru_base','logical_block'})

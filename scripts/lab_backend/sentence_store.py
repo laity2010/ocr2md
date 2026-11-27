@@ -36,10 +36,11 @@ COLUMNS = (
     'from_utf16', 'to_utf16', 'raw', 'type', 'level', 'candidates_json',
     'review_state', 'adopted_engine',
 )
-DDL = LEGACY_DDL.replace(
+RAW_V1_DDL = LEGACY_DDL.replace(
     "    sentence_text TEXT NOT NULL,\n    line_eol TEXT NOT NULL CHECK(line_eol IN ('', char(10))),",
     "    raw TEXT NOT NULL,\n    type TEXT NOT NULL CHECK(type IN ('title','text','blank')),\n    level TEXT NOT NULL,"
 )
+DDL = RAW_V1_DDL.replace("type TEXT NOT NULL CHECK(type IN ('title','text','blank'))", "type TEXT NOT NULL")
 INSERT = 'INSERT INTO main.sentence (' + ','.join(COLUMNS) + ') VALUES (' + ','.join('?' for _ in COLUMNS) + ')'
 SELECT = 'SELECT ' + ','.join(COLUMNS) + ' FROM main.sentence ORDER BY source_line,sentence_index'
 
@@ -246,9 +247,8 @@ def _types(markdown, line_types):
         line_types = classify_markdown(markdown)
     lines = list(_mdlines(markdown))
     _require(isinstance(line_types, list) and len(line_types) == len(lines), 'MDLine types missing')
-    for (text, _), kind in zip(lines,line_types):
-        _require(kind in ('title','text','blank') and (kind == 'blank') == _blank(text), 'invalid MDLine type')
-        _require(kind != 'title' or re.match(r'^#{1,6}(?=\s|$)',text), 'invalid title type')
+    for kind in line_types:
+        _require(isinstance(kind,str) and bool(kind), 'invalid MDLine type')
     return line_types
 
 def _raw_group(digest, number, text, eol, tail, kind, plan):
@@ -312,8 +312,7 @@ def rebuild_markdown(rows):
         first=group[0]
         _require(isinstance(first['candidates_json'],str), 'missing candidate metadata')
         kind=first['type']
-        _require(kind in ('title','text','blank') and (kind=='blank')==_blank(text), 'invalid MDLine type')
-        _require(kind!='title' or re.match(r'^#{1,6}(?=\s|$)',text), 'invalid title type')
+        _require(isinstance(kind,str) and bool(kind), 'invalid MDLine type')
         plan=dict(boundaries=[r['to_utf16'] for r in group[:-1]],candidates=json.loads(first['candidates_json']),
                   review_state=first['review_state'],adopted_engine=first['adopted_engine'])
         expected=_raw_group(digest,number,text,eol,tail,kind,plan)
@@ -374,7 +373,7 @@ class SentenceStore:
                          'external foreign key depends on sentence')
         if owned:
             _require(len(owned) == 1 and owned[0][0] == 'table' and
-                     owned[0][1] == 'sentence' and owned[0][3] in ((DDL,LEGACY_DDL) if legacy else (DDL,)),
+                     owned[0][1] == 'sentence' and owned[0][3] in ((DDL,LEGACY_DDL,RAW_V1_DDL) if legacy else (DDL,)),
                      'unsupported sentence schema')
         else:
             _require(create, 'sentence table has not been initialized')
@@ -387,9 +386,12 @@ class SentenceStore:
     def is_legacy(self):
         return self._db.execute("SELECT sql FROM main.sqlite_master WHERE type='table' AND name='sentence'").fetchone()==(LEGACY_DDL,)
 
+    def is_raw_v1(self):
+        return self._db.execute("SELECT sql FROM main.sqlite_master WHERE type='table' AND name='sentence'").fetchone()==(RAW_V1_DDL,)
+
     def _replace_legacy_schema(self):
         self._schema(writing=True,legacy=True)
-        _require(self.is_legacy(), 'legacy schema changed')
+        _require(self.is_legacy() or self.is_raw_v1(), 'legacy schema changed')
         for kind,name,table,sql in self._db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master"):
             _require(not (kind=='index' and table=='sentence' and sql is not None), 'external index on sentence')
             _require(not (kind in ('view','trigger') and sql and re.search(r'\bsentence\b',sql,re.I)), 'external SQL dependency on sentence')
@@ -401,25 +403,36 @@ class SentenceStore:
             self._creating=False
 
     def upgrade(self, markdown, line_types, *, verify_source=None):
-        """Exact legacy schema only; retain all decisions and migrate atomically."""
+        """Same-source type migration, retaining all RAW, candidates and decisions."""
+        kinds = _types(markdown, line_types)
         db=self._db
         db.execute('BEGIN IMMEDIATE')
         try:
             if verify_source is not None:
                 verify_source()
-            if not self.is_legacy():
-                self._schema()
-                db.commit()
-                return
             self._schema(writing=True,legacy=True)
-            old=[dict(zip(LEGACY_COLUMNS,r)) for r in db.execute('SELECT '+','.join(LEGACY_COLUMNS)+' FROM main.sentence ORDER BY source_line,sentence_index')]
-            if _rebuild_legacy(old)!=markdown:
-                db.commit()
-                return
-            rows=_convert_legacy(markdown,old,line_types)
-            self._replace_legacy_schema()
-            db.executemany(INSERT,(tuple(r[c] for c in COLUMNS) for r in rows))
-            _require(rebuild_markdown(self._read())==markdown,'legacy upgrade roundtrip mismatch')
+            if self.is_legacy():
+                old=[dict(zip(LEGACY_COLUMNS,r)) for r in db.execute('SELECT '+','.join(LEGACY_COLUMNS)+' FROM main.sentence ORDER BY source_line,sentence_index')]
+                if _rebuild_legacy(old)!=markdown:
+                    db.commit()
+                    return
+                rows=_convert_legacy(markdown,old,kinds)
+                self._replace_legacy_schema()
+                db.executemany(INSERT,(tuple(r[c] for c in COLUMNS) for r in rows))
+            else:
+                old=self._read()
+                if rebuild_markdown(old)!=markdown:
+                    db.commit()
+                    return
+                rows=[{**r,'type':kinds[r['source_line']-1]} for r in old]
+                if self.is_raw_v1():
+                    self._replace_legacy_schema()
+                    db.executemany(INSERT,(tuple(r[c] for c in COLUMNS) for r in rows))
+                else:
+                    changes={(r['source_line'],r['type']) for r,prior in zip(rows,old) if r['type']!=prior['type']}
+                    for number,kind in changes:
+                        db.execute('UPDATE main.sentence SET type=? WHERE source_line=?',(kind,number))
+            _require(self._read()==rows and rebuild_markdown(rows)==markdown,'type upgrade roundtrip mismatch')
             db.commit()
         except BaseException:
             db.rollback()
@@ -444,7 +457,7 @@ class SentenceStore:
             if initialize_only:
                 _require(not db.execute("SELECT name FROM main.sqlite_master WHERE name='sentence' COLLATE NOCASE").fetchone(),
                          'sentence table already exists; automatic initialization refused')
-            if not initialize_only and self.is_legacy():
+            if not initialize_only and (self.is_legacy() or self.is_raw_v1()):
                 self._replace_legacy_schema()
             self._schema(create=True)
             db.execute('DELETE FROM main.sentence')
@@ -455,7 +468,7 @@ class SentenceStore:
             db.rollback()
             raise
 
-    def save_choices(self, markdown, changes, *, verify_source=None):
+    def save_choices(self, markdown, changes, *, verify_source=None, line_types=None):
         """One idle batch. Validate all lines before replacing any; no SQL history."""
         _require(isinstance(changes, list) and 0 < len(changes) <= 4096, 'invalid batch size')
         db = self._db
@@ -467,6 +480,9 @@ class SentenceStore:
             self._schema(writing=True)
             original = self._read()
             _require(rebuild_markdown(original) == markdown, 'stale sentence table')
+            if line_types is not None:
+                kinds=_types(markdown,line_types)
+                _require(all(r['type']==kinds[r['source_line']-1] for r in original), 'stale MDLine types; reopen workspace')
             owners = _owners(markdown)
             groups = defaultdict(list)
             for row in original:
@@ -537,10 +553,12 @@ class SentenceStore:
                     state, rows = ('legacy' if _rebuild_legacy(old)==markdown else 'stale'), []
                     db.commit()
                     return state, rows
-                self._schema()
+                self._schema(legacy=True)
                 rows = self._read()
                 state = 'ready' if rebuild_markdown(rows) == markdown else 'stale'
-                if state == 'stale':
+                if state == 'ready' and self.is_raw_v1():
+                    state = 'legacy'
+                if state != 'ready':
                     rows = []
             db.commit()
             return state, rows

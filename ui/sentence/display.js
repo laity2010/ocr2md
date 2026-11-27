@@ -67,7 +67,7 @@ export function reviewProjection(snapshot,results,all,adopted){
   const pending=isDisputed(row)&&!adopted.has(b.sourceLine);
   // Keep only genuine trailing blank source lines of a visible disagreement.
   // No invented LF, and no blank lines belonging to a hidden paragraph.
-  if(!pending&&!(trailing&&(b.type==='blank'||/^[ \t]*$/.test(b.text)))){trailing=false;continue;}
+  if(!pending&&!(trailing&&(b.text.trim()===''))){trailing=false;continue;}
   trailing=true;
   const from=markdown.length;markdown+=b.text+b.eol;
   lines.push({...b,sourceFrom:b.from,from,textTo:from+b.text.length,to:markdown.length});

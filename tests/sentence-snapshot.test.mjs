@@ -8,7 +8,8 @@ async function fixture(){
   const text=texts[i],end=from+text.length,n=Array.from(text).length;
   segments.push({logicalId:i+1,baseBlockId:i+1,parentId:null,logicalOrder:i+1,blockType:'text',p:0,b:i,s:0,startChar:ch,endChar:ch+n,startUtf16:from,endUtf16:end,fragmentSha256:await sha256(text)});from=end;ch+=n;
  }
- return {schema:'v2-logical-md/v3',markdown,segments,rowCount:2,lengthUtf16:markdown.length,sha256:await sha256(markdown)};
+ const mdLines=[];for(const b of segments){let offset=b.startUtf16;for(const [line_offset,text] of markdown.slice(offset,b.endUtf16).split('\n').slice(0,-1).entries()){const textTo=offset+text.length;mdLines.push({source_line:mdLines.length+1,logical_id:b.logicalId,base_blockid:b.baseBlockId,line_offset,from:offset,to:textTo+1,textTo,type:b.blockType});offset=textTo+1;}}
+ return {schema:'v2-logical-md/v3',markdown,segments,mdLines,rowCount:2,lengthUtf16:markdown.length,sha256:await sha256(markdown)};
 }
 test('immutable exact V2 UTF16 source and read-only GET',async()=>{
  const f=await fixture();const s=await importSnapshot(f);
@@ -41,4 +42,16 @@ test('real LF, empty lines, spaces, UTF16 and final EOF are exact',async()=>{
   }
  }
  const f=await fixture();f.schema='v2-logical-md/v2';await assert.rejects(importSnapshot(f),/真实 LF/);
+});
+
+test('original type is independent of syntax and blank ownership; reject corrupt metadata',async()=>{
+ const f=await fixture();
+ f.segments[0].blockType='table_caption';f.mdLines.slice(0,2).forEach(m=>m.type='table_caption');
+ f.segments[1].blockType='image_body';f.mdLines.slice(2).forEach(m=>m.type='image_body');
+ const s=await importSnapshot(f);
+ assert.deepEqual(s.lines.map(l=>l.type),['table_caption','table_caption','image_body','image_body']);
+ assert.equal(s.lines[1].ownerLine,1);assert.equal(s.lines[3].ownerLine,3);
+ for(const damage of [x=>delete x.mdLines,x=>x.mdLines.pop(),x=>x.mdLines[0].type='text',x=>x.mdLines[0].textTo++,x=>x.mdLines[0].logical_id=2]){
+  const bad=structuredClone(f);damage(bad);await assert.rejects(importSnapshot(bad),/MDLine/);
+ }
 });

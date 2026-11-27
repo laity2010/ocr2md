@@ -31,7 +31,7 @@ WP04E 已接入现有动态 Lab Gateway 和 F02 授权：保存目录后自动�
 | sentence_index | MDLine 内从 0 开始的连续句序 |
 | from_utf16 / to_utf16 | 不含 LF 的行正文内半开区间，连续覆盖原行；空行允许唯一 0..0 |
 | raw | 唯一原文切片；末句包含真实行终止符及所有尾随空白行 |
-| type | 继承上游 MDLine 的 title/text/blank 类型；同一 MDLine 各句一致 |
+| type | WP04F5：直接继承 V2 公共 mdLines.type（原始 MinerU 元素类型）；同一 MDLine 各句一致 |
 | level | 继承原 MDLine 行首引用层级，值为空或 >、>> 等；不向各句重复插入前缀 |
 | candidates_json | 仅句序 0 保存各引擎标识、版本/配置、状态及候选句界/受保护范围；不复制全文 |
 | review_state / adopted_engine | 仅句序 0 保存一致、待仲裁、已仲裁、无分句或引擎错误等状态及有效采用方案 |
@@ -62,7 +62,13 @@ WP04A 确立数据契约；WP04B 已切换为 MDLine 分句和审阅；WP04C 已
 
 ## 当前实现
 
-### WP04F4 RAW 无损结构与 MDLine 属性继承
+### WP04F5 上游 MDLine 原始 Type 接入
+
+消费 V2 WP32 的既有 GET markdown/v3 响应 mdLines：逐一校验物理行号、UTF-16 from/to/textTo、逻辑元素归属及原始 type 与公开 segments 一致；缺失或不符拒绝打开，不用 Markdown 语法猜测原始 type。空白行归属按原文字符判断，引用 level 保持原规则。type 不限制为 title/text/blank，允许上游原始 table_caption、table_body、table_footnote、image_body 等；不把手工插入的 Markdown 语法冒称原始类型。
+
+仅在已授权同源句表打开时，识别 WP04F4 精确旧 RAW DDL 并原子迁移其类型约束；每条记录仅替换 type，其余字段逐项不变，旧引擎候选及人工采用完整保留。更早精确旧表仍走无损 RAW 升级并继承公开 type。新 Schema 同源类型发生变化时仅局部更新 type；无变化不写入，正文哈希变化保持原表并报告过期；事务内复核公开来源与类型，写入失败回滚，禁止外州写入。原五窗、分句算法、CM6 内存历史及空闲保存不变。用户库不主动迁移。
+
+### WP04F4 RAW 无损结构与 MDLine 属性继承（历史类型语义已由 WP04F5 取代）
 
 sentence 仅存 raw 原文，取代 sentence_text、line_eol；type 继承 V2 MDLine 的 title/text/blank 语义（沿用 CM6 Markdown fenced-code 排除及 V2 ATX 规则），level 取行首 Markdown 引用标记数量，允许标记间空格或制表符，统一显示为相同数量的 >。所有同源句继承相同 type 和 level；raw 保留原始前缀且不重复插入。末句 raw 包含原行 LF 和连续尾随真实空白行；开头空白段归第一条 blank 记录。source_line、source_line_hash 和 from/to UTF16 仍指原物理 MDLine 的正文及其本行 LF，不含尾随行的范围。全文 SHA256 及 RAW 拼接校验覆盖全部尾随空白。AG 显示 raw/type/level，点击尾随空行定位其所属末句，原五窗及过滤不变。内存采用和原生 CM6 History 同步派生 RAW，850ms 空闲批量保存及上游只读不变。
 

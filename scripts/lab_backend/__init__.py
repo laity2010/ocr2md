@@ -11,7 +11,8 @@ import subprocess
 from urllib.parse import urlencode
 
 from .sentence_store import SentenceStore
-from .sentence_initialize import prepare_sentence_rows, classify_markdown
+from .sentence_initialize import prepare_sentence_rows
+from .sentence_store import _mdlines, _offsets
 
 DB_NAME = 'ocr2md.v2.sqlite'
 MAX_SNAPSHOT = 32 * 1024 * 1024
@@ -48,6 +49,37 @@ def snapshot_hash(snapshot):
         raise SentenceError(409, 'V2 快照摘要或大小无效')
     return digest
 
+def public_line_types(snapshot):
+    """Validate V2 public physical line identity; never infer original type."""
+    markdown=snapshot['markdown']
+    lines=list(_mdlines(markdown))
+    metadata=snapshot.get('mdLines')
+    segments=snapshot.get('segments')
+    if not isinstance(metadata,list) or len(metadata)!=len(lines) or not isinstance(segments,list):
+        raise SentenceError(409,'V2 MDLine 原始类型元数据缺失或行数不符')
+    kinds=[]
+    offset=block_index=line_offset=0
+    for number,((text,eol),m) in enumerate(zip(lines,metadata),1):
+        text_to=offset+_offsets(text)[1]
+        end=text_to+len(eol)
+        while block_index<len(segments) and offset>=segments[block_index]['endUtf16']:
+            block_index+=1
+            line_offset=0
+        if block_index>=len(segments):
+            raise SentenceError(409,'V2 MDLine 无所属原始元素')
+        b=segments[block_index]
+        kind=m.get('type') if isinstance(m,dict) else None
+        if (not isinstance(kind,str) or not kind or kind!=b['blockType'] or
+            any(type(m.get(k)) is not int or m[k]!=v for k,v in {
+                'source_line':number,'logical_id':b['logicalId'],'base_blockid':b['baseBlockId'],
+                'line_offset':line_offset,'from':offset,'to':end,'textTo':text_to}.items()) or
+            not b['startUtf16']<=offset<end<=b['endUtf16']):
+            raise SentenceError(409,'V2 MDLine 原始类型或坐标不符')
+        kinds.append(kind)
+        line_offset+=1
+        offset=end
+    return kinds
+
 
 def file_identity(path):
     try:
@@ -68,16 +100,22 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
         if file_identity(path) != identity:
             raise SentenceError(409, 'SQLite 文件已切换，请重新打开工作目录')
 
+    initial_types = None
+
     def current():
         verify_identity()
         snapshot = reader()
         if snapshot_hash(snapshot) != expected_hash:
             raise SentenceError(409, '上游 MDLine 已变化，请重新打开工作目录')
+        kinds=public_line_types(snapshot)
+        if initial_types is not None and kinds!=initial_types:
+            raise SentenceError(409, '上游 MDLine 类型已变化，请重新打开工作目录')
         verify_identity()
         return snapshot
 
     snapshot = current()
     markdown = snapshot['markdown']
+    initial_types=public_line_types(snapshot)
 
     def response(state, rows):
         verify_identity()
@@ -91,14 +129,14 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
 
     if operation == 'save':
         with closing(connect()) as db:
-            changed = SentenceStore(db).save_choices(markdown, changes, verify_source=current)
+            changed = SentenceStore(db).save_choices(markdown, changes, verify_source=current,line_types=initial_types)
         return response('ready', changed)
     if operation == 'open':
         with closing(connect()) as db:
             store=SentenceStore(db)
             state, rows = store.inspect(markdown, verify_source=current)
-            if state=='legacy':
-                store.upgrade(markdown,classify_markdown(markdown),verify_source=current)
+            if state=='legacy' or (state=='ready' and any(r['type']!=initial_types[r['source_line']-1] for r in rows)):
+                store.upgrade(markdown,initial_types,verify_source=current)
                 state, rows=store.inspect(markdown,verify_source=current)
         if state != 'missing':
             return response(state, rows)
@@ -106,6 +144,8 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
         raise SentenceError(404, '未知句表操作')
 
     rows = prepare(snapshot)
+    if any(r['type']!=initial_types[r['source_line']-1] for r in rows):
+        raise SentenceError(409,'句表 MDLine 原始类型不一致')
     with closing(connect()) as db:
         store = SentenceStore(db)
         if operation == 'reinitialize':
@@ -118,8 +158,8 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
                 if str(error) != 'sentence table already exists; automatic initialization refused':
                     raise
                 state, existing = store.inspect(markdown, verify_source=current)
-                if state=='legacy':
-                    store.upgrade(markdown,classify_markdown(markdown),verify_source=current)
+                if state=='legacy' or (state=='ready' and any(r['type']!=initial_types[r['source_line']-1] for r in existing)):
+                    store.upgrade(markdown,initial_types,verify_source=current)
                     state, existing=store.inspect(markdown,verify_source=current)
                 return response(state, existing)
     return response('ready', rows)

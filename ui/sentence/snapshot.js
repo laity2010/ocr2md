@@ -8,7 +8,7 @@ export async function sha256(text){
 const integer=(v,min=0)=>Number.isSafeInteger(v)&&v>=min;
 // Pure Markdown input, independent of OCR structure. LF belongs to the line
 // that it terminates; an EOF cursor after LF is not a physical source line.
-export async function createMDLineSnapshot(markdown){
+export async function createMDLineSnapshot(markdown,originalTypes=null){
  require(typeof markdown==='string'&&new TextEncoder().encode(markdown).length<=8*1024*1024,'Markdown 快照大小无效');
  const sourceSha256=await sha256(markdown),lines=[];
  for(let from=0;from<markdown.length;){
@@ -16,10 +16,10 @@ export async function createMDLineSnapshot(markdown){
   lines.push({sourceLine:lines.length+1,from,to,textTo,text:markdown.slice(from,textTo),eol:markdown.slice(textTo,to)});
   from=to;
  }
- const types=mdlineTypes(markdown);let owner=null;
+ const types=originalTypes===null?mdlineTypes(markdown):originalTypes;let owner=null;
  for(const [i,line] of lines.entries()){
   line.type=types[i];line.level=quoteLevel(line.text);
-  if(line.type==='blank'&&owner){line.ownerLine=owner.sourceLine;owner.ownedTail+=line.text+line.eol;}
+  if(line.text.trim()===''&&owner){line.ownerLine=owner.sourceLine;owner.ownedTail+=line.text+line.eol;}
   else{owner=line;line.ownerLine=line.sourceLine;line.ownedTail=line.eol;}
  }
  const frozen=await Promise.all(lines.map(async line=>Object.freeze({...line,sha256:await sha256(line.text+line.eol)})));
@@ -49,7 +49,19 @@ export async function importSnapshot(input){
  require(cursor===md.length,'存在未映射正文');
  const byId=new Map(blocks.map(b=>[b.logicalId,b]));
  for(const b of blocks){const seen=new Set();let node=b;while(node){require(!seen.has(node.logicalId),'父块循环');seen.add(node.logicalId);if(node.parentId===null)break;node=byId.get(node.parentId);require(node,'父块缺失');}}
- return createMDLineSnapshot(md);
+ const metadata=input.mdLines;
+ require(Array.isArray(metadata),'V2 MDLine 原始类型元数据缺失');
+ const physical=await createMDLineSnapshot(md,metadata.map(m=>m?.type));
+ require(metadata.length===physical.lines.length,'V2 MDLine 原始类型行数不符');
+ let blockIndex=0,lineOffset=0;
+ physical.lines.forEach((line,i)=>{
+  while(blockIndex<blocks.length&&line.from>=blocks[blockIndex].to){blockIndex++;lineOffset=0;}
+  const b=blocks[blockIndex],m=metadata[i];
+  require(b&&m&&line.to<=b.to&&m.source_line===line.sourceLine&&m.logical_id===b.logicalId&&
+   m.base_blockid===b.baseBlockId&&m.line_offset===lineOffset++&&m.from===line.from&&m.to===line.to&&
+   m.textTo===line.textTo&&typeof m.type==='string'&&m.type.length>0&&m.type===b.blockType,'V2 MDLine 原始类型或坐标不符');
+ });
+ return physical;
 }
 export async function readV2Snapshot(workspace,fetcher=fetch){
  require(typeof workspace==='string'&&workspace.length>0,'未绑定资料目录');

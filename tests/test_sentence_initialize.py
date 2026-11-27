@@ -56,7 +56,7 @@ class InitializationTests(unittest.TestCase):
                     self.assertEqual(len(group), 1)
                 self.assertIsNone(first['adopted_engine'])
                 self.assertTrue(''.join(r['raw'] for r in group).startswith(markdown.split('\n')[number-1]+'\n'))
-                self.assertTrue(all(r['type']==first['type'] and r['level']==first['level'] for r in group))
+                self.assertTrue(all(r['type']==first['type']==snapshot['mdLines'][number-1]['type'] and r['level']==first['level'] for r in group))
             with closing(sqlite3.connect(path)) as db:
                 self.assertEqual(upstream_evidence(db), before)
                 self.assertEqual({r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")},
