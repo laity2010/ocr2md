@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"60a5a937c3c24812956107b16084a1c6","branch":"refs/heads/experiment/lab-translation","baseline":"534d01c9278e7b1deda3832d3fd9c66d44464932","event":"START","utc":"2026-11-27T09:00:41.316070+00:00","wp":"WP05A3","goal":"Prompt CM6继承源码公共行号及Markdown语法样式；当前授权任务JSON路径、语言、身份、输出路径等自动参数，明确未写盘；通用可编辑草稿及历史不受参数刷新影响；不改JSON/SQL或交接文件写入。","retrospective":false}
