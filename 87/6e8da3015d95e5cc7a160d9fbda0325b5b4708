@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"22b7f15526a046d8a0ef07d07527b681","branch":"refs/heads/experiment/lab-translation","baseline":"876e8da3015d95e5cc7a160d9fbda0325b5b4708","event":"START","utc":"2026-11-27T04:23:15.112310+00:00","wp":"WP02","goal":"从公开原句快照识别全文保护范围并投影到每句，生成本州唯一译句实体表，保留RAW/type/level及来源，AG展示；不修改上游、既有译句数据或Frame布局；不重构预览、不导出trans。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"22b7f15526a046d8a0ef07d07527b681","branch":"refs/heads/experiment/lab-translation","baseline":"876e8da3015d95e5cc7a160d9fbda0325b5b4708","event":"RUN_START","utc":"2026-11-27T04:28:04.336794+00:00","phase":"wp02-acceptance","step":"67e062d59a774ed29fb0f35c568e51c8"}
