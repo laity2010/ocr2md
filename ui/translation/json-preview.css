@@ -12,3 +12,7 @@
   font:12px "OCR2MD Sarasa",monospace;cursor:pointer;
 }
 #workspace .translation-json-actions button:disabled{opacity:.45;cursor:default}
+
+#workspace .translation-json-preview .translation-focus-json{
+  background:rgba(235,163,82,.18);
+}

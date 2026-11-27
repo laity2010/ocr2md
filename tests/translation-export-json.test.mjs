@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
-import {createTranslationJSON} from '../ui/translation/export-json.js';
+import {createTranslationJSON,indexJSONSentences} from '../ui/translation/export-json.js';
 import {sha256} from '../ui/translation/original-sentences.js';
 
 test('export exact prepared text, grouped MDLine, stable identity, no protected values or raw',async()=>{
@@ -28,4 +28,21 @@ test('export rejects altered text, identity and source; empty table generates ze
  }
  const empty={...table,rows:[],source_document_hash:await sha256('')};
  const a=await createTranslationJSON(empty);assert.equal(a.count,0);assert.deepEqual(JSON.parse(a.text).mdlines,[]);
+});
+
+
+test('JSON display index uses exact compound identity, not text or original line number',async()=>{
+ const table=preparedFixture(await sampleSnapshot(' 😀 "text" \\n',true,true));
+ const artifact=await createTranslationJSON(table);
+ const lines=artifact.text.split('\n'),index=indexJSONSentences(artifact.text);
+ assert.equal(index.size,artifact.count);
+ for(const row of table.rows){
+   const key=row.source_line+':'+row.sentence_index;
+   if(!row.translatable){assert.equal(index.has(key),false);continue;}
+   const line=index.get(key);
+   assert.equal(lines[line-1],'          "text": '+JSON.stringify(row.text));
+   assert.equal(lines[line-2],'          "sentence_index": '+row.sentence_index+',');
+ }
+ assert.equal(indexJSONSentences('').size,0);
+ assert.deepEqual([...indexJSONSentences(artifact.text)], [...index]);
 });

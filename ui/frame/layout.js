@@ -127,7 +127,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     bar.append(mode,actions,jsonActions);element.append(bar);
     const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';element.append(area);
     const promptHost=document.createElement('div');promptHost.className='translation-prompt-editor frame-editor';promptHost.hidden=true;element.append(promptHost);
-    const jsonHost=document.createElement('div');jsonHost.className='translation-json-preview frame-editor';jsonHost.hidden=true;element.append(jsonHost);
+    const jsonHost=document.createElement('div');jsonHost.className='translation-json-preview ocr-cm-source frame-editor';jsonHost.hidden=true;element.append(jsonHost);
     element.setAttribute('aria-label','Markdown 预览、翻译 Prompt 与 JSON');
     owned=()=>{
       const reader=mountReadingPreview(area,onLocate);
@@ -144,7 +144,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
         area.hidden=editing||showJSON;promptHost.hidden=!editing;actions.hidden=!editing;
         jsonHost.hidden=!showJSON;jsonActions.hidden=!showJSON;
         if(editing)prompt.activate();
-        else if(showJSON){jsonReader.layout();onStatus(jsonArtifact?'待译句 JSON · '+jsonArtifact.count+' 句':'请先 SQL 初始化',jsonArtifact?'info':'warning');}
+        else if(showJSON){jsonReader.layout();jsonReader.locate(lastFocus,{scroll:true});onStatus(jsonArtifact?'待译句 JSON · '+jsonArtifact.count+' 句':'请先 SQL 初始化',jsonArtifact?'info':'warning');}
         else{reader.locate(lastFocus,{scroll:true});onStatus('Markdown 阅读预览');}
       }
       function downloadJSON(){
@@ -156,8 +156,8 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
       undo.addEventListener('click',()=>prompt?.undo());redo.addEventListener('click',()=>prompt?.redo());
       return Object.freeze({
         setDocument(...args){reader.setDocument(...args);},
-        setJSONArtifact(artifact){jsonArtifact=artifact;download.disabled=!artifact;jsonReader?.setArtifact(artifact);},
-        locate(row,options){lastFocus=row;if(mode.value==='md')reader.locate(row,options);},
+        setJSONArtifact(artifact){jsonArtifact=artifact;download.disabled=!artifact;jsonReader?.setArtifact(artifact);if(mode.value==='json')jsonReader?.locate(lastFocus,{scroll:true});},
+        locate(row,options){lastFocus=row;if(mode.value==='md')reader.locate(row,options);else if(mode.value==='json')jsonReader?.locate(row,{scroll:true});},
         layout(){reader.layout();if(mode.value==='prompt')prompt?.layout();if(mode.value==='json')jsonReader?.layout();},
         isPromptActive:()=>mode.value==='prompt',
         getPromptText:()=>prompt?.getText()??null,

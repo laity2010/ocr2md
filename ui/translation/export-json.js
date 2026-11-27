@@ -33,3 +33,23 @@ export async function createTranslationJSON(table,{targetLanguage='zh-CN'}={}){
   const {schema,...rest}=input;
   return Object.freeze({text:JSON.stringify({schema,task_id,...rest},null,2)+'\n',count});
 }
+
+
+/** Display-only index into the exact pretty-printed artifact. JSON.stringify
+ * escapes embedded LF and quotes; only structural lines at these indents
+ * can match. Identity is MDLine + sentence_index, never the sentence text. */
+export function indexJSONSentences(text){
+  const result=new Map();let source=null,index=null;
+  for(const [i,line] of text.split('\n').entries()){
+    const md=line.match(/^ {6}"source_line": (\d+),$/);
+    if(md){source=Number(md[1]);index=null;continue;}
+    const sentence=line.match(/^ {10}"sentence_index": (\d+),$/);
+    if(sentence){index=Number(sentence[1]);continue;}
+    if(source!==null&&index!==null&&/^ {10}"text": "/.test(line)){
+      const key=source+':'+index;
+      if(result.has(key))throw Error('JSON 句身份重复');
+      result.set(key,i+1);index=null;
+    }
+  }
+  return result;
+}

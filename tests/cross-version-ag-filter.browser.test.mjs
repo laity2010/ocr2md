@@ -172,6 +172,25 @@ try{
    await exportButton.click();const downloaded=await downloadPromise;
    assert.equal(downloaded.suggestedFilename(),'sentences.json');
    assert.equal(await readFile(await downloaded.path(),'utf8'),expectedJSON.text);
+   // WP05A2: reuse exact source gutter styles, and sync by compound identity.
+   const gutterStyle=scope=>scope.locator('.cm-gutters').evaluate(el=>{
+     const c=getComputedStyle(el);return [c.backgroundColor,c.color,c.borderRightColor,c.borderRightWidth,c.fontFamily,c.fontSize];
+   });
+   assert.deepEqual(await gutterStyle(jsonHost),await gutterStyle(source));
+   const selectedJSON=jsonHost.locator('.translation-focus-json');
+   assert.equal(await selectedJSON.count(),0,'non-exported math sentence has no JSON target');
+   await grid.locator('.ag-row [col-id="source_line"]').first().click();
+   await selectedJSON.waitFor();assert.equal((await selectedJSON.textContent()).trim(),'"text": '+JSON.stringify(prepared.rows[0].text));
+   assert.equal(await selectedJSON.evaluate(el=>getComputedStyle(el).backgroundColor),'rgba(235, 163, 82, 0.18)');
+   await source.locator('.cm-line').filter({hasText:'<table>'}).first().click();
+   await page.waitForFunction(expected=>document.querySelector('.translation-focus-json')?.textContent.trim()===expected,'"text": '+JSON.stringify(prepared.rows.find(r=>r.source_line===4).text));
+   await mode.selectOption('md');
+   await source.locator('.cm-line').first().click();
+   await mode.selectOption('json');
+   await page.waitForFunction(expected=>document.querySelector('.translation-focus-json')?.textContent.trim()===expected,'"text": '+JSON.stringify(prepared.rows[0].text));
+   await grid.locator('.ag-row [col-id="source_line"]').last().click();await page.waitForFunction(()=>!document.querySelector('.translation-focus-json'));
+   console.log('TRANSLATION_WP05A2_BROWSER_PASS',name,'shared gutter, AG/source identity, hidden focus restore, non-exported clear');
+
    await mode.selectOption('prompt');
    assert.match(await prompt.locator('.cm-line').first().textContent(),/WP04draft/);
    assert.equal(await workspace.locator('#prompt-undo').isEnabled(),true);
@@ -307,6 +326,11 @@ try{
    await visible.click();
    await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].some(el=>/ROW_0[4-6]\d/.test(el.textContent)));
    assert((await grid.locator('.ag-row-selected').count())>0);
+   await workspace.locator('.ocr-preview-mode').selectOption('json');
+   const selectedLong=workspace.locator('.translation-focus-json');
+   await selectedLong.waitFor();assert.match(await selectedLong.textContent(),/ROW_0[4-6]\d/);
+   await page.waitForFunction(()=>{const el=document.querySelector('.translation-focus-json'),sc=el?.closest('.cm-scroller');if(!sc)return false;const a=el.getBoundingClientRect(),b=sc.getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});
+   await workspace.locator('.ocr-preview-mode').selectOption('md');
    // Late response for another authorized book cannot repopulate the new empty book.
    await chooseNav(workspace,'settings');await waitStatus('已有译句表');
    let release,started;const promise=new Promise(r=>release=r),seen=new Promise(r=>started=r);late={path:'/demo/books/b',promise,started};

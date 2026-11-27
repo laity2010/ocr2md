@@ -70,6 +70,10 @@ WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。
 
 输入结构 ocr2md-trans/v1：schema、task_id（去除 task_id 的规范字段顺序 JSON.stringify 的 SHA-256）、source_sha256（原文摘要）、sentence_sha256（已保存分句摘要）、target_language（暂为 zh-CN）、mdlines（按原 source_line 分组，继承 type/level；每组 sentences 保留原 sentence_index 与 text）。仅 translatable=true；整句不可译省略、不重新编号，保留占位符原样，不输出 raw、protected 原值、绝对路径及内部 SQL 字段。回填原值仅留本地。生成器复验每句 text 与回填及全文 RAW SHA，任务 ID 随输入/目标语言变化；尚不绑定 Prompt 摘要，正式工作目录任务协议在下一航点确定。createTranslationJSON(table,options) 为唯一生成器，tests/translation-export-json.test.mjs 验证字段、身份、无损和确定性；mountJSONPreview 由双浏览器验收实际只读预览与下载字节、切换及清理。
 
+## WP05A2 · JSON 行号与跨窗定位
+
+JSON 只读 CM6 复用源码窗 ocr-cm-source 行号、字体及 Everforest 配色；不新增样式体系。indexJSONSentences(text) 仅为现有确定性 JSON 文本生成 MDLine:sentence_index → text 物理行的内存索引，不改变 JSON 字节、任务 ID 或持久数据。沿用三窗句身份焦点，AG/源码点击时定位高亮 JSON 对应 text 行并居中滚动；切回 JSON 恢复最新焦点，未导出的不可译句清除高亮，不误跳其他句。目录清空时索引与高亮清除。JSON 仍单向跟随、只读，不新增反向交互。直接测试及双浏览器覆盖行号样式、准确身份、长文滚动、模式恢复、不可译句及原导出字节。
+
 ## 已确定的后续执行边界（尚未实现）
 
 - WP05 后续：指定目标语言；在书籍工作目录 trans/ 导出 sentences.json 与 prompt.md。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
