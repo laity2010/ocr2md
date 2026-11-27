@@ -1,3 +1,5 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"34a16210550147f9b4e6bfa458af2d47","branch":"refs/heads/experiment/lab-translation","baseline":"314d2c9527fe35a07594c95dcae111034d4f0a78","event":"START","utc":"2026-11-27T07:57:11.945568+00:00","wp":"WP05A","goal":"现有预览下拉增加JSON，只读CM6展示待译句表实际导出JSON并支持手动下载；按MDLine分组保留句身份及来源摘要，默认zh-CN，保护原值留本地；不写书籍目录、SQL、上游，不改原句、AG与Prompt。","retrospective":false}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"34a16210550147f9b4e6bfa458af2d47","branch":"refs/heads/experiment/lab-translation","baseline":"314d2c9527fe35a07594c95dcae111034d4f0a78","event":"RUN_START","utc":"2026-11-27T07:58:09.876171+00:00","phase":"wp05a-acceptance","step":"370413c2d6e44e4ab5bf07ae415815df"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"34a16210550147f9b4e6bfa458af2d47","branch":"refs/heads/experiment/lab-translation","baseline":"314d2c9527fe35a07594c95dcae111034d4f0a78","event":"RUN_EXIT","utc":"2026-11-27T07:59:42.376639+00:00","phase":"wp05a-acceptance","step":"370413c2d6e44e4ab5bf07ae415815df","exit_code":1}
