@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"be313bc1a2d0466f9d739e8a3b99fd06","branch":"refs/heads/experiment/lab-translation","baseline":"ebf3443ecbcb8bea0934523e297035b9d6b395d0","event":"START","utc":"2026-11-27T06:48:59.518112+00:00","wp":"WP04F3","goal":"仅待译句表源码区左右双CM6，左RAW带原行号、右text无行号，按原句身份同步高亮、双向语义滚动；原句单窗、AG、MD预览、Prompt、SQL及上游不变。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"be313bc1a2d0466f9d739e8a3b99fd06","branch":"refs/heads/experiment/lab-translation","baseline":"ebf3443ecbcb8bea0934523e297035b9d6b395d0","event":"RUN_START","utc":"2026-11-27T06:50:21.341367+00:00","phase":"wp04f3-acceptance","step":"223740e947ff4619acd3964075ab5e55"}
