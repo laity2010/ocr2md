@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"356ada579afa4f95adbf3535191d93e5","branch":"refs/heads/experiment/lab-translation","baseline":"b84766c685c3efba22523ac91e427222025a5dd8","event":"START","utc":"2026-11-27T05:25:11.421296+00:00","wp":"WP04","goal":"撤下PDF及切分控件，原预览下拉MD/翻译Prompt，独立可编辑CM6历史及草稿保存；保留原句/译句/保护规则、三窗定位、其他州；不导出trans或写SQL。","retrospective":false}
