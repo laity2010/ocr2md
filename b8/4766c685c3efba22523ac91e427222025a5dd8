@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"356ada579afa4f95adbf3535191d93e5","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"356ada579afa4f95adbf3535191d93e5","branch":"refs/heads/experiment/lab-translation","baseline":"b84766c685c3efba22523ac91e427222025a5dd8","event":"RUN_START","utc":"2026-11-27T05:26:28.062307+00:00","phase":"wp04-acceptance","step":"488e10a5db7e44df892b2d8d69da5106"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"356ada579afa4f95adbf3535191d93e5","branch":"refs/heads/experiment/lab-translation","baseline":"b84766c685c3efba22523ac91e427222025a5dd8","event":"RUN_EXIT","utc":"2026-11-27T05:28:37.241991+00:00","phase":"wp04-acceptance","step":"488e10a5db7e44df892b2d8d69da5106","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"356ada579afa4f95adbf3535191d93e5","branch":"refs/heads/experiment/lab-translation","baseline":"b84766c685c3efba22523ac91e427222025a5dd8","event":"RUN_START","utc":"2026-11-27T05:49:01.658406+00:00","phase":"wp04-release-build-and-publish","step":"73cabb3237c5454e9f0eec63340d5caa"}
