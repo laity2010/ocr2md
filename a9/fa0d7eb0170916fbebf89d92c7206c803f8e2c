@@ -1,1 +1,3 @@
 FEDERAL_BUILD_EVENT_V1 {"id":"d8af407d35a544b8aba6d1329bc8d040","branch":"refs/heads/experiment/lab-translation","baseline":"a9fa0d7eb0170916fbebf89d92c7206c803f8e2c","event":"START","utc":"2026-11-27T09:16:01.749493+00:00","wp":"WP05A4","goal":"JSON窗导出直接写授权资料目录trans/sentences.json，与Prompt input_json一致；服务端只读重验当前译句及精确摘要、F02安全目录与独占文件写入/回读、相同复用不同拒绝；不动SQL或其他AI文件。","retrospective":false}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"d8af407d35a544b8aba6d1329bc8d040","branch":"refs/heads/experiment/lab-translation","baseline":"a9fa0d7eb0170916fbebf89d92c7206c803f8e2c","event":"RUN_START","utc":"2026-11-27T09:17:16.457314+00:00","phase":"wp05a4-implementation","step":"8a0ac2f8cc204185b58232e110342d08"}
