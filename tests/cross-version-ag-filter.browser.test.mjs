@@ -131,6 +131,21 @@ try{
    assert.equal(await prompt.locator('.cm-content').getAttribute('contenteditable'),'true');
    assert.match(await prompt.locator('.cm-line').first().textContent(),/独立校译任务书/);
    assert.equal(await page.evaluate(key=>localStorage.getItem(key),promptKey),null);
+   const promptGutter=scope=>scope.locator('.cm-gutters').evaluate(el=>{const c=getComputedStyle(el);return [c.backgroundColor,c.color,c.borderRightColor,c.borderRightWidth,c.fontFamily,c.fontSize];});
+   assert.deepEqual(await promptGutter(prompt),await promptGutter(source));
+   const showPromptParams=async(path)=>{
+     await prompt.locator('.cm-scroller').evaluate(el=>el.scrollTop=el.scrollHeight);
+     await page.waitForFunction(path=>[...document.querySelectorAll('.translation-prompt-editor .cm-line')].some(el=>el.textContent.includes('input_json: '+JSON.stringify(path))),path);
+   };
+   await showPromptParams('/demo/books/b/trans/sentences.json');
+   const paramLine=prompt.locator('.cm-line').filter({hasText:'input_json:'});
+   const paramBefore=await paramLine.textContent();
+   await paramLine.click();await page.keyboard.insertText('WP05A3_FORBIDDEN');
+   assert.equal(await paramLine.textContent(),paramBefore);
+   assert.equal(await workspace.locator('#prompt-undo').isDisabled(),true);
+   assert((await prompt.locator('.cm-line').allTextContents()).some(line=>line.includes('target_language: "zh-CN"')));
+   await prompt.locator('.cm-scroller').evaluate(el=>el.scrollTop=0);
+   await page.waitForFunction(()=>document.querySelector('.translation-prompt-editor .cm-line')?.textContent.includes('独立校译任务书'));
    const initialLine=await prompt.locator('.cm-line').first().textContent();
    await prompt.locator('.cm-line').first().click();
    await page.keyboard.insertText('WP04draft');
@@ -154,6 +169,7 @@ try{
    assert.equal(await workspace.locator('#prompt-undo').isEnabled(),true);
    await page.locator('#global-save').click();
    await page.waitForFunction(key=>localStorage.getItem(key)?.includes('WP04draft'),promptKey);
+   assert(!(await page.evaluate(key=>localStorage.getItem(key),promptKey)).includes('本次任务参数（自动生成）'));
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')),settingsBefore);
    assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
    await mode.selectOption('json');
@@ -305,6 +321,8 @@ try{
    assert.equal((await source.locator('.cm-content').textContent()).trim(),'');assert.equal(await preview.locator('h1').count(),0);
    assert.equal((await jsonHost.locator('.cm-content').textContent()).trim(),'');
    assert.equal(await workspace.locator('.translation-json-actions button').isDisabled(),true);
+   await prompt.locator('.cm-scroller').evaluate(el=>el.scrollTop=el.scrollHeight);
+   assert(!(await prompt.locator('.cm-content').textContent()).includes('/demo/books/b/trans/sentences.json'));
 
    assert.equal(prepCalls.length,3);
    // Reload: only the explicitly saved Prompt survives; history is session-local.
@@ -330,6 +348,13 @@ try{
    const selectedLong=workspace.locator('.translation-focus-json');
    await selectedLong.waitFor();assert.match(await selectedLong.textContent(),/ROW_0[4-6]\d/);
    await page.waitForFunction(()=>{const el=document.querySelector('.translation-focus-json'),sc=el?.closest('.cm-scroller');if(!sc)return false;const a=el.getBoundingClientRect(),b=sc.getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});
+   await workspace.locator('.ocr-preview-mode').selectOption('prompt');
+   await showPromptParams('/demo/books/d/trans/sentences.json');
+   assert(!(await prompt.locator('.cm-content').textContent()).includes('/demo/books/b/trans/sentences.json'));
+   assert((await page.evaluate(key=>localStorage.getItem(key),promptKey)).includes('WP04draft'));
+   assert.equal(await workspace.locator('#prompt-undo').isDisabled(),true);
+   await prompt.locator('.cm-scroller').evaluate(el=>el.scrollTop=0);
+   console.log('TRANSLATION_WP05A3_BROWSER_PASS',name,'shared gutter, task path/language, generated section readonly, saved body preserved, runtime parameters follow book');
    await workspace.locator('.ocr-preview-mode').selectOption('md');
    // Late response for another authorized book cannot repopulate the new empty book.
    await chooseNav(workspace,'settings');await waitStatus('已有译句表');

@@ -74,6 +74,10 @@ WP03 的预览保护匹配属于显示层，不构成新的保护识别规则。
 
 JSON 只读 CM6 复用源码窗 ocr-cm-source 行号、字体及 Everforest 配色；不新增样式体系。indexJSONSentences(text) 仅为现有确定性 JSON 文本生成 MDLine:sentence_index → text 物理行的内存索引，不改变 JSON 字节、任务 ID 或持久数据。沿用三窗句身份焦点，AG/源码点击时定位高亮 JSON 对应 text 行并居中滚动；切回 JSON 恢复最新焦点，未导出的不可译句清除高亮，不误跳其他句。目录清空时索引与高亮清除。JSON 仍单向跟随、只读，不新增反向交互。直接测试及双浏览器覆盖行号样式、准确身份、长文滚动、模式恢复、不可译句及原导出字节。
 
+## WP05A3 · Prompt 样式及本次任务参数
+
+Prompt CM6 与只读源码窗复用 ocr-cm-source、Everforest、Markdown 源码着色及标题标记，独立编辑与 Undo/Redo 保留。既有本浏览器 Prompt 用户草稿原样加载，不强行替换旧文本；新增默认任务书引用文末自动参数。createPromptParameters(artifact,workspace) 以唯一当前 JSON 导出及授权资料目录派生 input_json（资料目录/trans/sentences.json，明确待手动交接）、input_status、target_language、task_id、source_sha256、sentence_sha256、schema、sentence_count、AI_ID、result_json（资料目录/trans/AI_ID.json）。参数来自当前 JSON，不另设目标语言权威；目标语言当前仍为 zh-CN，正式配置及落盘留 WP05B。不得声称路径已有文件或自动写入。参数区在同一 CM6 文档末尾只读，复制/getPromptText 得到完整任务书，显式保存只存用户正文，参数切换不进入历史或修改草稿 dirty 状态。无有效表/换目录/授权失败立即清除旧参数。直接测试及双浏览器覆盖样式、当前路径、参数区拒绝编辑、草稿保存、切换更新及既有 Prompt/JSON 回归。
+
 ## 已确定的后续执行边界（尚未实现）
 
 - WP05 后续：指定目标语言；在书籍工作目录 trans/ 导出 sentences.json 与 prompt.md。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。

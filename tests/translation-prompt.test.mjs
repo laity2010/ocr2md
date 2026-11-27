@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {createPromptStorage,DEFAULT_PROMPT,PROMPT_KEY} from '../ui/translation/prompt-document.js';
+import {createPromptStorage,DEFAULT_PROMPT,PROMPT_KEY,createPromptParameters} from '../ui/translation/prompt-document.js';
 const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)};};
 test('default contract and explicit local save preserve exact text',()=>{
  const storage=memory(),port=createPromptStorage(storage),first=port.read();
@@ -20,4 +20,19 @@ test('stale draft never overwrites a more recent saved prompt; failures are expl
  assert.equal(a.read().text,'newer');
  assert.throws(()=>a.save(null,'newer'),/文本/);
  assert.throws(()=>createPromptStorage({getItem:()=>null,setItem:()=>{throw Error('quota');}}).save('x',null),/quota/);
+});
+
+
+test('runtime parameter values follow the current export; no claim of filesystem writes',()=>{
+ const a={text:JSON.stringify({schema:'ocr2md-trans/v1',task_id:'T1',source_sha256:'S1',sentence_sha256:'Q1',target_language:'zh-CN'}),count:7};
+ const b={text:JSON.stringify({schema:'ocr2md-trans/v1',task_id:'T2',source_sha256:'S2',sentence_sha256:'Q2',target_language:'ja'}),count:9};
+ const first=createPromptParameters(a,'/books/中文 A/');
+ assert(first.includes('input_json: "/books/中文 A/trans/sentences.json"'));
+ assert(first.includes('result_json: "/books/中文 A/trans/AI_ID.json"'));
+ assert(first.includes('target_language: "zh-CN"'));assert(first.includes('task_id: "T1"'));assert(first.includes('sentence_count: 7'));assert(first.includes('尚未写入'));
+ const next=createPromptParameters(b,'/books/B');
+ assert(next.includes('target_language: "ja"'));assert(next.includes('task_id: "T2"'));assert(!next.includes('T1'));assert(!next.includes('中文 A'));
+ const empty=createPromptParameters(null,'');assert(empty.includes('尚无有效译句表'));assert(!empty.includes('input_json:'));
+ const storage=memory(),port=createPromptStorage(storage);port.save('用户自定义任务书',null);
+ createPromptParameters(a,'/books/A');assert.equal(port.read().text,'用户自定义任务书');
 });

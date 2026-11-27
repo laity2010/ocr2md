@@ -2,7 +2,7 @@
 export const PROMPT_KEY='ocr2md.lab-translation.prompt.md.v1';
 export const DEFAULT_PROMPT=`# OCR2MD · 独立校译任务书 V1
 
-通过 AgentDock 连接 Mac，读取本次任务目录下的 sentences.json。确定自己的唯一 AI_ID，例如 gpt、grok、muse。
+通过 AgentDock 连接 Mac，按文末「本次任务参数」读取 input_json 指定的文件，核对任务身份与 target_language 后再执行。确定自己的唯一 AI_ID，例如 gpt、grok、muse。
 
 ## 任务要求
 
@@ -34,4 +34,27 @@ export function createPromptStorage(storage){
       return Object.freeze({stored:text,text});
     }
   });
+}
+
+
+/** Runtime parameters are derived from the verified export, never a second
+ * language/task authority. No filesystem existence or write is implied. */
+export function createPromptParameters(artifact,workspace){
+  const head='\n\n## 本次任务参数（自动生成）\n\n';
+  if(!artifact||!workspace)return head+'- 状态：尚无有效译句表，不能执行校译任务。\n';
+  const task=JSON.parse(artifact.text);
+  const directory=workspace.replace(/\/+$/,'')+'/trans';
+  const fields={
+    input_json:directory+'/sentences.json',
+    input_status:'待交接：本工作台仅提供浏览器下载，尚未写入或验证上述路径；请先将导出的 sentences.json 保存至该路径，再读取校译。',
+    target_language:task.target_language,
+    task_id:task.task_id,
+    source_sha256:task.source_sha256,
+    sentence_sha256:task.sentence_sha256,
+    schema:task.schema,
+    sentence_count:artifact.count,
+    AI_ID:'执行者自行确定唯一标识',
+    result_json:directory+'/AI_ID.json'
+  };
+  return head+Object.entries(fields).map(([key,value])=>'- '+key+': '+JSON.stringify(value)).join('\n')+'\n';
 }

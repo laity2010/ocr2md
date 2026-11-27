@@ -126,19 +126,19 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     jsonActions.append(download);
     bar.append(mode,actions,jsonActions);element.append(bar);
     const area=document.createElement('div');area.className='ocr-preview-md-scroll ocr-markdown';element.append(area);
-    const promptHost=document.createElement('div');promptHost.className='translation-prompt-editor frame-editor';promptHost.hidden=true;element.append(promptHost);
+    const promptHost=document.createElement('div');promptHost.className='translation-prompt-editor ocr-cm-source frame-editor';promptHost.hidden=true;element.append(promptHost);
     const jsonHost=document.createElement('div');jsonHost.className='translation-json-preview ocr-cm-source frame-editor';jsonHost.hidden=true;element.append(jsonHost);
     element.setAttribute('aria-label','Markdown 预览、翻译 Prompt 与 JSON');
     owned=()=>{
       const reader=mountReadingPreview(area,onLocate);
-      let prompt=null,jsonReader=null,jsonArtifact=null,lastFocus=null;
+      let prompt=null,jsonReader=null,jsonArtifact=null,lastFocus=null,promptWorkspace='';
       const refresh=state=>{
         undo.disabled=!state.undo;redo.disabled=!state.redo;
         if(mode.value==='prompt')onStatus(state.dirty?'● 翻译 Prompt 未保存':'翻译 Prompt · 已保存或默认任务书',state.dirty?'warning':'info');
       };
       function switchMode(){
         const editing=mode.value==='prompt',showJSON=mode.value==='json';
-        if(editing&&!prompt)prompt=mountPromptEditor(promptHost,{onChange:refresh,onStatus});
+        if(editing&&!prompt)prompt=mountPromptEditor(promptHost,{onChange:refresh,onStatus,artifact:jsonArtifact,workspace:promptWorkspace});
         if(showJSON&&!jsonReader){jsonReader=mountJSONPreview(jsonHost);jsonReader.setArtifact(jsonArtifact);}
         element.dataset.previewMode=mode.value;
         area.hidden=editing||showJSON;promptHost.hidden=!editing;actions.hidden=!editing;
@@ -155,8 +155,8 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
       mode.addEventListener('change',switchMode);
       undo.addEventListener('click',()=>prompt?.undo());redo.addEventListener('click',()=>prompt?.redo());
       return Object.freeze({
-        setDocument(...args){reader.setDocument(...args);},
-        setJSONArtifact(artifact){jsonArtifact=artifact;download.disabled=!artifact;jsonReader?.setArtifact(artifact);if(mode.value==='json')jsonReader?.locate(lastFocus,{scroll:true});},
+        setDocument(model,markdown,path){promptWorkspace=model?path:'';reader.setDocument(model,markdown,path);if(!model)prompt?.setTask(null,'');},
+        setJSONArtifact(artifact){jsonArtifact=artifact;prompt?.setTask(artifact,promptWorkspace);download.disabled=!artifact;jsonReader?.setArtifact(artifact);if(mode.value==='json')jsonReader?.locate(lastFocus,{scroll:true});},
         locate(row,options){lastFocus=row;if(mode.value==='md')reader.locate(row,options);else if(mode.value==='json')jsonReader?.locate(row,{scroll:true});},
         layout(){reader.layout();if(mode.value==='prompt')prompt?.layout();if(mode.value==='json')jsonReader?.layout();},
         isPromptActive:()=>mode.value==='prompt',
