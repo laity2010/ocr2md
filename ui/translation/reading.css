@@ -28,3 +28,29 @@
   background:#27352f;color:#a7c080;border-bottom:1px solid #525c62;
 }
 #workspace .translation-source-column>.frame-editor{flex:1 1 0;height:0;min-width:0}
+/* Full RAW uses the byte-identical V2 Everforest syntax and source sizing.
+   Protection is a deeper color only, including standalone formula/code/image. */
+#workspace .translation-raw-source .translation-protected-source,
+#workspace .translation-raw-source .translation-protected-source *{color:#65746b!important}
+/* Sentence Lab's adopted green boundary style. Pseudo content is display
+   only; copy/RAW text and all UTF-16 offsets stay unchanged. */
+#workspace .translation-raw-source .translation-final-boundary{
+  display:inline-block;color:#d9ffc0!important;background:#416342;border-radius:2px;
+  text-shadow:0 0 3px #a7c080;vertical-align:baseline;
+  font-family:"OCR2MD Sarasa",monospace;pointer-events:none;
+  font-size:1.16em;font-weight:900;padding:0 2px;line-height:1;
+}
+#workspace .translation-final-boundary::before{content:"│"}
+#workspace .translation-source-comparison.is-comparing{
+  grid-template-columns:minmax(0,var(--translation-left,.5fr)) 7px minmax(0,var(--translation-right,.5fr));
+}
+#workspace .translation-comparison-divider{
+  cursor:col-resize;touch-action:none;user-select:none;min-width:0;min-height:0;
+  background:#525c62;position:relative;
+}
+#workspace .translation-comparison-divider[hidden]{display:none!important}
+#workspace .translation-comparison-divider::after{
+  content:"";position:absolute;top:50%;left:2px;right:2px;height:34px;
+  transform:translateY(-50%);border-radius:2px;background:#9cae9b;
+}
+#workspace .translation-comparison-divider:is(:hover,:focus-visible,:active){background:#789477;outline:none}

@@ -175,10 +175,12 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,fullModel=null,readingPath='',focused=null,tableRows=null,viewMode='original';
   function locate(value,origin){
     if(!readingModel)return;
-    const row=readingModel.byKey(typeof value==='string'?value:value?.key);
-    if(!row)return;focused=row;
+    const key=typeof value==='string'?value:value?.key;
+    const sourceRow=fullModel?.byKey(key);
+    if(!sourceRow)return;focused=sourceRow;
+    const row=readingModel.byKey(key);
     originalGrid?.locate(row,{scroll:origin!=='ag'});
-    sourceReader?.locate(row,{scroll:true,origin});
+    sourceReader?.locate(sourceRow,{scroll:true,origin});
     previewReader?.locate(row,{scroll:origin!=='preview'});
   }
   function register(name,port){
@@ -194,11 +196,14 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   function visibleRows(){return tableRows===null?null:viewMode==='pending'?tableRows.filter(r=>r.translatable):tableRows;}
   function applyReading(model,path='',viewSwitch=false){
     const keep=model&&readingPath===path&&focused&&(viewSwitch||readingModel?.text===model.text);
-    readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
-    sourceReader?.setDocument(model,model&&viewMode==='pending'?createComparisonDocument(tableRows):null);
-    previewReader?.setDocument(model,sourceReader?.getMarkdown()??'',path);
+    readingModel=model;readingPath=path;focused=keep?fullModel?.byKey(focused.key):null;
+    sourceReader?.setDocument(fullModel,model&&viewMode==='pending'?createComparisonDocument(tableRows):null);
+    // Pending preview keeps its previous filtered RAW projection; the left
+    // source is now full RAW. Both come from the same verified table.
+    previewReader?.setDocument(model,model&&viewMode==='pending'?model.text:sourceReader?.getMarkdown()??'',path);
     if(focused){
-      originalGrid?.locate(focused,{scroll:viewSwitch});sourceReader?.locate(focused,{scroll:viewSwitch});previewReader?.locate(focused,{scroll:viewSwitch});
+      const visible=readingModel?.byKey(focused.key);
+      originalGrid?.locate(visible,{scroll:viewSwitch});sourceReader?.locate(focused,{scroll:viewSwitch});previewReader?.locate(visible,{scroll:viewSwitch});
     }else{originalGrid?.locate(null);sourceReader?.locate(null);previewReader?.locate(null);}
   }
   function switchReadingView(mode){

@@ -4,8 +4,9 @@ import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
 import {createReadingDocument} from '../ui/translation/document.js';
 import {createComparisonDocument} from '../ui/translation/comparison-document.js';
-import {nearestSentence,fractionWithin,anchorHeight} from '../ui/translation/scroll-anchor.js';
+import {nearestSentence,fractionWithin,anchorHeight,comparisonAnchor} from '../ui/translation/scroll-anchor.js';
 import {placeholder} from '../ui/translation/refill.js';
+import {clampRatio,dividerRatio} from '../ui/translation/comparison-divider.js';
 test('right projection uses exact prepared text, same sentence keys, no mutation, protected tokens only',async()=>{
  const original=await sampleSnapshot(' ⟦P0⟧ 😀',true,true),table=preparedFixture(original);
  const before=JSON.stringify(table),left=createReadingDocument(table,{pending:true}),right=createComparisonDocument(table.rows);
@@ -34,4 +35,22 @@ test('scroll anchor maps omitted regions and different visual heights by shared 
  assert.equal(nearestSentence(createReadingDocument({rows:[]},{pending:true}),0),null);
  assert.equal(fractionWithin(10,90,30),.25);assert.equal(anchorHeight(100,140,.25),110);
  assert.equal(fractionWithin(10,90,-1),0);assert.equal(anchorHeight(100,140,2),140);
+});
+
+test('full RAW and final saved split points; nontranslatable anchors do not select other rows',async()=>{
+ const table=preparedFixture(await sampleSnapshot(' full',true,true));
+ const full=createReadingDocument(table),right=createComparisonDocument(table.rows);
+ assert.equal(full.text,table.rows.map(r=>r.raw).join(''));
+ assert.deepEqual(full.boundaries.map(b=>[b.line,b.index,full.text.slice(b.pos-2,b.pos)]),[[3,0,'A.']]);
+ assert.equal(full.byKey('5:0').translatable,false);
+ assert.equal(right.byKey('5:0'),null);
+ assert.deepEqual(comparisonAnchor({key:'5:0',fraction:.3},full,right),{key:'4:0',fraction:1});
+ assert.deepEqual(comparisonAnchor({key:'3:1',fraction:.3},full,right),{key:'3:1',fraction:.3});
+ assert.equal(comparisonAnchor({key:'missing',fraction:0},full,right),null);
+ assert.equal(comparisonAnchor({key:'5:0',fraction:0},full,createComparisonDocument([])),null);
+});
+test('divider width ratio stays within bounds',()=>{
+ assert.equal(clampRatio(0),.2);assert.equal(clampRatio(1),.8);
+ assert.equal(dividerRatio(160,100,100),.6);assert.equal(dividerRatio(60,100,100),.2);
+ assert.equal(dividerRatio(100,100,0),.5);
 });

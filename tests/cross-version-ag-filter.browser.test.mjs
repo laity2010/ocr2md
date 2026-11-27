@@ -139,7 +139,7 @@ try{
    assert.equal(await agPicker.inputValue(),'original');
    const beforeViewCalls=prepCalls.length, beforeViewReads=reads.length;
    await agPicker.selectOption('pending');await count(4);
-   assert.equal(await workspace.locator('#editor .cm-line').allTextContents().then(x=>x.join('\n')),prepared.rows.map(r=>r.translatable?r.raw:r.raw.replace(/[^\n]/g,'')).join(''));
+   assert.equal(await workspace.locator('#editor .cm-line').allTextContents().then(x=>x.join('\n')),prepared.rows.map(r=>r.raw).join(''));
    assert.equal(await preview.locator('.ocr-math').count(),0);
    assert.equal(await preview.locator('.ocr-reviewed-inline-latex.translation-protected-preview').count(),1);
    assert((await source.locator('.translation-protected-source').allTextContents()).join('').includes('$r_t$'));
@@ -156,6 +156,33 @@ try{
      return {left:l.right,right:r.left,lh:l.height,rh:r.height,width:r.width};
    });
    assert(sides.right>=sides.left-2&&sides.width>30&&Math.abs(sides.lh-sides.rh)<3);
+   // WP04F4: full left source, adopted boundary widget, darker protected text.
+   assert.equal(await source.locator('.translation-final-boundary').count(),1);
+   assert.equal(await compare.locator('.translation-final-boundary').count(),0);
+   assert.equal(await source.locator('.translation-final-boundary').getAttribute('aria-label'),'最终句界 · MDLine 3 · 句 0');
+   assert.equal(await source.locator('.translation-final-boundary').evaluate(el=>getComputedStyle(el,'::before').content),'"│"');
+   const rawFormula=source.locator('.cm-line').filter({hasText:'$$x=1$$'});
+   assert.equal(await rawFormula.count(),1);
+   assert((await rawFormula.locator('.translation-protected-source').allTextContents()).join('').includes('$$x=1$$'));
+   assert.equal(await rawFormula.locator('.translation-protected-source').first().evaluate(el=>getComputedStyle(el).color),'rgb(101, 116, 107)');
+   const divider=workspace.getByRole('separator',{name:'调整原句窗与待译句窗宽度'});
+   await divider.waitFor({state:'visible'});
+   const d=await divider.boundingBox(),body=await workspace.locator('.translation-source-comparison').boundingBox();
+   const oldLeft=(await source.boundingBox()).width;
+   await page.mouse.move(d.x+d.width/2,d.y+d.height/2);await page.mouse.down();
+   await page.mouse.move(body.x+body.width*.66,d.y+d.height/2,{steps:5});await page.mouse.up();
+   await page.waitForFunction(old=>document.querySelector('#editor').getBoundingClientRect().width>old+20,oldLeft);
+   assert(Number(await divider.getAttribute('aria-valuenow'))>=64);
+   await divider.focus();await page.keyboard.press('Home');
+   assert.equal(await divider.getAttribute('aria-valuenow'),'20');
+   for(let i=0;i<6;i++)await page.keyboard.press('ArrowRight');
+   assert.equal(await divider.getAttribute('aria-valuenow'),'50');
+   await rawFormula.click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('$$x=1$$'));
+   assert.equal(await grid.locator('.ag-row-selected').count(),0);
+   assert.equal(await compare.locator('.translation-focus-source').count(),0);
+   console.log('TRANSLATION_WP04F4_BROWSER_PASS',name,'full RAW, saved boundary, darker protection, draggable divider, no false selection');
+
    await compare.locator('.cm-line').filter({hasText:'B.'}).click();
    await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('B.'));
    await grid.locator('.ag-row-selected[row-id="3:1"]').first().waitFor();
@@ -168,7 +195,7 @@ try{
    assert.equal(await grid.locator('.ag-header-cell[col-id="text"]').count(),1);
    await grid.locator('.ag-row [col-id="source_line"]').last().click();
    await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('<table>'));
-   await agPicker.selectOption('original');await count(5);assert.equal(await compare.isVisible(),false);
+   await agPicker.selectOption('original');await count(5);assert.equal(await compare.isVisible(),false);assert.equal(await divider.isVisible(),false);
    assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
    assert.equal(await preview.locator('.ocr-math.translation-protected-preview').count(),1);
    assert.equal(prepCalls.length,beforeViewCalls);assert.equal(reads.length,beforeViewReads);

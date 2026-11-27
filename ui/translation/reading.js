@@ -1,6 +1,6 @@
 /** Read-only CM6 source + V2 Markdown renderer, no document persistence. */
 import {EditorState,StateEffect,StateField,Prec} from '@codemirror/state';
-import {EditorView,Decoration,lineNumbers} from '@codemirror/view';
+import {EditorView,Decoration,lineNumbers,WidgetType} from '@codemirror/view';
 import {markdown,markdownLanguage} from '@codemirror/lang-markdown';
 import {syntaxHighlighting} from '@codemirror/language';
 import {oneDarkHighlightStyle} from '@codemirror/theme-one-dark';
@@ -14,21 +14,35 @@ import {applyPreviewProtection} from './preview-protection.js';
 import './reading.css';
 import {nearestSentence,fractionWithin,anchorHeight} from './scroll-anchor.js';
 
+/** Adopted Sentence Lab green boundary, rendered without adding RAW chars. */
+class FinalBoundary extends WidgetType {
+  constructor(line,index){super();this.line=line;this.index=index;}
+  eq(other){return other instanceof FinalBoundary&&other.line===this.line&&other.index===this.index;}
+  toDOM(){
+    const span=document.createElement('span');
+    span.className='ocr-sb-boundary ocr-sb-agreed translation-final-boundary';
+    span.setAttribute('aria-label','最终句界 · MDLine '+this.line+' · 句 '+this.index);
+    span.title=span.getAttribute('aria-label');return span;
+  }
+  ignoreEvent(){return true;}
+}
 export function mountReadingSource(host,onLocate,{numbered=true,origin='source',onScroll=()=>{},onScrollIntent=()=>{}}={}){
-  const protect=StateEffect.define(),focus=StateEffect.define(),replace=StateEffect.define();
+  const protect=StateEffect.define(),focus=StateEffect.define(),replace=StateEffect.define(),cuts=StateEffect.define();
   const field=(effect,build)=>StateField.define({create:()=>Decoration.none,update(value,tr){
     if(tr.docChanged)value=Decoration.none;
     for(const e of tr.effects)if(e.is(effect))value=build(e.value,tr.state.doc);
     return value;
   },provide:f=>EditorView.decorations.from(f)});
   const protectedField=field(protect,ranges=>Decoration.set(ranges.map(p=>Decoration.mark({class:'translation-protected-source'}).range(p.from,p.to)),true));
+  const boundaryField=field(cuts,marks=>Decoration.set(marks.map(m=>Decoration.widget({widget:new FinalBoundary(m.line,m.index),side:1}).range(m.pos)),true));
   const focusField=field(focus,(row,doc)=>row?Decoration.set([row.from===row.to?Decoration.line({class:'translation-focus-source'}).range(doc.lineAt(row.from).from):Decoration.mark({class:'translation-focus-source'}).range(row.from,row.to)]):Decoration.none);
   let programmatic=false,model=null;
   host.classList.add('translation-reading-source');
+  if(numbered)host.classList.add('translation-raw-source');
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
     EditorState.readOnly.of(true),EditorView.editable.of(false),...(numbered?[lineNumbers()]:[]),EditorView.lineWrapping,
     EditorView.contentAttributes.of({spellcheck:'false','aria-label':numbered?'原文源码（只读）':'待译句源码（只读）'}),
-    ...(numbered?[markdown({base:markdownLanguage}),obsidianMarkdown,syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers]:[]),Prec.high(protectedField),focusField,
+    ...(numbered?[markdown({base:markdownLanguage}),obsidianMarkdown,syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers,boundaryField]:[]),Prec.high(protectedField),focusField,
     EditorState.transactionFilter.of(tr=>tr.docChanged&&!tr.effects.some(e=>e.is(replace))?[]:tr),
     EditorView.updateListener.of(update=>{
       if(!programmatic&&update.selectionSet&&model)onLocate(model.atOffset(update.state.selection.main.head),origin);
@@ -77,7 +91,7 @@ export function mountReadingSource(host,onLocate,{numbered=true,origin='source',
     setDocument(next){
       if(model===next)return;
       const changed=model?.text!==next?.text;model=next;programmatic=true;
-      try{editor.dispatch({...(changed?{changes:{from:0,to:editor.state.doc.length,insert:next?.text??''},selection:{anchor:0}}:{}),effects:[replace.of(null),protect.of(next?.ranges??[]),...(changed?[focus.of(null)]:[])]});}
+      try{editor.dispatch({...(changed?{changes:{from:0,to:editor.state.doc.length,insert:next?.text??''},selection:{anchor:0}}:{}),effects:[replace.of(null),protect.of(next?.ranges??[]),...(numbered?[cuts.of(next?.boundaries??[])]:[]),...(changed?[focus.of(null)]:[])]});}
       finally{programmatic=false;}
     },
     getMarkdown:()=>editor.state.doc.toString(),
