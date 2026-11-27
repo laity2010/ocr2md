@@ -21,3 +21,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"726e85c1b557459fa8b6f716b7a7b23d","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"726e85c1b557459fa8b6f716b7a7b23d","branch":"refs/heads/experiment/lab-sentence","baseline":"0e98c6a344a8d623b6544615e40835f3e19ce4e4","event":"RUN_EXIT","utc":"2026-11-27T01:52:55.326066+00:00","phase":"raw-migration-regression-2","step":"fcd777d229274414af3fe50a791a01fa","exit_code":1}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"726e85c1b557459fa8b6f716b7a7b23d","branch":"refs/heads/experiment/lab-sentence","baseline":"0e98c6a344a8d623b6544615e40835f3e19ce4e4","event":"RUN_START","utc":"2026-11-27T01:53:17.777667+00:00","phase":"raw-final-regression","step":"2fa77acc70924f858eb7bfce59d796c3"}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"726e85c1b557459fa8b6f716b7a7b23d","branch":"refs/heads/experiment/lab-sentence","baseline":"0e98c6a344a8d623b6544615e40835f3e19ce4e4","event":"RUN_EXIT","utc":"2026-11-27T01:56:27.278117+00:00","phase":"raw-final-regression","step":"2fa77acc70924f858eb7bfce59d796c3","exit_code":1}
