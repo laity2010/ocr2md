@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"892f5d5531254793b09a196dc85e935f","branch":"refs/heads/experiment/lab-translation","baseline":"a687f686c2a31c8ace1cb731c2e32d6102afc84d","event":"START","utc":"2026-11-27T07:09:53.852799+00:00","wp":"WP04F4","goal":"待译模式左原句窗保留完整RAW/V2源码样式、最终采用的句界、加深非译元素、左右可拖分隔；右待译文本、预览/Prompt、AG和SQL不变，按句身份同步。","retrospective":false}
