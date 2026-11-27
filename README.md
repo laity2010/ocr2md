@@ -1,6 +1,6 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP04F5，继承 WP00–04F4）
+## 当前可运行基线（WP04F6，继承 WP00–04F5）
 
 独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt。
 
@@ -24,39 +24,11 @@
 | initializeTable / initializePreparation / validatePreparation | 单次逻辑初始化、双摘要和逐行回填验证、取消和失败不返回中间表；tests/translation-preparation.test.mjs |
 | createFrameWorkspace.setTranslationRows / createReadingDocument(table) | 单表 AG 与 RAW 阅读坐标；tests/translation-reading.test.mjs、双浏览器门禁 |
 
-## WP04F2 · AG 原句表 / 待译句表
+## WP04F6 · 单原句视图与三窗高亮
 
-初始化成功后，AG 自身下拉启用「原句表」（默认）与「待译句表」，源导航仍仅一个 SQL 初始化与译句表入口。原句视图以 raw 为主列、显示全部记录；待译视图以 text 为主列、仅保留 translatable=true 的记录，raw 与回填元素仍可核对。两视图的筛选状态独立。切换为纯内存派生，不建 SQL view/表、不调用初始化 API、不写数据库；换目录或清空时恢复原句视图、清除筛选及禁用业务下拉。
+原句表为 AG 唯一业务视图，完整显示所有句记录（raw 为主列，text、protected、translatable 等原字段仍可核对）。移除 WP04F2–F4 的待译独立视图、第二源码窗、分隔线、句级双窗滚动及过滤正文投影；不保留隐藏编辑器或平行数据状态。原生列值筛选仍只影响 AG 行，不能改变原文和 MD 预览；全部 RAW 及其物理行号和最终保存句界保留。源码、MD 预览使用同一完整阅读模型；AG、源码、MD 预览按原句身份同步定位，包括整句不可译记录。AG 原生选中行与源码焦点、预览焦点统一橙色底 rgba(235,163,82,.18)，保留各窗口原有结构、字体和原生控件。WP04F5 的保护色 #505e55、暗底 #25302c、细下边线及 V2 引用原色不变。Prompt 编辑仍独立。text 与回填清单不删除，留待 WP05 导出；SQL、上游及其他州不变。
 
-MD 预览随 AG 视图切换：原句视图保留全文 RAW，待译视图只拼接可译句原始 RAW，完整不可译句仅保留原 LF 分隔（物理 MDLine 行号不变），可译句内部 protected 继续按原坐标投影并淡化。保留原 source_line/sentence_index 作为定位身份；省略区不定位到其他句；切回原句表恢复全文。待译视图不以 text 的占位符破坏预览；仅 AG 主列显示占位文本。跨句 Markdown/HTML 结构若依赖被省略句中的标记，派生预览可能与全文不同，原句视图始终保留完整结构。Prompt 状态与历史不受切换影响。
-
-`createReadingDocument(table,{pending:true})` 为待译阅读投影，默认仍为无损全文模式。tests/translation-reading.test.mjs 覆盖同行与跨行省略、保留行号、保护坐标、全不可译及原始记录不变；tests/cross-version-ag-filter.browser.test.mjs 覆盖真实 AG 切换、预览省略/淡化、定位、切回及无 API 请求。
-
-## WP04F3 · 待译句双源码对照
-
-仅 AG 选择「待译句表」时，原源码窗 body 默认左右等分（WP04F4 可调），原顶栏导航/Undo/Redo 不移动。左窗复用已有只读 CM6 完整 RAW、原物理行号和保护淡化（WP04F4）；右窗复用同一只读 CM6 组件但不显示行号、逐句显示实际 text，回填占位符淡化，句间新增 LF 仅作显示分隔、不写入任何业务数据。两窗共享同一 source_line:sentence_index 身份，点击任一窗同步另一窗同句高亮以及 AG、MD 预览定位；预览仍渲染对应视图的 RAW 投影，Prompt 保持独立。双向垂直滚动以当前顶部原句身份和句内可视高度比例映射，使用 CM6 实际折行坐标、屏幕外块几何估计；不按像素硬同步。用户滚动输入确定主窗，接收端滚动不反向触发循环。两窗因折行高度不同、文档首尾滚动边界，不承诺逐像素对齐。切回原句表/清空时隐藏右窗并恢复完整 RAW；不改变 SQL、初始化、保护规则、文件或其他州。
-
-| API | 直接验收 |
-|---|---|
-| createComparisonDocument(rows) | 从唯一表 text 构造句级坐标及占位范围，逐句回填校验；tests/translation-comparison.test.mjs |
-| nearestSentence / fractionWithin / anchorHeight | 句身份与可视高度比例映射；同上 |
-| mountReadingSource(host,onLocate,options) / mountSourceComparison | 复用 CM6、单双窗切换、行号、双向点击和实际 scrollDOM 验收；tests/cross-version-ag-filter.browser.test.mjs |
-
-## WP04F4 · 完整原句、最终句界、可调双窗
-
-左源码窗在两种 AG 视图下均以唯一译句表全部 RAW 原样拼接（含整句不可译、全部换行），沿用 V2 相同的 Obsidian 源码语法扩展、Everforest 样式和 Sarasa 字号。只读物理行号，不启用 V2 编辑菜单。最终句界由相邻同 MDLine 的已保存句记录导出（无候选分歧，不重新分句，不标普通行尾），采用分句州已采用绿色 │ 样式的 CM6 装饰，伪元素仅视觉显示不改变原文、复制正文和 UTF-16 坐标。左窗 protected 色调及右窗占位符样式见 WP04F5；待译 AG、右窗 text、MD 预览过滤逻辑及 Prompt 不变。
-
-待译模式分隔条支持鼠标/触控指针拖动及键盘左右箭头/Home/End，默认 50%，限制 20%–80%，仅内存比例，触发 CM6 重新测量，切回原句隐藏分隔条。两窗仍按 source_line:sentence_index 同步。左窗选中整句不可译时，仅左窗高亮，清除 AG、右窗和预览焦点；滚动到不可译区时，右窗定位下一可译句（文末取最后可译句），不虚构对应句或自动选中。原文、SQL、保护规则、上游和其他州不变。
-
-| API | 直接验收 |
-|---|---|
-| createReadingDocument(table).boundaries | 同一 MDLine 内最终句界、完整 RAW；tests/translation-comparison.test.mjs |
-| comparisonAnchor(anchor,full,prepared) | 整句不可译滚动锚点映射，精确身份保留；同上 |
-| clampRatio/dividerRatio/mountComparisonDivider | 限制比例及真实拖动、键盘、单双窗、无错误配对；直接与双浏览器门禁 |
-
-## WP04F5 · 非翻译元素视觉层级
-
-不修改 protected 识别或任何正文数据，仅调整本州源码窗 CSS。正文继续使用 V2 Everforest 原色（普通正文 #d3c6aa、引用正文 #9aa79d）；左窗仅扫描确认的 protected 范围使用 #505e55、暗底 #25302c 与细内下边线，悬停恢复到 #748278 以便查看，引用中的普通文字不被整行淡化。右窗实际回填占位符使用 #859289、#26332f 暗底及细下边线，作为弱强调，不改变文本、行宽和坐标。最终句界仍以原绿色装饰显示；MD 预览、Prompt、AG、SQL、分隔和滚动逻辑不变。双浏览器验收检查实际 computed style、普通引用色、公式保护底色、占位符以及旧行为回归。实体 iPad 视觉验收不由模拟浏览器代替。
+现行接口：createReadingDocument(table) 只生成全文坐标；mountReadingSource(host,onLocate) 单只读 CM6；createFrameWorkspace.setTranslationRows / setReadingDocument 负责三窗装载及同句定位。直接测试 tests/translation-reading.test.mjs，真实双浏览器门禁 tests/cross-version-ag-filter.browser.test.mjs 覆盖单视图、完整 RAW、最终句界、保护色、同一选中背景、三向定位及原生筛选和 Prompt。已撤除视图的历史实现与验收可追溯 Git，不再列为现行能力。
 
 ## WP03 · 无损 MDLine 阅读与保护淡化
 

@@ -33,21 +33,14 @@ test('last line without LF has a real half-open interval; no extra line or newli
  assert.equal(model.text.endsWith('\n'),false);
  assert.equal(model.lineOffset(last.source_line+1),model.text.length);
 });
-test('pending projection omits wholly protected sentences, keeps physical lines and original identities',()=>{
- const rows=[
-   {source_line:1,sentence_index:0,raw:'$x$ ',protected:[{from:0,to:4,kind:'latex',text:'$x$ '}],translatable:false},
-   {source_line:1,sentence_index:1,raw:'A $y$.\n\n',protected:[{from:2,to:5,kind:'latex',text:'$y$'}],translatable:true},
-   {source_line:3,sentence_index:0,raw:'$$z$$\n',protected:[{from:0,to:6,kind:'latex',text:'$$z$$\n'}],translatable:false},
-   {source_line:4,sentence_index:0,raw:'Tail.',protected:[],translatable:true}
- ];
- const before=JSON.stringify(rows),full=createReadingDocument({rows}),pending=createReadingDocument({rows},{pending:true});
- assert.equal(full.text,'$x$ A $y$.\n\n$$z$$\nTail.');
- assert.equal(pending.text,'A $y$.\n\n\nTail.');
- assert.deepEqual(pending.sentences.map(s=>s.key),['1:1','4:0']);
- assert.equal(pending.byKey('1:0'),null);assert.equal(pending.byKey('3:0'),null);
- assert.equal(pending.byKey('4:0').from,pending.lineOffset(4));
- assert.equal(pending.atOffset(pending.lineOffset(3)),null);
- assert.deepEqual(pending.ranges.map(p=>pending.text.slice(p.from,p.to)),['$y$']);
- assert.equal(JSON.stringify(rows),before);
- assert.equal(createReadingDocument({rows:rows.map(r=>({...r,translatable:false}))},{pending:true}).sentences.length,0);
+
+test('complete RAW includes nontranslatable sentences and final adopted split points',async()=>{
+ const table=preparedFixture(await sampleSnapshot(' full',true,true)),before=JSON.stringify(table);
+ const full=createReadingDocument(table);
+ assert.equal(full.text,table.rows.map(r=>r.raw).join(''));
+ assert.deepEqual(full.boundaries.map(b=>[b.line,b.index,full.text.slice(b.pos-2,b.pos)]),[[3,0,'A.']]);
+ assert.equal(full.byKey('5:0').translatable,false);
+ assert.equal(full.byKey('3:1').translatable,true);
+ assert.equal(full.text.slice(full.byKey('5:0').from,full.byKey('5:0').to),table.rows.at(-1).raw);
+ assert.equal(JSON.stringify(table),before);
 });

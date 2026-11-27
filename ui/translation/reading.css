@@ -3,40 +3,13 @@
 #workspace .ocr-cm-source.translation-reading-source .cm-scroller{
   background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);line-height:1.5;
 }
-/* WP04F5: only scanner-confirmed protected spans get a protection surface.
-   Ordinary V2 quote prose (#9aa79d) and source syntax keep their own palette.
-   No opacity on an ancestor, so neighboring prose and final cut widgets
-   cannot accidentally inherit the dimming. */
-#workspace .translation-reading-source:not(.translation-raw-source) .translation-protected-source,
-#workspace .translation-reading-source:not(.translation-raw-source) .translation-protected-source *{
-  color:#859289!important;
-}
-#workspace .translation-reading-source:not(.translation-raw-source) .translation-protected-source{
-  background:#26332f;border-radius:2px;box-decoration-break:clone;
-  -webkit-box-decoration-break:clone;
-  box-shadow:inset 0 -1px #45574d;
-}
 #workspace .translation-reading-source .translation-focus-source{background:rgba(235,163,82,.18);box-decoration-break:clone}
 #workspace .ocr-markdown .translation-protected-preview{opacity:.55}
 #workspace .ocr-markdown .translation-protected-preview .translation-protected-preview{opacity:1}
 #workspace .ocr-markdown .translation-focus-preview{
-  background:rgba(235,163,82,.12);outline:1px solid rgba(235,163,82,.30);outline-offset:1px;
+  background:rgba(235,163,82,.18);outline:1px solid rgba(235,163,82,.30);outline-offset:1px;
 }
 #workspace .ocr-preview-md-scroll>.ocr-markdown{min-height:100%;box-sizing:border-box;font-size:var(--ocr-frame-font-size,16px)}
-/* Split only the existing source body; the navigation remains one strip. */
-#workspace .translation-source-comparison{
-  flex:1 1 0;min-height:0;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);overflow:hidden;
-  width:100%;height:100%;
-}
-#workspace .translation-source-comparison.is-comparing{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-#workspace .translation-source-column{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden}
-#workspace .translation-source-column[hidden],#workspace .translation-source-label[hidden]{display:none!important}
-#workspace .translation-source-column+.translation-source-column{border-left:1px solid #525c62}
-#workspace .translation-source-label{
-  flex:none;padding:3px 6px;font:calc(12px * var(--ocr-frame-scale,1))/1.3 "OCR2MD Sarasa",monospace;
-  background:#27352f;color:#a7c080;border-bottom:1px solid #525c62;
-}
-#workspace .translation-source-column>.frame-editor{flex:1 1 0;height:0;min-width:0}
 /* Full RAW: a separate, deliberately low-contrast protection tier.
    Reuse the exact protected range; don't dim the entire Markdown quote line.
    Descendant syntax tokens must not restore a bright link/math/HTML color. */
@@ -63,16 +36,3 @@
   font-size:1.16em;font-weight:900;padding:0 2px;line-height:1;
 }
 #workspace .translation-final-boundary::before{content:"│"}
-#workspace .translation-source-comparison.is-comparing{
-  grid-template-columns:minmax(0,var(--translation-left,.5fr)) 7px minmax(0,var(--translation-right,.5fr));
-}
-#workspace .translation-comparison-divider{
-  cursor:col-resize;touch-action:none;user-select:none;min-width:0;min-height:0;
-  background:#525c62;position:relative;
-}
-#workspace .translation-comparison-divider[hidden]{display:none!important}
-#workspace .translation-comparison-divider::after{
-  content:"";position:absolute;top:50%;left:2px;right:2px;height:34px;
-  transform:translateY(-50%);border-radius:2px;background:#9cae9b;
-}
-#workspace .translation-comparison-divider:is(:hover,:focus-visible,:active){background:#789477;outline:none}

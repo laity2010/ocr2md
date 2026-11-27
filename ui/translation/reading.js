@@ -12,7 +12,6 @@ import {mediaFileUrl,retryLocalImage} from '../v2-media-url.js';
 import {createFootnotePopover} from '../footnote-popover.js';
 import {applyPreviewProtection} from './preview-protection.js';
 import './reading.css';
-import {nearestSentence,fractionWithin,anchorHeight} from './scroll-anchor.js';
 
 /** Adopted Sentence Lab green boundary, rendered without adding RAW chars. */
 class FinalBoundary extends WidgetType {
@@ -26,7 +25,7 @@ class FinalBoundary extends WidgetType {
   }
   ignoreEvent(){return true;}
 }
-export function mountReadingSource(host,onLocate,{numbered=true,origin='source',onScroll=()=>{},onScrollIntent=()=>{}}={}){
+export function mountReadingSource(host,onLocate){
   const protect=StateEffect.define(),focus=StateEffect.define(),replace=StateEffect.define(),cuts=StateEffect.define();
   const field=(effect,build)=>StateField.define({create:()=>Decoration.none,update(value,tr){
     if(tr.docChanged)value=Decoration.none;
@@ -37,61 +36,26 @@ export function mountReadingSource(host,onLocate,{numbered=true,origin='source',
   const boundaryField=field(cuts,marks=>Decoration.set(marks.map(m=>Decoration.widget({widget:new FinalBoundary(m.line,m.index),side:1}).range(m.pos)),true));
   const focusField=field(focus,(row,doc)=>row?Decoration.set([row.from===row.to?Decoration.line({class:'translation-focus-source'}).range(doc.lineAt(row.from).from):Decoration.mark({class:'translation-focus-source'}).range(row.from,row.to)]):Decoration.none);
   let programmatic=false,model=null;
-  host.classList.add('translation-reading-source');
-  if(numbered)host.classList.add('translation-raw-source');
+  host.classList.add('translation-reading-source','translation-raw-source');
   const editor=new EditorView({state:EditorState.create({doc:'',extensions:[
-    EditorState.readOnly.of(true),EditorView.editable.of(false),...(numbered?[lineNumbers()]:[]),EditorView.lineWrapping,
-    EditorView.contentAttributes.of({spellcheck:'false','aria-label':numbered?'原文源码（只读）':'待译句源码（只读）'}),
-    ...(numbered?[markdown({base:markdownLanguage}),obsidianMarkdown,syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers,boundaryField]:[]),Prec.high(protectedField),focusField,
+    EditorState.readOnly.of(true),EditorView.editable.of(false),lineNumbers(),EditorView.lineWrapping,
+    EditorView.contentAttributes.of({spellcheck:'false','aria-label':'原文源码（只读）'}),
+    markdown({base:markdownLanguage}),obsidianMarkdown,syntaxHighlighting(oneDarkHighlightStyle,{fallback:true}),obsidianSourceSyntax,obsidianHeadingMarkers,boundaryField,Prec.high(protectedField),focusField,
     EditorState.transactionFilter.of(tr=>tr.docChanged&&!tr.effects.some(e=>e.is(replace))?[]:tr),
     EditorView.updateListener.of(update=>{
-      if(!programmatic&&update.selectionSet&&model)onLocate(model.atOffset(update.state.selection.main.head),origin);
+      if(!programmatic&&update.selectionSet&&model)onLocate(model.atOffset(update.state.selection.main.head),'source');
     }),
     EditorView.domEventHandlers({click(event,view){
       if(!model)return false;
       const pos=view.posAtCoords({x:event.clientX,y:event.clientY});
-      if(pos!==null)onLocate(model.atOffset(pos),origin);return false;
+      if(pos!==null)onLocate(model.atOffset(pos),'source');return false;
     }})
   ]}),parent:host});
-  // Real CM6 geometry, including wrapped visual lines. Estimated block
-  // geometry is used only for a target that has not yet been rendered.
-  function bounds(row){
-    const start=editor.coordsAtPos(row.from,1);
-    const end=editor.coordsAtPos(Math.max(row.from,row.to-1),-1);
-    return {top:start?start.top-editor.documentTop:editor.lineBlockAt(row.from).top,
-      bottom:end?end.bottom-editor.documentTop:editor.lineBlockAt(Math.max(row.from,row.to-1)).bottom};
-  }
-  function getScrollAnchor(){
-    if(!model?.sentences.length||!editor.scrollDOM.clientHeight)return null;
-    const rect=editor.scrollDOM.getBoundingClientRect(),y=rect.top+2;
-    const pos=editor.posAtCoords({x:editor.contentDOM.getBoundingClientRect().left+2,y},false);
-    const block=editor.lineBlockAtHeight(Math.max(0,y-editor.documentTop));
-    const row=nearestSentence(model,pos??block.from);
-    if(!row)return null;
-    const b=bounds(row);
-    return {key:row.key,fraction:fractionWithin(b.top,b.bottom,y-editor.documentTop)};
-  }
-  function scrollToAnchor(anchor){
-    const row=model?.byKey(anchor.key);
-    if(!row||!editor.scrollDOM.clientHeight)return;
-    const b=bounds(row),target=anchorHeight(b.top,b.bottom,anchor.fraction);
-    const y=editor.scrollDOM.getBoundingClientRect().top;
-    editor.scrollDOM.scrollTop+=editor.documentTop+target-y-2;
-  }
-  let scheduled=0;
-  const scroll=()=>{
-    if(scheduled)return;
-    scheduled=requestAnimationFrame(()=>{scheduled=0;const anchor=getScrollAnchor();if(anchor)onScroll(anchor,origin);});
-  };
-  const intent=()=>onScrollIntent(origin);
-  editor.scrollDOM.addEventListener('scroll',scroll,{passive:true});
-  for(const event of ['wheel','pointerdown','touchstart','keydown'])editor.scrollDOM.addEventListener(event,intent,{passive:true});
   return Object.freeze({
-    getScrollAnchor,scrollToAnchor,
     setDocument(next){
       if(model===next)return;
       const changed=model?.text!==next?.text;model=next;programmatic=true;
-      try{editor.dispatch({...(changed?{changes:{from:0,to:editor.state.doc.length,insert:next?.text??''},selection:{anchor:0}}:{}),effects:[replace.of(null),protect.of(next?.ranges??[]),...(numbered?[cuts.of(next?.boundaries??[])]:[]),...(changed?[focus.of(null)]:[])]});}
+      try{editor.dispatch({...(changed?{changes:{from:0,to:editor.state.doc.length,insert:next?.text??''},selection:{anchor:0}}:{}),effects:[replace.of(null),protect.of(next?.ranges??[]),cuts.of(next?.boundaries??[]),...(changed?[focus.of(null)]:[])]});}
       finally{programmatic=false;}
     },
     getMarkdown:()=>editor.state.doc.toString(),
@@ -100,12 +64,7 @@ export function mountReadingSource(host,onLocate,{numbered=true,origin='source',
       try{editor.dispatch({effects:[focus.of(row),...(row&&scroll?[EditorView.scrollIntoView(row.from,{y:'center'})]:[])],...(row&&scroll?{selection:{anchor:row.from}}:{})});}
       finally{programmatic=false;}
     },
-    layout:()=>editor.requestMeasure(),dispose(){
-      if(scheduled)cancelAnimationFrame(scheduled);
-      editor.scrollDOM.removeEventListener('scroll',scroll);
-      for(const event of ['wheel','pointerdown','touchstart','keydown'])editor.scrollDOM.removeEventListener(event,intent);
-      editor.destroy();
-    }
+    layout:()=>editor.requestMeasure(),dispose:()=>editor.destroy()
   });
 }
 

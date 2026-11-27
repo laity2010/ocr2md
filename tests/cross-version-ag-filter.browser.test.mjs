@@ -133,32 +133,18 @@ try{
    assert.equal(await page.evaluate(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')),settingsBefore);
    assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
    await mode.selectOption('md');
-   // WP04F2: AG owns the two views, not SQL navigation.
+   // WP04F6: only one AG view and one full RAW source, no hidden comparison editor.
    const agPicker=workspace.locator('.ocr-ag-module-select');
-   assert.deepEqual(await agPicker.locator('option').allTextContents(),['原句表','待译句表']);
+   assert.deepEqual(await agPicker.locator('option').allTextContents(),['原句表']);
    assert.equal(await agPicker.inputValue(),'original');
-   const beforeViewCalls=prepCalls.length, beforeViewReads=reads.length;
-   await agPicker.selectOption('pending');await count(4);
-   assert.equal(await workspace.locator('#editor .cm-line').allTextContents().then(x=>x.join('\n')),prepared.rows.map(r=>r.raw).join(''));
-   assert.equal(await preview.locator('.ocr-math').count(),0);
-   assert.equal(await preview.locator('.ocr-reviewed-inline-latex.translation-protected-preview').count(),1);
-   assert((await source.locator('.translation-protected-source').allTextContents()).join('').includes('$r_t$'));
-   assert.equal(await grid.locator('.ag-row [col-id="source_line"]').last().textContent(),'4');
-   // WP04F3: only the source body is split; left RAW/line numbers, right text.
-   const compare=workspace.locator('#prepared-editor');
-   await compare.waitFor({state:'visible'});
+   await count(5);
+   assert.equal(await workspace.locator('#prepared-editor,.translation-comparison-divider,.translation-source-comparison').count(),0);
+   assert.equal(await workspace.locator('.ocr-source-pane .cm-editor').count(),1);
    assert.equal(await source.locator('.cm-lineNumbers').count(),1);
-   assert.equal(await compare.locator('.cm-gutters').count(),0);
-   assert.equal(await compare.locator('.cm-content').getAttribute('contenteditable'),'false');
-   assert.equal((await compare.locator('.cm-line').allTextContents()).join('\n'),prepared.rows.filter(r=>r.translatable).map(r=>r.text).join('\n'));
-   const sides=await page.evaluate(()=>{
-     const l=document.querySelector('#editor').getBoundingClientRect(),r=document.querySelector('#prepared-editor').getBoundingClientRect();
-     return {left:l.right,right:r.left,lh:l.height,rh:r.height,width:r.width};
-   });
-   assert(sides.right>=sides.left-2&&sides.width>30&&Math.abs(sides.lh-sides.rh)<3);
+   assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),prepared.rows.map(r=>r.raw).join(''));
+   assert.equal(await preview.locator('.ocr-math.translation-protected-preview').count(),1);
    // WP04F4: full left source, adopted boundary widget, darker protected text.
    assert.equal(await source.locator('.translation-final-boundary').count(),1);
-   assert.equal(await compare.locator('.translation-final-boundary').count(),0);
    assert.equal(await source.locator('.translation-final-boundary').getAttribute('aria-label'),'最终句界 · MDLine 3 · 句 0');
    assert.equal(await source.locator('.translation-final-boundary').evaluate(el=>getComputedStyle(el,'::before').content),'"│"');
    const rawFormula=source.locator('.cm-line').filter({hasText:'$$x=1$$'});
@@ -186,52 +172,36 @@ try{
    assert.equal(visual.math?.color,'rgb(80, 94, 85)');
    assert.equal(visual.math?.background,'rgb(37, 48, 44)');
    assert.notEqual(visual.math?.shadow,'none');
-   const token=compare.locator('.translation-protected-source').first();
-   assert.match(await token.textContent(),/⟦P/);
-   assert.equal(await token.evaluate(el=>getComputedStyle(el).color),'rgb(133, 146, 137)');
-   assert.equal(await token.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(38, 51, 47)');
-   assert.notEqual(await token.evaluate(el=>getComputedStyle(el).boxShadow),'none');
+   assert.equal(visual.body?.color,'rgb(211, 198, 170)');
    console.log('TRANSLATION_WP04F5_BROWSER_PASS',name,JSON.stringify(visual));
-
-   const divider=workspace.getByRole('separator',{name:'调整原句窗与待译句窗宽度'});
-   await divider.waitFor({state:'visible'});
-   const d=await divider.boundingBox(),body=await workspace.locator('.translation-source-comparison').boundingBox();
-   const oldLeft=(await source.boundingBox()).width;
-   await page.mouse.move(d.x+d.width/2,d.y+d.height/2);await page.mouse.down();
-   await page.mouse.move(body.x+body.width*.66,d.y+d.height/2,{steps:5});await page.mouse.up();
-   await page.waitForFunction(old=>document.querySelector('#editor').getBoundingClientRect().width>old+20,oldLeft);
-   assert(Number(await divider.getAttribute('aria-valuenow'))>=64);
-   await divider.focus();await page.keyboard.press('Home');
-   assert.equal(await divider.getAttribute('aria-valuenow'),'20');
-   for(let i=0;i<6;i++)await page.keyboard.press('ArrowRight');
-   assert.equal(await divider.getAttribute('aria-valuenow'),'50');
+   // Verify actual AG cell-container overlay and both
+   // reading focus surfaces on the same non-protected sentence.
+   await grid.locator('.ag-row [col-id="source_line"]').first().click();
+   await page.waitForFunction(()=>document.querySelector('#workspace .ag-row-selected[row-id="1:0"]')&&document.querySelector('#editor .translation-focus-source')&&document.querySelector('.ocr-preview-md-scroll .translation-focus-preview'));
+   await page.mouse.move(0,0);
+   const focus=await page.evaluate(()=>{
+     const row=document.querySelector('#workspace .ag-row-selected[row-id="1:0"]');
+     const source=document.querySelector('#editor .translation-focus-source');
+     const preview=document.querySelector('.ocr-preview-md-scroll .translation-focus-preview');
+     const overlays=[...row.querySelectorAll('.ag-grid-pinned-left-cells,.ag-grid-pinned-right-cells,.ag-grid-scrolling-cells')].filter(el=>el.getBoundingClientRect().width>0).map(el=>getComputedStyle(el,'::before').backgroundColor);
+     return {row:overlays[0],overlays,source:getComputedStyle(source).backgroundColor,preview:getComputedStyle(preview).backgroundColor,
+       theme:getComputedStyle(row).getPropertyValue('--ag-selected-row-background-color').trim()};
+   });
+   assert.equal(focus.row,'rgba(235, 163, 82, 0.18)',JSON.stringify(focus));
+   assert(focus.overlays.length>0&&focus.overlays.every(color=>color===focus.row),JSON.stringify(focus));
+   assert.equal(focus.source,focus.row,JSON.stringify(focus));
+   assert.equal(focus.preview,focus.row,JSON.stringify(focus));
+   // Wholly protected sentences remain in AG and full source/preview.
    await rawFormula.click();
    await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('$$x=1$$'));
-   assert.equal(await grid.locator('.ag-row-selected').count(),0);
-   assert.equal(await compare.locator('.translation-focus-source').count(),0);
-   console.log('TRANSLATION_WP04F4_BROWSER_PASS',name,'full RAW, saved boundary, darker protection, draggable divider, no false selection');
-
-   await compare.locator('.cm-line').filter({hasText:'B.'}).click();
-   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('B.'));
-   await grid.locator('.ag-row-selected[row-id="3:1"]').first().waitFor();
-   assert((await compare.locator('.translation-focus-source').allTextContents()).join('').includes('B.'));
-   await source.locator('.cm-line').first().click();
-   await page.waitForFunction(()=>[...document.querySelectorAll('#prepared-editor .translation-focus-source')].map(n=>n.textContent).join('').includes('Heading'));
-   assert.equal(await grid.locator('.ag-row-selected [col-id="source_line"]').textContent(),'1');
-
-   await grid.locator('.ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=0);
-   assert.equal(await grid.locator('.ag-header-cell[col-id="text"]').count(),1);
-   await grid.locator('.ag-row [col-id="source_line"]').last().click();
-   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('<table>'));
-   await agPicker.selectOption('original');await count(5);assert.equal(await compare.isVisible(),false);assert.equal(await divider.isVisible(),false);
-   assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
-   assert.equal(await preview.locator('.ocr-math.translation-protected-preview').count(),1);
-   assert.equal(prepCalls.length,beforeViewCalls);assert.equal(reads.length,beforeViewReads);
-   console.log('TRANSLATION_WP04F2_BROWSER_PASS',name,'pending view and reversible reading projection without SQL');
+   await grid.locator('.ag-row-selected[row-id="5:0"]').first().waitFor();
+   assert.equal(await preview.locator('.ocr-math.translation-focus-preview').count(),1);
+   await preview.locator('table td').first().click();
+   await grid.locator('.ag-row-selected[row-id="4:0"]').first().waitFor();
+   assert((await source.locator('.translation-focus-source').allTextContents()).join('').includes('<table>'));
+   console.log('TRANSLATION_WP04F6_BROWSER_PASS',name,JSON.stringify(focus));
    const scroll=grid.locator('.ag-body-horizontal-scroll-viewport');
-   // Column definitions are replaced on view switch. WebKit may restore
-   // horizontal scroll asynchronously. Reveal actual virtualized columns
-   // rather than assuming an unchanged fixed pixel position.
+   // Reveal actual virtualized columns rather than assuming a fixed scroll position.
    async function revealColumn(id){
      const header=grid.locator('.ag-header-cell[col-id="'+id+'"]');
      const max=await scroll.evaluate(el=>el.scrollWidth-el.clientWidth);
@@ -275,39 +245,18 @@ try{
    assert.match(await workspace.locator('.translation-prompt-editor .cm-line').first().textContent(),/WP04draft/);
    assert.equal(await workspace.locator('#prompt-undo').isDisabled(),true);
    assert.equal(await workspace.locator('#prompt-redo').isDisabled(),true);
-   // Long document: real scroll events in both panes, differing wrapping
-   // and sentence counts. Drive the scrolling pane via native scrollDOM.
+   // Long document: the one full source retains stable navigation.
    await workspace.locator('.ocr-preview-mode').selectOption('md');
    version=3;await chooseNav(workspace,'sql-init');
    await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可翻译 76 句'));
-   await workspace.locator('.ocr-ag-module-select').selectOption('pending');
-   await workspace.locator('#prepared-editor').waitFor({state:'visible'});
-   const scrollPair=async(from,to,ratio)=>{
-     const a=workspace.locator(from+' .cm-scroller'),b=workspace.locator(to+' .cm-scroller');
-     const before=await b.evaluate(el=>el.scrollTop);
-     await a.evaluate((el,ratio)=>{
-       el.dispatchEvent(new WheelEvent('wheel',{deltaY:100,bubbles:true}));
-       el.scrollTop=(el.scrollHeight-el.clientHeight)*ratio;
-     },ratio);
-     await page.waitForFunction(({sel,before})=>Math.abs(document.querySelector(sel+' .cm-scroller').scrollTop-before)>100,{sel:to,before});
-     // Verify the same numbered passage is visible near the top on each
-     // side, not merely that scrollTop changed by the same pixel amount.
-     const visible=sel=>[...document.querySelectorAll(sel+' .cm-line')].filter(el=>{
-       const rect=el.getBoundingClientRect(),sc=el.closest('.cm-scroller').getBoundingClientRect();
-       return rect.bottom>sc.top+1&&rect.top<sc.top+Math.min(sc.height,100);
-     }).map(el=>Number(el.textContent.match(/ROW_(\d+)/)?.[1])).filter(Number.isFinite);
-     await page.waitForFunction(({from,to})=>{
-       const visible=sel=>[...document.querySelectorAll(sel+' .cm-line')].filter(el=>{
-         const rect=el.getBoundingClientRect(),sc=el.closest('.cm-scroller').getBoundingClientRect();
-         return rect.bottom>sc.top+1&&rect.top<sc.top+Math.min(sc.height,120);
-       }).map(el=>Number(el.textContent.match(/ROW_(\d+)/)?.[1])).filter(Number.isFinite);
-       const x=visible(from),y=visible(to);
-       return x.length&&y.length&&Math.abs(x[0]-y[0])<=2;
-     },{from,to},{timeout:10000});
-   };
-   await scrollPair('#editor','#prepared-editor',.65);
-   await scrollPair('#prepared-editor','#editor',.25);
-   console.log('TRANSLATION_WP04F3_BROWSER_PASS',name,'split/gutters/exact text/click focus/semantic scrolling both directions');
+   assert.equal(await workspace.locator('#prepared-editor').count(),0);
+   assert.equal(await workspace.locator('.ocr-ag-module-select option').count(),1);
+   await source.locator('.cm-scroller').evaluate(el=>{el.scrollTop=(el.scrollHeight-el.clientHeight)*.65;});
+   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .cm-line')].some(el=>/ROW_0[4-6]\d/.test(el.textContent)));
+   const visible=source.locator('.cm-line').filter({hasText:/ROW_0[4-6]\d/}).first();
+   await visible.click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].some(el=>/ROW_0[4-6]\d/.test(el.textContent)));
+   assert((await grid.locator('.ag-row-selected').count())>0);
    console.log('TRANSLATION_WP04_BROWSER_PASS',name,'three panes, independent Prompt, undo/redo, save/reload, reading preserved');
    console.log('TRANSLATION_WP04F1_BROWSER_PASS',name,'one init, one table, raw/text/refill, filter, stale refusal, source/preview and Prompt preserved');
    assert.deepEqual(errors,[]);console.log('TRANSLATION_WP01_BROWSER_PASS',name,'bind/init/raw/readonly/native all/multi/refresh/change/failure/retry',JSON.stringify({reads,probes}));

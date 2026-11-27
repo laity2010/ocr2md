@@ -1,10 +1,7 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
-import {mountReadingPreview} from '../translation/reading.js';
-import {mountSourceComparison} from '../translation/source-comparison.js';
-import {createComparisonDocument} from '../translation/comparison-document.js';
+import {mountReadingPreview,mountReadingSource} from '../translation/reading.js';
 import {placeholder} from '../translation/refill.js';
-import {createReadingDocument} from '../translation/document.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
@@ -14,7 +11,7 @@ import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
 import '../ag-enum-filter-shared.css';
 import '../settings-module.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
-const agTheme=themeQuartz.withParams({accentColor:'#569d79',backgroundColor:'#2f383e',
+const agTheme=themeQuartz.withParams({accentColor:'#569d79',selectedRowBackgroundColor:'rgba(235,163,82,.18)',backgroundColor:'#2f383e',
   foregroundColor:'#d3c6aa',headerBackgroundColor:'#272f34',headerTextColor:'#d3c6aa',
   borderColor:'#525c62',fontFamily:'"OCR2MD Sarasa",monospace',fontSize:13,spacing:3});
 
@@ -38,39 +35,30 @@ const translatedColumns=[
   {field:'source_document_hash',headerName:'文档哈希',width:165},
   {field:'sentence_sha256',headerName:'分句哈希',width:165},
 ];
-// Same entity rows, two display projections; text is the primary column
-// in the pending view while raw remains available for checking.
-const pendingColumns=[...translatedColumns.slice(0,2),translatedColumns[7],...translatedColumns.slice(3,7),translatedColumns[2],...translatedColumns.slice(8)];
-function mountEmptyGrid(host,picker,onLocate,onViewChange){
+function mountEmptyGrid(host,picker,onLocate){
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{editable:false,resizable:true,sortable:false,suppressMovable:true},
     getRowId:({data})=>data.source_line+':'+data.sentence_index,
     columnDefs:emptyColumns,rowData:[],rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},onRowClicked:({data})=>{if(data)onLocate(data.source_line+':'+data.sentence_index,'ag');}});
   let active='empty';
-  const filters=new Map();
-  function change(){onViewChange(picker.value);}
-  picker.addEventListener('change',change);
-  function showRows(rows,mode='original'){
-    const next=rows===null?'empty':mode;
+  function showRows(rows){
+    const next=rows===null?'empty':'original';
     if(active!==next){
-      if(next==='empty')filters.clear();
-      else if(active!=='empty')filters.set(active,grid.getFilterModel());
       grid.setFilterModel(null);
-      grid.setGridOption('columnDefs',next==='pending'?pendingColumns:next==='original'?translatedColumns:emptyColumns);
+      grid.setGridOption('columnDefs',next==='original'?translatedColumns:emptyColumns);
       active=next;
-      grid.setGridOption('rowData',rows??[]);
-      if(filters.has(next))grid.setFilterModel(filters.get(next));
-    }else grid.setGridOption('rowData',rows??[]);
-    if(next==='empty'){
-      picker.replaceChildren(new Option('空白框架','frame'),new Option('全局设置','settings'));
-      picker.value='frame';picker.disabled=true;picker.title='空白框架 AG 模块切换不可用';
-    }else{
-      if(picker.disabled)picker.replaceChildren(new Option('原句表','original'),new Option('待译句表','pending'));
-      picker.disabled=false;picker.value=next;picker.title='';
+      if(next==='empty'){
+        picker.replaceChildren(new Option('空白框架','frame'),new Option('全局设置','settings'));
+        picker.value='frame';picker.disabled=true;picker.title='空白框架 AG 模块切换不可用';
+      }else{
+        picker.replaceChildren(new Option('原句表','original'));
+        picker.value='original';picker.disabled=false;picker.title='';
+      }
     }
+    grid.setGridOption('rowData',rows??[]);
   }
-  return {dispose(){picker.removeEventListener('change',change);grid.destroy();},layout:()=>{},setTranslationRows:showRows,
+  return {dispose(){grid.destroy();},layout:()=>{},setTranslationRows:showRows,
     locate(row,{scroll=true}={}){
       const node=row&&grid.getRowNode(row.key);
       if(!node||node.rowIndex==null){grid.deselectAll();return;}
@@ -78,7 +66,7 @@ function mountEmptyGrid(host,picker,onLocate,onViewChange){
       if(scroll)grid.ensureIndexVisible(node.rowIndex,'middle');
     }};
 }
-function blankPane(name,onModuleChange,register,onLocate,onStatus,onViewChange){
+function blankPane(name,onModuleChange,register,onLocate,onStatus){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -98,7 +86,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus,onViewChange){
     bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
-    owned=()=>mountEmptyGrid(grid,picker,onLocate,onViewChange);
+    owned=()=>mountEmptyGrid(grid,picker,onLocate);
   }else if(name==='source'){
     element.className='ocr-source-pane ocr-source-file-source';
     const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
@@ -119,8 +107,8 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus,onViewChange){
     redo.textContent='↷';redo.setAttribute('aria-label','重做');redo.title='没有绑定文档';redo.disabled=true;
     actions.append(undo,redo);
     bar.append(select,actions);element.append(bar);
-    const body=document.createElement('div');
-    element.append(body);owned=()=>mountSourceComparison(body,onLocate);
+    const body=document.createElement('div');body.id='editor';body.className='ocr-cm-source frame-editor';
+    element.append(body);owned=()=>mountReadingSource(body,onLocate);
   }else if(name==='preview'){
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
@@ -172,15 +160,14 @@ function addPanel(dockview,id,component,title,position){
 }
 /** Public F01: three original groups; WP04 replaces PDF with Prompt mode. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
-  let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,fullModel=null,readingPath='',focused=null,tableRows=null,viewMode='original';
+  let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,readingPath='',focused=null;
   function locate(value,origin){
     if(!readingModel)return;
     const key=typeof value==='string'?value:value?.key;
-    const sourceRow=fullModel?.byKey(key);
-    if(!sourceRow)return;focused=sourceRow;
     const row=readingModel.byKey(key);
+    if(!row)return;focused=row;
     originalGrid?.locate(row,{scroll:origin!=='ag'});
-    sourceReader?.locate(sourceRow,{scroll:true,origin});
+    sourceReader?.locate(row,{scroll:origin!=='source'});
     previewReader?.locate(row,{scroll:origin!=='preview'});
   }
   function register(name,port){
@@ -189,43 +176,24 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     if(name==='preview')previewReader=port;
   }
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,onModuleChange,register,locate,onStatus,switchReadingView)});
+    createComponent:({name})=>blankPane(name,onModuleChange,register,locate,onStatus)});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
-  function visibleRows(){return tableRows===null?null:viewMode==='pending'?tableRows.filter(r=>r.translatable):tableRows;}
-  function applyReading(model,path='',viewSwitch=false){
-    const keep=model&&readingPath===path&&focused&&(viewSwitch||readingModel?.text===model.text);
-    readingModel=model;readingPath=path;focused=keep?fullModel?.byKey(focused.key):null;
-    sourceReader?.setDocument(fullModel,model&&viewMode==='pending'?createComparisonDocument(tableRows):null);
-    // Pending preview keeps its previous filtered RAW projection; the left
-    // source is now full RAW. Both come from the same verified table.
-    previewReader?.setDocument(model,model&&viewMode==='pending'?model.text:sourceReader?.getMarkdown()??'',path);
-    if(focused){
-      const visible=readingModel?.byKey(focused.key);
-      originalGrid?.locate(visible,{scroll:viewSwitch});sourceReader?.locate(focused,{scroll:viewSwitch});previewReader?.locate(visible,{scroll:viewSwitch});
-    }else{originalGrid?.locate(null);sourceReader?.locate(null);previewReader?.locate(null);}
-  }
-  function switchReadingView(mode){
-    if(!fullModel||!tableRows||!['original','pending'].includes(mode)||viewMode===mode)return;
-    const next=mode==='pending'?createReadingDocument({rows:tableRows},{pending:true}):fullModel;
-    viewMode=mode;
-    const rows=visibleRows();
-    originalGrid?.setTranslationRows(rows,viewMode);
-    applyReading(next,readingPath,true);
-    onStatus('✓ '+(mode==='pending'?'待译句表':'原句表')+' · '+rows.length+' 句','ok');
+  function applyReading(model,path=''){
+    const keep=model&&readingPath===path&&focused&&readingModel?.text===model.text;
+    readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
+    sourceReader?.setDocument(model);
+    previewReader?.setDocument(model,sourceReader?.getMarkdown()??'',path);
+    originalGrid?.locate(focused,{scroll:false});
+    sourceReader?.locate(focused,{scroll:false});
+    previewReader?.locate(focused,{scroll:false});
   }
   return Object.freeze({isPromptActive:()=>previewReader?.isPromptActive()??false,
     getPromptText:()=>previewReader?.getPromptText()??null,
-    savePrompt:()=>previewReader?.savePrompt(),setTranslationRows(rows){
-      tableRows=rows;
-      if(rows===null)viewMode='original';
-      originalGrid?.setTranslationRows(visibleRows(),viewMode);
-    },
-    setReadingDocument(model,path=''){
-      fullModel=model;
-      applyReading(model&&viewMode==='pending'?createReadingDocument({rows:tableRows},{pending:true}):model,path);
-    },activate(){if(container.clientWidth&&container.clientHeight)
+    savePrompt:()=>previewReader?.savePrompt(),
+    setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
+    setReadingDocument:applyReading,activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);previewReader?.layout();},
     dispose(){dockview.dispose();}});
 }
