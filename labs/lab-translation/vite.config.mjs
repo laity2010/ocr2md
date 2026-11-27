@@ -1,0 +1,45 @@
+/** Independent, DATALESS frame showcase. Main's application entry is untouched.
+ * This is not a replacement for the identical-module-graph mirror Lab build. */
+import {defineConfig} from 'vite';
+import {fileURLToPath} from 'node:url';
+import {resolve} from 'node:path';
+import {execFileSync} from 'node:child_process';
+const root=fileURLToPath(new URL('../../ui/frame/',import.meta.url));
+// No private full Sarasa copies: Frame uses Agent Link's shared immutable face.
+const publicDir=false;
+const outDir=fileURLToPath(new URL('./dist/',import.meta.url));
+const sha=execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim();
+const now=new Date();
+const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(now);
+const p=k=>parts.find(x=>x.type===k).value;
+const version=`lab-translation-${p('year')}${p('month')}${p('day')}-${p('hour')}${p('minute')}${p('second')}`;
+// Federal construction registration: build only, never dev-server/reader traffic.
+import {existsSync as federalBuildExists} from 'node:fs';
+import {fileURLToPath as federalBuildPath} from 'node:url';
+import {execFileSync as federalBuildExec} from 'node:child_process';
+const federalBuildRegistration={name:'ocr2md-federal-build-record',enforce:'pre',config(_config,{command}){
+  if(command!=='build')return;
+  const federalRoot=new URL('../../../../',import.meta.url);
+  if(!federalBuildExists(new URL('main/constitution/',federalRoot))||!federalBuildExists(new URL('labs/',federalRoot)))return;
+  federalBuildExec('python3',[federalBuildPath(new URL('.ops/git-gate.py',federalRoot)),
+    'check-start','--tree',federalBuildPath(new URL('../../',import.meta.url))],{stdio:'inherit'});
+}};
+const exact=(source,oldText,newText)=>{
+  if(source.split(oldText).length!==2)throw Error('Frame identity contract changed: '+oldText);
+  return source.replace(oldText,newText);
+};
+export default defineConfig({
+  root,publicDir,base:'/labs/lab-translation/',
+  define:{__FRAME_BUILD_VERSION__:JSON.stringify(version),__FRAME_SOURCE_COMMIT__:JSON.stringify(sha)},
+  build:{outDir,emptyOutDir:true},
+  plugins:[federalBuildRegistration,{
+    name:'translation-frame-identity',enforce:'pre',
+    transform(code,id){
+      if(id.endsWith('/ui/frame/frame.js'))return exact(code,"createFrameSettingsIO(localStorage,'lab-frame'","createFrameSettingsIO(localStorage,'lab-translation'");
+      if(id.endsWith('/ui/frame/refresh.js'))return exact(code,"remote?.name==='lab-frame'","remote?.name==='lab-translation'");
+    },
+    transformIndexHtml:{order:'pre',handler(html){
+      return exact(exact(html,'OCR2MD V6 · Lab Frame','OCR2MD · Lab Translation'),'OCR2MD lab-frame</a>','OCR2MD lab-translation</a>');
+    }}
+  },{name:'frame-release-version',generateBundle(){this.emitFile({type:'asset',fileName:'release-version.json',source:JSON.stringify({schema:'ocr2md-frame/v1',name:'lab-translation',version,commit:sha})+'\n'});}}],
+});
