@@ -1,6 +1,6 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP04F4，继承 WP00–04F3）
+## 当前可运行基线（WP04F5，继承 WP00–04F4）
 
 独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt。
 
@@ -44,7 +44,7 @@ MD 预览随 AG 视图切换：原句视图保留全文 RAW，待译视图只拼
 
 ## WP04F4 · 完整原句、最终句界、可调双窗
 
-左源码窗在两种 AG 视图下均以唯一译句表全部 RAW 原样拼接（含整句不可译、全部换行），沿用 V2 相同的 Obsidian 源码语法扩展、Everforest 样式和 Sarasa 字号。只读物理行号，不启用 V2 编辑菜单。最终句界由相邻同 MDLine 的已保存句记录导出（无候选分歧，不重新分句，不标普通行尾），采用分句州已采用绿色 │ 样式的 CM6 装饰，伪元素仅视觉显示不改变原文、复制正文和 UTF-16 坐标。左窗 protected 色调加深为 #65746b，右窗原配色不变；待译 AG、右窗 text、MD 预览过滤逻辑及 Prompt 不变。
+左源码窗在两种 AG 视图下均以唯一译句表全部 RAW 原样拼接（含整句不可译、全部换行），沿用 V2 相同的 Obsidian 源码语法扩展、Everforest 样式和 Sarasa 字号。只读物理行号，不启用 V2 编辑菜单。最终句界由相邻同 MDLine 的已保存句记录导出（无候选分歧，不重新分句，不标普通行尾），采用分句州已采用绿色 │ 样式的 CM6 装饰，伪元素仅视觉显示不改变原文、复制正文和 UTF-16 坐标。左窗 protected 色调及右窗占位符样式见 WP04F5；待译 AG、右窗 text、MD 预览过滤逻辑及 Prompt 不变。
 
 待译模式分隔条支持鼠标/触控指针拖动及键盘左右箭头/Home/End，默认 50%，限制 20%–80%，仅内存比例，触发 CM6 重新测量，切回原句隐藏分隔条。两窗仍按 source_line:sentence_index 同步。左窗选中整句不可译时，仅左窗高亮，清除 AG、右窗和预览焦点；滚动到不可译区时，右窗定位下一可译句（文末取最后可译句），不虚构对应句或自动选中。原文、SQL、保护规则、上游和其他州不变。
 
@@ -53,6 +53,10 @@ MD 预览随 AG 视图切换：原句视图保留全文 RAW，待译视图只拼
 | createReadingDocument(table).boundaries | 同一 MDLine 内最终句界、完整 RAW；tests/translation-comparison.test.mjs |
 | comparisonAnchor(anchor,full,prepared) | 整句不可译滚动锚点映射，精确身份保留；同上 |
 | clampRatio/dividerRatio/mountComparisonDivider | 限制比例及真实拖动、键盘、单双窗、无错误配对；直接与双浏览器门禁 |
+
+## WP04F5 · 非翻译元素视觉层级
+
+不修改 protected 识别或任何正文数据，仅调整本州源码窗 CSS。正文继续使用 V2 Everforest 原色（普通正文 #d3c6aa、引用正文 #9aa79d）；左窗仅扫描确认的 protected 范围使用 #505e55、暗底 #25302c 与细内下边线，悬停恢复到 #748278 以便查看，引用中的普通文字不被整行淡化。右窗实际回填占位符使用 #859289、#26332f 暗底及细下边线，作为弱强调，不改变文本、行宽和坐标。最终句界仍以原绿色装饰显示；MD 预览、Prompt、AG、SQL、分隔和滚动逻辑不变。双浏览器验收检查实际 computed style、普通引用色、公式保护底色、占位符以及旧行为回归。实体 iPad 视觉验收不由模拟浏览器代替。
 
 ## WP03 · 无损 MDLine 阅读与保护淡化
 

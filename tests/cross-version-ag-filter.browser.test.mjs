@@ -164,7 +164,35 @@ try{
    const rawFormula=source.locator('.cm-line').filter({hasText:'$$x=1$$'});
    assert.equal(await rawFormula.count(),1);
    assert((await rawFormula.locator('.translation-protected-source').allTextContents()).join('').includes('$$x=1$$'));
-   assert.equal(await rawFormula.locator('.translation-protected-source').first().evaluate(el=>getComputedStyle(el).color),'rgb(101, 116, 107)');
+   assert.equal(await rawFormula.locator('.translation-protected-source').first().evaluate(el=>getComputedStyle(el).color),'rgb(80, 94, 85)');
+   // WP04F5: actual computed styles, not just CSS presence. Compare an
+   // ordinary quote text node with scanner-protected content on the same line.
+   const visual=await source.evaluate(root=>{
+     const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+     const colorFor=(fragment,protectedOnly=false)=>{
+       walker.currentNode=root;
+       for(let node=walker.nextNode();node;node=walker.nextNode()){
+         const parent=node.parentElement;
+         if(!node.nodeValue.includes(fragment)||!!parent.closest('.translation-protected-source')!==protectedOnly)continue;
+         const owner=parent.closest('.translation-protected-source')??parent;
+         return {color:getComputedStyle(parent).color,background:getComputedStyle(owner).backgroundColor,shadow:getComputedStyle(owner).boxShadow};
+       }
+       return null;
+     };
+     return {quote:colorFor('B.'),math:colorFor('r',true),body:colorFor('Text')};
+   });
+   assert.equal(visual.quote?.color,'rgb(154, 167, 157)','V2 quoted prose must remain unchanged');
+   assert.equal(visual.quote?.background,'rgba(0, 0, 0, 0)');
+   assert.equal(visual.math?.color,'rgb(80, 94, 85)');
+   assert.equal(visual.math?.background,'rgb(37, 48, 44)');
+   assert.notEqual(visual.math?.shadow,'none');
+   const token=compare.locator('.translation-protected-source').first();
+   assert.match(await token.textContent(),/⟦P/);
+   assert.equal(await token.evaluate(el=>getComputedStyle(el).color),'rgb(133, 146, 137)');
+   assert.equal(await token.evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(38, 51, 47)');
+   assert.notEqual(await token.evaluate(el=>getComputedStyle(el).boxShadow),'none');
+   console.log('TRANSLATION_WP04F5_BROWSER_PASS',name,JSON.stringify(visual));
+
    const divider=workspace.getByRole('separator',{name:'调整原句窗与待译句窗宽度'});
    await divider.waitFor({state:'visible'});
    const d=await divider.boundingBox(),body=await workspace.locator('.translation-source-comparison').boundingBox();

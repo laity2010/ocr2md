@@ -3,9 +3,18 @@
 #workspace .ocr-cm-source.translation-reading-source .cm-scroller{
   background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);line-height:1.5;
 }
-#workspace .translation-reading-source .translation-protected-source,
-#workspace .translation-reading-source .translation-protected-source *{
-  color:#84918a!important;
+/* WP04F5: only scanner-confirmed protected spans get a protection surface.
+   Ordinary V2 quote prose (#9aa79d) and source syntax keep their own palette.
+   No opacity on an ancestor, so neighboring prose and final cut widgets
+   cannot accidentally inherit the dimming. */
+#workspace .translation-reading-source:not(.translation-raw-source) .translation-protected-source,
+#workspace .translation-reading-source:not(.translation-raw-source) .translation-protected-source *{
+  color:#859289!important;
+}
+#workspace .translation-reading-source:not(.translation-raw-source) .translation-protected-source{
+  background:#26332f;border-radius:2px;box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+  box-shadow:inset 0 -1px #45574d;
 }
 #workspace .translation-reading-source .translation-focus-source{background:rgba(235,163,82,.18);box-decoration-break:clone}
 #workspace .ocr-markdown .translation-protected-preview{opacity:.55}
@@ -28,10 +37,23 @@
   background:#27352f;color:#a7c080;border-bottom:1px solid #525c62;
 }
 #workspace .translation-source-column>.frame-editor{flex:1 1 0;height:0;min-width:0}
-/* Full RAW uses the byte-identical V2 Everforest syntax and source sizing.
-   Protection is a deeper color only, including standalone formula/code/image. */
+/* Full RAW: a separate, deliberately low-contrast protection tier.
+   Reuse the exact protected range; don't dim the entire Markdown quote line.
+   Descendant syntax tokens must not restore a bright link/math/HTML color. */
 #workspace .translation-raw-source .translation-protected-source,
-#workspace .translation-raw-source .translation-protected-source *{color:#65746b!important}
+#workspace .translation-raw-source .translation-protected-source *{
+  color:#505e55!important;
+  text-decoration-color:#505e55!important;
+}
+#workspace .translation-raw-source .translation-protected-source{
+  background:#25302c;border-radius:2px;
+  box-decoration-break:clone;-webkit-box-decoration-break:clone;
+  box-shadow:inset 0 -1px #35433a;
+}
+#workspace .translation-raw-source .translation-protected-source:hover,
+#workspace .translation-raw-source .translation-protected-source:hover *{
+  color:#748278!important;text-decoration-color:#748278!important;
+}
 /* Sentence Lab's adopted green boundary style. Pseudo content is display
    only; copy/RAW text and all UTF-16 offsets stay unchanged. */
 #workspace .translation-raw-source .translation-final-boundary{
