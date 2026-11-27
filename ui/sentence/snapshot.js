@@ -1,3 +1,4 @@
+import {mdlineTypes,quoteLevel} from './mdline-attributes.js';
 /** WP04B: verify the V2 transport, expose only immutable Markdown lines. */
 const require=(ok,message)=>{if(!ok)throw Error(message);};
 export async function sha256(text){
@@ -14,6 +15,12 @@ export async function createMDLineSnapshot(markdown){
   const lf=markdown.indexOf('\n',from),textTo=lf<0?markdown.length:lf,to=lf<0?textTo:lf+1;
   lines.push({sourceLine:lines.length+1,from,to,textTo,text:markdown.slice(from,textTo),eol:markdown.slice(textTo,to)});
   from=to;
+ }
+ const types=mdlineTypes(markdown);let owner=null;
+ for(const [i,line] of lines.entries()){
+  line.type=types[i];line.level=quoteLevel(line.text);
+  if(line.type==='blank'&&owner){line.ownerLine=owner.sourceLine;owner.ownedTail+=line.text+line.eol;}
+  else{owner=line;line.ownerLine=line.sourceLine;line.ownedTail=line.eol;}
  }
  const frozen=await Promise.all(lines.map(async line=>Object.freeze({...line,sha256:await sha256(line.text+line.eol)})));
  return Object.freeze({schema:'ocr2md-sentence-mdline/v1',documentVersion:sourceSha256,sourceSha256,markdown,lines:Object.freeze(frozen)});

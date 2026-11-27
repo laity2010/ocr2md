@@ -32,8 +32,7 @@ try{
      assert.equal(c.previous_engine,first.adopted_engine);
      const points=[0,...(c.adopted_engine===null?[]:JSON.parse(first.candidates_json)[c.adopted_engine].boundaries),line.text.length];
      const next=points.slice(0,-1).map((from,i)=>({...first,
-      sentence_index:i,from_utf16:from,to_utf16:points[i+1],sentence_text:line.text.slice(from,points[i+1]),
-      line_eol:i===points.length-2?line.eol:'',candidates_json:i===0?first.candidates_json:null,
+      sentence_index:i,from_utf16:from,to_utf16:points[i+1],raw:line.text.slice(from,points[i+1])+(i===points.length-2?line.ownedTail:''),candidates_json:i===0?first.candidates_json:null,
       review_state:i===0?(c.adopted_engine===null?'disputed':'adopted'):null,
       adopted_engine:i===0?c.adopted_engine:null
      }));
@@ -253,7 +252,7 @@ try{
    assert.equal(await all.isVisible(),true);
    await select(0);
    await gridRow(payload.rows[0].source_line,payload.rows[0].sentence_index).first().waitFor({state:'visible'});
-   assert.equal(await gridRow(payload.rows[0].source_line,payload.rows[0].sentence_index).locator('[col-id="sentence_text"]').textContent(),payload.rows[0].sentence_text);
+   assert.equal(await gridRow(payload.rows[0].source_line,payload.rows[0].sentence_index).locator('[col-id="raw"]').textContent(),payload.rows[0].raw);
    const pair=payload.rows.find(r=>r.sentence_index===1);
    assert(pair);
    const pairLine=sourceSnapshot.lines[pair.source_line-1];
@@ -285,7 +284,7 @@ try{
    await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();
    assert.equal(resets,0);
    await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
-   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('677 句记录'));
+   await page.waitForFunction(n=>document.querySelector('#status').textContent.includes(n+' 句记录'),payload.rows.length);
    assert.equal(resets,1);
    await expectDocs(pending.markdown);assert(await undo.isDisabled());assert(await redo.isDisabled());
    failReset=true;
@@ -296,7 +295,7 @@ try{
    assert.equal(resets,2);
    await expectDocs(pending.markdown);
    failReset=false;
-   console.log('SENTENCE_SQL_NAV_GRID_REINIT_PASS',name,'677 persisted rows, native filter, cancel, confirmed reset, failure keeps review');
+   console.log('SENTENCE_SQL_NAV_GRID_REINIT_PASS',name,payload.rows.length+' RAW rows, native filter, cancel, confirmed reset, failure keeps review');
    // Reopening a saved directory with stale rows never auto-reinitializes.
    stale=true;
    await openNav();await page.locator('.ocr-navigation-popup:visible [data-value="settings"]').click();
@@ -311,7 +310,7 @@ try{
    await sqlMenu();
    await page.getByRole('button',{name:'重新初始化句表',exact:true}).click();
    await page.getByRole('button',{name:'确认重新初始化句表',exact:true}).click();
-   await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('677 句记录'));
+   await page.waitForFunction(n=>document.querySelector('#status').textContent.includes(n+' 句记录'),payload.rows.length);
    assert.equal(resets,3);
    await expectDocs(pending.markdown);
    console.log('SENTENCE_STALE_EXPLICIT_RESET_PASS',name);

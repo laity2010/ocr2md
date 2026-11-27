@@ -13,17 +13,18 @@ const theme=themeQuartz.withParams({
 const columns=[
  {field:'source_line',headerName:'MDLine',width:100,pinned:'left',sortable:false},
  {field:'sentence_index',headerName:'句序',width:80,sortable:false},
- {field:'sentence_text',headerName:'句文本',minWidth:240,flex:1},
+ {field:'raw',headerName:'raw',minWidth:240,flex:1,tooltipField:'raw',cellStyle:{whiteSpace:'pre'}},
+ {field:'type',headerName:'type',width:100,filter:EnumCheckboxFilter,suppressHeaderFilterButton:false},
+ {field:'level',headerName:'level',width:90,filter:EnumCheckboxFilter,suppressHeaderFilterButton:false},
  {field:'review_state',headerName:'状态',width:150,filter:EnumCheckboxFilter,suppressHeaderFilterButton:false},
  {field:'adopted_engine',headerName:'采用引擎',width:145,filter:EnumCheckboxFilter,suppressHeaderFilterButton:false},
  {field:'from_utf16',headerName:'起点',width:95},{field:'to_utf16',headerName:'终点',width:95},
- {field:'line_eol',headerName:'行终止符',width:105,valueFormatter:p=>p.value==='\n'?'LF':''},
  {field:'source_line_hash',headerName:'行哈希',width:160},
  {field:'source_document_hash',headerName:'文档哈希',width:160},
  {field:'candidates_json',headerName:'候选方案',width:220}
 ];
 export function createSentenceGrid(host,rows,{onRowFocus=()=>{}}={}){
- let activeLine=null;
+ let activeLine=null,scrollFrame=null,focusVersion=0;
  const api=createGrid(host,{theme,columnDefs:columns,rowData:rows,
   defaultColDef:{editable:false,resizable:true,sortable:false},
   getRowId:p=>p.data.source_line+':'+p.data.sentence_index,
@@ -31,7 +32,8 @@ export function createSentenceGrid(host,rows,{onRowFocus=()=>{}}={}){
   onRowClicked:e=>{if(e.data)onRowFocus(e.data);},
   suppressMovableColumns:true});
  function focus(line,offset=0,scroll=true){
-  const old=activeLine;activeLine=line;
+  const old=activeLine;activeLine=line;const version=++focusVersion;
+  if(scrollFrame!==null){cancelAnimationFrame(scrollFrame);scrollFrame=null;}
   const redraw=[];let target=null,first=null;
   api.forEachNode(node=>{
    const r=node.data;if(!r)return;
@@ -43,8 +45,17 @@ export function createSentenceGrid(host,rows,{onRowFocus=()=>{}}={}){
   });
   if(old!==line&&redraw.length)api.redrawRows({rowNodes:redraw});
   target??=first;
-  if(scroll&&target?.rowIndex!=null)api.ensureIndexVisible(target.rowIndex,'auto');
+  if(scroll&&target?.rowIndex!=null){
+   const node=target;
+   const ensure=()=>{if(node.rowIndex!=null)api.ensureIndexVisible(node.rowIndex,node.rowIndex===0?'top':'auto');};
+   ensure();
+   // Dockview activation and AG row redraw can complete in a later WebKit frame.
+   // Recheck only the latest requested row, without changing review state.
+   scrollFrame=requestAnimationFrame(()=>{
+    scrollFrame=null;if(version===focusVersion&&!api.isDestroyed())ensure();
+   });
+  }
  }
  return {setRows:rows=>api.setGridOption('rowData',rows),focus,
-  activate:()=>host.focus({preventScroll:true}),dispose:()=>api.destroy()};
+  activate:()=>host.focus({preventScroll:true}),dispose:()=>{if(scrollFrame!==null)cancelAnimationFrame(scrollFrame);api.destroy();}};
 }

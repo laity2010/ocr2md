@@ -12,15 +12,25 @@ from pathlib import Path
 from .sentence_store import SentenceStore, build_sentence_rows
 
 
-def prepare_sentence_rows(snapshot):
-    """Compute plans outside the SQLite write lock, using the same WP04D engines."""
-    engine = Path(__file__).resolve().parent.parent / 'sentence_init_engine.mjs'
-    # launchd has a minimal PATH. Allow an explicit runtime setting; otherwise
-    # search normal Unix package-manager locations as well as the process PATH.
+def _node():
     node = os.environ.get('OCR2MD_NODE') or shutil.which(
         'node', path=os.environ.get('PATH', os.defpath) + ':/opt/homebrew/bin:/usr/local/bin')
     if not node:
         raise OSError('Node runtime unavailable')
+    return node
+
+
+def classify_markdown(markdown):
+    engine=Path(__file__).resolve().parent.parent/'sentence_line_metadata.mjs'
+    response=subprocess.run([_node(),str(engine)],input=json.dumps(markdown,ensure_ascii=False),
+                            text=True,encoding='utf-8',capture_output=True,check=True,timeout=120)
+    return json.loads(response.stdout)
+
+
+def prepare_sentence_rows(snapshot):
+    """Compute plans outside the SQLite write lock, using the same WP04D engines."""
+    engine = Path(__file__).resolve().parent.parent / 'sentence_init_engine.mjs'
+    node = _node()
     response = subprocess.run(
         [node, str(engine)], input=json.dumps(snapshot, ensure_ascii=False),
         text=True, encoding='utf-8', capture_output=True, check=True, timeout=120,
@@ -30,7 +40,7 @@ def prepare_sentence_rows(snapshot):
     digest = hashlib.sha256(markdown.encode('utf-8')).hexdigest()
     if result['source_document_hash'] != digest:
         raise ValueError('candidate document hash mismatch')
-    return build_sentence_rows(markdown, result['plans'])
+    return build_sentence_rows(markdown, result['plans'],result['line_types'])
 
 
 def initialize_sentence_table(connection, snapshot):

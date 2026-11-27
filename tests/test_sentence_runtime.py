@@ -28,7 +28,8 @@ class RuntimeTests(unittest.TestCase):
                 db.commit()
             result=runtime.dispatch(folder,'open',snap['sha256'],reader)
             self.assertEqual(result['state'],'ready')
-            self.assertEqual(len(result['rows']),677)
+            self.assertLess(len(result['rows']),677)
+            self.assertEqual(''.join(r['raw'] for r in result['rows']),snap['markdown'])
             self.assertEqual(rebuild_markdown(result['rows']),snap['markdown'])
             with closing(sqlite3.connect(dbpath)) as db:
                 self.assertEqual(upstream_evidence(db),before)

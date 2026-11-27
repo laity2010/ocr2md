@@ -6,17 +6,25 @@ export function persistedReview(snapshot,rows){
  require(Array.isArray(rows),'句表记录无效');
  const results=[];let i=0;
  for(const line of snapshot.lines){
+  if(line.ownerLine!==line.sourceLine){
+   results.push({sourceLine:line.sourceLine,sourceSha256:line.sha256,
+    candidates:ids.map(engine=>({engine,boundaries:[]})),reviewState:'no_split',adoptedEngine:null});
+   continue;
+  }
   const group=[];
   while(i<rows.length&&rows[i].source_line===line.sourceLine)group.push(rows[i++]);
   require(group.length>0,'句表缺少 MDLine '+line.sourceLine);
   let offset=0,raw='';
   for(const [index,r] of group.entries()){
+   const last=index===group.length-1;
    require(r.source_document_hash===snapshot.documentVersion&&r.source_line_hash===line.sha256&&
-    r.sentence_index===index&&r.from_utf16===offset&&typeof r.sentence_text==='string'&&
-    r.to_utf16===offset+r.sentence_text.length&&r.line_eol===(index===group.length-1?line.eol:''),'句表来源或范围不符');
-   raw+=r.sentence_text+r.line_eol;offset=r.to_utf16;
+    r.sentence_index===index&&r.from_utf16===offset&&Number.isInteger(r.to_utf16)&&r.to_utf16>=offset&&
+    r.to_utf16<=line.text.length&&r.type===line.type&&r.level===line.level&&typeof r.raw==='string','句表来源、属性或范围不符');
+   require(r.raw===line.text.slice(offset,r.to_utf16)+(last?line.ownedTail:''),'RAW 切片或尾随空行不符');
+   require(index===0||[r.candidates_json,r.review_state,r.adopted_engine].every(v=>v===null),'句表元数据不符');
+   raw+=r.raw;offset=r.to_utf16;
   }
-  require(raw===line.text+line.eol,'句表不能无损还原 MDLine');
+  require(offset===line.text.length&&raw===line.text+line.ownedTail,'句表不能无损还原 MDLine');
   const first=group[0],c=JSON.parse(first.candidates_json);
   const candidates=ids.map(engine=>{
    const item=c[engine];

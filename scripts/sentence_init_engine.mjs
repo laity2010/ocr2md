@@ -26,4 +26,4 @@ const versions={
 };
 const snapshot=await importSnapshot(JSON.parse(readFileSync(0,'utf8')));
 const plans=initializationPlans(snapshot,splitSnapshot(snapshot),versions);
-process.stdout.write(JSON.stringify({source_document_hash:snapshot.sourceSha256,plans}));
+process.stdout.write(JSON.stringify({source_document_hash:snapshot.sourceSha256,plans,line_types:snapshot.lines.map(line=>line.type)}));

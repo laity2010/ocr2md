@@ -20,8 +20,7 @@ export function choiceRows(line,group,engine){
  const cuts=engine===null?[]:JSON.parse(first.candidates_json)[engine].boundaries;
  const points=[0,...cuts,line.text.length];
  return points.slice(0,-1).map((from,i)=>({...first,
-  sentence_index:i,from_utf16:from,to_utf16:points[i+1],sentence_text:line.text.slice(from,points[i+1]),
-  line_eol:i===points.length-2?line.eol:'',candidates_json:i===0?first.candidates_json:null,
+  sentence_index:i,from_utf16:from,to_utf16:points[i+1],raw:line.text.slice(from,points[i+1])+(i===points.length-2?line.ownedTail:''),candidates_json:i===0?first.candidates_json:null,
   review_state:i===0?(engine===null?'disputed':'adopted'):null,adopted_engine:i===0?engine:null
  }));
 }

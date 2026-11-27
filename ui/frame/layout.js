@@ -233,7 +233,7 @@ export function createFrameWorkspace(container,{onModuleChange=()=>{},onStatus=(
     const line=lineAtOffset(visible.lines,pos);
     if(!line){active=null;panes.get('sentence').focus(null,0,false);panes.get('source').highlight(null);for(const name of Object.keys(engineIds))panes.get(name).setMarkdown('',[],'');refreshChecks();return;}
     panes.get('source').highlight({from:line.from,to:line.to,pos:Math.min(pos,line.textTo)});
-    panes.get('sentence').focus(line.sourceLine,Math.max(0,pos-line.from));
+    panes.get('sentence').focus(line.ownerLine??line.sourceLine,line.ownerLine!==undefined&&line.ownerLine!==line.sourceLine?snapshot.lines[line.ownerLine-1].text.length:Math.max(0,pos-line.from));
     if(active===line)return;
     active=line;refreshChecks();
     const row=visibleRows.get(line.sourceLine);

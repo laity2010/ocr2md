@@ -76,9 +76,8 @@ class SentenceStoreTests(unittest.TestCase):
             candidate['protected_ranges'] = [[2, 4]]
         rows = build_sentence_rows(md, plans)
         self.assertEqual(rebuild_markdown(rows), md)
-        self.assertEqual(len(rows), 7)
-        self.assertEqual([r['sentence_text'] for r in rows[:3]], ['  😀.', ' Next.  ', ''])
-        self.assertEqual([r['line_eol'] for r in rows[:3]], ['', '\n', '\n'])
+        self.assertEqual(len(rows), 6)
+        self.assertEqual([r['raw'] for r in rows[:2]], ['  😀.', ' Next.  \n\n'])
         self.assertIsNone(rows[1]['candidates_json'])
         for text in ('', '\n', '\n\n', ' A.  ', 'A\n', 'A\n\n', ' $$a$$ \n<!--\nHi.\n-->\n'):
             self.assertEqual(rebuild_markdown(build_sentence_rows(text, whole_plans(text))), text)
@@ -91,9 +90,9 @@ class SentenceStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'boundary cuts protected'):
             build_sentence_rows(md, bad)
         for change in (
-            lambda r: r[0].update(sentence_text='broken'),
+            lambda r: r[0].update(raw='broken'),
             lambda r: r[1].update(from_utf16=0),
-            lambda r: r[1].update(line_eol=''),
+            lambda r: r[1].update(raw=r[1]['raw'].rstrip('\n')),
             lambda r: r[1].update(review_state='adopted'),
             lambda r: r.pop(),
             lambda r: r.reverse(),
@@ -111,7 +110,8 @@ class SentenceStoreTests(unittest.TestCase):
             snapshot = prepare_owned_book(folder)
             markdown = snapshot['markdown']
             rows = build_sentence_rows(markdown, whole_plans(markdown))
-            self.assertEqual(len(rows), 497)
+            self.assertEqual(len(rows), len({r["source_line"] for r in rows}))
+            self.assertLess(len(rows), 497)
             path = folder / base.DB_NAME
             with closing(sqlite3.connect(path)) as db:
                 before = upstream_evidence(db)

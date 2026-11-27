@@ -11,7 +11,7 @@ import subprocess
 from urllib.parse import urlencode
 
 from .sentence_store import SentenceStore
-from .sentence_initialize import prepare_sentence_rows
+from .sentence_initialize import prepare_sentence_rows, classify_markdown
 
 DB_NAME = 'ocr2md.v2.sqlite'
 MAX_SNAPSHOT = 32 * 1024 * 1024
@@ -95,7 +95,11 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
         return response('ready', changed)
     if operation == 'open':
         with closing(connect()) as db:
-            state, rows = SentenceStore(db).inspect(markdown, verify_source=current)
+            store=SentenceStore(db)
+            state, rows = store.inspect(markdown, verify_source=current)
+            if state=='legacy':
+                store.upgrade(markdown,classify_markdown(markdown),verify_source=current)
+                state, rows=store.inspect(markdown,verify_source=current)
         if state != 'missing':
             return response(state, rows)
     elif operation != 'reinitialize':
@@ -114,6 +118,9 @@ def dispatch(folder, operation, expected_hash, reader, *, prepare=prepare_senten
                 if str(error) != 'sentence table already exists; automatic initialization refused':
                     raise
                 state, existing = store.inspect(markdown, verify_source=current)
+                if state=='legacy':
+                    store.upgrade(markdown,classify_markdown(markdown),verify_source=current)
+                    state, existing=store.inspect(markdown,verify_source=current)
                 return response(state, existing)
     return response('ready', rows)
 

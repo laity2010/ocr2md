@@ -6,15 +6,16 @@ and Markdown from the upstream public snapshot. No live V2 route is mounted.
 import hashlib
 import json
 import sqlite3
+import re
 from collections import defaultdict
 
 ENGINES = ('intl', 'sentence-splitter', 'wink-nlp')
-COLUMNS = (
+LEGACY_COLUMNS = (
     'source_document_hash', 'source_line', 'source_line_hash', 'sentence_index',
     'from_utf16', 'to_utf16', 'sentence_text', 'line_eol', 'candidates_json',
     'review_state', 'adopted_engine',
 )
-DDL = """CREATE TABLE sentence(
+LEGACY_DDL = """CREATE TABLE sentence(
     source_document_hash TEXT NOT NULL,
     source_line INTEGER NOT NULL CHECK(source_line >= 1),
     source_line_hash TEXT NOT NULL,
@@ -30,6 +31,15 @@ DDL = """CREATE TABLE sentence(
     CHECK((sentence_index = 0 AND candidates_json IS NOT NULL AND review_state IS NOT NULL)
        OR (sentence_index > 0 AND candidates_json IS NULL AND review_state IS NULL AND adopted_engine IS NULL))
 ) WITHOUT ROWID"""
+COLUMNS = (
+    'source_document_hash', 'source_line', 'source_line_hash', 'sentence_index',
+    'from_utf16', 'to_utf16', 'raw', 'type', 'level', 'candidates_json',
+    'review_state', 'adopted_engine',
+)
+DDL = LEGACY_DDL.replace(
+    "    sentence_text TEXT NOT NULL,\n    line_eol TEXT NOT NULL CHECK(line_eol IN ('', char(10))),",
+    "    raw TEXT NOT NULL,\n    type TEXT NOT NULL CHECK(type IN ('title','text','blank')),\n    level TEXT NOT NULL,"
+)
 INSERT = 'INSERT INTO main.sentence (' + ','.join(COLUMNS) + ') VALUES (' + ','.join('?' for _ in COLUMNS) + ')'
 SELECT = 'SELECT ' + ','.join(COLUMNS) + ' FROM main.sentence ORDER BY source_line,sentence_index'
 
@@ -123,7 +133,7 @@ def _mdlines(markdown):
         yield text, '\n' if i < len(parts) - 1 else ''
 
 
-def build_sentence_rows(markdown, plans):
+def _build_legacy_rows(markdown, plans):
     """Build exact sentence rows from explicit plans, not automatic arbitration.
 
     One plan per real MDLine: boundaries, candidates, review_state, adopted_engine.
@@ -143,7 +153,7 @@ def build_sentence_rows(markdown, plans):
         points = [0, *cuts, end]
         line_digest = _sha(text + eol)
         for index, piece in enumerate(pieces):
-            result.append(dict(zip(COLUMNS, (
+            result.append(dict(zip(LEGACY_COLUMNS, (
                 digest, number, line_digest, index, points[index], points[index + 1],
                 piece, eol if index == len(pieces) - 1 else '',
                 metadata if index == 0 else None,
@@ -153,13 +163,13 @@ def build_sentence_rows(markdown, plans):
     return result
 
 
-def rebuild_markdown(rows):
+def _rebuild_legacy(rows):
     """Validate rows and reconstruct original Markdown without reading upstream."""
     _require(isinstance(rows, (list, tuple)), 'expected ordered sentence records')
     groups = defaultdict(list)
     previous = (0, -1)
     for row in rows:
-        _require(isinstance(row, dict) and set(row) == set(COLUMNS), 'invalid sentence row')
+        _require(isinstance(row, dict) and set(row) == set(LEGACY_COLUMNS), 'invalid sentence row')
         _require(type(row['source_line']) is int and type(row['sentence_index']) is int, 'invalid row identity')
         identity = (row['source_line'], row['sentence_index'])
         _require(identity > previous, 'out-of-order or duplicate sentence row')
@@ -192,7 +202,7 @@ def rebuild_markdown(rows):
             digest = row['source_document_hash'] if digest is None else digest
             _require(row['source_document_hash'] == digest, 'mixed document revisions')
             if index:
-                _require(all(row[k] is None for k in COLUMNS[-3:]), 'metadata belongs to first sentence only')
+                _require(all(row[k] is None for k in LEGACY_COLUMNS[-3:]), 'metadata belongs to first sentence only')
             if not last:
                 cuts.append(offset)
             line_parts.append(text)
@@ -206,6 +216,108 @@ def rebuild_markdown(rows):
         output.append(text + eol)
     markdown = ''.join(output)
     _require(digest is None or _sha(markdown) == digest, 'document digest mismatch')
+    return markdown
+
+
+# Match JS String.trim() used by V2 MDLine type, without Python-only controls.
+_TRIM = ' \t\n\r\v\f\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff'
+
+def _blank(text):
+    return not text.strip(_TRIM)
+
+def _level(text):
+    prefix = re.match(r'^[ \t]*(?:>[ \t]*)+', text)
+    return '>' * prefix.group().count('>') if prefix else ''
+
+def _owners(markdown):
+    """Physical source identity remains unchanged; only row ownership changes."""
+    owners = {}
+    for number, (text, eol) in enumerate(_mdlines(markdown), 1):
+        if _blank(text) and owners:
+            last = next(reversed(owners))
+            owners[last][2] += text + eol
+        else:
+            owners[number] = [text, eol, eol]
+    return owners
+
+def _types(markdown, line_types):
+    if line_types is None:
+        from .sentence_initialize import classify_markdown
+        line_types = classify_markdown(markdown)
+    lines = list(_mdlines(markdown))
+    _require(isinstance(line_types, list) and len(line_types) == len(lines), 'MDLine types missing')
+    for (text, _), kind in zip(lines,line_types):
+        _require(kind in ('title','text','blank') and (kind == 'blank') == _blank(text), 'invalid MDLine type')
+        _require(kind != 'title' or re.match(r'^#{1,6}(?=\s|$)',text), 'invalid title type')
+    return line_types
+
+def _raw_group(digest, number, text, eol, tail, kind, plan):
+    cuts = plan['boundaries']
+    pieces = split_mdline(text, cuts)
+    metadata = _metadata(text, cuts, plan['candidates'], plan['review_state'], plan['adopted_engine'])
+    _, end = _offsets(text)
+    points = [0, *cuts, end]
+    return [dict(zip(COLUMNS, (
+        digest, number, _sha(text+eol), i, points[i], points[i+1],
+        piece + (tail if i == len(pieces)-1 else ''), kind, _level(text),
+        metadata if i == 0 else None, plan['review_state'] if i == 0 else None,
+        plan['adopted_engine'] if i == 0 else None,
+    ))) for i,piece in enumerate(pieces)]
+
+def _convert_legacy(markdown, rows, line_types=None):
+    _require(_rebuild_legacy(rows) == markdown, 'legacy sentence table differs from source')
+    kinds = _types(markdown, line_types)
+    owners = _owners(markdown)
+    groups = defaultdict(list)
+    for row in rows:
+        groups[row['source_line']].append(row)
+    result = []
+    digest = _sha(markdown)
+    for number, (text,eol,tail) in owners.items():
+        group = groups[number]
+        first = group[0]
+        # A blank line cannot carry an actual cut; its provenance is covered
+        # by the owning RAW and document hash. Do not discard a legacy choice.
+        plan = dict(boundaries=[r['to_utf16'] for r in group[:-1]],
+                    candidates=json.loads(first['candidates_json']),
+                    review_state=first['review_state'],adopted_engine=first['adopted_engine'])
+        result.extend(_raw_group(digest, number,text,eol,tail,kinds[number-1],plan))
+    for number, group in groups.items():
+        if number not in owners:
+            _require(group[0]['adopted_engine'] is None and len(group)==1, 'cannot fold reviewed blank MDLine')
+    return result
+
+def build_sentence_rows(markdown, plans, line_types=None):
+    """RAW is the only stored source text. Blank runs belong to their owner."""
+    return _convert_legacy(markdown,_build_legacy_rows(markdown,plans),line_types)
+
+def rebuild_markdown(rows):
+    """Validate complete RAW coverage and candidate boundaries without upstream reads."""
+    _require(isinstance(rows,(list,tuple)), 'expected ordered sentence records')
+    groups = defaultdict(list)
+    previous = (0,-1)
+    for row in rows:
+        _require(isinstance(row,dict) and set(row)==set(COLUMNS), 'invalid sentence row')
+        _require(type(row['source_line']) is int and type(row['sentence_index']) is int, 'invalid row identity')
+        key = (row['source_line'],row['sentence_index'])
+        _require(key>previous and isinstance(row['raw'],str), 'invalid RAW row order or value')
+        previous=key
+        groups[key[0]].append(row)
+    markdown = ''.join(row['raw'] for row in rows)
+    owners = _owners(markdown)
+    _require(list(groups)==list(owners), 'incorrect blank-line ownership')
+    digest = _sha(markdown)
+    for number,(text,eol,tail) in owners.items():
+        group=groups[number]
+        first=group[0]
+        _require(isinstance(first['candidates_json'],str), 'missing candidate metadata')
+        kind=first['type']
+        _require(kind in ('title','text','blank') and (kind=='blank')==_blank(text), 'invalid MDLine type')
+        _require(kind!='title' or re.match(r'^#{1,6}(?=\s|$)',text), 'invalid title type')
+        plan=dict(boundaries=[r['to_utf16'] for r in group[:-1]],candidates=json.loads(first['candidates_json']),
+                  review_state=first['review_state'],adopted_engine=first['adopted_engine'])
+        expected=_raw_group(digest,number,text,eol,tail,kind,plan)
+        _require(group==expected,'RAW ranges, metadata, inherited attributes or digest mismatch')
     return markdown
 
 
@@ -237,13 +349,13 @@ class SentenceStore:
             if arg1 == 'sentence' or (self._creating and arg1 in ('sqlite_master', 'sqlite_schema')):
                 return sqlite3.SQLITE_OK
         if self._creating and database == 'main':
-            if action == sqlite3.SQLITE_CREATE_TABLE and arg1 == 'sentence':
+            if action in (sqlite3.SQLITE_CREATE_TABLE,sqlite3.SQLITE_DROP_TABLE) and arg1 == 'sentence':
                 return sqlite3.SQLITE_OK
             if action == sqlite3.SQLITE_CREATE_INDEX and arg2 == 'sentence' and arg1 == 'sqlite_autoindex_sentence_1':
                 return sqlite3.SQLITE_OK
         return sqlite3.SQLITE_DENY
 
-    def _schema(self, create=False, *, writing=False):
+    def _schema(self, create=False, *, writing=False, legacy=False):
         catalog = self._db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master").fetchall()
         # Only this module's own table is a schema contract. The source
         # document is supplied by the public snapshot, not by private SQL.
@@ -262,7 +374,7 @@ class SentenceStore:
                          'external foreign key depends on sentence')
         if owned:
             _require(len(owned) == 1 and owned[0][0] == 'table' and
-                     owned[0][1] == 'sentence' and owned[0][3] == DDL,
+                     owned[0][1] == 'sentence' and owned[0][3] in ((DDL,LEGACY_DDL) if legacy else (DDL,)),
                      'unsupported sentence schema')
         else:
             _require(create, 'sentence table has not been initialized')
@@ -271,6 +383,47 @@ class SentenceStore:
                 self._db.execute(DDL)
             finally:
                 self._creating = False
+
+    def is_legacy(self):
+        return self._db.execute("SELECT sql FROM main.sqlite_master WHERE type='table' AND name='sentence'").fetchone()==(LEGACY_DDL,)
+
+    def _replace_legacy_schema(self):
+        self._schema(writing=True,legacy=True)
+        _require(self.is_legacy(), 'legacy schema changed')
+        for kind,name,table,sql in self._db.execute("SELECT type,name,tbl_name,sql FROM main.sqlite_master"):
+            _require(not (kind=='index' and table=='sentence' and sql is not None), 'external index on sentence')
+            _require(not (kind in ('view','trigger') and sql and re.search(r'\bsentence\b',sql,re.I)), 'external SQL dependency on sentence')
+        self._creating=True
+        try:
+            self._db.execute('DROP TABLE main.sentence')
+            self._db.execute(DDL)
+        finally:
+            self._creating=False
+
+    def upgrade(self, markdown, line_types, *, verify_source=None):
+        """Exact legacy schema only; retain all decisions and migrate atomically."""
+        db=self._db
+        db.execute('BEGIN IMMEDIATE')
+        try:
+            if verify_source is not None:
+                verify_source()
+            if not self.is_legacy():
+                self._schema()
+                db.commit()
+                return
+            self._schema(writing=True,legacy=True)
+            old=[dict(zip(LEGACY_COLUMNS,r)) for r in db.execute('SELECT '+','.join(LEGACY_COLUMNS)+' FROM main.sentence ORDER BY source_line,sentence_index')]
+            if _rebuild_legacy(old)!=markdown:
+                db.commit()
+                return
+            rows=_convert_legacy(markdown,old,line_types)
+            self._replace_legacy_schema()
+            db.executemany(INSERT,(tuple(r[c] for c in COLUMNS) for r in rows))
+            _require(rebuild_markdown(self._read())==markdown,'legacy upgrade roundtrip mismatch')
+            db.commit()
+        except BaseException:
+            db.rollback()
+            raise
 
     def initialize(self, markdown, rows, *, verify_source=None):
         """Create the sentence table once; never overwrite an existing table."""
@@ -291,6 +444,8 @@ class SentenceStore:
             if initialize_only:
                 _require(not db.execute("SELECT name FROM main.sqlite_master WHERE name='sentence' COLLATE NOCASE").fetchone(),
                          'sentence table already exists; automatic initialization refused')
+            if not initialize_only and self.is_legacy():
+                self._replace_legacy_schema()
             self._schema(create=True)
             db.execute('DELETE FROM main.sentence')
             db.executemany(INSERT, (tuple(r[c] for c in COLUMNS) for r in rows))
@@ -312,6 +467,7 @@ class SentenceStore:
             self._schema(writing=True)
             original = self._read()
             _require(rebuild_markdown(original) == markdown, 'stale sentence table')
+            owners = _owners(markdown)
             groups = defaultdict(list)
             for row in original:
                 groups[row['source_line']].append(row)
@@ -340,21 +496,12 @@ class SentenceStore:
                 if actual == after:
                     replacements[number] = group
                     continue
-                text = ''.join(row['sentence_text'] for row in group)
-                eol = group[-1]['line_eol']
+                text,eol,tail = owners[number]
                 candidates = json.loads(first['candidates_json'])
                 cuts = [] if after is None else candidates[after]['boundaries']
                 state = 'disputed' if after is None else 'adopted'
-                metadata = _metadata(text, cuts, candidates, state, after)
-                pieces = split_mdline(text, cuts)
-                _, end = _offsets(text)
-                points = [0, *cuts, end]
-                replacements[number] = [dict(zip(COLUMNS, (
-                    first['source_document_hash'], number, first['source_line_hash'],
-                    i, points[i], points[i+1], piece,
-                    eol if i == len(pieces)-1 else '', metadata if i == 0 else None,
-                    state if i == 0 else None, after if i == 0 else None,
-                ))) for i,piece in enumerate(pieces)]
+                replacements[number] = _raw_group(first['source_document_hash'],number,text,eol,tail,first['type'],
+                    dict(boundaries=cuts,candidates=candidates,review_state=state,adopted_engine=after))
                 writes.append(number)
             expected = [row for number,group in groups.items()
                         for row in replacements.get(number, group)]
@@ -384,6 +531,12 @@ class SentenceStore:
             if owned is None:
                 state, rows = 'missing', []
             else:
+                if self.is_legacy():
+                    self._schema(legacy=True)
+                    old=[dict(zip(LEGACY_COLUMNS,r)) for r in db.execute('SELECT '+','.join(LEGACY_COLUMNS)+' FROM main.sentence ORDER BY source_line,sentence_index')]
+                    state, rows = ('legacy' if _rebuild_legacy(old)==markdown else 'stale'), []
+                    db.commit()
+                    return state, rows
                 self._schema()
                 rows = self._read()
                 state = 'ready' if rebuild_markdown(rows) == markdown else 'stale'

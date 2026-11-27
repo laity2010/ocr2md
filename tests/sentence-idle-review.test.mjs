@@ -6,7 +6,7 @@ import {saveSentenceChoices} from '../ui/sentence/persisted.js';
 async function fixture(){
  const snapshot=await createMDLineSnapshot('A. B.\nC. D.\n');
  const candidates_json=JSON.stringify(Object.fromEntries(['intl','sentence-splitter','wink-nlp'].map((id,i)=>[id,{status:'ok',version:'fixture',boundaries:i===1?[]:[2],protected_ranges:[]}])));
- const rows=snapshot.lines.map(l=>({source_document_hash:snapshot.documentVersion,source_line:l.sourceLine,source_line_hash:l.sha256,sentence_index:0,from_utf16:0,to_utf16:l.text.length,sentence_text:l.text,line_eol:l.eol,candidates_json,review_state:'disputed',adopted_engine:null}));
+ const rows=snapshot.lines.map(l=>({source_document_hash:snapshot.documentVersion,source_line:l.sourceLine,source_line_hash:l.sha256,sentence_index:0,from_utf16:0,to_utf16:l.text.length,raw:l.text+l.ownedTail,type:l.type,level:l.level,candidates_json,review_state:'disputed',adopted_engine:null}));
  return {snapshot,rows};
 }
 function clock(){
@@ -54,4 +54,16 @@ test('batch HTTP contains identities and choices only; exact receipt required',a
   return {ok:true,json:async()=>({state:'ready',source_document_hash:snapshot.documentVersion,rows:expected})};
  }});
  await assert.rejects(saveSentenceChoices('/fixture',snapshot,batch,{fetcher:async()=>({ok:true,json:async()=>({state:'ready',source_document_hash:snapshot.documentVersion,rows:[rows[0]]})})}));
+});
+
+test('RAW projection preserves inherited type and quote depth, tail belongs only to final sentence',async()=>{
+ const snapshot=await createMDLineSnapshot('>> A. B.\n \t\n\n# Title\n\n~~~\n# literal\n~~~\n');
+ const l=snapshot.lines[0],candidates_json=JSON.stringify(Object.fromEntries(['intl','sentence-splitter','wink-nlp'].map((id,i)=>[id,{status:'ok',version:'fixture',boundaries:i===1?[]:[5],protected_ranges:[]}])));
+ assert.deepEqual(snapshot.lines.map(l=>[l.sourceLine,l.ownerLine,l.type,l.level]),[[1,1,'text','>>'],[2,1,'blank',''],[3,1,'blank',''],[4,4,'title',''],[5,4,'blank',''],[6,6,'text',''],[7,7,'text',''],[8,8,'text','']]);
+ const first={source_document_hash:snapshot.documentVersion,source_line:1,source_line_hash:l.sha256,sentence_index:0,from_utf16:0,to_utf16:l.text.length,raw:l.text+l.ownedTail,type:l.type,level:l.level,candidates_json,review_state:'disputed',adopted_engine:null};
+ const s=createReviewSession(snapshot,[first],{save:async()=>{},timers:clock()});
+ assert(s.choose(1,'intl'));
+ assert.deepEqual(s.rows().map(r=>[r.raw,r.type,r.level]),[['>> A.','text','>>'],[' B.\n \t\n\n','text','>>']]);
+ assert.equal(s.history('undo'),1);assert.deepEqual(s.rows(),[first]);assert.equal(s.history('redo'),1);
+ assert.equal(s.rows().map(r=>r.raw).join(''),first.raw);s.dispose();
 });
