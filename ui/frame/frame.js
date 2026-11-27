@@ -4,6 +4,7 @@ import '../obsidian-everforest.css';
 import './frame.css';
 import {createFrameWorkspace} from './layout.js';
 import {createOriginalSession} from '../translation/original-sentences.js';
+import {initializePreparation} from '../translation/preparation.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
@@ -31,8 +32,12 @@ let settings=null,loadingSettings=null,currentModule='frame';
 // Only one I/O probe may publish status; switching Settings cancels older
 // announcements without touching the shared status or Save component.
 let probeGeneration=0,verifiedPath='',selectedPath='',initializing=false;
+let preparation=null,preparationRequest=null;
+function clearPreparation(){preparationRequest?.abort();preparationRequest=null;preparation=null;}
 const original=createOriginalSession({onChange:current=>{
-  frame.setOriginalRows(current?.snapshot.rows??null);
+  if(!current||preparation?.sentence_sha256!==current.snapshot.sentence_sha256)clearPreparation();
+  if(currentModule==='translation'&&preparation)frame.setTranslationRows(preparation.rows);
+  else frame.setOriginalRows(current?.snapshot.rows??null);
   syncNavigation();
 }});
 function settingsNav(){return $('settings-workspace').querySelector('.ocr-source-file-select');}
@@ -43,10 +48,13 @@ function syncNavigation(){
     if(verifiedPath){
       const group=document.createElement('optgroup');group.label='SQL';
       group.append(new Option('初始化原句表（只读）','sql-init'));
-      if(original.current?.workspace===verifiedPath)group.append(new Option('原句表 · sentence（只读）','original'));
+      if(original.current?.workspace===verifiedPath){
+        group.append(new Option('原句表 · sentence（只读）','original'),new Option('初始化译句表','translation-init'));
+        if(preparation)group.append(new Option('译句表 · translation','translation'));
+      }
       select.prepend(group);
     }
-    select.value=select===frameFileSelect?(original.current?'original':''):'settings';
+    select.value=select===frameFileSelect?(original.current?(currentModule==='translation'&&preparation?'translation':'original'):''):'settings';
     select.ocrNavigationSelect?.refresh();
   }
 }
@@ -65,6 +73,22 @@ async function initializeOriginal(){
       syncNavigation();topStatus('原句表初始化失败：'+error.message,'error');
     }
   }finally{initializing=false;syncNavigation();}
+}
+async function initializeTranslation(){
+  const current=original.current;
+  if(!current||current.workspace!==verifiedPath||current.workspace!==selectedPath||initializing||preparationRequest)return;
+  const controller=new AbortController();preparationRequest=controller;
+  topStatus('正在识别不翻译元素并初始化译句表…');
+  try{
+    const result=await initializePreparation(current.workspace,current.snapshot,{signal:controller.signal});
+    if(preparationRequest!==controller||original.current!==current||verifiedPath!==current.workspace||selectedPath!==current.workspace)return;
+    preparation=result;await showModule('translation');
+  }catch(error){
+    if(preparationRequest!==controller||original.current!==current)return;
+    preparation=null;await showModule('original');topStatus('译句表初始化失败：'+error.message,'error');
+  }finally{
+    if(preparationRequest===controller){preparationRequest=null;syncNavigation();}
+  }
 }
 async function verifyWorkspaceIO(selected,{afterSave=false,uncommitted=false}={}){
   const generation=++probeGeneration;
@@ -163,7 +187,7 @@ function mountSettingsNavigation(){
   // Clone only the underlying authoritative select/optgroup, never Tom's DOM.
   select.append(...[...frameFileSelect.children].map(child=>child.cloneNode(true)));
   select.value='settings';
-  select.addEventListener('change',()=>{if(['settings','sql-init','original'].includes(select.value))void showModule(select.value);});
+  select.addEventListener('change',()=>{if(['settings','sql-init','original','translation-init','translation'].includes(select.value))void showModule(select.value);});
   const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
   actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
   for(const [name,action,label] of [['undo',()=>settings?.undo(),'撤销'],
@@ -180,8 +204,10 @@ function mountSettingsNavigation(){
 }
 async function showModule(name){
   if(name==='sql-init'){syncNavigation();return initializeOriginal();}
-  if(name==='original'&&!original.current)return;
-  currentModule=name==='original'?'original':'settings';
+  if(name==='translation-init'){syncNavigation();return initializeTranslation();}
+  if((name==='original'||name==='translation')&&!original.current)return;
+  if(name==='translation'&&!preparation)return;
+  currentModule=['original','translation'].includes(name)?name:'settings';
   const inSettings=currentModule==='settings';
   $('workspace').hidden=inSettings;
   $('settings-workspace').hidden=!inSettings;
@@ -198,8 +224,14 @@ async function showModule(name){
       }}
     catch(error){topStatus('全局设置加载失败：'+error.message,'error');}
   }else{
+    if(currentModule==='translation'){
+      frame.setTranslationRows(preparation.rows);
+      topStatus('✓ 译句表 · '+preparation.rows.length+' 句 · 可翻译 '+preparation.rows.filter(r=>r.translatable).length+' 句','ok');
+    }else{
+      frame.setOriginalRows(original.current.snapshot.rows);
+      topStatus('✓ 原句表（只读） · '+original.current.snapshot.rows.length+' 句 · 已保存分句快照','ok');
+    }
     syncNavigation();frame.activate();
-    topStatus('✓ 原句表（只读） · '+original.current.snapshot.rows.length+' 句 · 已保存分句快照','ok');
   }
 }
 $('global-save').addEventListener('click',async()=>{

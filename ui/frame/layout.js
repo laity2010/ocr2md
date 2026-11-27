@@ -41,19 +41,35 @@ const originalColumns=[
   {field:'source_document_hash',headerName:'文档哈希',width:165},
   {field:'candidates_json',headerName:'候选方案',width:220},
 ];
+const translatedColumns=[
+  originalColumns[0],originalColumns[1],originalColumns[2],originalColumns[3],originalColumns[4],
+  {field:'translatable',headerName:'可翻译',width:100,valueFormatter:({value})=>value?'是':'否',filter: EnumCheckboxFilter,filterValueGetter:({data})=>data?.translatable?'是':'否',suppressHeaderMenuButton:true,suppressHeaderFilterButton: false},
+  {field:'protected',headerName:'不翻译元素',minWidth:240,flex:1,valueFormatter:({value})=>(value??[]).map(p=>p.kind+': '+JSON.stringify(p.text)).join(' · '),tooltipValueGetter:({value})=>JSON.stringify(value)},
+  {field:'policy',headerName:'识别版本',width:110},
+  {field:'source_line_hash',headerName:'行哈希',width:165},
+  {field:'source_document_hash',headerName:'文档哈希',width:165},
+  {field:'sentence_sha256',headerName:'分句哈希',width:165},
+];
 function mountEmptyGrid(host,picker){
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
     defaultColDef:{editable:false,resizable:true,sortable:false,suppressMovable:true},
     getRowId:({data})=>data.source_line+':'+data.sentence_index,
     columnDefs:emptyColumns,rowData:[]});
-  let active=false;
-  return {dispose(){grid.destroy();},layout:()=>{},setOriginalRows(rows){
-    const next=rows!==null;
-    if(active!==next){grid.setFilterModel(null);grid.setGridOption('columnDefs',next?originalColumns:emptyColumns);active=next;}
-    grid.setGridOption('rowData',rows??[]);
-    picker.options[0].textContent=next?'原句表（只读）':'空白框架';
-  }};
+  let active='empty';
+  const filters=new Map();
+  function showRows(mode,rows){
+    const next=rows===null?'empty':mode;
+    if(active!==next){
+      if(next==='empty')filters.clear();else if(active!=='empty')filters.set(active,grid.getFilterModel());
+      grid.setFilterModel(null);
+      grid.setGridOption('columnDefs',next==='original'?originalColumns:next==='translation'?translatedColumns:emptyColumns);
+      active=next;grid.setGridOption('rowData',rows??[]);
+      if(filters.has(next))grid.setFilterModel(filters.get(next));
+    }else grid.setGridOption('rowData',rows??[]);
+    picker.options[0].textContent=next==='original'?'原句表（只读）':next==='translation'?'译句表':'空白框架';
+  }
+  return {dispose(){grid.destroy();},layout:()=>{},setOriginalRows:rows=>showRows('original',rows),setTranslationRows:rows=>showRows('translation',rows)};
 }
 function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
   const element=document.createElement('div');
@@ -87,7 +103,7 @@ function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
     group.append(new Option('settings.json','settings'));
     select.append(group);
     select.value='';
-    select.addEventListener('change',()=>{if(['settings','sql-init','original'].includes(select.value))onModuleChange?.(select.value);});
+    select.addEventListener('change',()=>{if(['settings','sql-init','original','translation-init','translation'].includes(select.value))onModuleChange?.(select.value);});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id='undo';
@@ -149,7 +165,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     onStatus(split?'四窗布局已启用':'三窗布局已启用');
   }
   setSplit(true);
-  return Object.freeze({setSplit,setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},activate(){if(container.clientWidth&&container.clientHeight)
+  return Object.freeze({setSplit,setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
     dispose(){dockview.dispose();},get split(){return split;}});
 }

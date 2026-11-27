@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {setTimeout as sleep} from 'node:timers/promises';
 import {chromium,webkit} from 'playwright';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
+import {preparedFixture} from './translation-preparation-fixture.mjs';
 const HOST='http://127.0.0.1:5404/labs/lab-translation/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','preview','--config','labs/lab-translation/vite.config.mjs','--host','127.0.0.1','--port','5404','--strictPort'],{stdio:['ignore','pipe','pipe']});
 let log='';server.stdout.on('data',b=>log+=b);server.stderr.on('data',b=>log+=b);
@@ -13,14 +14,22 @@ try{
   const browser=await engine.launch({headless:true});
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1180,height:860},hasTouch:true});
-   const errors=[],reads=[],probes=[];let failed=false,version=0;
-   const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed');
+   const errors=[],reads=[],probes=[];let failed=false,version=0,preparationFailed=false;const prepCalls=[];
+   const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true);
+   const prepared=preparedFixture(withFormula);
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/labs/lab-frame/api/workspace-io/session',r=>r.fulfill({json:{authorized:true}}));
    await page.route('**/labs/lab-frame/api/workspace-io/roots',r=>r.fulfill({json:{allowedRoots:['/demo/books']}}));
    await page.route('**/labs/lab-frame/api/workspace-io/browse?*',r=>{const path=new URL(r.request().url()).searchParams.get('path');return r.fulfill({json:{path,children:path==='/demo/books'?[{path:'/demo/books/a',name:'a'},{path:'/demo/books/b',name:'b'}]:[]}});});
    await page.route('**/labs/lab-frame/api/workspace-io/probe',r=>{probes.push(r.request().postDataJSON().workspace);return r.fulfill({json:{verified:true,readable:true,writable:true}});});
-   await page.route('**/labs/lab-sentence/api/**',r=>{assert.equal(r.request().method(),'GET');const u=new URL(r.request().url());assert(u.pathname.endsWith('/sentence/snapshot'));reads.push(u.searchParams.get('workspace'));return failed?r.fulfill({status:409,json:{error:'句表已过期'}}):r.fulfill({json:version?fresh:old});});
+   await page.route('**/labs/lab-sentence/api/**',r=>{assert.equal(r.request().method(),'GET');const u=new URL(r.request().url());assert(u.pathname.endsWith('/sentence/snapshot'));reads.push(u.searchParams.get('workspace'));return failed?r.fulfill({status:409,json:{error:'句表已过期'}}):r.fulfill({json:version===2?withFormula:version?fresh:old});});
+   await page.route('**/labs/lab-translation/api/translation/initialize',r=>{
+    assert.equal(r.request().method(),'POST');
+    const input=r.request().postDataJSON();
+    assert.deepEqual(input,{workspace:'/demo/books/b',source_document_hash:withFormula.source_document_hash,sentence_sha256:withFormula.sentence_sha256});
+    prepCalls.push(input);
+    return preparationFailed?r.fulfill({status:409,json:{error:'已有译句表不一致，拒绝覆盖'}}):r.fulfill({json:prepared});
+   });
    await page.goto(HOST,{waitUntil:'domcontentloaded'});
    const settings=page.locator('#settings-workspace'),workspace=page.locator('#workspace'),grid=workspace.locator('.ocr-outline-grid');
    const nav=scope=>scope.locator('.ocr-source-file-select');
@@ -54,6 +63,36 @@ try{
    await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/b');assert.equal(await tableOption(settings).count(),0);await count(0);
    failed=true;await chooseNav(settings,'sql-init');await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('原句表初始化失败'));assert.equal(await tableOption(settings).count(),0);assert.equal(await workspace.isVisible(),false);
    failed=false;await chooseNav(settings,'sql-init');await workspace.waitFor({state:'visible'});await count(4);assert.equal(reads.at(-1),'/demo/books/b');
+   // WP02: new source contains a complete non-translatable formula.
+   version=2;await chooseNav(workspace,'sql-init');await count(5);
+   assert.equal(await nav(workspace).locator('option[value="translation"]').count(),0);
+   preparationFailed=true;await chooseNav(workspace,'translation-init');
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('译句表初始化失败'));
+   assert.equal(await nav(workspace).locator('option[value="translation"]').count(),0);await count(5);
+   preparationFailed=false;await chooseNav(workspace,'translation-init');
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可翻译 4 句'));
+   await count(5);assert.equal(await nav(workspace).locator('option[value="translation"]').count(),1);
+   assert.equal(await workspace.locator('.dv-content-container').count(),4);
+   const scroll=grid.locator('.ag-body-horizontal-scroll-viewport');
+   await scroll.evaluate(el=>el.scrollLeft=530);
+   const transButton=grid.locator('.ag-header-cell[col-id="translatable"] .ag-header-cell-filter-button');
+   await transButton.waitFor();
+   if(name==='iPad-WebKit')await transButton.tap();else await transButton.click();
+   const transPopup=page.locator('.ocr-enum-filter[aria-label="可翻译 筛选"]:visible');
+   await transPopup.waitFor();
+   const tcb=v=>transPopup.locator('[data-filter-value="'+v+'"] input');
+   assert.equal(await tcb('all').isChecked(),true);
+   await tcb('all').uncheck();await count(0);await tcb('否').check();await count(1);
+   assert.equal(await grid.locator('.ag-row [col-id="source_line"]').textContent(),'5');
+   await page.keyboard.press('Escape');
+   await scroll.evaluate(el=>el.scrollLeft=740);
+   await page.waitForFunction(()=>[...document.querySelectorAll('#workspace .ag-row [col-id="protected"]')].some(el=>el.textContent.includes('latex')&&el.textContent.includes('$$x=1$$')));
+   await chooseNav(workspace,'original');await count(5);
+   await chooseNav(workspace,'translation');await count(1);
+   await chooseNav(workspace,'settings');await settings.waitFor({state:'visible'});await bind('/demo/books/a');
+   assert.equal(await nav(settings).locator('option[value="translation"]').count(),0);await count(0);
+   assert.equal(prepCalls.length,2);
+   console.log('TRANSLATION_WP02_BROWSER_PASS',name,'protected ranges / untranslated retained / native filter / switch / stale refusal');
    assert.deepEqual(errors,[]);console.log('TRANSLATION_WP01_BROWSER_PASS',name,'bind/init/raw/readonly/native all/multi/refresh/change/failure/retry',JSON.stringify({reads,probes}));
   }finally{await browser.close();}
  }
