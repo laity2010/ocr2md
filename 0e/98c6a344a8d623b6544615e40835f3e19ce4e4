@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"726e85c1b557459fa8b6f716b7a7b23d","branch":"refs/heads/experiment/lab-sentence","baseline":"0e98c6a344a8d623b6544615e40835f3e19ce4e4","event":"START","utc":"2026-11-27T01:47:40.964400+00:00","wp":"WP04F4","goal":"句表raw唯一原文、尾随空白物理行归末句、逐句继承V2 MDLine type及引用层级；保留真实坐标与已保存仲裁、旧自有表事务迁移；CM内存及空闲落盘不变，外州/布局不改；隔离验证发布。","retrospective":false}
