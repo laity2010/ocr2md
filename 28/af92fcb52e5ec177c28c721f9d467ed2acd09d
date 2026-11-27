@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"5b4a754a3e8249dfab4d6790c839d674","branch":"refs/heads/experiment/lab-translation","baseline":"28af92fcb52e5ec177c28c721f9d467ed2acd09d","event":"START","utc":"2026-11-27T08:45:02.454671+00:00","wp":"WP05A2","goal":"JSON预览CM6行号与源码一致，AG/源码定位同步JSON对应待译句，未导出句清除焦点，模式切换恢复，导出字节不变；不改SQL及其他布局。","retrospective":false}
