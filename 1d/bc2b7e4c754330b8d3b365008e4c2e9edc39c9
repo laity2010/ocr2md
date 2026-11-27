@@ -39,3 +39,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/heads/experiment/lab-translation","baseline":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","event":"RUN_START","utc":"2026-11-27T03:52:20.283867+00:00","phase":"wp00-publish","step":"56e93b4ddaaf485889219f74241afe1d"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/heads/experiment/lab-translation","baseline":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","event":"RUN_EXIT","utc":"2026-11-27T03:52:41.591327+00:00","phase":"wp00-publish","step":"56e93b4ddaaf485889219f74241afe1d","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"839389ad3ef840f5ab526f6a6fdb5d7f","branch":"refs/heads/experiment/lab-translation","baseline":"1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9","event":"RUN_START","utc":"2026-11-27T03:53:37.161884+00:00","phase":"wp00-first-portal-card-check","step":"a8e91e45ceea4b77840b74689e58ac55"}
