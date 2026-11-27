@@ -19,3 +19,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"2ae0cf1201cd48bb8fa7ab5bfde414a5","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"2ae0cf1201cd48bb8fa7ab5bfde414a5","branch":"refs/heads/experiment/lab-translation","baseline":"f463c39f3e0b934fec396b44f63dbbcf764f6556","event":"RUN_START","utc":"2026-11-27T04:14:43.192219+00:00","phase":"wp01-empty-regression","step":"62a3320bc99e4ab6a689133d79c60116"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"2ae0cf1201cd48bb8fa7ab5bfde414a5","branch":"refs/heads/experiment/lab-translation","baseline":"f463c39f3e0b934fec396b44f63dbbcf764f6556","event":"RUN_EXIT","utc":"2026-11-27T04:15:06.297688+00:00","phase":"wp01-empty-regression","step":"62a3320bc99e4ab6a689133d79c60116","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"2ae0cf1201cd48bb8fa7ab5bfde414a5","branch":"refs/heads/experiment/lab-translation","baseline":"f463c39f3e0b934fec396b44f63dbbcf764f6556","event":"RUN_START","utc":"2026-11-27T04:15:53.722995+00:00","phase":"wp01-release-build-and-publish","step":"e977e11b49794ef993a2021b66bb31a2"}
