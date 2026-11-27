@@ -10,8 +10,8 @@ from .protection import build_rows,canonical,DIGEST,require
 
 DB_NAME='ocr2md.v2.sqlite'
 MAX_SNAPSHOT=32*1024*1024
-FIELDS=('source_document_hash','sentence_sha256','source_line_hash','source_line','sentence_index','raw','type','level','policy','protected','translatable')
-DDL="""CREATE TABLE translation (
+LEGACY_FIELDS=('source_document_hash','sentence_sha256','source_line_hash','source_line','sentence_index','raw','type','level','policy','protected','translatable')
+LEGACY_DDL="""CREATE TABLE translation (
  source_document_hash TEXT NOT NULL,
  sentence_sha256 TEXT NOT NULL,
  source_line_hash TEXT NOT NULL,
@@ -25,6 +25,9 @@ DDL="""CREATE TABLE translation (
  translatable INTEGER NOT NULL CHECK(translatable IN (0,1)),
  PRIMARY KEY(source_line,sentence_index)
 )"""
+FIELDS=LEGACY_FIELDS+('text',)
+ADD_TEXT="ALTER TABLE translation ADD COLUMN text TEXT NOT NULL DEFAULT ''"
+DDL=LEGACY_DDL.replace(",\n PRIMARY KEY",", text TEXT NOT NULL DEFAULT '',\n PRIMARY KEY")
 INSERT='INSERT INTO translation ('+','.join(FIELDS)+') VALUES ('+','.join('?' for _ in FIELDS)+')'
 
 class TranslationError(Exception):
@@ -54,7 +57,7 @@ def sql_rows(rows):
 
 def initialize(folder,expected_source,expected_sentences,reader):
     """Create exactly one owned table, or return the identical existing table.
-    No update/delete/replacement, even for stale data. Reads upstream via API.
+    Only exact same-source legacy rows may gain text; no replacement. Reads upstream via API.
     """
     path=folder/DB_NAME;original_identity=identity(path)
     def read():
@@ -65,11 +68,15 @@ def initialize(folder,expected_source,expected_sentences,reader):
         if identity(path)!=original_identity:raise TranslationError(409,'SQLite 文件已切换')
         return s
     snapshot=read();rows=build_rows(snapshot);expected=sql_rows(rows)
-    creating=False
+    creating=False;migrating=False
     def authorize(action,a,b,db,source):
         if source is not None:return sqlite3.SQLITE_DENY
         if action in (sqlite3.SQLITE_SELECT,sqlite3.SQLITE_TRANSACTION):return sqlite3.SQLITE_OK
         if action==sqlite3.SQLITE_READ and db=='main' and a in ('translation','sqlite_master','sqlite_schema'):return sqlite3.SQLITE_OK
+        if migrating:
+            if action==sqlite3.SQLITE_ALTER_TABLE and a=='main' and b=='translation':return sqlite3.SQLITE_OK
+            if action==sqlite3.SQLITE_FUNCTION and b in ('printf','substr','length'):return sqlite3.SQLITE_OK
+            if action==sqlite3.SQLITE_UPDATE and db=='main' and ((a=='sqlite_master' and b=='sql') or (a=='translation' and b=='text')):return sqlite3.SQLITE_OK
         if creating and db=='main':
             if action in (sqlite3.SQLITE_INSERT,sqlite3.SQLITE_UPDATE) and a in ('sqlite_master','sqlite_schema'):return sqlite3.SQLITE_OK
             if action==sqlite3.SQLITE_INSERT and a=='translation':return sqlite3.SQLITE_OK
@@ -89,12 +96,22 @@ def initialize(folder,expected_source,expected_sentences,reader):
             # published snapshot, never read private upstream data in this connection.
             require(read()==snapshot,'原句快照变化')
             if owned:
-                if owned!=[('table','translation','translation',DDL)]:
+                if owned==[('table','translation','translation',LEGACY_DDL)]:
+                    existing=db.execute('SELECT '+','.join(LEGACY_FIELDS)+' FROM translation ORDER BY source_line,sentence_index').fetchall()
+                    if existing!=[r[:-1] for r in expected]:
+                        raise TranslationError(409,'旧译句表与当前原句或保护版本不一致，保留旧表，拒绝覆盖')
+                    migrating=True
+                    db.execute(ADD_TEXT)
+                    db.executemany('UPDATE translation SET text=? WHERE source_line=? AND sentence_index=?',((r['text'],r['source_line'],r['sentence_index']) for r in rows))
+                    migrating=False
+                    state='migrated'
+                elif owned==[('table','translation','translation',DDL)]:
+                    state='ready'
+                else:
                     raise TranslationError(409,'已有同名译句表结构不同，拒绝覆盖')
                 existing=db.execute('SELECT '+','.join(FIELDS)+' FROM translation ORDER BY source_line,sentence_index').fetchall()
                 if existing!=expected:
                     raise TranslationError(409,'已有译句表与当前原句或保护版本不一致，保留旧表，拒绝自动覆盖')
-                state='ready'
             else:
                 creating=True
                 db.execute(DDL);db.executemany(INSERT,expected);creating=False
@@ -105,7 +122,7 @@ def initialize(folder,expected_source,expected_sentences,reader):
             db.commit()
         except BaseException:
             db.rollback();raise
-    return {'schema':'ocr2md-translation-preparation/v1','state':state,'source_document_hash':expected_source,'sentence_sha256':expected_sentences,'rows':rows}
+    return {'schema':'ocr2md-translation-preparation/v2','state':state,'source_document_hash':expected_source,'sentence_sha256':expected_sentences,'rows':rows}
 
 def handle(handler,operation,parsed,common):
     def respond(code,obj):handler.respond(code,json.dumps(obj,ensure_ascii=False),'application/json; charset=utf-8')

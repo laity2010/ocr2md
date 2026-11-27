@@ -104,6 +104,8 @@ def scan(text):
     matches(r'\*{1,3}|_{2,3}|(?<!\w)_(?!\s)|(?<!\s)_(?!\w)|~~|==|\[|\]|\|','markdown_marker')
     return sorted(spans)
 
+from .refill import template,check_row
+
 def build_rows(snapshot):
     source=validate_snapshot(snapshot)
     text=''.join(r['raw'] for r in source)
@@ -145,6 +147,7 @@ def build_rows(snapshot):
             if cursor<len(raw):extra.append((cursor,len(raw),'non_text'))
             local=sorted(local+extra)
         protected=[{'from':u16(raw[:a]),'to':u16(raw[:b]),'kind':k,'text':raw[a:b]} for a,b,k in local]
-        out.append({k:r[k] for k in ('source_document_hash','source_line_hash','source_line','sentence_index','raw','type','level')}|{'sentence_sha256':snapshot['sentence_sha256'],'policy':POLICY,'protected':protected,'translatable':translatable})
+        out.append({k:r[k] for k in ('source_document_hash','source_line_hash','source_line','sentence_index','raw','type','level')}|{'sentence_sha256':snapshot['sentence_sha256'],'policy':POLICY,'protected':protected,'translatable':translatable,'text':template(raw,protected)})
         offset=end
+    require(sha(''.join(check_row(r) for r in out))==snapshot['source_document_hash'],'全文回填摘要不一致')
     return out

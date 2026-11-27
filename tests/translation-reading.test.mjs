@@ -6,7 +6,7 @@ import {preparedFixture} from './translation-preparation-fixture.mjs';
 import {sha256,canonicalRows} from '../ui/translation/original-sentences.js';
 test('lossless physical MDLine and sentence index, including trailing blank lines and UTF16',async()=>{
  const original=await sampleSnapshot(' 😀',true),preparation=preparedFixture(original);
- const model=createReadingDocument(original,preparation);
+ const model=createReadingDocument(preparation);
  assert.equal(model.text,original.rows.map(r=>r.raw).join(''));
  assert.equal(await sha256(model.text),original.source_document_hash);
  assert.deepEqual(model.lineStarts,[0,...Array.from(model.text.matchAll(/\n/g),m=>m.index+1)]);
@@ -19,10 +19,8 @@ test('lossless physical MDLine and sentence index, including trailing blank line
  }
  assert.equal(model.atOffset(model.lineOffset(2)).key,'1:0');
  assert.equal(model.atOffset(model.text.length).key,'5:0');
- assert.equal(createReadingDocument(original).ranges.length,0);
  assert.equal(createReadingDocument(null),null);
- assert.throws(()=>createReadingDocument(original,{...preparation,sentence_sha256:'stale'}));
- const bad=structuredClone(original);bad.rows[1].source_line=99;
+ const bad=structuredClone(preparation);bad.rows[1].source_line=99;
  assert.throws(()=>createReadingDocument(bad));
 });
 test('last line without LF has a real half-open interval; no extra line or newline',async()=>{
@@ -31,7 +29,7 @@ test('last line without LF has a real half-open interval; no extra line or newli
  original.source_document_hash=await sha256(original.rows.map(r=>r.raw).join(''));
  original.rows.forEach(r=>r.source_document_hash=original.source_document_hash);
  original.sentence_sha256=await sha256(canonicalRows(original.rows));
- const model=createReadingDocument(original,preparedFixture(original));
+ const model=createReadingDocument(preparedFixture(original));
  assert.equal(model.text.endsWith('\n'),false);
  assert.equal(model.lineOffset(last.source_line+1),model.text.length);
 });

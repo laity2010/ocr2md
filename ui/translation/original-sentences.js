@@ -34,19 +34,3 @@ export async function readOriginalSnapshot(workspace,{fetcher=fetch,signal}={}){
   if(!response.ok)throw Error(typeof result?.error==='string'?result.error:'HTTP '+response.status);
   return validateOriginalSnapshot(result);
 }
-/** Generation-checked, single in-memory reference. Old replies cannot replace a new book. */
-export function createOriginalSession({reader=readOriginalSnapshot,onChange=()=>{}}={}){
-  let generation=0,controller=null,current=null;
-  function invalidate(){generation++;controller?.abort();controller=null;current=null;onChange(null);}
-  async function initialize(workspace){
-    if(current?.workspace!==workspace)invalidate();
-    const token=++generation;controller?.abort();const request=new AbortController();controller=request;
-    try{
-      const snapshot=await reader(workspace,{signal:request.signal});
-      if(token!==generation)return null;
-      current=Object.freeze({workspace,snapshot});onChange(current);return current;
-    }catch(error){if(token!==generation)return null;current=null;onChange(null);throw error;}
-    finally{if(token===generation)controller=null;}
-  }
-  return Object.freeze({initialize,invalidate,get current(){return current;}});
-}

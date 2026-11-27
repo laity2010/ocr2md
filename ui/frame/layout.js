@@ -1,6 +1,7 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
 import {mountReadingSource,mountReadingPreview} from '../translation/reading.js';
+import {placeholder} from '../translation/refill.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
 import 'dockview/dist/styles/dockview.css';
@@ -20,24 +21,15 @@ const emptyColumns=[
   {field:'type',headerName:'类型',width:95},
   {field:'content',headerName:'文本块',flex:1},
 ];
-const originalColumns=[
+const translatedColumns=[
   {field:'source_line',headerName:'MDLine',pinned:'left',width:100},
   {field:'sentence_index',headerName:'句序',width:72},
   {field:'raw',headerName:'raw',minWidth:240,flex:1,tooltipField:'raw',cellStyle:{whiteSpace:'pre'}},
   {field:'type',headerName:'type',width:135,filter: EnumCheckboxFilter,suppressHeaderMenuButton:true,suppressHeaderFilterButton: false},
   {field:'level',headerName:'level',width:75,filter: EnumCheckboxFilter,suppressHeaderMenuButton:true,suppressHeaderFilterButton: false},
-  {field:'review_state',headerName:'状态',width:125},
-  {field:'adopted_engine',headerName:'采用引擎',width:135},
-  {field:'from_utf16',headerName:'起点',width:85},
-  {field:'to_utf16',headerName:'终点',width:85},
-  {field:'source_line_hash',headerName:'行哈希',width:165},
-  {field:'source_document_hash',headerName:'文档哈希',width:165},
-  {field:'candidates_json',headerName:'候选方案',width:220},
-];
-const translatedColumns=[
-  originalColumns[0],originalColumns[1],originalColumns[2],originalColumns[3],originalColumns[4],
   {field:'translatable',headerName:'可翻译',width:100,valueFormatter:({value})=>value?'是':'否',filter: EnumCheckboxFilter,filterValueGetter:({data})=>data?.translatable?'是':'否',suppressHeaderMenuButton:true,suppressHeaderFilterButton: false},
-  {field:'protected',headerName:'不翻译元素',minWidth:240,flex:1,valueFormatter:({value})=>(value??[]).map(p=>p.kind+': '+JSON.stringify(p.text)).join(' · '),tooltipValueGetter:({value})=>JSON.stringify(value)},
+  {field:'protected',headerName:'回填元素',minWidth:240,flex:1,valueFormatter:({value,data})=>(value??[]).map((p,i)=>placeholder(data.raw,i)+' '+p.kind+': '+JSON.stringify(p.text)).join(' · '),tooltipValueGetter:({value})=>JSON.stringify(value)},
+  {field:'text',headerName:'text',minWidth:240,flex:1,tooltipField:'text',cellStyle:{whiteSpace:'pre'}},
   {field:'policy',headerName:'识别版本',width:110},
   {field:'source_line_hash',headerName:'行哈希',width:165},
   {field:'source_document_hash',headerName:'文档哈希',width:165},
@@ -50,19 +42,16 @@ function mountEmptyGrid(host,picker,onLocate){
     getRowId:({data})=>data.source_line+':'+data.sentence_index,
     columnDefs:emptyColumns,rowData:[],rowSelection:{mode:'singleRow',checkboxes:false,enableClickSelection:true},onRowClicked:({data})=>{if(data)onLocate(data.source_line+':'+data.sentence_index,'ag');}});
   let active='empty';
-  const filters=new Map();
-  function showRows(mode,rows){
-    const next=rows===null?'empty':mode;
+  function showRows(rows){
+    const next=rows===null?'empty':'translation';
     if(active!==next){
-      if(next==='empty')filters.clear();else if(active!=='empty')filters.set(active,grid.getFilterModel());
       grid.setFilterModel(null);
-      grid.setGridOption('columnDefs',next==='original'?originalColumns:next==='translation'?translatedColumns:emptyColumns);
+      grid.setGridOption('columnDefs',next==='translation'?translatedColumns:emptyColumns);
       active=next;grid.setGridOption('rowData',rows??[]);
-      if(filters.has(next))grid.setFilterModel(filters.get(next));
     }else grid.setGridOption('rowData',rows??[]);
-    picker.options[0].textContent=next==='original'?'原句表（只读）':next==='translation'?'译句表':'空白框架';
+    picker.options[0].textContent=next==='translation'?'译句表':'空白框架';
   }
-  return {dispose(){grid.destroy();},layout:()=>{},setOriginalRows:rows=>showRows('original',rows),setTranslationRows:rows=>showRows('translation',rows),
+  return {dispose(){grid.destroy();},layout:()=>{},setTranslationRows:showRows,
     locate(row,{scroll=true}={}){
       const node=row&&grid.getRowNode(row.key);
       if(!node||node.rowIndex==null){grid.deselectAll();return;}
@@ -102,7 +91,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     group.append(new Option('settings.json','settings'));
     select.append(group);
     select.value='';
-    select.addEventListener('change',()=>{if(['settings','sql-init','original','translation-init','translation'].includes(select.value))onModuleChange?.(select.value);});
+    select.addEventListener('change',()=>{if(['settings','sql-init','translation'].includes(select.value))onModuleChange?.(select.value);});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id='undo';
@@ -186,7 +175,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
   return Object.freeze({isPromptActive:()=>previewReader?.isPromptActive()??false,
     getPromptText:()=>previewReader?.getPromptText()??null,
-    savePrompt:()=>previewReader?.savePrompt(),setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
+    savePrompt:()=>previewReader?.savePrompt(),setTranslationRows(rows){originalGrid?.setTranslationRows(rows);},
     setReadingDocument(model,path=''){
       const keep=model&&readingModel?.text===model.text&&readingPath===path&&focused;
       readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;

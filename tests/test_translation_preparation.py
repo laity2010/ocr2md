@@ -10,6 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('translation_test_backend',ROOT/'scripts/lab_backend/__init__.py',submodule_search_locations=[str(ROOT/'scripts/lab_backend')])
 runtime=importlib.util.module_from_spec(spec);sys.modules[spec.name]=runtime;spec.loader.exec_module(runtime)
 from translation_test_backend.protection import build_rows,canonical,sha,u16,scan
+from translation_test_backend.refill import template,refill,check_row
 sys.path.insert(0,str(ROOT.parent/'lab-sentence/tests'))
 from test_sentence_store import prepare_owned_book,whole_plans,plan,base,upstream_evidence
 import lab_backend as sentence
@@ -122,7 +123,7 @@ class PreparationTests(unittest.TestCase):
             self.assertEqual(result['state'],'created');self.assertEqual(evidence(),before)
             self.assertEqual(''.join(r['raw'] for r in result['rows']),md)
             print('REAL_BOOK_PREPARATION',len(result['rows']),sum(r['translatable'] for r in result['rows']),sum(len(r['protected']) for r in result['rows']))
-            for r in result['rows']:projection(r)
+            for r in result['rows']:projection(r);self.assertEqual(check_row(r),r['raw'])
             with closing(sqlite3.connect(path)) as db:
                 self.assertEqual({x[0] for x in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")},{'mineru_base','logical_block','sentence','translation'})
             digest=hashlib.sha256(path.read_bytes()).hexdigest()
@@ -132,6 +133,41 @@ class PreparationTests(unittest.TestCase):
             with self.assertRaises(runtime.TranslationError):runtime.initialize(folder,stale['source_document_hash'],stale['sentence_sha256'],lambda:stale)
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(),digest)
             self.assertEqual(evidence(),before)
+    def test_refill_collision_and_invalid_tokens(self):
+        raw='😀 Original ⟦P0⟧ with $x$ and $x$.\n\n'
+        r=build_rows(snapshot(raw))[0]
+        self.assertEqual(refill(r['text'],raw,r['protected']),raw)
+        self.assertIn('⟦P_0⟧',r['text'])
+        for bad in (r['text'].replace('⟦P_0⟧','',1),r['text']+'⟦P_0⟧',r['text'].replace('⟦P_0⟧','⟦P_999⟧',1),r['text'].replace('⟦P_0⟧','⟦P_x⟧',1)):
+            with self.assertRaises(ValueError):refill(bad,raw,r['protected'])
+        self.assertEqual(template('',[]),'')
+        self.assertEqual(refill('','',[]),'')
+    def test_legacy_migration_and_reject_tamper(self):
+        s=snapshot('One $x$.\n\nTwo.\n')
+        rows=build_rows(s)
+        for tamper in (False,True):
+            with tempfile.TemporaryDirectory() as tmp:
+                folder=Path(tmp);path=folder/runtime.DB_NAME
+                with closing(sqlite3.connect(path)) as db:
+                    db.executescript("CREATE TABLE sentence(id,raw);INSERT INTO sentence VALUES(1,'keep');")
+                    db.execute(runtime.LEGACY_DDL)
+                    db.executemany('INSERT INTO translation VALUES ('+','.join('?' for _ in runtime.LEGACY_FIELDS)+')',[r[:-1] for r in runtime.sql_rows(rows)])
+                    if tamper:db.execute("UPDATE translation SET raw='changed' WHERE source_line=1")
+                    db.commit()
+                    old=db.execute('SELECT * FROM translation ORDER BY source_line,sentence_index').fetchall()
+                digest=path.read_bytes()
+                if tamper:
+                    with self.assertRaises(runtime.TranslationError):runtime.initialize(folder,s['source_document_hash'],s['sentence_sha256'],lambda:s)
+                    self.assertEqual(path.read_bytes(),digest);continue
+                result=runtime.initialize(folder,s['source_document_hash'],s['sentence_sha256'],lambda:s)
+                self.assertEqual(result['state'],'migrated')
+                with closing(sqlite3.connect(path)) as db:
+                    self.assertEqual(db.execute('SELECT '+','.join(runtime.LEGACY_FIELDS)+' FROM translation ORDER BY source_line,sentence_index').fetchall(),old)
+                    self.assertEqual(db.execute('SELECT * FROM sentence').fetchall(),[(1,'keep')])
+                    self.assertEqual(db.execute('SELECT sql FROM sqlite_master WHERE name="translation"').fetchone()[0],runtime.DDL)
+                digest=path.read_bytes()
+                self.assertEqual(runtime.initialize(folder,s['source_document_hash'],s['sentence_sha256'],lambda:s)['state'],'ready')
+                self.assertEqual(path.read_bytes(),digest)
     def test_http_contract(self):
         s=snapshot('Hello.\n')
         p={'workspace':'/fixture','source_document_hash':s['source_document_hash'],'sentence_sha256':s['sentence_sha256']}
