@@ -3,3 +3,5 @@ FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/h
 FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/heads/main","baseline":"3557c93599cb670eb0251bd0f632380f5038386d","event":"RUN_START","utc":"2026-11-27T08:23:17.179421+00:00","phase":"federal-sql-nav-legislation","step":"5c3fff1fe91b4d5a95e2483da302816b"}
 
 FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/heads/main","baseline":"3557c93599cb670eb0251bd0f632380f5038386d","event":"RUN_EXIT","utc":"2026-11-27T08:23:25.131387+00:00","phase":"federal-sql-nav-legislation","step":"5c3fff1fe91b4d5a95e2483da302816b","exit_code":0}
+
+FEDERAL_BUILD_EVENT_V1 {"id":"691d2a8c9b8e47d6bb67c22644ba865a","branch":"refs/heads/main","baseline":"3557c93599cb670eb0251bd0f632380f5038386d","event":"RUN_START","utc":"2026-11-27T08:23:43.846899+00:00","phase":"federal-sql-nav-validation","step":"4eae3c1409dc439abaf16fa23d12ed09"}
