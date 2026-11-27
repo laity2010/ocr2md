@@ -1,6 +1,8 @@
 /** Minimal first-class Frame API: Dockview shell, no CMD/SQL/Media reads or writes. */
 import {createDockview,themeAbyss} from 'dockview';
-import {mountReadingSource,mountReadingPreview} from '../translation/reading.js';
+import {mountReadingPreview} from '../translation/reading.js';
+import {mountSourceComparison} from '../translation/source-comparison.js';
+import {createComparisonDocument} from '../translation/comparison-document.js';
 import {placeholder} from '../translation/refill.js';
 import {createReadingDocument} from '../translation/document.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
@@ -117,9 +119,8 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus,onViewChange){
     redo.textContent='↷';redo.setAttribute('aria-label','重做');redo.title='没有绑定文档';redo.disabled=true;
     actions.append(undo,redo);
     bar.append(select,actions);element.append(bar);
-    const body=document.createElement('div');body.className='ocr-cm-source frame-editor';
-    body.id='editor';
-    element.append(body);owned=()=>mountReadingSource(body,onLocate);
+    const body=document.createElement('div');
+    element.append(body);owned=()=>mountSourceComparison(body,onLocate);
   }else if(name==='preview'){
     element.className='ocr-preview-pane';element.dataset.previewMode='md';
     const bar=document.createElement('div');bar.className='ocr-preview-switchbar';
@@ -174,10 +175,10 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   let originalGrid=null,sourceReader=null,previewReader=null,readingModel=null,fullModel=null,readingPath='',focused=null,tableRows=null,viewMode='original';
   function locate(value,origin){
     if(!readingModel)return;
-    const row=typeof value==='string'?readingModel.byKey(value):value;
+    const row=readingModel.byKey(typeof value==='string'?value:value?.key);
     if(!row)return;focused=row;
     originalGrid?.locate(row,{scroll:origin!=='ag'});
-    sourceReader?.locate(row,{scroll:origin!=='source'});
+    sourceReader?.locate(row,{scroll:true,origin});
     previewReader?.locate(row,{scroll:origin!=='preview'});
   }
   function register(name,port){
@@ -194,7 +195,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
   function applyReading(model,path='',viewSwitch=false){
     const keep=model&&readingPath===path&&focused&&(viewSwitch||readingModel?.text===model.text);
     readingModel=model;readingPath=path;focused=keep?model.byKey(focused.key):null;
-    sourceReader?.setDocument(model);
+    sourceReader?.setDocument(model,model&&viewMode==='pending'?createComparisonDocument(tableRows):null);
     previewReader?.setDocument(model,sourceReader?.getMarkdown()??'',path);
     if(focused){
       originalGrid?.locate(focused,{scroll:viewSwitch});sourceReader?.locate(focused,{scroll:viewSwitch});previewReader?.locate(focused,{scroll:viewSwitch});

@@ -1,6 +1,6 @@
 # Lab-Translation · 校译州
 
-## 当前可运行基线（WP04F2，继承 WP00–04F1）
+## 当前可运行基线（WP04F3，继承 WP00–04F2）
 
 独立工作树 `experiment/lab-translation`，从已验收的 lab-frame `1dbc2b7e4c754330b8d3b365008e4c2e9edc39c9` 建立；不是旧 `translation-lab` 的覆盖升级，也不是 Main 镜像或晋升候选。公共 Frame 布局和组件契约不变，本州界面接线仅涉及 frame.js/layout.js 及独立校译模块；Vite 精确适配品牌、自动更新身份和本州浏览器设置命名空间。默认打开全局设置，未绑定时业务窗格为空，导航只含 settings.json，继承保存、Undo/Redo、Sarasa、目录选择及共享 F02 权限。WP00 不加载或初始化任何书籍 SQL，不生成 trans，不读写正文，不接入 AI。WP04 已撤下 PDF 空白占位及切分控制，原预览窗内切换 Markdown / 翻译 Prompt。
 
@@ -31,6 +31,16 @@
 两阅读窗随 AG 视图切换：原句视图保留全文 RAW，待译视图只拼接可译句原始 RAW，完整不可译句仅保留原 LF 分隔（物理 MDLine 行号不变），可译句内部 protected 继续按原坐标投影并淡化。保留原 source_line/sentence_index 作为定位身份；省略区不定位到其他句；切回原句表恢复全文。待译视图不以 text 的占位符破坏预览；仅 AG 主列显示占位文本。跨句 Markdown/HTML 结构若依赖被省略句中的标记，派生预览可能与全文不同，原句视图始终保留完整结构。Prompt 状态与历史不受切换影响。
 
 `createReadingDocument(table,{pending:true})` 为待译阅读投影，默认仍为无损全文模式。tests/translation-reading.test.mjs 覆盖同行与跨行省略、保留行号、保护坐标、全不可译及原始记录不变；tests/cross-version-ag-filter.browser.test.mjs 覆盖真实 AG 切换、两窗省略/淡化、定位、切回及无 API 请求。
+
+## WP04F3 · 待译句双源码对照
+
+仅 AG 选择「待译句表」时，原源码窗 body 左右等分，原顶栏导航/Undo/Redo 不移动。左窗复用已有只读 CM6 RAW 投影、原物理行号和保护淡化；右窗复用同一只读 CM6 组件但不显示行号、逐句显示实际 text，回填占位符淡化，句间新增 LF 仅作显示分隔、不写入任何业务数据。两窗共享同一 source_line:sentence_index 身份，点击任一窗同步另一窗同句高亮以及 AG、MD 预览定位；预览仍只渲染左窗 RAW，Prompt 保持独立。双向垂直滚动以当前顶部原句身份和句内可视高度比例映射，使用 CM6 实际折行坐标、屏幕外块几何估计；不按像素硬同步。用户滚动输入确定主窗，接收端滚动不反向触发循环。两窗因折行高度不同、文档首尾滚动边界，不承诺逐像素对齐。切回原句表/清空时隐藏右窗并恢复完整 RAW；不改变 SQL、初始化、保护规则、文件或其他州。
+
+| API | 直接验收 |
+|---|---|
+| createComparisonDocument(rows) | 从唯一表 text 构造句级坐标及占位范围，逐句回填校验；tests/translation-comparison.test.mjs |
+| nearestSentence / fractionWithin / anchorHeight | 句身份与可视高度比例映射；同上 |
+| mountReadingSource(host,onLocate,options) / mountSourceComparison | 复用 CM6、单双窗切换、行号、双向点击和实际 scrollDOM 验收；tests/cross-version-ag-filter.browser.test.mjs |
 
 ## WP03 · 无损 MDLine 阅读与保护淡化
 

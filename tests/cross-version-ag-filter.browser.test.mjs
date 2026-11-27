@@ -15,21 +15,21 @@ try{
   try{
    const page=await browser.newPage({viewport:name==='iPad-WebKit'?{width:774,height:1032}:{width:1180,height:860},hasTouch:true});
    const errors=[],reads=[],probes=[];let failed=false,version=0,preparationFailed=false;const prepCalls=[];
-   const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true,true);
-   const prepared=preparedFixture(withFormula),oldPrepared=preparedFixture(old),freshPrepared=preparedFixture(fresh);
+   const old=await sampleSnapshot(),fresh=await sampleSnapshot(' refreshed'),withFormula=await sampleSnapshot(' prepared',true,true),longSnapshot=await sampleSnapshot(' scroll',true,true,72);
+   const prepared=preparedFixture(withFormula),oldPrepared=preparedFixture(old),freshPrepared=preparedFixture(fresh),longPrepared=preparedFixture(longSnapshot);
    page.on('pageerror',e=>errors.push(e.message));
    await page.route('**/labs/lab-frame/api/workspace-io/session',r=>r.fulfill({json:{authorized:true}}));
    await page.route('**/labs/lab-frame/api/workspace-io/roots',r=>r.fulfill({json:{allowedRoots:['/demo/books']}}));
    await page.route('**/labs/lab-frame/api/workspace-io/browse?*',r=>{const path=new URL(r.request().url()).searchParams.get('path');return r.fulfill({json:{path,children:path==='/demo/books'?[{path:'/demo/books/a',name:'a'},{path:'/demo/books/b',name:'b'}]:[]}});});
    await page.route('**/labs/lab-frame/api/workspace-io/probe',r=>{probes.push(r.request().postDataJSON().workspace);return r.fulfill({json:{verified:true,readable:true,writable:true}});});
-   await page.route('**/labs/lab-sentence/api/**',r=>{assert.equal(r.request().method(),'GET');const u=new URL(r.request().url());assert(u.pathname.endsWith('/sentence/snapshot'));reads.push(u.searchParams.get('workspace'));return failed?r.fulfill({status:409,json:{error:'句表已过期'}}):r.fulfill({json:version===2?withFormula:version?fresh:old});});
+   await page.route('**/labs/lab-sentence/api/**',r=>{assert.equal(r.request().method(),'GET');const u=new URL(r.request().url());assert(u.pathname.endsWith('/sentence/snapshot'));reads.push(u.searchParams.get('workspace'));return failed?r.fulfill({status:409,json:{error:'句表已过期'}}):r.fulfill({json:version===3?longSnapshot:version===2?withFormula:version?fresh:old});});
    await page.route('**/labs/lab-translation/api/translation/initialize',r=>{
     assert.equal(r.request().method(),'POST');
     const input=r.request().postDataJSON();
-    const source=version===2?withFormula:version?fresh:old;
+    const source=version===3?longSnapshot:version===2?withFormula:version?fresh:old;
     assert.deepEqual(input,{workspace:reads.at(-1),source_document_hash:source.source_document_hash,sentence_sha256:source.sentence_sha256});
     prepCalls.push(input);
-    return preparationFailed?r.fulfill({status:409,json:{error:'已有译句表不一致，拒绝覆盖'}}):r.fulfill({json:version===2?prepared:version?freshPrepared:oldPrepared});
+    return preparationFailed?r.fulfill({status:409,json:{error:'已有译句表不一致，拒绝覆盖'}}):r.fulfill({json:version===3?longPrepared:version===2?prepared:version?freshPrepared:oldPrepared});
    });
    await page.goto(HOST,{waitUntil:'domcontentloaded'});
    const settings=page.locator('#settings-workspace'),workspace=page.locator('#workspace'),grid=workspace.locator('.ocr-outline-grid');
@@ -144,11 +144,31 @@ try{
    assert.equal(await preview.locator('.ocr-reviewed-inline-latex.translation-protected-preview').count(),1);
    assert((await source.locator('.translation-protected-source').allTextContents()).join('').includes('$r_t$'));
    assert.equal(await grid.locator('.ag-row [col-id="source_line"]').last().textContent(),'4');
+   // WP04F3: only the source body is split; left RAW/line numbers, right text.
+   const compare=workspace.locator('#prepared-editor');
+   await compare.waitFor({state:'visible'});
+   assert.equal(await source.locator('.cm-lineNumbers').count(),1);
+   assert.equal(await compare.locator('.cm-gutters').count(),0);
+   assert.equal(await compare.locator('.cm-content').getAttribute('contenteditable'),'false');
+   assert.equal((await compare.locator('.cm-line').allTextContents()).join('\n'),prepared.rows.filter(r=>r.translatable).map(r=>r.text).join('\n'));
+   const sides=await page.evaluate(()=>{
+     const l=document.querySelector('#editor').getBoundingClientRect(),r=document.querySelector('#prepared-editor').getBoundingClientRect();
+     return {left:l.right,right:r.left,lh:l.height,rh:r.height,width:r.width};
+   });
+   assert(sides.right>=sides.left-2&&sides.width>30&&Math.abs(sides.lh-sides.rh)<3);
+   await compare.locator('.cm-line').filter({hasText:'B.'}).click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('B.'));
+   await grid.locator('.ag-row-selected[row-id="3:1"]').first().waitFor();
+   assert((await compare.locator('.translation-focus-source').allTextContents()).join('').includes('B.'));
+   await source.locator('.cm-line').first().click();
+   await page.waitForFunction(()=>[...document.querySelectorAll('#prepared-editor .translation-focus-source')].map(n=>n.textContent).join('').includes('Heading'));
+   assert.equal(await grid.locator('.ag-row-selected [col-id="source_line"]').textContent(),'1');
+
    await grid.locator('.ag-body-horizontal-scroll-viewport').evaluate(el=>el.scrollLeft=0);
    assert.equal(await grid.locator('.ag-header-cell[col-id="text"]').count(),1);
    await grid.locator('.ag-row [col-id="source_line"]').last().click();
    await page.waitForFunction(()=>[...document.querySelectorAll('#editor .translation-focus-source')].map(n=>n.textContent).join('').includes('<table>'));
-   await agPicker.selectOption('original');await count(5);
+   await agPicker.selectOption('original');await count(5);assert.equal(await compare.isVisible(),false);
    assert.equal((await source.locator('.cm-line').allTextContents()).join('\n'),withFormula.rows.map(r=>r.raw).join(''));
    assert.equal(await preview.locator('.ocr-math.translation-protected-preview').count(),1);
    assert.equal(prepCalls.length,beforeViewCalls);assert.equal(reads.length,beforeViewReads);
@@ -200,6 +220,39 @@ try{
    assert.match(await workspace.locator('.translation-prompt-editor .cm-line').first().textContent(),/WP04draft/);
    assert.equal(await workspace.locator('#prompt-undo').isDisabled(),true);
    assert.equal(await workspace.locator('#prompt-redo').isDisabled(),true);
+   // Long document: real scroll events in both panes, differing wrapping
+   // and sentence counts. Drive the scrolling pane via native scrollDOM.
+   await workspace.locator('.ocr-preview-mode').selectOption('md');
+   version=3;await chooseNav(workspace,'sql-init');
+   await page.waitForFunction(()=>document.querySelector('#status')?.textContent.includes('可翻译 76 句'));
+   await workspace.locator('.ocr-ag-module-select').selectOption('pending');
+   await workspace.locator('#prepared-editor').waitFor({state:'visible'});
+   const scrollPair=async(from,to,ratio)=>{
+     const a=workspace.locator(from+' .cm-scroller'),b=workspace.locator(to+' .cm-scroller');
+     const before=await b.evaluate(el=>el.scrollTop);
+     await a.evaluate((el,ratio)=>{
+       el.dispatchEvent(new WheelEvent('wheel',{deltaY:100,bubbles:true}));
+       el.scrollTop=(el.scrollHeight-el.clientHeight)*ratio;
+     },ratio);
+     await page.waitForFunction(({sel,before})=>Math.abs(document.querySelector(sel+' .cm-scroller').scrollTop-before)>100,{sel:to,before});
+     // Verify the same numbered passage is visible near the top on each
+     // side, not merely that scrollTop changed by the same pixel amount.
+     const visible=sel=>[...document.querySelectorAll(sel+' .cm-line')].filter(el=>{
+       const rect=el.getBoundingClientRect(),sc=el.closest('.cm-scroller').getBoundingClientRect();
+       return rect.bottom>sc.top+1&&rect.top<sc.top+Math.min(sc.height,100);
+     }).map(el=>Number(el.textContent.match(/ROW_(\d+)/)?.[1])).filter(Number.isFinite);
+     await page.waitForFunction(({from,to})=>{
+       const visible=sel=>[...document.querySelectorAll(sel+' .cm-line')].filter(el=>{
+         const rect=el.getBoundingClientRect(),sc=el.closest('.cm-scroller').getBoundingClientRect();
+         return rect.bottom>sc.top+1&&rect.top<sc.top+Math.min(sc.height,120);
+       }).map(el=>Number(el.textContent.match(/ROW_(\d+)/)?.[1])).filter(Number.isFinite);
+       const x=visible(from),y=visible(to);
+       return x.length&&y.length&&Math.abs(x[0]-y[0])<=2;
+     },{from,to},{timeout:10000});
+   };
+   await scrollPair('#editor','#prepared-editor',.65);
+   await scrollPair('#prepared-editor','#editor',.25);
+   console.log('TRANSLATION_WP04F3_BROWSER_PASS',name,'split/gutters/exact text/click focus/semantic scrolling both directions');
    console.log('TRANSLATION_WP04_BROWSER_PASS',name,'three panes, independent Prompt, undo/redo, save/reload, reading preserved');
    console.log('TRANSLATION_WP04F1_BROWSER_PASS',name,'one init, one table, raw/text/refill, filter, stale refusal, source/preview and Prompt preserved');
    assert.deepEqual(errors,[]);console.log('TRANSLATION_WP01_BROWSER_PASS',name,'bind/init/raw/readonly/native all/multi/refresh/change/failure/retry',JSON.stringify({reads,probes}));
