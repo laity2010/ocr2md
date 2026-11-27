@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"f79a351e7fea4f6ba11a287df8476fb1","branch":"refs/heads/experiment/lab-translation","baseline":"16b07fc6455aa92d5ba40773409a18c49f1c7876","event":"START","utc":"2026-11-27T05:13:09.321235+00:00","wp":"WP03","goal":"原句RAW无损重构MDLine，CM6只读及V2渲染复用，已识别不译范围两窗淡化、AG与源码预览定位；不改SQL、保护规则、上游、Frame窗格与PDF/Prompt。","retrospective":false}
