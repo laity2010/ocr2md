@@ -6,6 +6,8 @@ import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-
 import 'dockview/dist/styles/dockview.css';
 import '../workspace.css';
 import '../outline-grid.css';
+import {EnumCheckboxFilter} from '../enum-checkbox-filter.js';
+import '../ag-enum-filter-shared.css';
 import '../settings-module.css';
 import '../pdf-preview.css';
 ModuleRegistry.registerModules([AllCommunityModule]);
@@ -19,20 +21,41 @@ function mountEmptySource(host){
   ]}),parent:host});
   return {dispose:()=>editor.destroy(),layout:()=>editor.requestMeasure()};
 }
-function mountEmptyGrid(host){
-  const columnDefs=[
-    {field:'pbs',headerName:'PBS',width:115},
-    {field:'usable',headerName:'可用',width:72},
-    {field:'type',headerName:'类型',width:95},
-    {field:'content',headerName:'文本块',flex:1},
-  ];
+const emptyColumns=[
+  {field:'pbs',headerName:'PBS',width:115},
+  {field:'usable',headerName:'可用',width:72},
+  {field:'type',headerName:'类型',width:95},
+  {field:'content',headerName:'文本块',flex:1},
+];
+const originalColumns=[
+  {field:'source_line',headerName:'MDLine',pinned:'left',width:100},
+  {field:'sentence_index',headerName:'句序',width:72},
+  {field:'raw',headerName:'raw',minWidth:240,flex:1,tooltipField:'raw',cellStyle:{whiteSpace:'pre'}},
+  {field:'type',headerName:'type',width:135,filter: EnumCheckboxFilter,suppressHeaderMenuButton:true,suppressHeaderFilterButton: false},
+  {field:'level',headerName:'level',width:75,filter: EnumCheckboxFilter,suppressHeaderMenuButton:true,suppressHeaderFilterButton: false},
+  {field:'review_state',headerName:'状态',width:125},
+  {field:'adopted_engine',headerName:'采用引擎',width:135},
+  {field:'from_utf16',headerName:'起点',width:85},
+  {field:'to_utf16',headerName:'终点',width:85},
+  {field:'source_line_hash',headerName:'行哈希',width:165},
+  {field:'source_document_hash',headerName:'文档哈希',width:165},
+  {field:'candidates_json',headerName:'候选方案',width:220},
+];
+function mountEmptyGrid(host,picker){
   const grid=createGrid(host,{theme:agTheme,headerHeight:33,rowHeight:35,
     suppressNoRowsOverlay:true,overlayNoRowsTemplate:' ',
-    defaultColDef:{resizable:true,sortable:false,suppressMovable:true},
-    columnDefs,rowData:[]});
-  return {dispose(){grid.destroy();},layout:()=>{}};
+    defaultColDef:{editable:false,resizable:true,sortable:false,suppressMovable:true},
+    getRowId:({data})=>data.source_line+':'+data.sentence_index,
+    columnDefs:emptyColumns,rowData:[]});
+  let active=false;
+  return {dispose(){grid.destroy();},layout:()=>{},setOriginalRows(rows){
+    const next=rows!==null;
+    if(active!==next){grid.setFilterModel(null);grid.setGridOption('columnDefs',next?originalColumns:emptyColumns);active=next;}
+    grid.setGridOption('rowData',rows??[]);
+    picker.options[0].textContent=next?'原句表（只读）':'空白框架';
+  }};
 }
-function blankPane(name,onSplit,onModuleChange){
+function blankPane(name,onSplit,onModuleChange,onOriginalGrid){
   const element=document.createElement('div');
   let owned=null;
   if(name==='outline'){
@@ -52,7 +75,7 @@ function blankPane(name,onSplit,onModuleChange){
     bar.append(label,picker);element.append(bar);
     const grid=document.createElement('div');grid.className='ocr-outline-grid';
     element.append(grid);
-    owned=()=>mountEmptyGrid(grid);
+    owned=()=>mountEmptyGrid(grid,picker);
   }else if(name==='source'){
     element.className='ocr-source-pane ocr-source-file-source';
     const bar=document.createElement('div');bar.className='ocr-source-file-toolbar';
@@ -64,7 +87,7 @@ function blankPane(name,onSplit,onModuleChange){
     group.append(new Option('settings.json','settings'));
     select.append(group);
     select.value='';
-    select.addEventListener('change',()=>{if(select.value==='settings')onModuleChange?.('settings');});
+    select.addEventListener('change',()=>{if(['settings','sql-init','original'].includes(select.value))onModuleChange?.(select.value);});
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo';
     actions.setAttribute('role','group');actions.setAttribute('aria-label','源码撤销与重做');
     const undo=document.createElement('button');undo.type='button';undo.id='undo';
@@ -101,7 +124,7 @@ function blankPane(name,onSplit,onModuleChange){
     const surface=document.createElement('div');surface.className='ocr-preview-pdf-host';
     host.append(surface);element.append(host);
   }else throw Error('Unknown Frame pane '+name);
-  return {element,init(){if(owned)this.resource=owned();},layout(){this.resource?.layout();},
+  return {element,init(){if(owned)this.resource=owned();if(name==='outline')onOriginalGrid(this.resource);},layout(){this.resource?.layout();},
     dispose(){this.resource?.dispose();}};
 }
 
@@ -111,9 +134,9 @@ function addPanel(dockview,id,component,title,position){
 }
 /** Public F01: exactly Main's default three groups + detached PDF split. */
 export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=()=>{}}={}){
-  let split=false;
+  let split=false,originalGrid=null;
   const dockview=createDockview(container,{theme:themeAbyss,
-    createComponent:({name})=>blankPane(name,setSplit,onModuleChange)});
+    createComponent:({name})=>blankPane(name,setSplit,onModuleChange,grid=>{originalGrid=grid;})});
   const left=addPanel(dockview,'outline','outline','章节大纲 · AG');
   const source=addPanel(dockview,'source','source','Markdown 源码',{referencePanel:left,direction:'right'});
   addPanel(dockview,'preview','preview','Markdown 预览',{referencePanel:source,direction:'below'});
@@ -126,7 +149,7 @@ export function createFrameWorkspace(container,{onStatus=()=>{},onModuleChange=(
     onStatus(split?'四窗布局已启用':'三窗布局已启用');
   }
   setSplit(true);
-  return Object.freeze({setSplit,activate(){if(container.clientWidth&&container.clientHeight)
+  return Object.freeze({setSplit,setOriginalRows(rows){originalGrid?.setOriginalRows(rows);},activate(){if(container.clientWidth&&container.clientHeight)
     dockview.layout(container.clientWidth,container.clientHeight);},
     dispose(){dockview.dispose();},get split(){return split;}});
 }
