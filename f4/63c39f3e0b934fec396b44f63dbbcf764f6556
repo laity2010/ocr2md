@@ -1,0 +1,1 @@
+FEDERAL_BUILD_EVENT_V1 {"id":"2ae0cf1201cd48bb8fa7ab5bfde414a5","branch":"refs/heads/experiment/lab-translation","baseline":"f463c39f3e0b934fec396b44f63dbbcf764f6556","event":"START","utc":"2026-11-27T04:05:26.215634+00:00","wp":"WP01","goal":"授权工作目录下只读初始化上游公开原句快照；独立内存原句引用，AG原句字段，原生Type过滤，导航失败/切换清理；不创建或写SQL、不重构MD、不提前保护或翻译，保持Frame布局。","retrospective":false}
