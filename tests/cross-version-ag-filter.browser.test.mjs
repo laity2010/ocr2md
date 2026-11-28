@@ -22,6 +22,15 @@ try{
    const prepared=preparedFixture(withFormula),oldPrepared=preparedFixture(old),freshPrepared=preparedFixture(fresh),longPrepared=preparedFixture(longSnapshot);
    persisted.set('/demo/books/d',longPrepared);
    page.on('pageerror',e=>errors.push(e.message));
+   let driveEnabled=false;
+   const driveInput='https://drive.google.com/file/d/testInput/view?usp=drivesdk',driveParent='https://drive.google.com/drive/folders/testParent';
+   await page.route('**/labs/lab-frame/api/workspace-io/read?*',async r=>{
+     const u=new URL(r.request().url());assert.equal(u.searchParams.get('path'),'trans/drive-handoff.json');
+     if(!driveEnabled||u.searchParams.get('workspace')!=='/demo/books/d')return r.fulfill({status:404,json:{error:'missing'}});
+     const a=await createTranslationJSON(longPrepared),digest=x=>createHash('sha256').update(x).digest('hex');
+     const b=Buffer.from(JSON.stringify({schema:'ocr2md-drive-handoff/v1',task_id:JSON.parse(a.text).task_id,input_sha256:digest(a.text),input_json:driveInput,output_directory:driveParent}));
+     return r.fulfill({json:{path:'trans/drive-handoff.json',size:b.length,sha256:digest(b),contentBase64:b.toString('base64')}});
+   });
    await page.route('**/labs/lab-frame/api/workspace-io/session',r=>r.fulfill({json:{authorized:true}}));
    await page.route('**/labs/lab-frame/api/workspace-io/roots',r=>r.fulfill({json:{allowedRoots:['/demo/books']}}));
    await page.route('**/labs/lab-frame/api/workspace-io/browse?*',r=>{const path=new URL(r.request().url()).searchParams.get('path');return r.fulfill({json:{path,children:path==='/demo/books'?[{path:'/demo/books/a',name:'a'},{path:'/demo/books/b',name:'b'},{path:'/demo/books/c',name:'c'},{path:'/demo/books/d',name:'d'}]:[]}});});
@@ -411,6 +420,25 @@ try{
    assert.equal(await tableOption(settings).count(),0);await count(0);assert.equal((await source.locator('.cm-content').textContent()).trim(),'');
    denied=true;await bind('/demo/books/d','工作区文件读写验证失败');assert.equal(await nav(settings).locator('optgroup[label="SQL"]').count(),0);
    denied=false;await bind('/demo/books/d','已有译句表');await chooseNav(settings,'translation');await workspace.waitFor({state:'visible'});assert.equal(prepCalls.length,3);
+   // The prior directory adoption was deliberately unsaved. Persist D before
+   // startup restoration; otherwise reload correctly restores saved book B.
+   driveEnabled=true;
+   await chooseNav(workspace,'settings');await waitStatus('已有译句表');
+   await page.locator('#global-save').click();
+   await page.waitForFunction(()=>localStorage.getItem('ocr2md.lab-translation.settings.json.v1')?.includes('/demo/books/d'));
+   await waitStatus('已有译句表');
+   await page.reload({waitUntil:'domcontentloaded'});await workspace.waitFor({state:'visible'});
+   assert.equal(loads.at(-1),'/demo/books/d');
+   await workspace.locator('.ocr-preview-mode').selectOption('prompt');await showPromptParams(driveInput);
+   await copyButton.click();await waitStatus('完整 Prompt 已复制到剪贴板');
+   const driveCopy=await page.evaluate(()=>window.__promptClipboard.writes.at(-1));
+   assert(driveCopy.includes(driveInput));assert(driveCopy.includes(driveParent));assert(driveCopy.includes('result_filename: "AI_ID.json"'));assert(!driveCopy.includes('/demo/books/d/trans/sentences.json'));
+   await chooseNav(workspace,'settings');await waitStatus('已有译句表');
+   await bind('/demo/books/b','已有译句表');await chooseNav(settings,'translation');await workspace.waitFor({state:'visible'});
+   await workspace.locator('.ocr-preview-mode').selectOption('prompt');await showPromptParams('/demo/books/b/trans/sentences.json');
+   await copyButton.click();await waitStatus('完整 Prompt 已复制到剪贴板');
+   assert(!(await page.evaluate(()=>window.__promptClipboard.writes.at(-1))).includes(driveInput));
+   console.log('TRANSLATION_WP05A6_BROWSER_PASS',name,'Drive input/output and copy, unrelated task uses local handoff');
    console.log('TRANSLATION_WP05A1_BROWSER_PASS',name,'SQL group modal, cancel/keyboard/touch, no fake table, GET-only restore and switching, no automatic POST, stale/denied/late cleared',JSON.stringify({loads,prepCalls:prepCalls.length}));
    console.log('TRANSLATION_WP04_BROWSER_PASS' ,name,'three panes, independent Prompt, undo/redo, save/reload, reading preserved');
    console.log('TRANSLATION_WP04F1_BROWSER_PASS',name,'one init, one table, raw/text/refill, filter, stale refusal, source/preview and Prompt preserved');

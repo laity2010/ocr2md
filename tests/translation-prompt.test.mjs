@@ -1,6 +1,7 @@
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {createPromptStorage,DEFAULT_PROMPT,PROMPT_KEY,createPromptParameters,copyPromptText} from '../ui/translation/prompt-document.js';
+import {createPromptStorage,DEFAULT_PROMPT,PROMPT_KEY,createPromptParameters,copyPromptText,loadDriveHandoff} from '../ui/translation/prompt-document.js';
 const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)};};
 test('default contract and explicit local save preserve exact text',()=>{
  const storage=memory(),port=createPromptStorage(storage),first=port.read();
@@ -45,4 +46,22 @@ test('copy full live prompt exactly; missing or rejected clipboard fails explici
  await assert.rejects(copyPromptText(text,{}),/剪贴板不可用/);
  await assert.rejects(copyPromptText(text,{writeText(){return Promise.reject(Error('denied'));}}),/denied/);
  await assert.rejects(copyPromptText('',{writeText(){throw Error('must not write');}}),/没有可复制/);
+});
+
+
+test('Drive handoff is verified and task-scoped; no Mac path or stale Drive links in copied parameters',async()=>{
+ const a={text:JSON.stringify({schema:'ocr2md-trans/v1',task_id:'A',source_sha256:'S',sentence_sha256:'Q',target_language:'zh-CN'}),count:7};
+ const digest=t=>createHash('sha256').update(t).digest('hex');
+ const v={schema:'ocr2md-drive-handoff/v1',task_id:'A',input_sha256:digest(a.text),input_json:'https://drive.google.com/file/d/testInput/view?usp=drivesdk',output_directory:'https://drive.google.com/drive/folders/testParent'};
+ const io=value=>({readFile:async(path,name)=>{assert.equal(path,'/books/A');assert.equal(name,'trans/drive-handoff.json');const text=JSON.stringify(value);const data=Buffer.from(text);return {path:name,size:data.length,sha256:digest(text),contentBase64:data.toString('base64')};}});
+ const handoff=await loadDriveHandoff(a,'/books/A',io(v));assert(handoff);
+ const current=createPromptParameters({...a,driveHandoff:handoff},'/books/A',false);
+ assert(current.includes(v.input_json));assert(current.includes(v.output_directory));assert(current.includes('result_filename: "AI_ID.json"'));assert(current.includes('Google Drive'));assert(!current.includes('/books/A/trans'));assert(!current.includes('尚未核验'));
+ assert.equal(createPromptParameters({...a,driveHandoff:handoff},'/books/A',true),current);
+ assert.equal(await loadDriveHandoff(a,'/books/A',io({...v,task_id:'B'})),null);
+ assert.equal(await loadDriveHandoff(a,'/books/A',io({...v,input_sha256:'wrong'})),null);
+ assert.equal(await loadDriveHandoff(a,'/books/A',io({...v,input_json:'https://bad.example/file'})),null);
+ assert.equal(await loadDriveHandoff(a,'/books/A',{readFile:async()=>{throw Error('missing');}}),null);
+ assert(!createPromptParameters({...a,text:a.text.replace('"A"','"B"'),driveHandoff:handoff},'/books/B').includes(v.input_json));
+ assert(DEFAULT_PROMPT.includes('output_directory'));assert(DEFAULT_PROMPT.includes('results'));assert(DEFAULT_PROMPT.includes('不得读取或参考其他 AI'));
 });

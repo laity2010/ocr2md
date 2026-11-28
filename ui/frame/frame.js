@@ -7,6 +7,7 @@ import {initializeTable,loadTable} from '../translation/preparation.js';
 import {wireSQLGroup,createSQLActions} from '../translation/sql-actions.js';
 import {createReadingDocument} from '../translation/document.js';
 import {createTranslationJSON} from '../translation/export-json.js';
+import {loadDriveHandoff} from '../translation/prompt-document.js';
 import {startFrameAutoUpdate} from './refresh.js';
 import {createFrameSettingsIO} from './settings-io.js';
 import {frameDirectoryPort} from './directory-port.js';
@@ -77,7 +78,10 @@ async function loadSQL({initialize=false,open=false}={}){
       return;
     }
     const model=createReadingDocument(result);
-    const artifact=await createTranslationJSON(result);
+    const input=await createTranslationJSON(result);
+    if(!current())return;
+    const driveHandoff=await loadDriveHandoff(input,path,frameWorkspaceIO);
+    const artifact=driveHandoff?Object.freeze({...input,driveHandoff}):input;
     if(!current())return;
     preparation=result;sqlState='ready';sqlMessage='';
     frame.setTranslationRows(result.rows);frame.setReadingDocument(model,path);frame.setJSONArtifact(artifact);

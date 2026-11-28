@@ -86,6 +86,10 @@ Prompt CM6 与只读源码窗复用 ocr-cm-source、Everforest、Markdown 源码
 
 翻译 Prompt 工具栏在 Undo/Redo 旁提供「复制」，仅 Prompt 模式显示。用户点击时从当前 CM6 getText 读取完整正文（包括未保存编辑）与自动参数，调用当前浏览器 Clipboard API writeText；成功/失败走全局状态栏，等待期间禁止重复点击。复制不保存草稿、不修改历史、不访问服务器或 SQL。剪贴板不可用或权限拒绝时明确失败，不冒称复制成功。直接测试与 Chromium/iPad-WebKit 浏览器测试在 Clipboard API 边界校验完整文本、拒绝、切换目录和历史，不覆盖实际宿主剪贴板；物理设备权限由用户实际验收。
 
+## WP05A6 · Google Drive 任务级交接 Prompt
+
+已授权工作目录可选配置 trans/drive-handoff.json（schema: ocr2md-drive-handoff/v1, task_id, input_sha256, input_json, output_directory），由现有 F02 read 端口只读获取；与当前导出任务 ID 及精确 UTF-8 摘要一致且链接格式正确才装配为 artifact.driveHandoff，不进入 JSON 导出内容或 SQLite。匹配时 Prompt 文末 input_json 是 Google Drive 文件链接，output_directory 是原父目录，result_filename 为 AI_ID.json；明确不连接 Mac/AgentDock，领取与交付走 Drive，任务参数优先于旧正文中的交接方式。无配置、无效或不匹配时不串用 Drive 链接，仍保留本机交接。新版默认正文兼容两种渠道、明确既有结果 JSON 结构；原样旧默认稿显示新版，其他自定义草稿不覆盖。复制仍为当前完整 CM6 文本。用户任务链接只存在授权资料目录的配置文件，不进入 Git 或静态发布；不自动上传、不修改 Drive 权限，不声称外部 AI 已获授权。直接与双浏览器测试验证匹配、拒绝、复制与切换。JSON 导出仍写本机原路径。
+
 ## 已确定的后续执行边界（尚未实现）
 
 - WP05 后续：指定目标语言；在书籍工作目录 trans/ 导出 prompt.md（sentences.json 已由 WP05A4 实现）。整 MDLine 作为 AI 上下文、按既定句序输出；保护元素、来源/分句摘要、任务身份验证及无损回填。外部 AI 经 AgentDock 领取同一输入和提示词，只写自己的 AI_ID.json，逐句返回 corrected（拼写/OCR 校正，不润色）和 translated（基于校正后原文的指定语言译文），不得跨句移位或改动保护元素。文件生成和更新不得覆盖已有外部结果；具体冲突策略待该航点确认。
