@@ -59,3 +59,11 @@ export function createPromptParameters(artifact,workspace,exportVerified=false){
   };
   return head+Object.entries(fields).map(([key,value])=>'- '+key+': '+JSON.stringify(value)).join('\n')+'\n';
 }
+
+
+/** User-gesture clipboard write; no selection, persistence, or server IO. */
+export async function copyPromptText(text,clipboard=globalThis.navigator?.clipboard){
+  if(typeof text!=='string'||!text)throw Error('没有可复制的 Prompt');
+  if(typeof clipboard?.writeText!=='function')throw Error('当前浏览器剪贴板不可用，请使用 HTTPS 或手动复制');
+  await clipboard.writeText(text);
+}

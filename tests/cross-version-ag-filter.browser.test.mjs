@@ -6,6 +6,7 @@ import {chromium,webkit} from 'playwright';
 import {sampleSnapshot} from './translation-original-fixture.mjs';
 import {preparedFixture} from './translation-preparation-fixture.mjs';
 import {createTranslationJSON} from '../ui/translation/export-json.js';
+import {DEFAULT_PROMPT,createPromptParameters} from '../ui/translation/prompt-document.js';
 import {createHash} from 'node:crypto';
 const HOST='http://127.0.0.1:5404/labs/lab-translation/';
 const server=spawn('node',['node_modules/vite/bin/vite.js','preview','--config','labs/lab-translation/vite.config.mjs','--host','127.0.0.1','--port','5404','--strictPort'],{stdio:['ignore','pipe','pipe']});
@@ -51,6 +52,15 @@ try{
     if(preparationFailed)return r.fulfill({status:409,json:{error:'已有译句表不一致，拒绝覆盖'}});
     const result=version===3?longPrepared:version===2?prepared:version?freshPrepared:oldPrepared;
     persisted.set(input.workspace,result);return r.fulfill({json:result});
+   });
+   // Intercept the actual Clipboard API boundary so the fixture never replaces
+   // the user's Mac clipboard; exercise success and rejection on both engines.
+   await page.addInitScript(()=>{
+     window.__promptClipboard={writes:[],deny:false};
+     Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText(text){
+       if(window.__promptClipboard.deny)return Promise.reject(new DOMException('测试权限拒绝','NotAllowedError'));
+       window.__promptClipboard.writes.push(text);return Promise.resolve();
+     }}});
    });
    await page.goto(HOST,{waitUntil:'domcontentloaded'});
    const settings=page.locator('#settings-workspace'),workspace=page.locator('#workspace'),grid=workspace.locator('.ocr-outline-grid');
@@ -158,6 +168,19 @@ try{
    await prompt.locator('.cm-line').first().click();
    await page.keyboard.insertText('WP04draft');
    await page.waitForFunction(()=>document.querySelector('.translation-prompt-editor .cm-line')?.textContent.includes('WP04draft'));
+   const copyButton=workspace.getByRole('button',{name:'复制 Prompt 到剪贴板',exact:true});
+   const copiedDraft=await prompt.locator('.cm-line').first().textContent();
+   const expectedDraft=DEFAULT_PROMPT.replace(DEFAULT_PROMPT.split('\n')[0],copiedDraft);
+   const copyArtifact=await createTranslationJSON(prepared);
+   await copyButton.click();await waitStatus('完整 Prompt 已复制到剪贴板');
+   assert.deepEqual(await page.evaluate(()=>window.__promptClipboard.writes),[expectedDraft+createPromptParameters(copyArtifact,'/demo/books/b')]);
+   assert.equal(await page.evaluate(key=>localStorage.getItem(key),promptKey),null);
+   assert.equal(await workspace.locator('#prompt-undo').isEnabled(),true);
+   await page.evaluate(()=>window.__promptClipboard.deny=true);
+   await copyButton.click();await waitStatus('Prompt 复制失败');
+   assert.equal(await page.evaluate(()=>window.__promptClipboard.writes.length),1);
+   await page.evaluate(()=>window.__promptClipboard.deny=false);
+   assert.equal(await copyButton.isEnabled(),true);
    assert.equal(await workspace.locator('#undo').isDisabled(),true);
    assert.equal(await workspace.locator('#redo').isDisabled(),true);
    assert.equal(await page.evaluate(key=>localStorage.getItem(key),promptKey),null);
@@ -185,7 +208,7 @@ try{
    await jsonHost.waitFor({state:'visible'});
    assert.equal(await preview.isVisible(),false);assert.equal(await prompt.isVisible(),false);
    assert.equal(await jsonHost.locator('.cm-content').getAttribute('contenteditable'),'false');
-   assert.equal(await workspace.locator('#prompt-undo').isVisible(),false);
+   assert.equal(await workspace.locator('#prompt-undo').isVisible(),false);assert.equal(await copyButton.isVisible(),false);
    assert.equal(await exportButton.isEnabled(),true);
    const expectedJSON=await createTranslationJSON(prepared);
    // CM6 may virtualize long documents; inspect the real visible start
@@ -197,6 +220,9 @@ try{
    assert.equal(exports.at(-1).workspace,'/demo/books/b');assert.equal(browserDownloads,0);
    await mode.selectOption('prompt');await showPromptParams('/demo/books/b/trans/sentences.json');
    assert.match(await prompt.locator('.cm-line').filter({hasText:'input_status:'}).textContent(),/回读验证一致/);
+   await copyButton.click();await waitStatus('完整 Prompt 已复制到剪贴板');
+   const savedBody=await page.evaluate(key=>localStorage.getItem(key),promptKey);
+   assert.equal(await page.evaluate(()=>window.__promptClipboard.writes.at(-1)),savedBody+createPromptParameters(expectedJSON,'/demo/books/b',true));
    await mode.selectOption('json');
    exportConflict=true;await exportButton.click();await waitStatus('JSON 导出失败');
    assert.equal(exported.get('/demo/books/b'),expectedJSON.text);
@@ -369,6 +395,9 @@ try{
    await page.waitForFunction(()=>{const el=document.querySelector('.translation-focus-json'),sc=el?.closest('.cm-scroller');if(!sc)return false;const a=el.getBoundingClientRect(),b=sc.getBoundingClientRect();return a.bottom>b.top&&a.top<b.bottom;});
    await workspace.locator('.ocr-preview-mode').selectOption('prompt');
    await showPromptParams('/demo/books/d/trans/sentences.json');
+   await copyButton.click();await waitStatus('完整 Prompt 已复制到剪贴板');
+   assert.equal(await page.evaluate(()=>window.__promptClipboard.writes.at(-1)),savedBody+createPromptParameters(await createTranslationJSON(longPrepared),'/demo/books/d'));
+   console.log('TRANSLATION_WP05A5_BROWSER_PASS',name,'copy entire live Prompt, parameters, unsaved draft, rejection, history, current workspace');
    assert(!(await prompt.locator('.cm-content').textContent()).includes('/demo/books/b/trans/sentences.json'));
    assert((await page.evaluate(key=>localStorage.getItem(key),promptKey)).includes('WP04draft'));
    assert.equal(await workspace.locator('#prompt-undo').isDisabled(),true);

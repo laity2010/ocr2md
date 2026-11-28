@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {createPromptStorage,DEFAULT_PROMPT,PROMPT_KEY,createPromptParameters} from '../ui/translation/prompt-document.js';
+import {createPromptStorage,DEFAULT_PROMPT,PROMPT_KEY,createPromptParameters,copyPromptText} from '../ui/translation/prompt-document.js';
 const memory=()=>{const m=new Map();return {getItem:k=>m.get(k)??null,setItem:(k,v)=>m.set(k,v)};};
 test('default contract and explicit local save preserve exact text',()=>{
  const storage=memory(),port=createPromptStorage(storage),first=port.read();
@@ -35,4 +35,14 @@ test('runtime parameter values follow the current export; no claim of filesystem
  const empty=createPromptParameters(null,'');assert(empty.includes('尚无有效译句表'));assert(!empty.includes('input_json:'));
  const storage=memory(),port=createPromptStorage(storage);port.save('用户自定义任务书',null);
  createPromptParameters(a,'/books/A');assert.equal(port.read().text,'用户自定义任务书');
+});
+
+
+test('copy full live prompt exactly; missing or rejected clipboard fails explicitly',async()=>{
+ const text='未保存正文 😀\n\n- input_json: "/book/trans/sentences.json"\n';
+ let copied=null;await copyPromptText(text,{writeText(value){copied=value;return Promise.resolve();}});
+ assert.equal(copied,text);
+ await assert.rejects(copyPromptText(text,{}),/剪贴板不可用/);
+ await assert.rejects(copyPromptText(text,{writeText(){return Promise.reject(Error('denied'));}}),/denied/);
+ await assert.rejects(copyPromptText('',{writeText(){throw Error('must not write');}}),/没有可复制/);
 });

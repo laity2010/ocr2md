@@ -3,6 +3,7 @@ import {createDockview,themeAbyss} from 'dockview';
 import {mountReadingPreview,mountReadingSource} from '../translation/reading.js';
 import {placeholder} from '../translation/refill.js';
 import {mountPromptEditor} from '../translation/prompt-editor.js';
+import {copyPromptText} from '../translation/prompt-document.js';
 import {mountJSONPreview} from '../translation/json-preview.js';
 import {exportTranslationJSON} from '../translation/export-json.js';
 import {AllCommunityModule,ModuleRegistry,createGrid,themeQuartz} from 'ag-grid-community';
@@ -117,11 +118,12 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
     const mode=document.createElement('select');mode.className='ocr-preview-mode';
     mode.setAttribute('aria-label','预览类型');mode.innerHTML='<option value="md">Markdown 预览</option><option value="prompt">翻译 Prompt</option><option value="json">JSON</option>';
     const actions=document.createElement('div');actions.className='ocr-source-undo-redo translation-prompt-actions';
-    actions.setAttribute('role','group');actions.setAttribute('aria-label','Prompt 撤销与重做');actions.hidden=true;
+    actions.setAttribute('role','group');actions.setAttribute('aria-label','Prompt 编辑与复制');actions.hidden=true;
     const undo=document.createElement('button'),redo=document.createElement('button');
     for(const [button,id,label,glyph] of [[undo,'prompt-undo','撤销 Prompt','↶'],[redo,'prompt-redo','重做 Prompt','↷']]){
       button.type='button';button.id=id;button.setAttribute('aria-label',label);button.title=label;button.textContent=glyph;button.disabled=true;actions.append(button);
     }
+    const copy=document.createElement('button');copy.type='button';copy.id='prompt-copy';copy.textContent='复制';copy.title='复制完整 Prompt 到剪贴板';copy.setAttribute('aria-label','复制 Prompt 到剪贴板');actions.append(copy);
     const jsonActions=document.createElement('div');jsonActions.className='ocr-preview-mode-tools translation-json-actions';jsonActions.hidden=true;
     const download=document.createElement('button');download.type='button';download.textContent='导出 JSON';download.disabled=true;
     jsonActions.append(download);
@@ -165,6 +167,17 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
           if(current()){exportRequest=null;download.disabled=false;}
         }
       }
+      async function copyPrompt(){
+        if(!prompt||mode.value!=='prompt'||copy.disabled)return;
+        copy.disabled=true;
+        try{
+          await copyPromptText(prompt.getText());
+          if(mode.value==='prompt')onStatus('✓ 完整 Prompt 已复制到剪贴板','ok');
+        }catch(error){
+          if(mode.value==='prompt')onStatus('Prompt 复制失败：'+error.message,'error');
+        }finally{copy.disabled=false;}
+      }
+      copy.addEventListener('click',copyPrompt);
       download.addEventListener('click',downloadJSON);
       mode.addEventListener('change',switchMode);
       undo.addEventListener('click',()=>prompt?.undo());redo.addEventListener('click',()=>prompt?.redo());
@@ -176,7 +189,7 @@ function blankPane(name,onModuleChange,register,onLocate,onStatus){
         isPromptActive:()=>mode.value==='prompt',
         getPromptText:()=>prompt?.getText()??null,
         savePrompt:()=>prompt?.save(),
-        dispose(){reader.dispose();prompt?.dispose();jsonReader?.dispose();download.removeEventListener('click',downloadJSON);mode.removeEventListener('change',switchMode);}
+        dispose(){reader.dispose();prompt?.dispose();jsonReader?.dispose();copy.removeEventListener('click',copyPrompt);download.removeEventListener('click',downloadJSON);mode.removeEventListener('change',switchMode);}
       });
     };
   }else throw Error('Unknown Frame pane '+name);

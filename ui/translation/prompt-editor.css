@@ -7,3 +7,5 @@
   background:var(--ob-bg,#2f383e);color:var(--ob-fg,#d3c6aa);line-height:1.5;
 }
 #workspace .translation-prompt-actions{margin-left:auto}
+
+#workspace .translation-prompt-actions #prompt-copy{width:auto;min-width:40px;padding:0 8px;font-size:inherit;line-height:normal}
